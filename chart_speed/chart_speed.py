@@ -22,5 +22,15 @@ def main():
         [twenty_four, twenty_three, twenty_two, twenty_one, twenty_zero]
     ) 
     
+    try:
+        if st.button('데이터 시각화 실행', use_container_width=True): # options:
+            # PATH = './data/speed_data.csv'
+            # df = pd.read_csv(PATH)
+            conn = duckdb.connect('./data/database.db')
+            df = conn.execute(f"SELECT * FROM {options[0]}").df()
+            ex = ExceptionHandling()
+
+    except IndexError:
+        st.write('데이터를 선택하세요')
 if __name__ == '__main__':
     main()
