@@ -50,6 +50,18 @@ def main():
                     st.plotly_chart(fig)
                     ex.exception_check()
 
+                with col3:
+                    st.subheader('시도별 음식점 종류')
+                    category_df = df.groupby(['시도', '구분'])['num'].agg('sum').reset_index()
+                    fig = px.scatter(category_df, x='시도', y='num', color='구분')
+                    fig.update_layout(
+                        xaxis_tickangle=90
+                    )
+                    st.plotly_chart(fig)
+                    ex.exception_check()
+
+
+
     except IndexError:
         st.write('데이터를 선택하세요')
 if __name__ == '__main__':
