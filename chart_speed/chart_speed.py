@@ -29,6 +29,18 @@ def main():
             conn = duckdb.connect('./data/database.db')
             df = conn.execute(f"SELECT * FROM {options[0]}").df()
             ex = ExceptionHandling()
+            
+            col1, col2, col3 = st.columns(3)
+            with st.container():
+                with col1:
+                    st.subheader('시도별 음식점 수')
+                    selected_df = pd.DataFrame(df.groupby('시도')['num'].agg('sum')).reset_index()
+                    fig = px.bar(selected_df, x='시도', y='num', color='시도')
+                    fig.update_layout(
+                        xaxis_tickangle=90
+                    )
+                    st.plotly_chart(fig)
+                    ex.exception_check()
 
     except IndexError:
         st.write('데이터를 선택하세요')
