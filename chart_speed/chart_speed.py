@@ -1,3 +1,5 @@
+# streamlit run chart_speed.py --server.port 8505
+# import time
 import requests
 import duckdb
 import json
