@@ -34,6 +34,16 @@ def main():
                     st.plotly_chart(fig)
                     ex.exception_check()
 
+                with col2:
+                    # restaurant_2023
+                    st.subheader('시도별 영업 상태')
+                    selected_df = pd.DataFrame(df.groupby(['시도', '영업상태명'])['num'].agg('sum')).reset_index()
+                    fig = px.funnel(selected_df, x='num', y='시도', color='영업상태명')
+                    # fig = px.bar(selected_df, x='시도', y='num', color='영업상태명')
+                    st.plotly_chart(fig)
+                    ex.exception_check()
+
+
             conn.close()
         except IndexError:
             st.write('데이터를 선택해 주세요')
