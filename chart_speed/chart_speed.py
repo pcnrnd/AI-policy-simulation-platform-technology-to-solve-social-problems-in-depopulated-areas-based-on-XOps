@@ -60,6 +60,16 @@ def main():
                     st.plotly_chart(fig)
                     ex.exception_check()
 
+                col1, col2 = st.columns(2)
+                with st.container(): 
+                    with col1:
+                        st.subheader('시군구 음식점 수')
+                        # city_df = pd.DataFrame(df.groupby(['시도', '인허가일자'])['num'].agg('sum')).reset_index()
+                        city_df = pd.DataFrame(df.groupby('시군구')['num'].agg('sum')).reset_index()
+                        fig = px.bar(city_df, x='시군구', y='num', color='시군구')
+                        st.plotly_chart(fig)
+                        ex.exception_check()
+
 
 
     except IndexError:
