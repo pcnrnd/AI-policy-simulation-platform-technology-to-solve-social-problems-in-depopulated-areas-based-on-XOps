@@ -69,7 +69,13 @@ def main():
                         fig = px.bar(city_df, x='시군구', y='num', color='시군구')
                         st.plotly_chart(fig)
                         ex.exception_check()
-
+                        
+                with col2:
+                    st.subheader('음식점 종류 변화')
+                    city_df = pd.DataFrame(df.groupby(['구분', '인허가일자'])['num'].agg('sum')).reset_index()
+                    fig = px.scatter(city_df, x='인허가일자', y='num', color='구분')
+                    st.plotly_chart(fig)
+                    ex.exception_check()
 
 
     except IndexError:
