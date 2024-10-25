@@ -9,16 +9,9 @@ def main():
     st.set_page_config(layout='wide')
     st.title('데이터 시각화 처리 응답속도')
 
-    twenty_zero = 'restaurant_2020' # 22년 데이터
-    twenty_one = 'restaurant_2021' # 23년 데이터
-    twenty_two = 'restaurant_2022' # 22년 데이터
-    twenty_three = 'restaurant_2023' # 23년 데이터
-    twenty_four = 'restaurant_2024' # 24년 데이터
-
     options = st.multiselect(
-        'Select data to check response speed',
-        [twenty_four, twenty_three, twenty_two, twenty_one, twenty_zero]
-    ) 
+            "Select data for visualization",
+            ["restaurant_2024", "restaurant_2023", "restaurant_2022", "restaurant_2021", "restaurant_2020"])
 
 if __name__ == '__main__':
     main()
