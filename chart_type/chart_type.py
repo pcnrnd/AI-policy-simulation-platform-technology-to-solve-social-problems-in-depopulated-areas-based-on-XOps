@@ -52,12 +52,13 @@ def main():
                 with col3:
                     # restaurant_2022
                     st.subheader('시도별 음식점 종류')
-                    category_df = df.groupby(['시도', '구분'])['num'].agg('sum').reset_index()
-                    fig = px.scatter(category_df, x='시도', y='num', color='구분')
-                    fig.update_layout(
-                        xaxis_tickangle=90
-                    )
-                    st.plotly_chart(fig)
+                    # category_df = df.groupby(['시도', '구분'])['num'].agg('sum').reset_index()
+                    # fig = px.scatter(category_df, x='시도', y='num', color='구분')
+                    # fig.update_layout(
+                    #     xaxis_tickangle=90
+                    # )
+                    # st.plotly_chart(fig)
+                    vis.scatter_chart(df, group_a='시도', group_b='구분')
                     ex.exception_check()
 
             conn.close()
