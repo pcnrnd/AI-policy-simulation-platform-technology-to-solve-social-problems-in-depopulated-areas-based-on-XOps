@@ -19,3 +19,11 @@ class Visualization:
         selected_df = pd.DataFrame(df.groupby([group_a, group_b])['num'].agg('sum')).reset_index()
         fig = px.funnel(selected_df, x='num', y=group_a, color=group_b)
         st.plotly_chart(fig)
+
+    def scatter_chart(slef, df, group_a, group_b):
+        category_df = df.groupby([group_a, group_b])['num'].agg('sum').reset_index()
+        fig = px.scatter(category_df, x=group_a, y='num', color=group_b)
+        fig.update_layout(
+            xaxis_tickangle=90
+        )
+        st.plotly_chart(fig)
