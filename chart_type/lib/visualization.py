@@ -15,7 +15,7 @@ class Visualization:
         )
         st.plotly_chart(fig)
 
-    def bar_chart(self, df, group_a, group_b):
+    def funnel_chart(self, df, group_a, group_b):
         selected_df = pd.DataFrame(df.groupby([group_a, group_b])['num'].agg('sum')).reset_index()
         fig = px.funnel(selected_df, x='num', y=group_a, color=group_b)
         st.plotly_chart(fig)

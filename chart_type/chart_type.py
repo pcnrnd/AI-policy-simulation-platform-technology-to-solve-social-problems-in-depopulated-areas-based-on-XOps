@@ -42,10 +42,11 @@ def main():
                 with col2:
                     # restaurant_2023
                     st.subheader('시도별 영업 상태')
-                    selected_df = pd.DataFrame(df.groupby(['시도', '영업상태명'])['num'].agg('sum')).reset_index()
-                    fig = px.funnel(selected_df, x='num', y='시도', color='영업상태명')
-                    # fig = px.bar(selected_df, x='시도', y='num', color='영업상태명')
-                    st.plotly_chart(fig)
+                    # selected_df = pd.DataFrame(df.groupby(['시도', '영업상태명'])['num'].agg('sum')).reset_index()
+                    # fig = px.funnel(selected_df, x='num', y='시도', color='영업상태명')
+                    # # fig = px.bar(selected_df, x='시도', y='num', color='영업상태명')
+                    # st.plotly_chart(fig)
+                    vis.funnel_chart(df, group_a='시도', group_b='영업상태명')
                     ex.exception_check()
 
                 with col3:
