@@ -8,6 +8,7 @@ import pandas as pd
 import plotly.express as px
 from datetime import datetime
 from lib.exception_handling import ExceptionHandling
+from lib.visualization import Visualization
 
 def main():
     st.set_page_config(layout='wide')
@@ -31,35 +32,39 @@ def main():
             conn = duckdb.connect('./data/database.db')
             df = conn.execute(f"SELECT * FROM {options[0]}").df()
             ex = ExceptionHandling()
+            vis = Visualization()
             
             col1, col2, col3 = st.columns(3)
             with st.container():
                 with col1:
                     st.subheader('시도별 음식점 수')
-                    selected_df = pd.DataFrame(df.groupby('시도')['num'].agg('sum')).reset_index()
-                    fig = px.bar(selected_df, x='시도', y='num', color='시도')
-                    fig.update_layout(
-                        xaxis_tickangle=90
-                    )
-                    st.plotly_chart(fig)
+                    # selected_df = pd.DataFrame(df.groupby('시도')['num'].agg('sum')).reset_index()
+                    # fig = px.bar(selected_df, x='시도', y='num', color='시도')
+                    # fig.update_layout(
+                    #     xaxis_tickangle=90
+                    # )
+                    # st.plotly_chart(fig)
+                    vis.bar_chart(df, group='시도')
                     ex.exception_check()
                 
                 with col2:
                     st.subheader('시도별 영업 상태')
-                    selected_df = pd.DataFrame(df.groupby(['시도', '영업상태명'])['num'].agg('sum')).reset_index()
-                    fig = px.funnel(selected_df, x='num', y='시도', color='영업상태명')
-                    # fig = px.bar(selected_df, x='시도', y='num', color='영업상태명')
-                    st.plotly_chart(fig)
+                    # selected_df = pd.DataFrame(df.groupby(['시도', '영업상태명'])['num'].agg('sum')).reset_index()
+                    # fig = px.funnel(selected_df, x='num', y='시도', color='영업상태명')
+                    # # fig = px.bar(selected_df, x='시도', y='num', color='영업상태명')
+                    # st.plotly_chart(fig)
+                    vis.funnel_chart(df, group_a='시도', group_b='영업상태명')
                     ex.exception_check()
 
                 with col3:
                     st.subheader('시도별 음식점 종류')
-                    category_df = df.groupby(['시도', '구분'])['num'].agg('sum').reset_index()
-                    fig = px.scatter(category_df, x='시도', y='num', color='구분')
-                    fig.update_layout(
-                        xaxis_tickangle=90
-                    )
-                    st.plotly_chart(fig)
+                    # category_df = df.groupby(['시도', '구분'])['num'].agg('sum').reset_index()
+                    # fig = px.scatter(category_df, x='시도', y='num', color='구분')
+                    # fig.update_layout(
+                    #     xaxis_tickangle=90
+                    # )
+                    # st.plotly_chart(fig)
+                    vis.scatter_chart(df, group_a='시도', group_b='구분')
                     ex.exception_check()
 
                 col1, col2 = st.columns(2)
