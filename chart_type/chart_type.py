@@ -4,6 +4,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from lib.exception_handling import ExceptionHandling
+from lib.visualization import Visualization
 
 def main():
     st.set_page_config(layout='wide')
@@ -17,6 +18,9 @@ def main():
         # 빈집
         try:
             ex = ExceptionHandling()
+            vis = Visualization
+
+
             conn = duckdb.connect('./data/restaurant/database.db')
             df = conn.execute(f'SELECT * FROM {options[0]}').df()
 
@@ -26,12 +30,13 @@ def main():
                 with col1:
                     # restaurant_2024
                     st.subheader('시도별 음식점 수')
-                    selected_df = pd.DataFrame(df.groupby('시도')['num'].agg('sum')).reset_index()
-                    fig = px.bar(selected_df, x='시도', y='num', color='시도')
-                    fig.update_layout(
-                        xaxis_tickangle=90
-                    )
-                    st.plotly_chart(fig)
+                    # selected_df = pd.DataFrame(df.groupby('시도')['num'].agg('sum')).reset_index()
+                    # fig = px.bar(selected_df, x='시도', y='num', color='시도')
+                    # fig.update_layout(
+                    #     xaxis_tickangle=90
+                    # )
+                    # st.plotly_chart(fig)
+                    vis.bar_chart(df, group='시도')
                     ex.exception_check()
 
                 with col2:
