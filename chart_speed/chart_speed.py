@@ -78,23 +78,6 @@ def main():
                     fig = px.scatter(city_df, x='인허가일자', y='num', color='구분')
                     st.plotly_chart(fig)
                     ex.exception_check()
-
-            # with st.container(): 
-            #     st.dataframe(df.iloc[:, :-1], use_container_width=True)
-
-            # end_time = datetime.now()
-            # elapsed_time = (end_time - start_time).total_seconds()
-            
-            # background_color = '#F0F8FF' # AliceBlue
-            # text_color = '#708090' # SlateGray
-
-            # 최종 응답 시간으로 메시지를 업데이트합니다
-            # final_message = f"""
-            # <div style="padding: 10px; background-color: {background_color}; border-radius: 10px; text-align: center;">
-            #     <h3 style="color: {text_color};">Response time: {elapsed_time:.6f} seconds / Number of data: {len(df)} rows</h3>
-            # </div>
-            # """
-            # placeholder.markdown(final_message, unsafe_allow_html=True)
             
             conn.close()
 
