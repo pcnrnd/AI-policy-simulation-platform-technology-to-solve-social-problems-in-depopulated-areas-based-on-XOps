@@ -6,6 +6,6 @@ class ExceptionHandling:
         pass
 
     def exception_check(self):
-        value = random.uniform(0.58, 0.63)
+        value = random.uniform(0.49, 0.50)
         time.sleep(value)
 
