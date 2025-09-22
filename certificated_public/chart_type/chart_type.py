@@ -18,7 +18,7 @@ def main():
         # 빈집
         try:
             ex = ExceptionHandling()
-            vis = Visualization
+            vis = Visualization()
 
 
             conn = duckdb.connect('./data/restaurant/database.db')
