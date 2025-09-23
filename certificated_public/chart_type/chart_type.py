@@ -8,11 +8,11 @@ from lib.visualization import Visualization
 
 def main():
     st.set_page_config(layout='wide')
-    st.title('데이터 시각화 처리 응답속도')
+    st.title('데이터 시각화 처리 유형')
 
     options = st.multiselect(
             "Select data for visualization",
-            ["restaurant_2024", "restaurant_2023", "restaurant_2022", "restaurant_2021", "restaurant_2020"])
+            ["restaurant_2025", "restaurant_2024", "restaurant_2023", "restaurant_2022", "restaurant_2021"])
 
     if st.button('데이터 시각화 실행', use_container_width=True):    
         # 빈집
@@ -21,7 +21,7 @@ def main():
             vis = Visualization()
 
 
-            conn = duckdb.connect('./data/restaurant/database.db')
+            conn = duckdb.connect('./data_2025/database.db')
             df = conn.execute(f'SELECT * FROM {options[0]}').df()
 
             col1, col2, col3 = st.columns(3)
@@ -60,6 +60,22 @@ def main():
                     # st.plotly_chart(fig)
                     vis.scatter_chart(df, group_a='시도', group_b='구분')
                     ex.exception_check()
+            
+            col1, col2 = st.columns(2)
+            with st.container():
+                with col1:
+                    st.subheader('전체 업종 분포')
+                    vis.pie_chart_by_category(df, group_by='시도')
+                    ex.exception_check()
+                        
+                with col2:
+                    st.subheader('업종별 인허가일자 추세')
+                    vis.trend_chart_by_category(df, group_by='구분')
+                    ex.exception_check()
+            
+            # 히트맵 차트 추가
+            # vis.heatmap_chart(df)
+            # ex.exception_check()
 
             conn.close()
         except IndexError:
