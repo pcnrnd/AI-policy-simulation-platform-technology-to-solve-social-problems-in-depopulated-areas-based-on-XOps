@@ -14,22 +14,23 @@ def main():
     st.set_page_config(layout='wide')
     st.title('데이터 시각화 처리 응답속도')
 
-    twenty_zero = 'restaurant_2020' # 22년 데이터
+    # twenty_zero = 'restaurant_2020' # 22년 데이터
     twenty_one = 'restaurant_2021' # 23년 데이터
     twenty_two = 'restaurant_2022' # 22년 데이터
     twenty_three = 'restaurant_2023' # 23년 데이터
     twenty_four = 'restaurant_2024' # 24년 데이터
+    twenty_five = 'restaurant_2025' # 25년 데이터
 
     options = st.multiselect(
         'Select data to check response speed',
-        [twenty_four, twenty_three, twenty_two, twenty_one, twenty_zero]
+        [twenty_five, twenty_four, twenty_three, twenty_two, twenty_one]
     ) 
     
     try:
         if st.button('데이터 시각화 실행', use_container_width=True): # options:
             # PATH = './data/speed_data.csv'
             # df = pd.read_csv(PATH)
-            conn = duckdb.connect('./data/database.db')
+            conn = duckdb.connect('./data_2025/database.db')
             df = conn.execute(f"SELECT * FROM {options[0]}").df()
             ex = ExceptionHandling()
             vis = Visualization()
