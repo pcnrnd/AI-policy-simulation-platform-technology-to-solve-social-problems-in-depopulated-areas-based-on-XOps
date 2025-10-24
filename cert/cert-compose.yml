@@ -1,0 +1,17 @@
+services:
+  speed:
+    build:
+      context: ./chart_speed
+      dockerfile: Dockerfile
+    ports:
+      - "8505:8505"
+    volumes:
+      - ./chart_speed:/app
+  types:
+    build:
+      context: ./chart_type
+      dockerfile: Dockerfile
+    ports:
+      - "8506:8506"
+    volumes:
+      - ./chart_type:/app
