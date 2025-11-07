@@ -24,7 +24,7 @@
 # The following variables are supported:
 #
 # AIRFLOW_IMAGE_NAME           - Docker image name used to run Airflow.
-#                                Default: apache/airflow:3.0.3
+#                                Default: apache/airflow:3.1.1
 # AIRFLOW_UID                  - User ID in Airflow containers
 #                                Default: 50000
 # AIRFLOW_PROJ_DIR             - Base path to which all the files will be volumed.
@@ -44,13 +44,19 @@
 #
 # Feel free to modify this file to suit your needs.
 ---
+name: xops-airflow
+networks:
+  xops-net:
+    external: true
 x-airflow-common:
   &airflow-common
   # In order to add custom dependencies or upgrade provider distributions you can use your extended image.
   # Comment the image line, place your Dockerfile in the directory where you placed the docker-compose.yaml
   # and uncomment the "build" line below, Then run `docker-compose build` to build the images.
-  image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:3.0.3}
+  image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:3.1.1}
   # build: .
+  env_file:
+    - ${ENV_FILE_PATH:-.env}
   environment:
     &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: CeleryExecutor
@@ -60,7 +66,7 @@ x-airflow-common:
     AIRFLOW__CELERY__BROKER_URL: redis://:@redis:6379/0
     AIRFLOW__CORE__FERNET_KEY: ''
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
-    AIRFLOW__CORE__LOAD_EXAMPLES: 'true'
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
     AIRFLOW__CORE__EXECUTION_API_SERVER_URL: 'http://airflow-apiserver:8080/execution/'
     # yamllint disable rule:line-length
     # Use simple http server on scheduler for health checks
@@ -77,6 +83,7 @@ x-airflow-common:
     - ${AIRFLOW_PROJ_DIR:-.}/logs:/opt/airflow/logs
     - ${AIRFLOW_PROJ_DIR:-.}/config:/opt/airflow/config
     - ${AIRFLOW_PROJ_DIR:-.}/plugins:/opt/airflow/plugins
+    - ${AIRFLOW_PROJ_DIR:-..}/data_dvc:/opt/airflow/data
   user: "${AIRFLOW_UID:-50000}:0"
   depends_on:
     &airflow-common-depends-on
@@ -84,10 +91,10 @@ x-airflow-common:
       condition: service_healthy
     postgres:
       condition: service_healthy
-
+  
 services:
   postgres:
-    image: postgres:13
+    image: postgres:16
     environment:
       POSTGRES_USER: airflow
       POSTGRES_PASSWORD: airflow
@@ -100,7 +107,8 @@ services:
       retries: 5
       start_period: 5s
     restart: always
-
+    networks: 
+      - xops-net
   redis:
     # Redis is limited to 7.2-bookworm due to licencing change
     # https://redis.io/blog/redis-adopts-dual-source-available-licensing/
@@ -114,7 +122,8 @@ services:
       retries: 50
       start_period: 30s
     restart: always
-
+    networks:
+      - xops-net
   airflow-apiserver:
     <<: *airflow-common
     command: api-server
@@ -131,7 +140,8 @@ services:
       <<: *airflow-common-depends-on
       airflow-init:
         condition: service_completed_successfully
-
+    networks:
+      - xops-net
   airflow-scheduler:
     <<: *airflow-common
     command: scheduler
@@ -146,7 +156,8 @@ services:
       <<: *airflow-common-depends-on
       airflow-init:
         condition: service_completed_successfully
-
+    networks:
+      - xops-net
   airflow-dag-processor:
     <<: *airflow-common
     command: dag-processor
@@ -161,7 +172,8 @@ services:
       <<: *airflow-common-depends-on
       airflow-init:
         condition: service_completed_successfully
-
+    networks:
+      - xops-net
   airflow-worker:
     <<: *airflow-common
     command: celery worker
@@ -186,7 +198,8 @@ services:
         condition: service_healthy
       airflow-init:
         condition: service_completed_successfully
-
+    networks:
+      - xops-net
   airflow-triggerer:
     <<: *airflow-common
     command: triggerer
@@ -201,7 +214,8 @@ services:
       <<: *airflow-common-depends-on
       airflow-init:
         condition: service_completed_successfully
-
+    networks:
+      - xops-net
   airflow-init:
     <<: *airflow-common
     entrypoint: /bin/bash
@@ -293,7 +307,8 @@ services:
       _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-airflow}
       _PIP_ADDITIONAL_REQUIREMENTS: ''
     user: "0:0"
-
+    networks:
+      - xops-net
   airflow-cli:
     <<: *airflow-common
     profiles:
@@ -308,7 +323,8 @@ services:
       - airflow
     depends_on:
       <<: *airflow-common-depends-on
-
+    networks:
+      - xops-net
   # You can enable flower by adding "--profile flower" option e.g. docker-compose --profile flower up
   # or by explicitly targeted on the command line e.g. docker-compose up flower.
   # See: https://docs.docker.com/compose/profiles/
@@ -330,6 +346,7 @@ services:
       <<: *airflow-common-depends-on
       airflow-init:
         condition: service_completed_successfully
-
+    networks:
+      - xops-net
 volumes:
   postgres-db-volume:
