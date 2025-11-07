@@ -4,3 +4,6 @@ venv
 .venv
 .population
 .env
+data_raw
+data_prepro
+/data_dvc
