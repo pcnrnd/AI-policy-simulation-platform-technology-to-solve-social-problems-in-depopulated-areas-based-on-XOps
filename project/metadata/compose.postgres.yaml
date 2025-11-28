@@ -1,0 +1,36 @@
+name: xops-metadata
+services:
+  db:
+    # [핵심] image 대신 build를 사용하여 현재 폴더의 Dockerfile로 이미지를 만듭니다.
+    build:
+      context: .
+      dockerfile: Dockerfile.postgres
+    container_name: metadata-postgres
+    restart: always
+    shm_size: 128mb
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: population_metadata
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data
+    ports:
+      - 5433:5432
+    networks:
+      - xops-net
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: metadata-pgadmin
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - 5051:80
+    depends_on:
+      - db
+    networks:
+      - xops-net
+networks:
+  xops-net:
+    external: true
