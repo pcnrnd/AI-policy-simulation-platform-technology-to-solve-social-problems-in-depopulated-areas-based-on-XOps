@@ -1,5 +1,7 @@
 # DataOps, MLOps workflow management 
 
+- 아래 순서로 "docker compose up" 진행
+
 ## How to start 
 - docker compose -f compose.airflow.yaml up airflow-init
 - docker compose -f compose.airflow.yaml up -d
