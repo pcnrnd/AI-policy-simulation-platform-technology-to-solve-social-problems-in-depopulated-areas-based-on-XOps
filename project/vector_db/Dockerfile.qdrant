@@ -1,0 +1,8 @@
+FROM qdrant/qdrant
+# FROM qdrant/qdrant:latest
+# curl 설치 (헬스체크용)
+# RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+
+# USER root
+
+
