@@ -105,7 +105,7 @@ with DAG(
             print("Initializing Git repository...")
             subprocess.run(['git', 'init'], check=True, capture_output=True)
             subprocess.run(['git', 'config', 'user.email', 'jwlee2301@pcninc.co.kr'], check=False)
-            subprocess.run(['git', 'config', 'user.name', '이진웅'], check=False)
+            subprocess.run(['git', 'config', 'user.name', 'jwlee'], check=False)
         
         # DVC 저장소 초기화 (없을 때만)
         if not (dvc_dir / '.dvc').exists():
