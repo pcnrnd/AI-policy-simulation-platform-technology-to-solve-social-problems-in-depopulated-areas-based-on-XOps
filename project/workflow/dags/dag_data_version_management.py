@@ -14,7 +14,8 @@ with DAG(
     description='데이터 버전 관리 데이터 파이프라인',
     start_date=pendulum.datetime(2025, 11, 4),
     schedule="@daily",
-    tags=['version_management']
+    tags=['version_management'],
+    default_args=default_args
 ) as dag:
 
     @task.virtualenv(

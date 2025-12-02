@@ -24,8 +24,3 @@ up-all:
 	make up-airflow
 	make up-mlflow
 	make up-metadata
-
-down-all:
-	cd workflow && docker compose -f compose.airflow.yaml down --volumes --rmi all
-	cd mlflow && docker compose -f compose.mlflow.yml down --volumes --rmi all
-	cd metadata && docker compose -f compose.postgres.yaml down --volumes --rmi all
