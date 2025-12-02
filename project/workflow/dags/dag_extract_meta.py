@@ -13,7 +13,8 @@ with DAG(
     description='MinIO에서 메타데이터를 추출하여 PostgreSQL에 저장하는 파이프라인',
     start_date=pendulum.datetime(2025, 11, 27),
     schedule="@daily",
-    tags=['metadata_extraction']
+    tags=['metadata_extraction'],
+    default_args=default_args
 ) as dag:
 
     @task.virtualenv(
@@ -31,23 +32,22 @@ with DAG(
         from minio import Minio
         import mimetypes
         import os
-        
-        minio_endpoint = 'minio:9000'
-        minio_access_key = 'minio'
-        minio_secret_key = 'minio123'
-        minio_bucket = "raw"
-        
+        MINIO_ENDPOINT = 'minio:9000'
+        MINIO_ACCESS_KEY = 'minio'
+        MINIO_SECRET_KEY = 'minio123'
+        MINIO_BUCKET = "raw"
+
         client = Minio(
-            minio_endpoint,
-            access_key=minio_access_key,
-            secret_key=minio_secret_key,
+            MINIO_ENDPOINT,
+            access_key=MINIO_ACCESS_KEY,
+            secret_key=MINIO_SECRET_KEY,
             secure=False
         )
         
         metadata_list = []
         
         # 버킷의 모든 객체 나열 (파일 내용 읽지 않음)
-        objects = client.list_objects(minio_bucket, recursive=True)
+        objects = client.list_objects(MINIO_BUCKET, recursive=True)
         
         for obj in objects:
             object_name = obj.object_name
@@ -62,7 +62,7 @@ with DAG(
             file_type = mimetypes.guess_type(object_name)[0] or (ext[1:] if ext else 'unknown')
             
             metadata = {
-                'bucket_name': minio_bucket,
+                'bucket_name': MINIO_BUCKET,
                 'file_path': object_name,
                 'file_type': file_type,
                 'file_size': file_size,
@@ -77,7 +77,6 @@ with DAG(
         
         print(f"총 {len(metadata_list)}개 파일의 메타데이터 추출 완료")
         return metadata_list
-
 
     @task.virtualenv(
         task_id="save_metadata_to_postgres",
@@ -95,13 +94,18 @@ with DAG(
         """
         import psycopg2
         import json
-        
+        POSTGRES_HOST = 'db'
+        POSTGRES_PORT = 5432
+        POSTGRES_DATABASE = 'population_metadata'
+        POSTGRES_USER = 'postgres'
+        POSTGRES_PASSWORD = 'postgres'
+
         conn = psycopg2.connect(
-            host='db',
-            port='5432',
-            database='meta_population',
-            user='postgres',
-            password='postgres'
+            host=POSTGRES_HOST,
+            port=POSTGRES_PORT,
+            database=POSTGRES_DATABASE,
+            user=POSTGRES_USER,
+            password=POSTGRES_PASSWORD
         )
         cursor = conn.cursor()
         

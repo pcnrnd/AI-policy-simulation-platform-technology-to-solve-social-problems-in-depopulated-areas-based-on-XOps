@@ -14,7 +14,8 @@ with DAG(
     description='MinIO에서 원본 데이터를 읽어 데이터 통합 후 저장하는 데이터 파이프라인',
     start_date=pendulum.datetime(2025, 11, 27),
     schedule="@daily",
-    tags=['data_integration']
+    tags=['data_integration'],
+    default_args=default_args
 ) as dag:
 
     @task.virtualenv(
@@ -78,7 +79,7 @@ with DAG(
         minio_access_key = 'minio'
         minio_secret_key = 'minio123'
         minio_bucket = "prepro"
-        minio_object = "prepro_data2.csv"
+        minio_object = "prepro_data.csv"
         client = Minio(
             minio_endpoint,
             access_key=minio_access_key,

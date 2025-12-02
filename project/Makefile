@@ -1,10 +1,3 @@
-copy-makefile:
-	rsync -avh ./Makefile /home/pcnrnd/population/Makefile
-
-copy-dags:
-	rsync -avh ./workflow/dags/ /home/pcnrnd/population/workflow/dags/
-
-
 up-airflow-init:
 	cd workflow && docker compose -f compose.airflow.yaml up airflow-init
 
@@ -31,3 +24,8 @@ up-all:
 	make up-airflow
 	make up-mlflow
 	make up-metadata
+
+down-all:
+	cd workflow && docker compose -f compose.airflow.yaml down --volumes --rmi all
+	cd mlflow && docker compose -f compose.mlflow.yml down --volumes --rmi all
+	cd metadata && docker compose -f compose.postgres.yaml down --volumes --rmi all
