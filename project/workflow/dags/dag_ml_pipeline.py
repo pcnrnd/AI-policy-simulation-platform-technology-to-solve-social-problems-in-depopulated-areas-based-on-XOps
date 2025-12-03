@@ -1,7 +1,6 @@
 from airflow.sdk import DAG, task
 import pendulum
 from datetime import timedelta
-from scripts.train import train_model
 
 default_args = {
     'owner': 'airflow',
@@ -15,40 +14,46 @@ with DAG(
     start_date=pendulum.datetime(2025, 1, 1),
     schedule="@daily",
     tags=['ml_pipeline', 'training', 'automation'],
-    default_args=default_args
+    default_args=default_args,
+    catchup=False  # 과거 실행 누락 방지
 ) as dag:
+    
     @task.virtualenv(
-        task_id="load_and_validate_data",
-        requirements=['pandas', 'scikit-learn']
+        task_id="train_model_task",
+        requirements=[
+            'pandas>=2.0.0',
+            'scikit-learn>=1.3.0',
+            'minio>=7.0.0',
+            'polars>=0.19.0',
+            'numpy>=1.24.0'
+        ],
+        system_site_packages=False  # 격리된 환경 사용
     )
-    def load_and_validate_data():
-        from sklearn.datasets import load_iris
-        import pandas as pd
-
-        iris = load_iris(as_frame=True)
-        df = iris['frame']  # feature와 target이 모두 포함된 DataFrame
-        print(df.head())
-        return df
-
-    @task.virtualenv(
-        task_id="preprocess_data",
-        requirements=['pandas', 'scikit-learn']
-    )
-    def preprocess_data(df):
-        from sklearn.preprocessing import MinMaxScaler
-        scaler = MinMaxScaler()
-        df[['sepal length (cm)', 'sepal width (cm)', 'petal length (cm)', 'petal width (cm)']] = scaler.fit_transform(df[['sepal length (cm)', 'sepal width (cm)', 'petal length (cm)', 'petal width (cm)']])
-        print(df.head())
-        return df
-
-    @task.virtualenv(
-        task_id="train_model",
-        requirements=['pandas', 'scikit-learn']
-    )
-    def train_model(df):
-        from sklearn.ensemble import RandomForestClassifier
-        model = RandomForestClassifier(n_estimators=100, random_state=42)
-        model.fit(df[['sepal length (cm)', 'sepal width (cm)', 'petal length (cm)', 'petal width (cm)']], df['target']) 
-        return model
-
-    load_and_validate_data() >> preprocess_data() >> train_model()
+    def train_model_task():
+        """
+        모델 학습 태스크
+        
+        Returns:
+            dict: 학습 결과 메트릭
+        """
+        from scripts.train import train_model
+        
+        # 설정값 (환경변수나 Airflow Variable로 관리 가능)
+        metrics = train_model(
+            minio_endpoint='minio:9000',
+            minio_access_key='minio',
+            minio_secret_key='minio123',
+            minio_bucket="raw",
+            data_object='Apart Deal.csv',
+            model_bucket="models",
+            data_limit=15000,
+            test_size=0.2,
+            random_state=42,
+            n_estimators=100,
+            save_model=True
+        )
+        
+        return metrics
+    
+    # 태스크 실행
+    train_result = train_model_task()
