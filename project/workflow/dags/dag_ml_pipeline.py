@@ -36,15 +36,23 @@ with DAG(
         Returns:
             dict: 학습 결과 메트릭
         """
-        from scripts.train import train_model
+        import sys
+        import os
+        
+        # Airflow 컨테이너 내부의 dags 폴더 경로를 sys.path에 추가
+        dags_path = '/opt/airflow/dags'
+        if dags_path not in sys.path:
+            sys.path.insert(0, dags_path)
+            
+        from dags.scripts.train import train_model
         
         # 설정값 (환경변수나 Airflow Variable로 관리 가능)
         metrics = train_model(
             minio_endpoint='minio:9000',
             minio_access_key='minio',
             minio_secret_key='minio123',
-            minio_bucket="raw",
-            data_object='Apart Deal.csv',
+            minio_bucket="raw/csv",
+            data_object='Apart_Deal.csv',
             model_bucket="models",
             data_limit=15000,
             test_size=0.2,
