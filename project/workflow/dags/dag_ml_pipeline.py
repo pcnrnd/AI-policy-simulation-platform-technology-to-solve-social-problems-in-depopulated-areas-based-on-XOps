@@ -51,8 +51,8 @@ with DAG(
         from scripts.train import train_model
         
         # MLflow 설정 (환경변수 또는 Airflow Variable로 관리 가능)
-        mlflow_uri = os.getenv('MLFLOW_TRACKING_URI', 'http://mlflow-server:5000')
-        use_mlflow = os.getenv('USE_MLFLOW', 'false').lower() == 'true'
+        mlflow_uri = os.getenv('MLFLOW_TRACKING_URI', 'http://mlflow:5000')
+        use_mlflow = os.getenv('USE_MLFLOW', 'true').lower() == 'true'
         
         # 설정값 (환경변수나 Airflow Variable로 관리 가능)
         metrics = train_model(
