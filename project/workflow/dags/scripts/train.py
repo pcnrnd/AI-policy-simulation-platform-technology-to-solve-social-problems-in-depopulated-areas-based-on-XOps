@@ -9,6 +9,10 @@ import numpy as np
 import re
 import pickle
 import json
+import os
+import sys
+import hashlib
+from datetime import datetime
 from minio import Minio
 from io import BytesIO
 from typing import Dict, Tuple, Optional
@@ -206,11 +210,13 @@ def save_artifacts_to_minio(
     model: RandomForestRegressor,
     encoders: Dict[str, LabelEncoder],
     metrics: Dict[str, float],
-    model_name: str = "model.pkl",
-    encoders_name: str = "encoders.pkl"
-) -> None:
+    model_name: str = "apartment-price-prediction",
+    version: Optional[str] = None,
+    hyperparameters: Optional[Dict] = None,
+    data_info: Optional[Dict] = None
+) -> str:
     """
-    모델과 전처리 객체를 MinIO에 저장하는 함수
+    모델과 전처리 객체를 MinIO에 저장하는 함수 (Phase 1: 필수 항목 적용)
     
     Args:
         client: MinIO 클라이언트
@@ -218,48 +224,241 @@ def save_artifacts_to_minio(
         model: 학습된 모델
         encoders: LabelEncoder 딕셔너리
         metrics: 평가 메트릭
-        model_name: 모델 파일명
-        encoders_name: 인코더 파일명
+        model_name: 모델 이름 (기본값: "apartment-price-prediction")
+        version: 모델 버전 (None이면 자동 생성)
+        hyperparameters: 하이퍼파라미터 딕셔너리
+        data_info: 데이터 정보 딕셔너리
+        
+    Returns:
+        str: 저장된 모델 경로
     """
     try:
+        # 버킷이 존재하는지 확인하고 없으면 생성
+        found = client.bucket_exists(bucket)
+        if not found:
+            client.make_bucket(bucket)
+            print(f"✅ 버킷 생성 완료: {bucket}")
+        else:
+            print(f"✅ 버킷 이미 존재: {bucket}")
+        
+        # 1. 버전 관리 (필수)
+        if version is None:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            version = f"v1.0.0_{timestamp}"
+        
+        # 4. 구조화된 경로 (필수): {model_name}/{version}/
+        base_path = f"{model_name}/{version}"
+        
+        # 2. 메타데이터 생성 (필수)
+        metadata = {
+            "model_name": model_name,
+            "version": version,
+            "created_at": datetime.now().isoformat(),
+            "metrics": metrics,
+            "model_type": type(model).__name__,
+            "hyperparameters": hyperparameters or {},
+            "data_info": data_info or {},
+            "python_version": f"{sys.version_info.major}.{sys.version_info.minor}",
+            "git_commit": os.getenv("GIT_COMMIT", "unknown")
+        }
+        
+        # 파일 저장 헬퍼 함수
+        def save_file(file_name: str, data: bytes, content_type: str = 'application/octet-stream'):
+            """MinIO에 파일을 저장하는 헬퍼 함수"""
+            client.put_object(
+                bucket,
+                f"{base_path}/{file_name}",
+                BytesIO(data),
+                length=len(data),
+                content_type=content_type
+            )
+        
         # 모델 저장
         model_buffer = BytesIO()
         pickle.dump(model, model_buffer)
-        model_buffer.seek(0)
-        client.put_object(
-            bucket,
-            f"models/{model_name}",
-            model_buffer,
-            length=len(model_buffer.getvalue()),
-            content_type='application/octet-stream'
-        )
+        model_data = model_buffer.getvalue()
+        save_file("model.pkl", model_data)
         
         # 인코더 저장
         encoders_buffer = BytesIO()
         pickle.dump(encoders, encoders_buffer)
-        encoders_buffer.seek(0)
-        client.put_object(
-            bucket,
-            f"models/{encoders_name}",
-            encoders_buffer,
-            length=len(encoders_buffer.getvalue()),
-            content_type='application/octet-stream'
-        )
+        save_file("encoders.pkl", encoders_buffer.getvalue())
         
         # 메트릭 저장 (JSON 형태로)
-        metrics_buffer = BytesIO(json.dumps(metrics, indent=2).encode('utf-8'))
-        metrics_buffer.seek(0)
-        client.put_object(
-            bucket,
-            f"models/metrics.json",
-            metrics_buffer,
-            length=len(metrics_buffer.getvalue()),
-            content_type='application/json'
-        )
+        metrics_json = json.dumps(metrics, indent=2, ensure_ascii=False).encode('utf-8')
+        save_file("metrics.json", metrics_json, 'application/json')
         
-        print(f"모델 및 아티팩트 저장 완료: {bucket}/models/")
+        # 메타데이터 저장
+        metadata_json = json.dumps(metadata, indent=2, ensure_ascii=False).encode('utf-8')
+        save_file("metadata.json", metadata_json, 'application/json')
+        
+        # 3. 체크섬 저장 (필수)
+        model_hash = hashlib.sha256(model_data).hexdigest()
+        checksum = {"model_sha256": model_hash}
+        checksum_json = json.dumps(checksum).encode('utf-8')
+        save_file("checksum.json", checksum_json, 'application/json')
+        
+        print(f"✅ 모델 저장 완료: {bucket}/{base_path}/")
+        print(f"   버전: {version}")
+        print(f"   메트릭: R²={metrics.get('r2', 0):.4f}, RMSE={metrics.get('rmse', 0):,.0f}")
+        
+        return f"{bucket}/{base_path}"
+        
     except Exception as e:
         raise Exception(f"MinIO에 아티팩트 저장 실패: {str(e)}")
+
+
+def save_artifacts_with_mlflow(
+    mlflow_tracking_uri: str,
+    model: RandomForestRegressor,
+    encoders: Dict[str, LabelEncoder],
+    metrics: Dict[str, float],
+    hyperparameters: Dict,
+    data_info: Dict,
+    model_name: str = "apartment-price-prediction",
+    experiment_name: str = "apartment-price-prediction",
+    use_mlflow: bool = True,
+    fallback_to_minio: bool = True,
+    minio_client: Optional[Minio] = None,
+    minio_bucket: Optional[str] = None
+) -> Dict[str, str]:
+    """
+    MLflow를 사용하여 모델 저장 (하이브리드: MLflow 실패 시 MinIO로 폴백)
+    
+    Args:
+        mlflow_tracking_uri: MLflow 서버 URI
+        model: 학습된 모델
+        encoders: LabelEncoder 딕셔너리
+        metrics: 평가 메트릭
+        hyperparameters: 하이퍼파라미터 딕셔너리
+        data_info: 데이터 정보 딕셔너리
+        model_name: 모델 이름
+        experiment_name: 실험 이름
+        use_mlflow: MLflow 사용 여부
+        fallback_to_minio: MLflow 실패 시 MinIO 폴백 여부
+        minio_client: MinIO 클라이언트 (폴백용)
+        minio_bucket: MinIO 버킷 이름 (폴백용)
+        
+    Returns:
+        Dict: 저장 정보 (run_id, model_uri, version 등)
+    """
+    try:
+        import mlflow
+        import mlflow.sklearn
+        from mlflow.tracking import MlflowClient
+        import tempfile
+        
+        if use_mlflow:
+            # MLflow 서버 연결 대기 (최대 30초)
+            import requests
+            import time
+            max_retries = 30
+            retry_interval = 2
+            
+            for i in range(max_retries):
+                try:
+                    response = requests.get(f"{mlflow_tracking_uri}/health", timeout=2)
+                    if response.status_code == 200:
+                        print(f"✅ MLflow 서버 연결 성공")
+                        break
+                except Exception as e:
+                    if i < max_retries - 1:
+                        print(f"⏳ MLflow 서버 연결 대기 중... ({i+1}/{max_retries})")
+                        time.sleep(retry_interval)
+                    else:
+                        raise ConnectionError(f"MLflow 서버에 연결할 수 없습니다: {mlflow_tracking_uri}")
+            
+            # MLflow 설정
+            mlflow.set_tracking_uri(mlflow_tracking_uri)
+            mlflow.set_experiment(experiment_name)
+            
+            with mlflow.start_run() as run:
+                # 하이퍼파라미터 로깅
+                mlflow.log_params(hyperparameters)
+                
+                # 메트릭 로깅
+                mlflow.log_metrics(metrics)
+                
+                # 데이터 정보 로깅
+                mlflow.log_params({
+                    f"data_{k}": str(v) for k, v in data_info.items()
+                })
+                
+                # 인코더 저장 (artifacts)
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.pkl') as tmp_file:
+                    pickle.dump(encoders, tmp_file)
+                    tmp_file.flush()
+                    mlflow.log_artifact(tmp_file.name, "encoders")
+                    os.unlink(tmp_file.name)
+                
+                # 모델 저장 및 등록
+                mlflow.sklearn.log_model(
+                    model,
+                    "model",
+                    registered_model_name=model_name
+                )
+                
+                # 메타데이터 저장
+                metadata = {
+                    "model_name": model_name,
+                    "run_id": run.info.run_id,
+                    "experiment_id": run.info.experiment_id,
+                    "created_at": datetime.now().isoformat(),
+                    "data_info": data_info
+                }
+                with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json', encoding='utf-8') as tmp_file:
+                    json.dump(metadata, tmp_file, indent=2, ensure_ascii=False)
+                    tmp_file.flush()
+                    mlflow.log_artifact(tmp_file.name, "metadata")
+                    os.unlink(tmp_file.name)
+                
+                # 모델 등록 정보 가져오기
+                client = MlflowClient()
+                model_versions = client.get_latest_versions(model_name, stages=["None"])
+                if model_versions:
+                    model_version = model_versions[0]
+                else:
+                    # 모델이 등록되지 않은 경우 (이론적으로는 발생하지 않아야 함)
+                    model_version = None
+                
+                result = {
+                    "run_id": run.info.run_id,
+                    "model_uri": f"runs:/{run.info.run_id}/model",
+                    "model_version": model_version.version if model_version else "unknown",
+                    "experiment_id": run.info.experiment_id,
+                    "storage_type": "mlflow"
+                }
+                
+                print(f"✅ MLflow 저장 완료")
+                print(f"   Run ID: {run.info.run_id}")
+                if model_version:
+                    print(f"   Model Version: {model_version.version}")
+                print(f"   Model URI: {result['model_uri']}")
+                
+                return result
+                
+    except Exception as e:
+        print(f"⚠️ MLflow 저장 실패: {str(e)}")
+        if fallback_to_minio and minio_client and minio_bucket:
+            print("📦 MinIO로 폴백 저장 중...")
+            model_path = save_artifacts_to_minio(
+                client=minio_client,
+                bucket=minio_bucket,
+                model=model,
+                encoders=encoders,
+                metrics=metrics,
+                model_name=model_name,
+                hyperparameters=hyperparameters,
+                data_info=data_info
+            )
+            result = {
+                "model_path": model_path,
+                "storage_type": "minio_fallback",
+                "error": str(e)
+            }
+            return result
+        else:
+            raise
 
 
 def train_model(
@@ -269,6 +468,8 @@ def train_model(
     minio_bucket: str = "raw",
     data_object: str = 'Apart Deal.csv',
     model_bucket: str = "models",
+    mlflow_tracking_uri: Optional[str] = None,
+    use_mlflow: bool = False,
     data_limit: Optional[int] = 15000,
     test_size: float = 0.2,
     random_state: int = 42,
@@ -285,6 +486,8 @@ def train_model(
         minio_bucket: 데이터 버킷 이름
         data_object: 데이터 객체 이름
         model_bucket: 모델 저장 버킷 이름
+        mlflow_tracking_uri: MLflow 서버 URI (예: "http://mlflow:5000")
+        use_mlflow: MLflow 사용 여부
         data_limit: 데이터 제한 행 수
         test_size: 테스트 데이터 비율
         random_state: 랜덤 시드
@@ -379,13 +582,51 @@ def train_model(
         # 모델 저장
         if save_model:
             print("\n모델 저장 중...")
-            save_artifacts_to_minio(
-                client=client,
-                bucket=model_bucket,
-                model=rfc,
-                encoders=encoders,
-                metrics=metrics
-            )
+            
+            hyperparameters = {
+                "n_estimators": n_estimators,
+                "random_state": random_state,
+                "test_size": test_size
+            }
+            
+            data_info = {
+                "train_size": len(X_train),
+                "test_size": len(X_test),
+                "features": list(X.columns),
+                "data_limit": data_limit
+            }
+            
+            if use_mlflow and mlflow_tracking_uri:
+                # MLflow 사용 (하이브리드: 실패 시 MinIO 폴백)
+                storage_info = save_artifacts_with_mlflow(
+                    mlflow_tracking_uri=mlflow_tracking_uri,
+                    model=rfc,
+                    encoders=encoders,
+                    metrics=metrics,
+                    hyperparameters=hyperparameters,
+                    data_info=data_info,
+                    model_name="apartment-price-prediction",
+                    experiment_name="apartment-price-prediction",
+                    use_mlflow=True,
+                    fallback_to_minio=True,
+                    minio_client=client,
+                    minio_bucket=model_bucket
+                )
+                print(f"📦 저장 정보: {storage_info}")
+            else:
+                # MinIO 사용 (기존 방식)
+                model_path = save_artifacts_to_minio(
+                    client=client,
+                    bucket=model_bucket,
+                    model=rfc,
+                    encoders=encoders,
+                    metrics=metrics,
+                    model_name="apartment-price-prediction",
+                    version=None,  # 자동 생성
+                    hyperparameters=hyperparameters,
+                    data_info=data_info
+                )
+                print(f"📦 모델 저장 경로: {model_path}")
         
         return metrics
         
