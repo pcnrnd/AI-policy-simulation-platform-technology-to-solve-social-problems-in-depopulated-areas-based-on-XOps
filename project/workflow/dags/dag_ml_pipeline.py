@@ -26,7 +26,10 @@ with DAG(
             'minio>=7.0.0',
             'polars>=0.19.0',
             'numpy>=1.24.0',
-            'pyarrow>=15.0.0'
+            'pyarrow>=15.0.0',
+            'mlflow>=2.0.0',
+            'boto3>=1.28.0',
+            'requests>=2.31.0'
         ],
         system_site_packages=False  # 격리된 환경 사용
     )
@@ -47,6 +50,10 @@ with DAG(
             
         from scripts.train import train_model
         
+        # MLflow 설정 (환경변수 또는 Airflow Variable로 관리 가능)
+        mlflow_uri = os.getenv('MLFLOW_TRACKING_URI', 'http://mlflow:5000')
+        use_mlflow = os.getenv('USE_MLFLOW', 'false').lower() == 'true'
+        
         # 설정값 (환경변수나 Airflow Variable로 관리 가능)
         metrics = train_model(
             minio_endpoint='minio:9000',
@@ -55,6 +62,8 @@ with DAG(
             minio_bucket="raw",
             data_object='csv/Apart_Deal.csv',
             model_bucket="models",
+            mlflow_tracking_uri=mlflow_uri if use_mlflow else None,
+            use_mlflow=use_mlflow,
             data_limit=15000,
             test_size=0.2,
             random_state=42,
