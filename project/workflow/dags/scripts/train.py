@@ -1,211 +1,399 @@
-import mlflow   
-import os
-import requests
+from sklearn.metrics import mean_absolute_error, r2_score, mean_absolute_percentage_error
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import mean_squared_error
 import pandas as pd
+import polars as pl
+import numpy as np
+import re
+import pickle
+import json
 from minio import Minio
 from io import BytesIO
-
-# ======================
-# LightGBM 학습 (불균형 보정 + 조기종료) - MLflow 연동
-# ======================
-# 테스트용 데이터 임의 생성 (입력)
-import numpy as np
-import pandas as pd
-import os
-import pickle
-from lightgbm import LGBMClassifier
-import lightgbm as lgb
-from sklearn.metrics import roc_auc_score, average_precision_score, f1_score
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
-from sklearn.preprocessing import LabelEncoder
-
-import socket
+from typing import Dict, Tuple, Optional
 
 
-mlflow_server_ip = socket.gethostbyname("mlflow-server")
-mlflow.set_tracking_uri(f"http://{mlflow_server_ip}:5000")
-mlflow.set_experiment("test_classifier")
-
-# MinIO 클라이언트 초기화
-client = Minio(
-    "mlflow-minio:9000",  # MinIO 서버 주소
-    access_key="minio",
-    secret_key="minio123",
-    secure=False  # HTTPS를 사용하지 않는 경우 (프로덕션 환경에서는 True로 설정)
-)
-
-# 모든 년도 파일 리스트
-bucket_name = "prepro"
-years = ['2020', '2021', '2022', '2023', '2024', '2025']
-dfs = []
-
-for year in years:
-    object_name = f"restaurant_{year}.csv"
-    response = client.get_object(bucket_name, object_name)
-    data_stream = BytesIO(response.read())
-    df_temp = pd.read_csv(data_stream)
-    dfs.append(df_temp)
-    response.close()
-    response.release_conn()
-
-# 모든 DataFrame 합치기
-df = pd.concat(dfs, ignore_index=True)
-
-
-
-le = LabelEncoder()
-label_data = le.fit_transform(df['영업상태명'])
-
-df['label'] = label_data
-
-# 주소지 컬럼 인코딩
-import re
-
-# 번지 숫자 추출 함수
-def extract_lot_number(lot_str):
-    """번지에서 숫자를 추출합니다 (예: '3', '11', '169-3' -> 3, 11, 169)"""
-    if pd.isna(lot_str) or lot_str == '' or lot_str == 'nan':
-        return 0
-    # 첫 번째 숫자 추출
-    match = re.search(r'\d+', str(lot_str))
-    return int(match.group()) if match else 0
-
-# 번지 컬럼 숫자로 변환
-df['번지_숫자'] = df['번지'].apply(extract_lot_number)
-
-# 시도, 시군구, 읍면동 LabelEncoder 인코딩
-cols = ['시도', '시군구', '읍면동', '구분']
-address_encoders = {}
-
-for col in cols:
-    if col in df.columns:
-        le = LabelEncoder()
-        # NaN 값을 '기타'로 채우기
-        df[col] = df[col].fillna('기타')
-        df[f'{col}_encoded'] = le.fit_transform(df[col])
-        address_encoders[col] = le
-
-# 사용할 feature 선정
-unused_cols = ['개방서비스명', '인허가일자', '폐업일자', '영업상태명', '소재지', 
-               'label', '시도', '시군구', '읍면동', '번지', '도로명', 
-               '시설명', '남성종사자수', '여성종사자수']  # 시설명, 종사자수도 제외
-features = [col for col in df.columns if col not in unused_cols]
-
-X = df[features]
-y = df['label']
-
-import os
-
-# MinIO/S3 접근을 위한 AWS credentials 설정
-os.environ['AWS_ACCESS_KEY_ID'] = 'minio'  # .env.train 파일의 값으로 변경
-os.environ['AWS_SECRET_ACCESS_KEY'] = 'minio123'  # .env.train 파일의 값으로 변경
-os.environ['AWS_DEFAULT_REGION'] = 'us-east-1'
-os.environ['MLFLOW_S3_ENDPOINT_URL'] = 'http://mlflow-minio:9000'
-os.environ['AWS_ENDPOINT_URL'] = 'http://mlflow-minio:9000'
-
-
-
-
-cat_features = []
-for col in X_train.columns:
-    if "encoded" in col or X_train[col].dtype == "object":
-        cat_features.append(col)
-
-
-with mlflow.start_run():
-    # 정수 컬럼 경고 해결: 전부 float64로 변환
-    # 문자열 컬럼이 있다면 float로 변환 가능한 컬럼만 선택
-    numeric_cols = X_train.select_dtypes(include=[np.number]).columns.tolist()
-    X_train = X_train[numeric_cols].astype('float64')
-    X_test = X_test[numeric_cols].astype('float64')
+def get_minio_client(
+    endpoint: str = 'minio:9000',
+    access_key: str = 'minio',
+    secret_key: str = 'minio123',
+    secure: bool = False
+) -> Minio:
+    """
+    MinIO 클라이언트를 생성하는 함수
     
-    # cat_features도 업데이트 (X_train에 존재하는 컬럼만)
-    cat_features_updated = [col for col in cat_features if col in numeric_cols]
-    
-    # 파라미터 로깅
-    mlflow.log_params({
-        "n_estimators": 1500,
-        "learning_rate": 0.04,
-        "num_leaves": 63,
-        "subsample": 0.8,
-        "colsample_bytree": 0.8,
-        "reg_lambda": 1.0,
-        "class_weight": "balanced",
-        "test_size": 0.2,
-        "random_state": 123,
-        "categorical_features": cat_features_updated
-    })
-    
-    lgbm = LGBMClassifier(
-        n_estimators=1500,
-        learning_rate=0.04,
-        num_leaves=63,
-        subsample=0.8,
-        colsample_bytree=0.8,
-        reg_lambda=1.0,
-        class_weight="balanced",
-        random_state=RANDOM_STATE,
-        n_jobs=-1
+    Args:
+        endpoint: MinIO 엔드포인트
+        access_key: 접근 키
+        secret_key: 시크릿 키
+        secure: SSL 사용 여부
+        
+    Returns:
+        Minio: MinIO 클라이언트 객체
+    """
+    return Minio(
+        endpoint,
+        access_key=access_key,
+        secret_key=secret_key,
+        secure=secure
     )
 
-    # 학습 메트릭을 수집하기 위한 callback
-    evals_result = {}
-    lgbm.fit(
-        X_train, y_train,
-        eval_set=[(X_test, y_test)],
-        eval_metric="auc",
-        callbacks=[
-            lgb.early_stopping(stopping_rounds=80, verbose=True),
-            lgb.record_evaluation(evals_result)
-        ],
-        categorical_feature=cat_features_updated if cat_features_updated else "auto"
+
+def extract_phase(apartment_name):
+    """
+    아파트명에서 차수 정보를 추출하는 함수
+    예: '남외푸르지오1차' -> '1차', '남운학성타운' -> None
+    """
+    if pd.isna(apartment_name):
+        return None
+    match = re.search(r'(\d+차)$', str(apartment_name))
+    return match.group(1) if match else None
+
+
+def remove_phase(apartment_name):
+    """
+    아파트명에서 차수 정보를 제거하는 함수
+    예: '남외푸르지오1차' -> '남외푸르지오', '남운학성타운' -> '남운학성타운'
+    """
+    if pd.isna(apartment_name):
+        return apartment_name
+    return re.sub(r'\d+차$', '', str(apartment_name)).strip()
+
+
+def split_lot_number(lot):
+    """
+    지번을 본번과 부번으로 분리하는 함수
+    '506-1' -> (506, 1)
+    '379' -> (379, 0)
+    """
+    if pd.isna(lot):
+        return 0, 0
+    
+    lot_str = str(lot).strip()
+    if '-' in lot_str:
+        parts = lot_str.split('-', 1)
+        main = int(parts[0]) if parts[0].isdigit() else 0
+        sub = int(parts[1]) if parts[1].isdigit() else 0
+        return main, sub
+    else:
+        main = int(lot_str) if lot_str.isdigit() else 0
+        return main, 0
+
+
+def load_data_from_minio(
+    client: Minio,
+    bucket: str,
+    object_name: str,
+    limit: Optional[int] = None
+) -> pl.DataFrame:
+    """
+    MinIO에서 데이터를 로드하는 함수
+    
+    Args:
+        client: MinIO 클라이언트
+        bucket: 버킷 이름
+        object_name: 객체 이름
+        limit: 읽을 최대 행 수 (None이면 전체)
+        
+    Returns:
+        pl.DataFrame: 로드된 데이터프레임
+    """
+    try:
+        response = client.get_object(bucket, object_name)
+        object_data = BytesIO(response.read())
+        object_data.seek(0)
+        
+        df = pl.read_csv(
+            object_data,
+            schema_overrides={
+                '거래금액': pl.Utf8,
+                '층': pl.Utf8
+            }
+        )
+        
+        if limit:
+            df = df[:limit]
+            
+        response.close()
+        response.release_conn()
+        
+        return df
+    except Exception as e:
+        raise Exception(f"MinIO에서 데이터 로드 실패: {str(e)}")
+
+
+def preprocess_data(df: pl.DataFrame) -> Tuple[pd.DataFrame, Dict[str, LabelEncoder]]:
+    """
+    데이터 전처리 함수
+    
+    Args:
+        df: 원본 데이터프레임
+        
+    Returns:
+        Tuple[pd.DataFrame, Dict[str, LabelEncoder]]: 전처리된 데이터와 LabelEncoder 딕셔너리
+    """
+    # 차수 추출
+    df = df.with_columns(
+        pl.col('아파트').map_elements(extract_phase, return_dtype=pl.Utf8).alias('차수')
     )
     
-    # 학습 과정 메트릭 로깅 (시간 경과 시각화용)
-    for metric_name, metric_values in evals_result.get('valid_0', {}).items():
-        for epoch, value in enumerate(metric_values):
-            mlflow.log_metric(f"train_{metric_name}", value, step=epoch)
+    # 지번 분리
+    df = df.with_columns([
+        pl.col('지번').map_elements(
+            lambda x: split_lot_number(x)[0] if x else 0,
+            return_dtype=pl.Int64
+        ).alias('지번_본번'),
+        pl.col('지번').map_elements(
+            lambda x: split_lot_number(x)[1] if x else 0,
+            return_dtype=pl.Int64
+        ).alias('지번_부번')
+    ])
     
-    # 모델 저장 (로컬 파일)
-    model_filename = f"lgbm_classifier_run_{mlflow.active_run().info.run_id}.pkl"  # 동적 이름
-    with open(os.path.join(ARTIFACT_DIR, model_filename), "wb") as f:
-        pickle.dump(lgbm, f)
-    
-    # 평가 메트릭을 MLflow로 로깅
-    proba = lgbm.predict_proba(X_test)[:, 1]
-    pred_default = (proba >= 0.5).astype(int)
-    
-    roc = roc_auc_score(y_test, proba)
-    precision = average_precision_score(y_test, proba)
-    
-    mlflow.log_metrics({
-        "roc": roc,
-        "precision": precision,
-        "f1_score": f1_score(y_test, pred_default),
-        "accuracy": (y_test == pred_default).mean(),
-        "best_iteration": lgbm.best_iteration_,
-        "num_features": len(X_train.columns)
-    })
-    
-    # 모델 로깅 (MLflow에 모델도 저장, 개선된 방식: signature와 input_example 포함)
-    from mlflow.models import infer_signature
-
-    # 1. 모델이 예상하는 입력 예제 생성 (float64 유지)
-    input_example = X_train.iloc[:5]
-
-    # 2. 모델의 예측 결과로 시그니처 추론
-    signature = mlflow.models.infer_signature(
-        X_train.iloc[:5],
-        lgbm.predict(X_train.iloc[:5])
-    )
-
-    # 3. 시그니처와 예제를 포함하여 모델 저장
-    mlflow.lightgbm.log_model(
-        lgbm, 
-        name="lgbm_classifier",  # ← 여기서 모델 이름 변경 가능
-        signature=signature,
-        input_example=input_example
+    # 아파트명 정제
+    df = df.with_columns(
+        pl.col('아파트').map_elements(remove_phase, return_dtype=pl.Utf8).alias('아파트_정제')
     )
     
-    print(f"\n[MLflow] 실험 저장 완료!")
+    # 차수 결측치 처리
+    df = df.with_columns(
+        pl.col('차수').fill_null('없음')
+    )
+    
+    # 필요한 컬럼만 선택
+    n_df = df[['지역코드', '법정동', '아파트_정제', '차수', '지번_본번', '지번_부번', 
+               '전용면적', '층', '건축년도', '거래금액']]
+    
+    # Polars를 Pandas로 변환
+    n_df_pd = n_df.to_pandas()
+    
+    # LabelEncoder 생성 및 적용
+    encoders = {}
+    le_a = LabelEncoder()
+    le_b = LabelEncoder()
+    le_c = LabelEncoder()
+    
+    n_df_pd['법정동'] = le_a.fit_transform(n_df_pd['법정동'])
+    n_df_pd['차수'] = le_b.fit_transform(n_df_pd['차수'])
+    n_df_pd['아파트_정제'] = le_c.fit_transform(n_df_pd['아파트_정제'])
+    
+    encoders['법정동'] = le_a
+    encoders['차수'] = le_b
+    encoders['아파트_정제'] = le_c
+    
+    # 데이터 타입 변환 및 결측치 처리
+    n_df_pd['지번_본번'] = n_df_pd['지번_본번'].fillna(0).astype(int)
+    n_df_pd['지번_부번'] = n_df_pd['지번_부번'].fillna(0).astype(int)
+    n_df_pd['건축년도'] = n_df_pd['건축년도'].fillna(0).astype(int)
+    n_df_pd['지역코드'] = n_df_pd['지역코드'].fillna(0).astype(int)
+    
+    n_df_pd['층'] = pd.to_numeric(
+        n_df_pd['층'].replace(' ', np.nan).replace('', np.nan),
+        errors='coerce'
+    ).fillna(0).astype(int)
+    
+    n_df_pd['거래금액'] = pd.to_numeric(
+        n_df_pd['거래금액'].astype(str).str.replace(',', ''),
+        errors='coerce'
+    ).fillna(0).astype(int)
+    
+    return n_df_pd, encoders
+
+
+def save_artifacts_to_minio(
+    client: Minio,
+    bucket: str,
+    model: RandomForestRegressor,
+    encoders: Dict[str, LabelEncoder],
+    metrics: Dict[str, float],
+    model_name: str = "model.pkl",
+    encoders_name: str = "encoders.pkl"
+) -> None:
+    """
+    모델과 전처리 객체를 MinIO에 저장하는 함수
+    
+    Args:
+        client: MinIO 클라이언트
+        bucket: 버킷 이름
+        model: 학습된 모델
+        encoders: LabelEncoder 딕셔너리
+        metrics: 평가 메트릭
+        model_name: 모델 파일명
+        encoders_name: 인코더 파일명
+    """
+    try:
+        # 모델 저장
+        model_buffer = BytesIO()
+        pickle.dump(model, model_buffer)
+        model_buffer.seek(0)
+        client.put_object(
+            bucket,
+            f"models/{model_name}",
+            model_buffer,
+            length=len(model_buffer.getvalue()),
+            content_type='application/octet-stream'
+        )
+        
+        # 인코더 저장
+        encoders_buffer = BytesIO()
+        pickle.dump(encoders, encoders_buffer)
+        encoders_buffer.seek(0)
+        client.put_object(
+            bucket,
+            f"models/{encoders_name}",
+            encoders_buffer,
+            length=len(encoders_buffer.getvalue()),
+            content_type='application/octet-stream'
+        )
+        
+        # 메트릭 저장 (JSON 형태로)
+        metrics_buffer = BytesIO(json.dumps(metrics, indent=2).encode('utf-8'))
+        metrics_buffer.seek(0)
+        client.put_object(
+            bucket,
+            f"models/metrics.json",
+            metrics_buffer,
+            length=len(metrics_buffer.getvalue()),
+            content_type='application/json'
+        )
+        
+        print(f"모델 및 아티팩트 저장 완료: {bucket}/models/")
+    except Exception as e:
+        raise Exception(f"MinIO에 아티팩트 저장 실패: {str(e)}")
+
+
+def train_model(
+    minio_endpoint: str = 'minio:9000',
+    minio_access_key: str = 'minio',
+    minio_secret_key: str = 'minio123',
+    minio_bucket: str = "raw",
+    data_object: str = 'Apart Deal.csv',
+    model_bucket: str = "models",
+    data_limit: Optional[int] = 15000,
+    test_size: float = 0.2,
+    random_state: int = 42,
+    n_estimators: int = 100,
+    save_model: bool = True
+) -> Dict[str, float]:
+    """
+    모델 학습 메인 함수
+    
+    Args:
+        minio_endpoint: MinIO 엔드포인트
+        minio_access_key: MinIO 접근 키
+        minio_secret_key: MinIO 시크릿 키
+        minio_bucket: 데이터 버킷 이름
+        data_object: 데이터 객체 이름
+        model_bucket: 모델 저장 버킷 이름
+        data_limit: 데이터 제한 행 수
+        test_size: 테스트 데이터 비율
+        random_state: 랜덤 시드
+        n_estimators: 랜덤 포레스트 트리 개수
+        save_model: 모델 저장 여부
+        
+    Returns:
+        Dict[str, float]: 평가 메트릭 딕셔너리
+    """
+    try:
+        # MinIO 클라이언트 생성
+        client = get_minio_client(
+            endpoint=minio_endpoint,
+            access_key=minio_access_key,
+            secret_key=minio_secret_key
+        )
+        
+        # 데이터 로드
+        print(f"데이터 로드 중: {minio_bucket}/{data_object}")
+        df = load_data_from_minio(client, minio_bucket, data_object, limit=data_limit)
+        print(f"로드된 데이터 행 수: {len(df)}")
+        
+        # 데이터 전처리
+        print("데이터 전처리 중...")
+        n_df_pd, encoders = preprocess_data(df)
+        print(f"전처리 완료. 컬럼 수: {len(n_df_pd.columns)}")
+        
+        # 타겟과 피처 분리
+        y = n_df_pd['거래금액']
+        X = n_df_pd.drop(columns=['거래금액'])
+        
+        # 데이터 분할
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=test_size, random_state=random_state
+        )
+        print(f"학습 데이터: {len(X_train)}행, 테스트 데이터: {len(X_test)}행")
+        
+        # 모델 학습
+        print("모델 학습 중...")
+        rfc = RandomForestRegressor(n_estimators=n_estimators, random_state=random_state)
+        rfc.fit(X_train, y_train)
+        
+        # 예측 및 평가
+        y_pred = rfc.predict(X_test)
+        
+        mse = mean_squared_error(y_test, y_pred)
+        rmse = np.sqrt(mse)
+        mae = mean_absolute_error(y_test, y_pred)
+        r2 = r2_score(y_test, y_pred)
+        
+        # 거래금액 통계
+        y_mean = y_test.mean()
+        y_std = y_test.std()
+        
+        metrics = {
+            'mse': float(mse),
+            'rmse': float(rmse),
+            'mae': float(mae),
+            'r2': float(r2),
+            'y_mean': float(y_mean),
+            'y_std': float(y_std),
+            'y_min': float(y_test.min()),
+            'y_max': float(y_test.max()),
+            'rmse_percentage': float((rmse/y_mean)*100),
+            'mae_percentage': float((mae/y_mean)*100)
+        }
+        
+        # 결과 출력
+        print("=" * 50)
+        print("모델 성능 평가 지표")
+        print("=" * 50)
+        print(f"MSE (Mean Squared Error): {mse:,.2f}")
+        print(f"RMSE (Root Mean Squared Error): {rmse:,.2f} 만원")
+        print(f"MAE (Mean Absolute Error): {mae:,.2f} 만원")
+        print(f"R² Score: {r2:.4f}")
+        print()
+        print("=" * 50)
+        print("실제 거래금액 통계")
+        print("=" * 50)
+        print(f"평균: {y_mean:,.2f} 만원")
+        print(f"표준편차: {y_std:,.2f} 만원")
+        print(f"최소값: {y_test.min():,} 만원")
+        print(f"최대값: {y_test.max():,} 만원")
+        print()
+        print("=" * 50)
+        print("상대적 성능")
+        print("=" * 50)
+        print(f"RMSE / 평균: {(rmse/y_mean)*100:.2f}%")
+        print(f"MAE / 평균: {(mae/y_mean)*100:.2f}%")
+        print(f"R² Score: {r2:.4f} ({r2*100:.2f}% 설명력)")
+        
+        # 모델 저장
+        if save_model:
+            print("\n모델 저장 중...")
+            save_artifacts_to_minio(
+                client=client,
+                bucket=model_bucket,
+                model=rfc,
+                encoders=encoders,
+                metrics=metrics
+            )
+        
+        return metrics
+        
+    except Exception as e:
+        print(f"모델 학습 중 오류 발생: {str(e)}")
+        raise
+
+
+# 스크립트 직접 실행 시
+if __name__ == "__main__":
+    train_model()
