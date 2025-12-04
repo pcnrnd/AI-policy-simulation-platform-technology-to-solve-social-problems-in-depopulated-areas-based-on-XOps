@@ -413,17 +413,16 @@ def save_artifacts_with_mlflow(
                     os.unlink(tmp_file.name)
                 
                 # 모델 저장 및 등록
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                unique_model_name = f"{model_name}_{timestamp}"
+                
                 mlflow.sklearn.log_model(
                     model,
                     "model",
-                    registered_model_name=unique_model_name
+                    registered_model_name=model_name
                 )
                 
                 # 메타데이터 저장
                 metadata = {
-                    "model_name": unique_model_name,
+                    "model_name": model_name,
                     "run_id": run.info.run_id,
                     "experiment_id": run.info.experiment_id,
                     "created_at": datetime.now().isoformat(),
