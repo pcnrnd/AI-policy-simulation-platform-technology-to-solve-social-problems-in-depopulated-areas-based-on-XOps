@@ -101,7 +101,7 @@ services:
         --default-artifact-root ${MLFLOW_DEFAULT_ARTIFACT_ROOT} \
         --host ${MLFLOW_HOST} \
         --port ${MLFLOW_PORT} \
-        --allowed-hosts "${MLFLOW_ALLOWED_HOSTS:-mlflow,mlflow:5001,localhost,127.0.0.1,0.0.0.0,airflow}"
+       --allowed-hosts "mlflow,mlflow:5001,localhost,127.0.0.1,0.0.0.0,airflow,airflow-apiserver,airflow-webserver,airflow-scheduler,airflow-worker,airflow-triggerer"
     ports:
       - "${MLFLOW_PORT}:${MLFLOW_PORT}"
     healthcheck:
