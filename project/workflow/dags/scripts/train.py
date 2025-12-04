@@ -372,7 +372,7 @@ def save_artifacts_with_mlflow(
             mlflow.set_tracking_uri(mlflow_tracking_uri)
             
             # 실험 생성 또는 가져오기
-            client = MlflowClient()
+            client = MlflowClient(tracking_uri=mlflow_tracking_uri)
             try:
                 # 실험 존재 여부 확인
                 experiment = client.get_experiment_by_name(experiment_name)
