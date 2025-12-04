@@ -89,7 +89,7 @@ services:
       # # Server host/port
       MLFLOW_HOST: ${MLFLOW_HOST}
       MLFLOW_PORT: ${MLFLOW_PORT}
-      # MLFLOW_ALLOWED_HOSTS: "mlflow,mlflow:${MLFLOW_PORT},localhost,127.0.0.1,0.0.0.0"
+      MLFLOW_ALLOWED_HOSTS: "mlflow,mlflow:${MLFLOW_PORT},localhost,127.0.0.1,0.0.0.0"
     command: 
     - /bin/sh
     - -c
