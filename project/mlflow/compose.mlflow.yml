@@ -76,8 +76,9 @@ services:
       - .env
     environment:
       # Backend store URI built from vars
-      # MLFLOW_BACKEND_STORE_URI: ${MLFLOW_BACKEND_STORE_URI}
-      MLFLOW_BACKEND_STORE_URI: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@mlflow-postgres:5432/${POSTGRES_DB}
+      MLFLOW_BACKEND_STORE_URI: ${MLFLOW_BACKEND_STORE_URI}
+      # MLFLOW_BACKEND_STORE_URI: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@mlflow-postgres:5432/${POSTGRES_DB}
+      # MLFLOW_BACKEND_STORE_URI: postgresql://${mlflow}:${mlflow}@mlflow-postgres:5432/${mlflow}
       # S3/MinIO settings
       MLFLOW_S3_ENDPOINT_URL: ${MLFLOW_S3_ENDPOINT_URL}
       AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
@@ -88,7 +89,7 @@ services:
       # # Server host/port
       MLFLOW_HOST: ${MLFLOW_HOST}
       MLFLOW_PORT: ${MLFLOW_PORT}
-      MLFLOW_ALLOWED_HOSTS: "mlflow,mlflow:${MLFLOW_PORT},localhost,127.0.0.1,0.0.0.0"
+      # MLFLOW_ALLOWED_HOSTS: "mlflow,mlflow:${MLFLOW_PORT},localhost,127.0.0.1,0.0.0.0"
     command: 
     - /bin/sh
     - -c
@@ -97,8 +98,7 @@ services:
         --backend-store-uri ${MLFLOW_BACKEND_STORE_URI} \
         --default-artifact-root ${MLFLOW_DEFAULT_ARTIFACT_ROOT} \
         --host ${MLFLOW_HOST} \
-        --port ${MLFLOW_PORT} \
-        --allowed-hosts "mlflow,mlflow:${MLFLOW_PORT},localhost,127.0.0.1,0.0.0.0"
+        --port ${MLFLOW_PORT} 
     ports:
       - "${MLFLOW_PORT}:${MLFLOW_PORT}"
     healthcheck:
