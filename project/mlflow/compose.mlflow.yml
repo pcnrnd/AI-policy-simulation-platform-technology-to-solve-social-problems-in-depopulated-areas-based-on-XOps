@@ -7,7 +7,7 @@ services:
     image: postgres:15
     container_name: postgres
     env_file:
-      - .env.mlflow
+      - .env
     volumes:
       - pgdata:/var/lib/postgresql/data
     ports:
@@ -24,7 +24,7 @@ services:
     image: minio/minio:latest
     container_name: mlflow-minio
     env_file:
-      - .env.mlflow
+      - .env
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
@@ -46,7 +46,7 @@ services:
     image: minio/mc:latest
     container_name: mlflow-create-bucket
     env_file:
-      - .env.mlflow
+      - .env
     depends_on:
       minio:
         condition: service_healthy
@@ -71,7 +71,7 @@ services:
       create-bucket:
         condition: service_completed_successfully
     env_file:
-      - .env.mlflow
+      - .env
     environment:
       # Backend store URI built from vars
       # MLFLOW_BACKEND_STORE_URI: ${MLFLOW_BACKEND_STORE_URI}
@@ -87,7 +87,7 @@ services:
       # MLFLOW_HOST: ${MLFLOW_HOST}
       # MLFLOW_PORT: ${MLFLOW_PORT}
 
-    command: |
+    command: >
       /bin/bash -c "
         pip install --no-cache-dir psycopg2-binary boto3 &&
         mlflow server \
