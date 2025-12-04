@@ -485,7 +485,7 @@ def train_model(
     minio_access_key: str = 'minio',
     minio_secret_key: str = 'minio123',
     minio_bucket: str = "raw",
-    data_object: str = 'Apart Deal.csv',
+    data_object: str = 'Apart_Deal.csv',
     model_bucket: str = "models",
     mlflow_tracking_uri: Optional[str] = None,
     use_mlflow: bool = False,
