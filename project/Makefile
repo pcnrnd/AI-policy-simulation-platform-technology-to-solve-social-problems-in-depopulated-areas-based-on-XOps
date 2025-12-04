@@ -1,23 +1,23 @@
 up-airflow-init:
-	cd workflow && docker compose -f compose.airflow.yaml up airflow-init
+	docker compose -f workflow/compose.airflow.yaml up airflow-init
 
 up-airflow:
-	cd workflow && docker compose -f compose.airflow.yaml up -d
+	docker compose -f workflow/compose.airflow.yaml up -d
 
 down-airflow:
-	cd workflow && docker compose -f compose.airflow.yaml down --volumes --rmi all
+	docker compose -f workflow/compose.airflow.yaml down --volumes --rmi all
 
 up-mlflow:
-	cd mlflow && docker compose -f compose.mlflow.yml up -d
+	docker compose -f mlflow/compose.mlflow.yml up -d
 
 down-mlflow:
-	cd mlflow && docker compose -f compose.mlflow.yml down --volumes --rmi all
+	docker compose -f mlflow/compose.mlflow.yml down --volumes --rmi all
 
 up-metadata:
-	cd metadata && docker compose -f compose.postgres.yaml up -d
+	docker compose -f metadata/compose.postgres.yaml up -d
 
 down-metadata:
-	cd metadata && docker compose -f compose.postgres.yaml down --volumes --rmi all
+	docker compose -f metadata/compose.postgres.yaml down --volumes --rmi all
 
 up-all:
 	make up-airflow-init
@@ -26,6 +26,6 @@ up-all:
 	make up-metadata
 
 down-all:
-	cd workflow && docker compose -f compose.airflow.yaml down --volumes --rmi all
-	cd mlflow && docker compose -f compose.mlflow.yml down --volumes --rmi all
-	cd metadata && docker compose -f compose.postgres.yaml down --volumes --rmi all
+	docker compose -f workflow/compose.airflow.yaml down --volumes --rmi all
+	docker compose -f mlflow/compose.mlflow.yml down --volumes --rmi all
+	docker compose -f metadata/compose.postgres.yaml down --volumes --rmi all
