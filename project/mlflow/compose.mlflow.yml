@@ -87,7 +87,7 @@ services:
       # MLFLOW_HOST: ${MLFLOW_HOST}
       # MLFLOW_PORT: ${MLFLOW_PORT}
 
-    command: >
+    command: |
       /bin/bash -c "
         pip install --no-cache-dir psycopg2-binary boto3 &&
         mlflow server \
