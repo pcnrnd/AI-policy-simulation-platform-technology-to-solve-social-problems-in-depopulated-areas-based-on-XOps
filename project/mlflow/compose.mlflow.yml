@@ -89,12 +89,13 @@ services:
       # # Server host/port
       MLFLOW_HOST: ${MLFLOW_HOST}
       MLFLOW_PORT: ${MLFLOW_PORT}
-      MLFLOW_ALLOWED_HOSTS: "mlflow,mlflow:${MLFLOW_PORT},localhost,127.0.0.1,0.0.0.0"
+      WERKZEUG_ALLOWED_HOSTS: "mlflow,mlflow:${MLFLOW_PORT},localhost,127.0.0.1,0.0.0.0,airflow,airflow-webserver"
     command: 
     - /bin/sh
     - -c
     - |
       export WERKZEUG_RUN_MAIN=true &&
+      export WERKZEUG_ALLOWED_HOSTS="${WERKZEUG_ALLOWED_HOSTS:-mlflow,mlflow:5001,localhost,127.0.0.1,0.0.0.0}" &&
       mlflow server \
         --backend-store-uri ${MLFLOW_BACKEND_STORE_URI} \
         --default-artifact-root ${MLFLOW_DEFAULT_ARTIFACT_ROOT} \
