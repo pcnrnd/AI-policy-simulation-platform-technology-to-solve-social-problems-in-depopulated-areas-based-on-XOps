@@ -372,7 +372,7 @@ def save_artifacts_with_mlflow(
             mlflow.set_tracking_uri(mlflow_tracking_uri)
             
             # 실험 생성 또는 가져오기
-            client = MlflowClient(tracking_uri=mlflow_tracking_uri)
+            # client = MlflowClient(tracking_uri=mlflow_tracking_uri)
             # try:
             #     # 실험 존재 여부 확인
             #     experiment = client.get_experiment_by_name(experiment_name)
@@ -434,7 +434,7 @@ def save_artifacts_with_mlflow(
                     os.unlink(tmp_file.name)
                 
                 # 모델 등록 정보 가져오기
-                client = MlflowClient()
+                client = MlflowClient(tracking_uri=mlflow_tracking_uri)
                 model_versions = client.get_latest_versions(model_name, stages=["None"])
                 if model_versions:
                     model_version = model_versions[0]
