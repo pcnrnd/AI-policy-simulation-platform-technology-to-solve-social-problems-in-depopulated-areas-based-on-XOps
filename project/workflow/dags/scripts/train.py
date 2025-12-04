@@ -373,24 +373,26 @@ def save_artifacts_with_mlflow(
             
             # 실험 생성 또는 가져오기
             client = MlflowClient(tracking_uri=mlflow_tracking_uri)
-            try:
-                # 실험 존재 여부 확인
-                experiment = client.get_experiment_by_name(experiment_name)
-                if experiment is None:
-                    # 실험이 없으면 생성
-                    print(f"📝 실험 '{experiment_name}' 생성 중...")
-                    experiment_id = client.create_experiment(experiment_name)
-                    print(f"✅ 실험 생성 완료 (ID: {experiment_id})")
-                else:
-                    print(f"✅ 실험 '{experiment_name}' 존재 확인 (ID: {experiment.experiment_id})")
-            except Exception as e:
-                # 실험 조회 실패 시 set_experiment로 시도 (자동 생성)
-                print(f"⚠️ 실험 조회 실패, 자동 생성 시도: {str(e)}")
-                mlflow.set_experiment(experiment_name)
-            else:
-                # 실험 설정
-                mlflow.set_experiment(experiment_name)
-            
+            # try:
+            #     # 실험 존재 여부 확인
+            #     experiment = client.get_experiment_by_name(experiment_name)
+            #     if experiment is None:
+            #         # 실험이 없으면 생성
+            #         print(f"📝 실험 '{experiment_name}' 생성 중...")
+            #         experiment_id = client.create_experiment(experiment_name)
+            #         print(f"✅ 실험 생성 완료 (ID: {experiment_id})")
+            #     else:
+            #         print(f"✅ 실험 '{experiment_name}' 존재 확인 (ID: {experiment.experiment_id})")
+            # except Exception as e:
+            #     # 실험 조회 실패 시 set_experiment로 시도 (자동 생성)
+            #     print(f"⚠️ 실험 조회 실패, 자동 생성 시도: {str(e)}")
+            #     mlflow.set_experiment(experiment_name)
+            # else:
+            #     # 실험 설정
+            #     mlflow.set_experiment(experiment_name)
+          
+            mlflow.set_experiment(experiment_name)
+
             with mlflow.start_run() as run:
                 # 하이퍼파라미터 로깅
                 mlflow.log_params(hyperparameters)
