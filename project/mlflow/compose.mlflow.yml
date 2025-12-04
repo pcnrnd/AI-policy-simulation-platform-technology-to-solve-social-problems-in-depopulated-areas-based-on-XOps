@@ -97,7 +97,8 @@ services:
         --backend-store-uri ${MLFLOW_BACKEND_STORE_URI} \
         --default-artifact-root ${MLFLOW_DEFAULT_ARTIFACT_ROOT} \
         --host ${MLFLOW_HOST} \
-        --port ${MLFLOW_PORT}
+        --port ${MLFLOW_PORT} \
+        --allowed-hosts "mlflow,mlflow:${MLFLOW_PORT},localhost,127.0.0.1,0.0.0.0"
     ports:
       - "${MLFLOW_PORT}:${MLFLOW_PORT}"
     healthcheck:
