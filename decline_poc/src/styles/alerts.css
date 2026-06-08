@@ -1,0 +1,22 @@
+#popup-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  z-index: 1000;
+}
+
+.alert-popup {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--accent-red);
+  border-radius: 8px;
+  padding: 16px 20px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5), var(--glow-shadow-red);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  animation: slideInRight 0.3s ease-out forwards;
+  min-width: 320px;
+}
