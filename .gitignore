@@ -1,9 +1,15 @@
+# === Data ===
 data
 data_2025
-venv
-.venv
-.population
-.env
 data_raw
 data_prepro
 /data_dvc
+
+# === Python virtual environments ===
+venv
+.venv
+.population
+
+# === Secrets / env ===
+.env
+
