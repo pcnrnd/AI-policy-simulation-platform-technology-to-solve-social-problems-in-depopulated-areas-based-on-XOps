@@ -1,0 +1,86 @@
+.pipeline-visualizer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 32px 0;
+  padding: 24px;
+  background-color: rgba(10, 15, 29, 0.5);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  overflow-x: auto;
+}
+
+.pipeline-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  position: relative;
+  min-width: 100px;
+}
+
+.node-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background-color: rgba(20, 30, 55, 0.8);
+  border: 2px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  color: var(--text-secondary);
+  transition: var(--transition-normal);
+  z-index: 5;
+}
+
+.node-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-align: center;
+  white-space: nowrap;
+}
+
+.pipeline-connector {
+  flex-grow: 1;
+  height: 2px;
+  background-color: var(--border-color);
+  margin: 0 -12px;
+  position: relative;
+  top: -14px;
+  z-index: 1;
+  min-width: 40px;
+}
+
+.pipeline-node.active .node-icon {
+  border-color: var(--accent-orange);
+  color: var(--accent-orange);
+  box-shadow: 0 0 15px rgba(245, 158, 11, 0.4);
+  animation: pulse-orange-node 1.5s infinite;
+}
+.pipeline-node.active .node-label { color: var(--accent-orange); }
+
+.pipeline-node.success .node-icon {
+  border-color: var(--accent-teal);
+  color: var(--accent-teal);
+  background-color: rgba(16, 185, 129, 0.05);
+  box-shadow: 0 0 15px rgba(16, 185, 129, 0.2);
+}
+.pipeline-node.success .node-label { color: var(--accent-teal); }
+
+.pipeline-node.failed .node-icon {
+  border-color: var(--accent-red);
+  color: var(--accent-red);
+  background-color: rgba(239, 68, 68, 0.05);
+  box-shadow: 0 0 15px rgba(239, 68, 68, 0.3);
+}
+.pipeline-node.failed .node-label { color: var(--accent-red); }
+
+.pipeline-connector.active {
+  background: linear-gradient(90deg, var(--accent-teal) 0%, var(--accent-orange) 50%, var(--border-color) 100%);
+  background-size: 200% 100%;
+  animation: connector-loading 1.5s infinite linear;
+}
+
+.pipeline-connector.success { background-color: var(--accent-teal); }
