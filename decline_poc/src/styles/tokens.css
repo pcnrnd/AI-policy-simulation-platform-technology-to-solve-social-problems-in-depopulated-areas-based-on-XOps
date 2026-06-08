@@ -1,0 +1,38 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap');
+
+:root {
+  --bg-primary: #080d1a;
+  --bg-secondary: #0e1629;
+  --bg-card: rgba(20, 30, 55, 0.65);
+  --bg-card-hover: rgba(26, 38, 69, 0.8);
+  --border-color: rgba(255, 255, 255, 0.08);
+  --border-focus: rgba(59, 130, 246, 0.4);
+
+  --text-primary: #f3f4f6;
+  --text-secondary: #9ca3af;
+  --text-muted: #6b7280;
+
+  --accent-blue: #3b82f6;
+  --accent-blue-rgb: 59, 130, 246;
+  --accent-teal: #10b981;
+  --accent-teal-rgb: 16, 185, 129;
+  --accent-purple: #8b5cf6;
+  --accent-purple-rgb: 139, 92, 246;
+  --accent-red: #ef4444;
+  --accent-red-rgb: 239, 68, 68;
+  --accent-orange: #f59e0b;
+  --accent-orange-rgb: 245, 158, 11;
+
+  --grad-primary: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  --grad-teal: linear-gradient(135deg, #10b981 0%, #3b82f6 100%);
+  --grad-dark: linear-gradient(180deg, #0e1629 0%, #080d1a 100%);
+
+  --glow-shadow: 0 0 20px rgba(59, 130, 246, 0.15);
+  --glow-shadow-red: 0 0 20px rgba(239, 68, 68, 0.25);
+  --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+
+  --sidebar-width: 260px;
+  --header-height: 70px;
+  --transition-fast: 0.2s ease;
+  --transition-normal: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
