@@ -13,7 +13,6 @@ venv
 # === Secrets / env ===
 .env
 
-# === AI tooling (local-only) ===
 CLAUDE.md
 .cursor
 .claude
@@ -21,3 +20,28 @@ CLAUDE.md
 .TASKs.md
 AGENTS.md
 DESIGN.md
+*.db
+
+
+# === Python build/cache ===
+__pycache__/
+*.py[cod]
+*.egg-info/
+.coverage
+htmlcov/
+coverage.xml
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# === Node / frontend build ===
+node_modules/
+dist/
+.tsbuildinfo
+*.log
+
+# === Editor / OS ===
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
