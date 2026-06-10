@@ -35,6 +35,7 @@ class AddRequest(BaseModel):
 class UpdateRequest(BaseModel):
     """Update 요청 모델"""
     path: str = Field(..., description="저장소 경로")
+    force: bool = Field(False, description="강제 업데이트 여부 (저장되지 않은 파일 덮어쓰기)")
 
 
 class MergeRequest(BaseModel):
