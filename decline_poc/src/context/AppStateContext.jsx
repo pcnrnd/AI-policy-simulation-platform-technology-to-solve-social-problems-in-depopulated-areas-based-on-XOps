@@ -11,6 +11,7 @@ export function AppStateProvider({ children }) {
   const [ready] = useState(true);
   const [appData] = useState(mockData);
 
+  const [activeTab, setActiveTab] = useState("tab-overview");
   const [currentRegion, setCurrentRegion] = useState(mockData.regions[0]);
 
   const [welfareWeight, setWelfareWeight] = useState(50);
@@ -116,11 +117,20 @@ export function AppStateProvider({ children }) {
     setTimeout(() => startPipeline(), 1500);
   }, [pipelineRunning, addConsoleLog, showAlert, startPipeline]);
 
+  // 지자체를 선택하고 지정 탭으로 이동(예: 현황 테이블 → 정책 시뮬레이터).
+  const focusRegion = useCallback((region, tabId = "tab-simulator") => {
+    setCurrentRegion(region);
+    setActiveTab(tabId);
+  }, []);
+
   const value = {
     ready,
     appData,
+    activeTab,
+    setActiveTab,
     currentRegion,
     setCurrentRegion,
+    focusRegion,
     welfareWeight,
     setWelfareWeight,
     industryWeight,
