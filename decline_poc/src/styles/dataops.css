@@ -1,0 +1,159 @@
+/* ===== DataOps 스키마 API — 카탈로그 / API 빌더 ===== */
+
+/* 데이터 소스 카탈로그 선택 행 */
+.catalog-table tbody tr {
+  transition: background-color var(--transition-fast);
+}
+.catalog-table tbody tr:hover {
+  background-color: var(--surface-hover);
+}
+.catalog-row-active,
+.catalog-table tbody tr.catalog-row-active:hover {
+  background-color: rgba(var(--accent-blue-rgb), 0.1);
+  box-shadow: inset 3px 0 0 var(--accent-blue);
+}
+
+/* API 빌더 섹션 그룹 */
+.builder-section {
+  margin-bottom: 16px;
+}
+
+.builder-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.auth-box {
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.token-line {
+  display: block;
+  margin-top: 8px;
+  font-size: 10px;
+  color: var(--accent-purple);
+  word-break: break-all;
+  line-height: 1.4;
+}
+
+/* 라벨이 붙은 인라인 숫자 필드 */
+.field-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 0 10px;
+}
+.field-inline > span {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: "Courier New", monospace;
+  flex-shrink: 0;
+}
+.field-inline .input-control {
+  border: none;
+  background: transparent;
+  padding-left: 0;
+  padding-right: 0;
+}
+.field-inline:focus-within {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 2px rgba(var(--accent-blue-rgb), 0.15);
+}
+
+/* 메타데이터 가상화 라우팅 흐름 */
+.routing-flow {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  overflow-x: auto;
+  padding: 10px;
+  background: var(--surface-hover);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  margin-bottom: 10px;
+}
+
+.routing-step-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.routing-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-width: 92px;
+  padding: 8px 6px;
+  border-radius: 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  text-align: center;
+}
+
+.routing-step > i {
+  font-size: 14px;
+  color: var(--accent-blue);
+}
+
+.routing-step-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.routing-step-sub {
+  font-size: 10px;
+  color: var(--text-muted);
+  line-height: 1.3;
+  word-break: keep-all;
+}
+
+.routing-arrow {
+  color: var(--text-muted);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+/* SQL 미리보기 / API 응답 */
+.sql-preview {
+  margin: 0;
+  height: 84px;
+  padding: 12px;
+  color: #fcd34d;
+  background-color: #040810;
+  border-radius: 8px;
+  white-space: pre-wrap;
+  font-family: "Courier New", monospace;
+  font-size: 12px;
+  overflow: auto;
+}
+
+.api-response {
+  margin: 0;
+  height: 200px;
+  padding: 12px;
+  color: #6ee7b7;
+  background-color: #040810;
+  border-radius: 8px;
+  white-space: pre-wrap;
+  font-family: "Courier New", monospace;
+  font-size: 12px;
+  overflow-y: auto;
+}
+
+/* 라이트 테마: 콘솔류는 어둡게 유지하되 테두리만 보강 */
+:root[data-theme="light"] .sql-preview,
+:root[data-theme="light"] .api-response {
+  border: 1px solid var(--border-color);
+}
