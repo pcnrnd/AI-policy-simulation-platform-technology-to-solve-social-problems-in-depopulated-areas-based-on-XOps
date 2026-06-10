@@ -10,7 +10,7 @@ default_args = {
 
 with DAG(
     dag_id='dag_extract_meta',
-    description='MinIO에서 메타데이터를 추출하여 PostgreSQL에 저장하는 파이프라인',
+    description='메타데이터를 추출하여 PostgreSQL에 저장하는 파이프라인',
     start_date=pendulum.datetime(2025, 11, 27),
     schedule="@daily",
     tags=['metadata_extraction'],
@@ -92,9 +92,10 @@ with DAG(
         Returns:
             bool: 저장 성공 여부
         """
-        import psycopg2
+        # import psycopg2
         import json
-        POSTGRES_HOST = 'db'
+        import psycopg2
+        POSTGRES_HOST = 'db' # docker compose 파일에서 설정한 호스트 이름: 
         POSTGRES_PORT = 5432
         POSTGRES_DATABASE = 'population_metadata'
         POSTGRES_USER = 'postgres'

@@ -18,8 +18,9 @@ from models.repository import (
 )
 from services.repository_service import RepositoryService
 from api.dependencies import get_repository_service
-from core.exceptions import RepositoryError, BranchError
+from core.exceptions import RepositoryError, BranchError, ValidationError
 from core.logger import logger
+from core.error_messages import get_user_friendly_message
 
 router = APIRouter(prefix="/repository", tags=["repository"])
 
@@ -41,12 +42,14 @@ async def init_repository(
             remote_url=request.remote_url
         )
         return RepositoryResponse(**result)
-    except RepositoryError as e:
+    except (RepositoryError, ValidationError) as e:
+        error_msg = get_user_friendly_message(str(e))
         logger.error(f"Repository init error: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=error_msg)
     except Exception as e:
+        error_msg = get_user_friendly_message(str(e))
         logger.error(f"Unexpected error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        raise HTTPException(status_code=500, detail=error_msg)
 
 
 @router.post("/checkout", response_model=RepositoryResponse)
@@ -68,12 +71,14 @@ async def checkout_repository(
             create=request.create
         )
         return RepositoryResponse(**result)
-    except BranchError as e:
+    except (BranchError, ValidationError) as e:
+        error_msg = get_user_friendly_message(str(e))
         logger.error(f"Checkout error: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=error_msg)
     except Exception as e:
+        error_msg = get_user_friendly_message(str(e))
         logger.error(f"Unexpected error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        raise HTTPException(status_code=500, detail=error_msg)
 
 
 @router.post("/commit", response_model=RepositoryResponse)
@@ -95,12 +100,14 @@ async def commit_changes(
             push=request.push
         )
         return RepositoryResponse(**result)
-    except RepositoryError as e:
+    except (RepositoryError, ValidationError) as e:
+        error_msg = get_user_friendly_message(str(e))
         logger.error(f"Commit error: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=error_msg)
     except Exception as e:
+        error_msg = get_user_friendly_message(str(e))
         logger.error(f"Unexpected error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        raise HTTPException(status_code=500, detail=error_msg)
 
 
 @router.post("/add", response_model=RepositoryResponse)
@@ -120,12 +127,14 @@ async def add_files(
             path=request.path
         )
         return RepositoryResponse(**result)
-    except RepositoryError as e:
+    except (RepositoryError, ValidationError) as e:
+        error_msg = get_user_friendly_message(str(e))
         logger.error(f"Add files error: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=error_msg)
     except Exception as e:
+        error_msg = get_user_friendly_message(str(e))
         logger.error(f"Unexpected error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        raise HTTPException(status_code=500, detail=error_msg)
 
 
 @router.post("/update", response_model=RepositoryResponse)
@@ -137,16 +146,19 @@ async def update_repository(
     원격 저장소에서 업데이트 (Pull)
     
     - **path**: 저장소 경로
+    - **force**: 강제 업데이트 여부 (저장되지 않은 파일 덮어쓰기)
     """
     try:
-        result = service.update(path=request.path)
+        result = service.update(path=request.path, force=request.force)
         return RepositoryResponse(**result)
-    except RepositoryError as e:
+    except (RepositoryError, ValidationError) as e:
+        error_msg = get_user_friendly_message(str(e))
         logger.error(f"Update error: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=error_msg)
     except Exception as e:
+        error_msg = get_user_friendly_message(str(e))
         logger.error(f"Unexpected error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        raise HTTPException(status_code=500, detail=error_msg)
 
 
 @router.post("/merge", response_model=RepositoryResponse)
@@ -168,12 +180,14 @@ async def merge_branches(
             path=request.path
         )
         return RepositoryResponse(**result)
-    except BranchError as e:
+    except (BranchError, ValidationError) as e:
+        error_msg = get_user_friendly_message(str(e))
         logger.error(f"Merge error: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=error_msg)
     except Exception as e:
+        error_msg = get_user_friendly_message(str(e))
         logger.error(f"Unexpected error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        raise HTTPException(status_code=500, detail=error_msg)
 
 
 @router.get("/branches", response_model=RepositoryResponse)
@@ -189,12 +203,14 @@ async def get_branches(
     try:
         result = service.get_branches(path=path)
         return RepositoryResponse(**result)
-    except BranchError as e:
+    except (BranchError, ValidationError) as e:
+        error_msg = get_user_friendly_message(str(e))
         logger.error(f"Get branches error: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=error_msg)
     except Exception as e:
+        error_msg = get_user_friendly_message(str(e))
         logger.error(f"Unexpected error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        raise HTTPException(status_code=500, detail=error_msg)
 
 
 @router.get("/status", response_model=RepositoryResponse)
@@ -210,10 +226,12 @@ async def get_status(
     try:
         result = service.get_status(path=path)
         return RepositoryResponse(**result)
-    except RepositoryError as e:
+    except (RepositoryError, ValidationError) as e:
+        error_msg = get_user_friendly_message(str(e))
         logger.error(f"Get status error: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=error_msg)
     except Exception as e:
+        error_msg = get_user_friendly_message(str(e))
         logger.error(f"Unexpected error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        raise HTTPException(status_code=500, detail=error_msg)
 
