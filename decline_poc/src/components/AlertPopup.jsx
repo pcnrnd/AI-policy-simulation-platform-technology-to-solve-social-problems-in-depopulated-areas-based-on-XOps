@@ -12,7 +12,7 @@ export default function AlertPopupContainer() {
             style={{ fontSize: 24, color: "var(--accent-red)" }}
           ></i>
           <div>
-            <div style={{ fontWeight: 700, color: "#ffffff", fontSize: 14 }}>{alert.title}</div>
+            <div style={{ fontWeight: 700, color: "var(--text-primary)", fontSize: 14 }}>{alert.title}</div>
             <div
               style={{
                 fontSize: 11,
