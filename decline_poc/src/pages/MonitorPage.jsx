@@ -13,7 +13,11 @@ import {
   Filler
 } from "chart.js";
 import Card from "../components/Card.jsx";
+import PerfBadge from "../components/PerfBadge.jsx";
+import GaugeChart from "../components/GaugeChart.jsx";
 import { useAppState } from "../context/AppStateContext.jsx";
+import { useChartTheme } from "../hooks/useChartTheme.js";
+import { useRenderTiming } from "../lib/perf.js";
 
 ChartJS.register(
   CategoryScale,
@@ -27,18 +31,19 @@ ChartJS.register(
   Filler
 );
 
-const AXIS_OPTS = {
-  responsive: true,
-  maintainAspectRatio: false,
-  scales: {
-    y: { grid: { color: "rgba(255, 255, 255, 0.05)" }, ticks: { color: "#9ca3af" } },
-    x: { grid: { display: false }, ticks: { color: "#9ca3af" } }
-  },
-  plugins: { legend: { labels: { color: "#f3f4f6" } } }
-};
-
 export default function MonitorPage() {
   const { appData, driftInjected, accuracyOverride, f1Override } = useAppState();
+  const ct = useChartTheme();
+
+  const AXIS_OPTS = {
+    responsive: true,
+    maintainAspectRatio: false,
+    scales: {
+      y: { grid: { color: ct.grid }, ticks: { color: ct.tick } },
+      x: { grid: { display: false }, ticks: { color: ct.tick } }
+    },
+    plugins: { legend: { labels: { color: ct.legend } } }
+  };
 
   const driftData = useMemo(() => {
     const current = driftInjected
@@ -127,11 +132,13 @@ export default function MonitorPage() {
     responsive: true,
     maintainAspectRatio: false,
     scales: {
-      x: { grid: { color: "rgba(255, 255, 255, 0.05)" }, ticks: { color: "#9ca3af" } },
-      y: { grid: { display: false }, ticks: { color: "#f3f4f6", font: { size: 10 } } }
+      x: { grid: { color: ct.grid }, ticks: { color: ct.tick } },
+      y: { grid: { display: false }, ticks: { color: ct.tickStrong, font: { size: 10 } } }
     },
     plugins: { legend: { display: false } }
   };
+
+  const vizMs = useRenderTiming([driftData, metricsData, shapData]);
 
   const accVal = accuracyOverride !== null ? accuracyOverride.toFixed(3) : "0.892";
   const f1Val = f1Override !== null ? f1Override.toFixed(3) : "0.884";
@@ -145,14 +152,14 @@ export default function MonitorPage() {
 
   const outlierRows = driftInjected
     ? [
-        { time: "13:02", target: "의성군 데이터 (인구비율)", z: "3.45", outlier: true },
-        { time: "13:01", target: "고흥군 데이터 (일자리수)", z: "2.89", outlier: true },
-        { time: "12:34", target: "의성군 데이터", z: "1.24", outlier: false }
+        { time: "13:02", target: "남원시 데이터 (스마트팜 소득)", z: "3.45", outlier: true },
+        { time: "13:01", target: "신안군 데이터 (임대주택 활용도)", z: "2.89", outlier: true },
+        { time: "12:34", target: "남원시 데이터", z: "1.24", outlier: false }
       ]
     : [
-        { time: "12:34", target: "의성군 데이터", z: "1.24", outlier: false },
-        { time: "11:20", target: "고흥군 데이터", z: "0.98", outlier: false },
-        { time: "10:05", target: "봉화군 데이터", z: "1.67", outlier: false }
+        { time: "12:34", target: "남원시 데이터", z: "1.24", outlier: false },
+        { time: "11:20", target: "신안군 데이터", z: "0.98", outlier: false },
+        { time: "10:05", target: "남원시 데이터", z: "1.67", outlier: false }
       ];
 
   const outlierCount = driftInjected ? "3건" : "0건";
@@ -238,7 +245,11 @@ export default function MonitorPage() {
       </div>
 
       <div className="grid-details-split">
-        <Card title="데이터 분포 변화 시각화 (참조 vs 최근유입)" icon="fa-chart-area">
+        <Card
+          title="데이터 분포 변화 시각화 (참조 vs 최근유입)"
+          icon="fa-chart-area"
+          headerRight={<PerfBadge ms={vizMs} />}
+        >
           <div style={{ position: "relative", height: 320, width: "100%" }}>
             <Bar data={driftData} options={AXIS_OPTS} />
           </div>
@@ -305,6 +316,14 @@ export default function MonitorPage() {
           </div>
         </Card>
       </div>
+
+      <Card title="모델 신뢰도 게이지 (실시간)" icon="fa-gauge-high">
+        <div className="grid-cols-3" style={{ marginBottom: 0 }}>
+          <GaugeChart value={accuracyOverride ?? 0.892} label="Accuracy" />
+          <GaugeChart value={f1Override ?? 0.884} label="F1-Score" />
+          <GaugeChart value={driftInjected ? 0.803 : 0.891} label="Precision" />
+        </div>
+      </Card>
     </>
   );
 }
