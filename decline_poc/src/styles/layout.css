@@ -7,12 +7,61 @@
 
 .sidebar {
   width: var(--sidebar-width);
-  background: linear-gradient(180deg, #090e1c 0%, #060a14 100%);
+  background: var(--sidebar-bg);
   border-right: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
   padding: 24px 16px;
   z-index: 100;
+  transition: background var(--transition-normal);
+}
+
+/* 사이드바 너비 조절 핸들 (드래그) */
+.sidebar-resizer {
+  flex: 0 0 5px;
+  align-self: stretch;
+  cursor: col-resize;
+  background: transparent;
+  position: relative;
+  z-index: 101;
+  margin-left: -3px;
+  transition: background var(--transition-fast);
+  touch-action: none;
+}
+
+.sidebar-resizer::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 2px;
+  height: 36px;
+  transform: translate(-50%, -50%);
+  border-radius: 2px;
+  background: var(--border-color);
+  transition: background var(--transition-fast);
+}
+
+.sidebar-resizer:hover,
+.sidebar-resizer.active,
+.sidebar-resizer:focus-visible {
+  background: rgba(var(--accent-blue-rgb), 0.25);
+  outline: none;
+}
+
+.sidebar-resizer:hover::before,
+.sidebar-resizer.active::before,
+.sidebar-resizer:focus-visible::before {
+  background: var(--accent-blue);
+}
+
+/* 드래그 중에는 본문 선택/호버 간섭 방지 */
+.app-container.resizing {
+  cursor: col-resize;
+}
+
+.app-container.resizing .main-content {
+  pointer-events: none;
 }
 
 .logo-section {
@@ -41,7 +90,7 @@
   font-size: 18px;
   font-weight: 700;
   font-family: 'Outfit', sans-serif;
-  background: linear-gradient(to right, #ffffff, #9ca3af);
+  background: var(--logo-text-grad);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
@@ -70,7 +119,7 @@
 
 .nav-item:hover {
   color: var(--text-primary);
-  background-color: rgba(255, 255, 255, 0.03);
+  background-color: var(--surface-hover);
 }
 
 .nav-item.active {
@@ -78,6 +127,13 @@
   background: rgba(59, 130, 246, 0.08);
   border-color: rgba(59, 130, 246, 0.15);
   box-shadow: 0 4px 12px rgba(59, 130, 246, 0.05);
+}
+
+/* 라이트: 흰 사이드바에서 활성 탭이 또렷하게 보이도록 */
+[data-theme="light"] .nav-item.active {
+  background: rgba(var(--accent-blue-rgb), 0.1);
+  border-color: rgba(var(--accent-blue-rgb), 0.25);
+  box-shadow: none;
 }
 
 .nav-item i {
@@ -106,13 +162,20 @@
 .main-header {
   height: var(--header-height);
   border-bottom: 1px solid var(--border-color);
-  background-color: rgba(8, 13, 26, 0.8);
+  background-color: var(--header-bg);
   backdrop-filter: blur(12px);
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 32px;
   z-index: 90;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
 }
 
 .header-title-area h2 {
@@ -124,6 +187,32 @@
   display: flex;
   align-items: center;
   gap: 20px;
+}
+
+/* 햄버거 토글 버튼 — 데스크탑에서는 숨김 */
+.sidebar-toggle-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: 18px;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.sidebar-toggle-btn:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-focus);
+}
+
+/* 모바일 드로어 뒷배경 — 데스크탑에서는 숨김 */
+.sidebar-backdrop {
+  display: none;
 }
 
 .content-body {
@@ -165,13 +254,45 @@
 }
 
 @media (max-width: 768px) {
-  .app-container { flex-direction: column; }
+  /* 사이드바를 오프캔버스 드로어로 전환 */
   .sidebar {
-    width: 100%;
-    height: auto;
-    border-right: none;
-    border-bottom: 1px solid var(--border-color);
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    height: 100vh;
+    width: 268px;
+    transform: translateX(-100%);
+    transition: transform var(--transition-normal);
+    box-shadow: var(--glass-shadow);
+    will-change: transform;
   }
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  /* 드로어 뒷배경 (열렸을 때만 표시) */
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 99;
+    background: rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--transition-normal);
+  }
+  .sidebar-backdrop.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .sidebar-toggle-btn { display: inline-flex; }
+
+  /* 모바일 드로어에서는 너비 조절 핸들 숨김 */
+  .sidebar-resizer { display: none; }
+
   .grid-cols-3, .grid-cols-2 { grid-template-columns: 1fr; }
   .main-header { padding: 0 16px; }
+  .header-title-area h2 { font-size: 17px; }
 }
