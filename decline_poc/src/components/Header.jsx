@@ -1,6 +1,6 @@
 import { useAppState } from "../context/AppStateContext.jsx";
 
-export default function Header({ title }) {
+export default function Header({ title, onToggleSidebar, sidebarOpen }) {
   const { driftInjected, pipelineRunning } = useAppState();
 
   let statusClass = "system-status";
@@ -15,8 +15,20 @@ export default function Header({ title }) {
 
   return (
     <header className="main-header">
-      <div className="header-title-area">
-        <h2>{title}</h2>
+      <div className="header-left">
+        <button
+          type="button"
+          className="sidebar-toggle-btn"
+          onClick={onToggleSidebar}
+          aria-label={sidebarOpen ? "메뉴 닫기" : "메뉴 열기"}
+          aria-expanded={sidebarOpen}
+          aria-controls="app-sidebar"
+        >
+          <i className="fa-solid fa-bars" aria-hidden="true"></i>
+        </button>
+        <div className="header-title-area">
+          <h2>{title}</h2>
+        </div>
       </div>
       <div className="header-controls">
         <div className={statusClass}>
