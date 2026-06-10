@@ -46,7 +46,7 @@ export default function OrchestratorPage() {
               onClick={startPipeline}
               disabled={pipelineRunning}
             >
-              <i className="fa-solid fa-play"></i> 자동 재학습 파이프라인 수동 시작
+              <i className="fa-solid fa-play"></i> 재학습 파이프라인 실행
             </button>
           </div>
         }
@@ -57,7 +57,7 @@ export default function OrchestratorPage() {
           <strong>
             학습 데이터 추출 → 데이터 검증 → 파라미터 튜닝 재학습 → 검증 평가 → 블루-그린 승급 배포
           </strong>
-          를 전자동으로 수행하는 파이프라인 시뮬레이션입니다.
+          를 전자동으로 수행합니다.
         </p>
 
         <div className="pipeline-visualizer">
