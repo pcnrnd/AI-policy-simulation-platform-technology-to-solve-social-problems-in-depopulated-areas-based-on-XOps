@@ -50,9 +50,10 @@ export const repositoryService = {
   /**
    * 원격 저장소에서 업데이트
    */
-  async update(path) {
+  async update(path, force = false) {
     const response = await api.post('/api/v1/repository/update', {
       path,
+      force,
     })
     return response.data
   },

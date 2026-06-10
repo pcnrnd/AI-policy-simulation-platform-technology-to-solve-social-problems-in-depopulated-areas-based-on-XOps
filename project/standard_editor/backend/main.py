@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from config.settings import settings
 from api.v1.router import api_router
 from core.logger import logger
+from core.system_check import check_system_requirements
 
 # FastAPI 앱 생성
 app = FastAPI(
@@ -41,7 +42,13 @@ async def root():
 @app.get("/health")
 async def health_check():
     """헬스 체크 엔드포인트"""
-    return {"status": "healthy"}
+    system_status = check_system_requirements()
+    status = "healthy" if system_status["all_requirements_met"] else "degraded"
+    
+    return {
+        "status": status,
+        "system_requirements": system_status
+    }
 
 
 if __name__ == "__main__":
@@ -56,6 +63,21 @@ if __name__ == "__main__":
     
     logger.info("Starting FastAPI server...")
     logger.info(f"Working directory: {backend_dir}")
+    
+    # 시스템 요구사항 확인
+    system_status = check_system_requirements()
+    if not system_status["all_requirements_met"]:
+        logger.warning("Some system requirements are not met:")
+        if not system_status["git"]["installed"]:
+            logger.warning("  - Git is not installed")
+        if not system_status["dvc"]["installed"]:
+            logger.warning("  - DVC is not installed")
+    else:
+        logger.info("All system requirements are met")
+        if system_status["git"]["version"]:
+            logger.info(f"  Git: {system_status['git']['version']}")
+        if system_status["dvc"]["version"]:
+            logger.info(f"  DVC: {system_status['dvc']['version']}")
     
     uvicorn.run(
         "main:app",

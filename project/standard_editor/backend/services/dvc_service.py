@@ -108,13 +108,14 @@ class DVCService:
             logger.error(f"DVC push failed: {e.message}")
             raise RepositoryError(f"DVC push failed: {e.message}")
     
-    def pull(self, path: Optional[str] = None, remote: Optional[str] = None) -> Dict:
+    def pull(self, path: Optional[str] = None, remote: Optional[str] = None, force: bool = False) -> Dict:
         """
         원격 저장소에서 풀
         
         Args:
             path: 작업 디렉토리 경로
             remote: 원격 저장소 이름
+            force: 강제 풀 여부 (저장되지 않은 파일 덮어쓰기)
             
         Returns:
             풀 결과
@@ -123,6 +124,8 @@ class DVCService:
             command = ["dvc", "pull"]
             if remote:
                 command.extend(["-r", remote])
+            if force:
+                command.append("--force")
             
             result = self.executor.execute(command, cwd=path, json_output=False)
             return result

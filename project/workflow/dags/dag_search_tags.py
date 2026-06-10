@@ -58,8 +58,6 @@ with DAG(
                 tags['site'] = '음식점'
             if 'crack' in filename:
                 tags['issue_tags'] = ['균열']
-            if 'drone' in filename:
-                tags['equipment'] = '드론'
             if 'sensor' in filename:
                 tags['asset_type'] = 'sensor_log'
             
@@ -93,8 +91,7 @@ with DAG(
         from pathlib import Path
         import re
         
-        # 모델 로드
-        model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
+
         
         conn = psycopg2.connect(
             host='db', port=5432,
@@ -125,7 +122,8 @@ with DAG(
             text = ' '.join(text.split())
             return text.lower()
         
-        # 배치 처리
+        # 모델 로드 및 배치 처리
+        model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
         texts = [normalize_filename(file_path) for _, file_path in records]
         embeddings = model.encode(texts, batch_size=32, normalize_embeddings=True)
         
