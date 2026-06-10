@@ -8,12 +8,12 @@ export const PIPELINE_STEPS = [
   {
     name: "node-prep",
     desc: "2. Data Prep",
-    log: "INFO: 분산 사일로 데이터 수집 및 정제 처리 가동. 4개 사일로(주민·복지·산업·공간) 메타데이터 검증 완료. 데이터셋 로딩 중..."
+    log: "INFO: 분산 데이터 소스 수집 및 정제 처리 가동. 6개 연계 데이터 소스(주민·복지·산업·공간·스마트팜·시설) 메타데이터 검증 완료. 데이터셋 로딩 중..."
   },
   {
     name: "node-train",
     desc: "3. Retraining",
-    log: "INFO: Flower 연합학습 엔진 기반 분산 학습 개시. 6개 클라이언트 사일로에서 분할 가중치 병렬 트레이닝 시작 (Differential Privacy 적용)."
+    log: "INFO: Flower 연합학습 엔진 기반 분산 학습 개시. 연합 클라이언트 노드에서 분할 가중치 병렬 트레이닝 시작 (Differential Privacy 적용)."
   },
   {
     name: "node-eval",
