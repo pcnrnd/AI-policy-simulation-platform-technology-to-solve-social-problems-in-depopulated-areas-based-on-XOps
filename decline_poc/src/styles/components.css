@@ -13,13 +13,13 @@
 
 .card:hover {
   background: var(--bg-card-hover);
-  border-color: rgba(255, 255, 255, 0.12);
+  border-color: var(--card-hover-border);
   transform: translateY(-2px);
-  box-shadow: 0 12px 24px -10px rgba(0, 0, 0, 0.5), var(--glow-shadow);
+  box-shadow: var(--card-hover-shadow), var(--glow-shadow);
 }
 
 .card.glow-red:hover {
-  box-shadow: 0 12px 24px -10px rgba(0, 0, 0, 0.5), var(--glow-shadow-red);
+  box-shadow: var(--card-hover-shadow), var(--glow-shadow-red);
   border-color: rgba(239, 68, 68, 0.2);
 }
 
@@ -77,7 +77,7 @@
 .stat-value {
   font-size: 26px;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--text-primary);
   margin-top: 8px;
   font-family: 'Outfit', sans-serif;
 }
@@ -196,13 +196,13 @@
 }
 
 .btn-secondary {
-  background-color: rgba(255, 255, 255, 0.03);
+  background-color: var(--surface-hover);
   border-color: var(--border-color);
   color: var(--text-primary);
 }
 .btn-secondary:hover:not(:disabled) {
-  background-color: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.15);
+  background-color: var(--bg-card-hover);
+  border-color: var(--card-hover-border);
 }
 
 .btn-danger {
@@ -228,7 +228,7 @@ label {
 .select-control, .input-control {
   width: 100%;
   padding: 12px 16px;
-  background-color: rgba(10, 15, 29, 0.7);
+  background-color: var(--input-bg);
   border: 1px solid var(--border-color);
   border-radius: 8px;
   color: var(--text-primary);
@@ -296,7 +296,7 @@ th {
   font-weight: 600;
   color: var(--text-secondary);
   border-bottom: 1px solid var(--border-color);
-  background-color: rgba(10, 15, 29, 0.4);
+  background-color: var(--table-head-bg);
 }
 
 td {
@@ -337,3 +337,39 @@ tr:hover td { background-color: rgba(255, 255, 255, 0.01); }
 .console-log .log-time { color: var(--text-muted); margin-right: 8px; }
 .console-log .log-warn { color: var(--accent-orange); }
 .console-log .log-err { color: var(--accent-red); }
+
+/* ===== 라이트 테마 정밀 보정 =====
+   반투명 액센트 칩이 흰 배경에서 증발하지 않도록 알파를 상향하고,
+   다크용 흰색-알파 트랙/호버를 라이트용으로 교체. */
+[data-theme="light"] .stat-icon {
+  background-color: rgba(var(--accent-blue-rgb), 0.12);
+}
+
+[data-theme="light"] .system-status {
+  background-color: rgba(var(--accent-teal-rgb), 0.12);
+  border-color: rgba(var(--accent-teal-rgb), 0.25);
+}
+[data-theme="light"] .system-status.drift-alert {
+  background-color: rgba(var(--accent-red-rgb), 0.12);
+  border-color: rgba(var(--accent-red-rgb), 0.25);
+}
+[data-theme="light"] .system-status.retraining {
+  background-color: rgba(var(--accent-orange-rgb), 0.12);
+  border-color: rgba(var(--accent-orange-rgb), 0.25);
+}
+
+[data-theme="light"] .outlier-tag {
+  background-color: rgba(var(--accent-red-rgb), 0.12);
+  border-color: rgba(var(--accent-red-rgb), 0.28);
+}
+
+[data-theme="light"] input[type="range"] {
+  background: rgba(15, 23, 42, 0.1);
+}
+
+[data-theme="light"] .alert-icon-btn {
+  background-color: var(--surface-hover);
+}
+[data-theme="light"] .alert-icon-btn:hover {
+  background-color: var(--bg-card-hover);
+}
