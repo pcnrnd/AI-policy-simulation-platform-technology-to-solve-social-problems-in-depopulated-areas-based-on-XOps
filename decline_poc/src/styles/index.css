@@ -5,5 +5,9 @@
 @import "./pipeline.css";
 @import "./simulator.css";
 @import "./report.css";
+@import "./dataops.css";
+@import "./policy.css";
 @import "./alerts.css";
+@import "./settings.css";
 @import "./animations.css";
+@import "./accessibility.css";
