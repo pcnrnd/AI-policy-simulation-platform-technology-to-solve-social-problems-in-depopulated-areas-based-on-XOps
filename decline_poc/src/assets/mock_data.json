@@ -1,76 +1,129 @@
 {
   "regions": [
     {
-      "id": "uiseong",
-      "name": "경상북도 의성군",
-      "lat": 36.3524,
-      "lng": 128.6970,
-      "riskIndex": 0.13,
-      "population": 50325,
-      "birthRate": 0.81,
-      "agingIndex": 41.2,
-      "history": [62100, 59800, 58200, 56900, 55200, 53800, 52400, 51300, 50800, 50325],
-      "policyImpacts": { "welfare": 0.15, "industry": 0.35, "housing": 0.20 }
-    },
-    {
-      "id": "goheung",
-      "name": "전라남도 고흥군",
-      "lat": 34.6080,
-      "lng": 127.2842,
-      "riskIndex": 0.14,
-      "population": 62310,
-      "birthRate": 0.78,
-      "agingIndex": 42.5,
-      "history": [74300, 72100, 70400, 68800, 67200, 65900, 64700, 63800, 63100, 62310],
-      "policyImpacts": { "welfare": 0.20, "industry": 0.25, "housing": 0.25 }
-    },
-    {
-      "id": "gunwi",
-      "name": "대구광역시 군위군",
-      "lat": 36.2427,
-      "lng": 128.5728,
-      "riskIndex": 0.15,
-      "population": 22940,
-      "birthRate": 0.85,
-      "agingIndex": 39.8,
-      "history": [26100, 25700, 25200, 24800, 24300, 23900, 23500, 23200, 23100, 22940],
-      "policyImpacts": { "welfare": 0.12, "industry": 0.45, "housing": 0.18 }
-    },
-    {
-      "id": "hapcheon",
-      "name": "경상남도 합천군",
-      "lat": 35.5666,
-      "lng": 128.1654,
+      "id": "namwon",
+      "name": "전라북도 남원시",
+      "theme": "소득 및 일자리 부족",
+      "lat": 35.4164,
+      "lng": 127.3905,
       "riskIndex": 0.16,
-      "population": 43120,
-      "birthRate": 0.82,
-      "agingIndex": 38.9,
-      "history": [51200, 49800, 48400, 47100, 46200, 45100, 44300, 43800, 43400, 43120],
-      "policyImpacts": { "welfare": 0.18, "industry": 0.30, "housing": 0.22 }
+      "population": 77200,
+      "birthRate": 0.83,
+      "agingIndex": 33.4,
+      "history": [85200, 83800, 82400, 81100, 80300, 79400, 78600, 78000, 77600, 77200],
+      "policyImpacts": { "welfare": 0.2, "industry": 0.4, "housing": 0.18 },
+      "case": {
+        "summary": "청년층 유지를 위한 목적으로 임대형 스마트팜 단지 조성 사업을 추진하여, 생산성·고용효과를 높여 청년인구의 귀농을 통한 정주인구 전환을 도모한다.",
+        "dataSources": [
+          "주민등록인구: 정주인구 성별·연령별·연도별 변화 추이",
+          "통신: 성별·연령별·시간대별·일별 유동인구 속성 및 방문 패턴",
+          "카드: 성별·연령별·시간대별·업종별 소비 지출 내역",
+          "스마트팜: 스마트팜 현황, 품종 데이터"
+        ],
+        "analysisTargets": [
+          "유동인구·정주인구 변화 패턴(청년인구 추이) 분석",
+          "스마트팜 고용 및 창업 인구 분석",
+          "시즌별 적정 품종 및 생산 규모 추천, 최적 입지 분석",
+          "스마트팜 적정 투자 자본 분석"
+        ],
+        "policyEffect": "임대형 스마트팜 성공요인 도출을 통한 청년인구 유입 효과 및 청년의 안정적 정착을 위한 정책적 의사결정 자료로 활용",
+        "aiModel": {
+          "xai": "SHAP (Shapley Additive exPlanations)",
+          "deepLearning": ["Auto-Encoder + BiLSTM", "Conv-LSTM + BiLSTM"],
+          "statBaseline": "유사지역 대비 생산기여 분석 (작물 분포·운영 패턴·직업 만족도)"
+        },
+        "correlations": {
+          "positive": [
+            "스마트팜 단지 규모",
+            "투자금액 대비 소득 분포",
+            "작물 규모 대비 소득 분포"
+          ],
+          "negative": [
+            "작물 수량 대비 투입 인원",
+            "작물 수량 대비 소득 분포",
+            "작업시간 대비 소득 구간 분포"
+          ]
+        },
+        "problemDiagnosis": [
+          "스마트팜 작물 과부족 여부",
+          "임대료 차등 적정 수준",
+          "스마트팜 작물 판매시점 적격",
+          "농업 지원 적격 여부",
+          "농업 지원 시장 위치 최적 필요"
+        ],
+        "simulation": {
+          "objective": "목적제 기반 강화학습 — 청년 정주 전환 극대화",
+          "factors": {
+            "demand": "청년 일자리·귀농 수요량",
+            "supply": "스마트팜 작물 생산량",
+            "adjust": "시설 위치·면적 등 조정 변수"
+          },
+          "constraint": "예산"
+        },
+        "reportFocus": "임대형 스마트팜 최적 추진계획 방안"
+      }
     },
     {
-      "id": "bonghwa",
-      "name": "경상북도 봉화군",
-      "lat": 36.8931,
-      "lng": 128.7325,
-      "riskIndex": 0.17,
-      "population": 30890,
-      "birthRate": 0.79,
-      "agingIndex": 37.6,
-      "history": [35400, 34800, 34100, 33500, 32900, 32300, 31800, 31400, 31100, 30890],
-      "policyImpacts": { "welfare": 0.25, "industry": 0.15, "housing": 0.30 }
-    },
-    {
-      "id": "namhae",
-      "name": "경상남도 남해군",
-      "lat": 34.8377,
-      "lng": 127.8924,
-      "riskIndex": 0.19,
-      "population": 41800,
-      "birthRate": 0.75,
-      "agingIndex": 36.8,
-      "history": [48900, 47700, 46600, 45500, 44600, 43800, 43100, 42600, 42200, 41800],
-      "policyImpacts": { "welfare": 0.22, "industry": 0.20, "housing": 0.35 }
+      "id": "shinan",
+      "name": "전라남도 신안군",
+      "theme": "주거환경 열악",
+      "lat": 34.8338,
+      "lng": 126.1067,
+      "riskIndex": 0.13,
+      "population": 38400,
+      "birthRate": 0.76,
+      "agingIndex": 43.1,
+      "history": [45600, 44700, 43800, 42600, 41700, 40800, 40000, 39300, 38800, 38400],
+      "policyImpacts": { "welfare": 0.22, "industry": 0.15, "housing": 0.42 },
+      "case": {
+        "summary": "지역주민의 주거환경 개선을 위한 목적으로 정주여건 지원사업(정원수 사회적협동조합 운영, 신재생 개발이익 공유, 어선 임대, 임대주택 지원 등)을 시행하여, 소득 창출·생활수준 향상·주택 개선을 통해 거주민으로 전환을 도모한다.",
+        "dataSources": [
+          "주민등록인구: 정주인구 성별·연령별·연도별 변화 추이",
+          "통신: 성별·연령별·시간대별·일별 유동인구 속성 및 방문 패턴",
+          "카드: 성별·연령별·시간대별·업종별 소비 지출 내역",
+          "시설: 정원수, 신재생 에너지, 임대주택 현황"
+        ],
+        "analysisTargets": [
+          "지역주민 소득 변화 및 지역 생활 소비 변화 패턴 분석",
+          "유동인구·정주인구 변화 패턴 분석",
+          "정주여건 지원사업의 진단 및 평가를 통한 활성화 요인 도출"
+        ],
+        "policyEffect": "정주여건 지원사업의 지속적 효과를 위한 정책적 의사결정 자료로 활용",
+        "aiModel": {
+          "xai": "SHAP (Shapley Additive exPlanations)",
+          "deepLearning": ["Conv-LSTM + BiLSTM"],
+          "statBaseline": "전국 대비 신안군 분석 (임대주택 운영·정주인구 규모·임대비율·운영 인력)"
+        },
+        "correlations": {
+          "positive": [
+            "정주인구 연별 비율",
+            "전체 임대주택 수",
+            "임대주택 운영 예산"
+          ],
+          "negative": [
+            "임대주택 활용도",
+            "임대주택 운영 예산",
+            "임대주택 부족 비율"
+          ]
+        },
+        "problemDiagnosis": [
+          "인구 대비 시설 수 과부족",
+          "인구 밀집 대비 이용 수준",
+          "주민 만족 수준",
+          "임대주택 운영 적절성",
+          "임대사업 위치 최적 필요"
+        ],
+        "simulation": {
+          "objective": "목적제 기반 강화학습 — 정주여건 만족도 극대화",
+          "factors": {
+            "demand": "주거·정주 수요량",
+            "supply": "임대주택·정주여건 시설 공급",
+            "adjust": "시설 위치·면적 등 조정 변수"
+          },
+          "constraint": "예산"
+        },
+        "reportFocus": "시설별(임대주택·신재생) 최적 추진계획 방안"
+      }
     }
   ],
   "metrics_history": {
@@ -89,55 +142,98 @@
     "current_drifted": [28.0, 24.0, 18.0, 12.0, 8.0, 6.0, 4.0]
   },
   "shap_features": [
-    { "feature": "청년층 복지 예산 (Youth Welfare Budget)", "value": 0.354 },
-    { "feature": "제조업 공장 수 (Number of Factories)", "value": 0.281 },
-    { "feature": "주택 공급 비율 (Housing Supply Rate)", "value": 0.195 },
-    { "feature": "평균 연령 (Average Age)", "value": -0.152 },
-    { "feature": "지방세율 (Local Tax Rate)", "value": -0.092 },
-    { "feature": "대도시와의 거리 (Distance to Metropolis)", "value": -0.068 }
+    { "feature": "스마트팜 단지 규모 (Smartfarm Scale)", "value": 0.331 },
+    { "feature": "임대주택 운영 예산 (Rental Housing Budget)", "value": 0.276 },
+    { "feature": "투자금액 대비 소득 (Income per Investment)", "value": 0.207 },
+    { "feature": "작물 수량 대비 투입 인원 (Labor per Yield)", "value": -0.168 },
+    { "feature": "임대주택 부족 비율 (Housing Shortage Rate)", "value": -0.124 },
+    { "feature": "대도시와의 거리 (Distance to Metropolis)", "value": -0.071 }
   ],
   "metadata_schemas": [
     {
-      "silo": "silo_01_resident_registry",
+      "id": "ds_01_resident_registry",
+      "label": "주민등록",
+      "source": "RDB · PostgreSQL",
+      "object": "tb_resident_movement",
       "description": "지자체 주민등록 전입/전출 데이터",
       "columns": [
         { "name": "reg_date", "type": "VARCHAR(8)", "description": "등록일자 (YYYYMMDD)" },
-        { "name": "silo_code", "type": "VARCHAR(5)", "description": "지자체 행정동 코드" },
+        { "name": "region_code", "type": "VARCHAR(5)", "description": "지자체 행정동 코드" },
         { "name": "in_flow_count", "type": "INTEGER", "description": "당일 전입 인구 수" },
         { "name": "out_flow_count", "type": "INTEGER", "description": "당일 전출 인구 수" },
         { "name": "age_group", "type": "VARCHAR(3)", "description": "연령대 코드 (10, 20, ..., 80)" }
       ]
     },
     {
-      "silo": "silo_02_local_welfare",
+      "id": "ds_02_local_welfare",
+      "label": "복지·재정",
+      "source": "RDB · PostgreSQL",
+      "object": "tb_welfare_budget",
       "description": "지자체 복지/재정 지출 데이터",
       "columns": [
         { "name": "year", "type": "VARCHAR(4)", "description": "회계 연도 (YYYY)" },
-        { "name": "silo_code", "type": "VARCHAR(5)", "description": "지자체 행정동 코드" },
+        { "name": "region_code", "type": "VARCHAR(5)", "description": "지자체 행정동 코드" },
         { "name": "welfare_budget", "type": "BIGINT", "description": "총 사회복지 예산 (원)" },
         { "name": "infant_support_budget", "type": "BIGINT", "description": "아동 및 영유아 지원 예산 (원)" },
         { "name": "youth_employment_budget", "type": "BIGINT", "description": "청년 고용 장려금 예산 (원)" }
       ]
     },
     {
-      "silo": "silo_03_industrial_factories",
+      "id": "ds_03_industrial_factories",
+      "label": "산업·공장",
+      "source": "RDB · PostgreSQL",
+      "object": "tb_factory_registry",
       "description": "공장 등록 및 산업체 정보 데이터",
       "columns": [
         { "name": "factory_id", "type": "VARCHAR(12)", "description": "공장 고유 식별 번호" },
-        { "name": "silo_code", "type": "VARCHAR(5)", "description": "지자체 행정동 코드" },
+        { "name": "region_code", "type": "VARCHAR(5)", "description": "지자체 행정동 코드" },
         { "name": "employee_count", "type": "INTEGER", "description": "종업원 총수" },
         { "name": "industry_type", "type": "VARCHAR(6)", "description": "한국표준산업분류 코드" },
         { "name": "annual_revenue", "type": "BIGINT", "description": "연간 총 매출액 (원)" }
       ]
     },
     {
-      "silo": "silo_04_spatial_geojson",
+      "id": "ds_04_spatial_geojson",
+      "label": "공간정보",
+      "source": "공간 DB · PostGIS",
+      "object": "geo_grid_cells",
       "description": "소멸위기 지역 공간 격자망 정보",
       "columns": [
         { "name": "grid_id", "type": "VARCHAR(10)", "description": "국토지리정보원 표준 격자 ID" },
-        { "name": "silo_code", "type": "VARCHAR(5)", "description": "지자체 행정동 코드" },
+        { "name": "region_code", "type": "VARCHAR(5)", "description": "지자체 행정동 코드" },
         { "name": "geom_polygon", "type": "GEOMETRY(Polygon, 4326)", "description": "격자 구역 공간 경계 좌표" },
         { "name": "population_density", "type": "DOUBLE PRECISION", "description": "격자 내 ㎢당 인구 밀도" }
+      ]
+    },
+    {
+      "id": "ds_05_smartfarm",
+      "label": "스마트팜",
+      "source": "시계열 DB · TimescaleDB",
+      "object": "ts_smartfarm_yield",
+      "description": "임대형 스마트팜 단지 현황 및 품종 데이터 (남원시 일자리 사례)",
+      "columns": [
+        { "name": "farm_id", "type": "VARCHAR(12)", "description": "스마트팜 단지 고유 식별 번호" },
+        { "name": "region_code", "type": "VARCHAR(5)", "description": "지자체 행정동 코드" },
+        { "name": "crop_type", "type": "VARCHAR(20)", "description": "재배 품종 코드 (토마토·딸기·파프리카 등)" },
+        { "name": "cultivation_area", "type": "DOUBLE PRECISION", "description": "재배 면적 (㎡)" },
+        { "name": "investment_amount", "type": "BIGINT", "description": "단지 투자 금액 (원)" },
+        { "name": "yield_amount", "type": "DOUBLE PRECISION", "description": "작물 생산량 (kg)" },
+        { "name": "employment_count", "type": "INTEGER", "description": "고용·창업 청년 인원" }
+      ]
+    },
+    {
+      "id": "ds_06_settlement_facility",
+      "label": "정주여건시설",
+      "source": "RDB · PostgreSQL",
+      "object": "tb_settlement_facility",
+      "description": "정주여건 지원시설(정원수·신재생·임대주택) 현황 데이터 (신안군 주거 사례)",
+      "columns": [
+        { "name": "facility_id", "type": "VARCHAR(12)", "description": "정주여건 시설 고유 식별 번호" },
+        { "name": "region_code", "type": "VARCHAR(5)", "description": "지자체 행정동 코드" },
+        { "name": "facility_type", "type": "VARCHAR(10)", "description": "시설 유형 (정원수·신재생·임대주택)" },
+        { "name": "rental_units", "type": "INTEGER", "description": "임대주택 공급 호수" },
+        { "name": "operating_budget", "type": "BIGINT", "description": "시설 운영 예산 (원)" },
+        { "name": "occupancy_rate", "type": "DOUBLE PRECISION", "description": "입주·활용률 (%)" }
       ]
     }
   ],
@@ -154,6 +250,26 @@
       ]
     },
     {
+      "id": "template_smartfarm",
+      "title": "[남원·일자리] 임대형 스마트팜 최적 추진계획 방안 AI 정책 보고서",
+      "structure": [
+        "1. 청년 일자리·소득 현안 및 임대형 스마트팜 사업 개요",
+        "2. SHAP 요인분석: 단지 규모·투자 대비 소득 등 기여도",
+        "3. 작물 과부족·판매시점·입지 문제 유형 진단 결과",
+        "4. 강화학습 시뮬레이션 기반 최적 품종·생산규모·투자 추진계획"
+      ]
+    },
+    {
+      "id": "template_settlement",
+      "title": "[신안·주거] 정주여건(임대주택·신재생) 최적 추진계획 방안 AI 정책 보고서",
+      "structure": [
+        "1. 주거환경 현안 및 정주여건 지원사업 개요",
+        "2. SHAP 요인분석: 임대주택 수·운영 예산 등 기여도",
+        "3. 임대주택 과부족·활용도·위치 문제 유형 진단 결과",
+        "4. 강화학습 시뮬레이션 기반 시설별 최적 추진계획"
+      ]
+    },
+    {
       "id": "template_youth_welfare",
       "title": "[청년] 청년인구 유출 방지를 위한 welfare/housing 최적 재정 분배 전략 기획서",
       "structure": [
@@ -162,6 +278,38 @@
         "3. 3대 정책(복지/산업/주거) 가중치 연계 시뮬레이션 결과",
         "4. 연차별 청년 거주 정착 활성화 예산 배정 계획안"
       ]
+    },
+    {
+      "id": "template_task_order",
+      "title": "[과업] 인구 정책 수행 과업 지시서 자동 요약",
+      "structure": [
+        "1. 과업 개요 (과업명·목적·기간·범위·과업비)",
+        "2. 세부 내용 (분석 대상지·분석 내용·요구 데이터·정책 시사점)",
+        "3. 과업 수행 지침 (보고 사항·성과 기준·납품 목록·준수 사항)"
+      ]
+    },
+    {
+      "id": "template_vital_population",
+      "title": "[생활인구] 생활인구 현황 분석 보고서",
+      "structure": [
+        "1. 생활인구 구성 (성별·연령·외국인)",
+        "2. 방문/숙박 패턴 및 전년·전월 대비 방문율",
+        "3. 생활인구 유입 전략 인사이트"
+      ]
     }
-  ]
+  ],
+  "population_change": {
+    "years": ["2021", "2022", "2023", "2024", "2025"],
+    "birth_rate": [0.92, 0.88, 0.85, 0.82, 0.79],
+    "death_rate": [1.31, 1.36, 1.41, 1.45, 1.52],
+    "net_migration": [-820, -910, -1040, -1180, -1320]
+  },
+  "vital_population": {
+    "gender": { "male": 48.2, "female": 51.8 },
+    "age_group": { "10대이하": 9.4, "20-30대": 18.7, "40-50대": 27.1, "60대이상": 44.8 },
+    "foreigner_ratio": 6.3,
+    "visit": { "day": 71.5, "overnight": 28.5 },
+    "yoy_visit_rate": 4.7,
+    "mom_visit_rate": -1.8
+  }
 }
