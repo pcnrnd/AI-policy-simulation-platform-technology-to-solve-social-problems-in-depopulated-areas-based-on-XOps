@@ -84,3 +84,55 @@
 }
 
 .pipeline-connector.success { background-color: var(--accent-teal); }
+
+/* 파이프라인 실행 식별 정보 스트립 */
+.run-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  padding: 10px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--surface-hover);
+  font-size: 12px;
+  color: var(--text-primary);
+}
+.run-meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.run-meta-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+.run-meta code {
+  font-size: 11px;
+  color: var(--accent-purple);
+}
+.run-meta-empty {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+/* ===== 라이트 테마 보정 =====
+   다크 전용 남색 배경(rgba(10,15,29)/rgba(20,30,55))이 라이트 모드에서
+   과도하게 어두워 보이는 문제 — 밝은 표면 + 은은한 테두리로 교체. */
+[data-theme="light"] .pipeline-visualizer {
+  background-color: rgba(15, 23, 42, 0.03);
+}
+[data-theme="light"] .node-icon {
+  background-color: #ffffff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+[data-theme="light"] .pipeline-node.success .node-icon {
+  background-color: rgba(16, 185, 129, 0.08);
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.15);
+}
+[data-theme="light"] .pipeline-node.failed .node-icon {
+  background-color: rgba(239, 68, 68, 0.08);
+}
