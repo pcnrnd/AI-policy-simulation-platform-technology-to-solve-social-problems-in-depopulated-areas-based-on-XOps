@@ -1,5 +1,164 @@
 /* ===== DataOps 스키마 API — 카탈로그 / API 빌더 ===== */
 
+/* 과제 항목명 표기 — "데이터 라이프사이클 관리(DataOps) · 빅데이터 관리 아카이빙" */
+.dataops-page-sub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.dataops-page-sub > i {
+  color: var(--accent-blue);
+}
+
+/* 데이터 라이프사이클 칩 라인 — 수집→적재(아카이빙)→메타데이터 등록→API 제공 */
+.lifecycle-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.lifecycle-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: var(--surface-hover);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.lifecycle-chip > i {
+  color: var(--accent-blue);
+  font-size: 10px;
+}
+.lifecycle-arrow {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+/* STEP ①→②→③ 순차 스테이지(.pl-stage 재사용) 구조.
+   STEP ③ 내부만 좌(요청 구성)|우(응답) 분할로 가로 폭을 활용 */
+.dataops-builder-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  gap: 24px;
+  align-items: start;
+}
+/* 응답 카드는 좌측 폼 스크롤 동안 따라오도록 고정 */
+.dataops-resp-card {
+  position: sticky;
+  top: 16px;
+}
+.dataops-builder-grid .api-response {
+  height: auto;
+  min-height: 380px;
+  max-height: 560px;
+}
+@media (max-width: 1100px) {
+  .dataops-builder-grid {
+    grid-template-columns: 1fr;
+  }
+  .dataops-resp-card {
+    position: static;
+  }
+  .dataops-builder-grid .api-response {
+    min-height: 220px;
+  }
+}
+
+/* 빌드·등록 + 전송 버튼 행 */
+.builder-action-row {
+  display: flex;
+  gap: 8px;
+}
+.builder-action-row .btn-secondary {
+  flex: 1;
+}
+.builder-action-row .btn-primary {
+  flex: 1.6;
+}
+
+/* 발급 API 목록 — 호출 행 강조 + 인라인 응답 행 */
+.built-row-active td {
+  background-color: rgba(var(--accent-blue-rgb), 0.06);
+}
+.built-resp-row td {
+  padding: 12px 16px 16px;
+  background-color: rgba(var(--accent-blue-rgb), 0.04);
+}
+.built-resp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.built-resp-head i {
+  color: var(--accent-blue);
+  margin-right: 4px;
+}
+.built-resp-pre {
+  height: auto;
+  min-height: 120px;
+  max-height: 300px;
+}
+
+/* 응답 출처 칩 — 빌더 전송 / 발급 API 호출 구분 */
+.resp-origin-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--accent-blue);
+  background: rgba(var(--accent-blue-rgb), 0.1);
+  border: 1px solid rgba(var(--accent-blue-rgb), 0.25);
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 발급된 API 목록 — STEP ③ 하단 전체 폭 */
+.dataops-built-card {
+  margin-top: 24px;
+}
+
+/* 단계 하단 "다음 단계" 이동 버튼 행 */
+.stage-next-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
+/* 카탈로그에서 현재 API 대상으로 선택된 소스 표시 */
+.catalog-selected-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent-blue);
+  background: rgba(var(--accent-blue-rgb), 0.12);
+  border: 1px solid rgba(var(--accent-blue-rgb), 0.3);
+  vertical-align: middle;
+}
+
 /* 데이터 소스 카탈로그 선택 행 */
 .catalog-table tbody tr {
   transition: background-color var(--transition-fast);
