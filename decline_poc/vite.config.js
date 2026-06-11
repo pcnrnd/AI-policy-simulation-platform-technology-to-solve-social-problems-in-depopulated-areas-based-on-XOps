@@ -9,6 +9,16 @@ export default defineConfig({
   },
   build: {
     outDir: "dist",
-    sourcemap: true
+    sourcemap: true,
+    rollupOptions: {
+      output: {
+        // 무거운 서드파티를 별도 청크로 분리 — 초기 로드 축소 + 장기 캐싱
+        manualChunks: {
+          react: ["react", "react-dom"],
+          leaflet: ["leaflet"],
+          charts: ["chart.js", "react-chartjs-2"]
+        }
+      }
+    }
   }
 });
