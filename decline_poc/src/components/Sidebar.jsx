@@ -5,7 +5,12 @@ export default function Sidebar({ tabs, activeTab, onSelect, open }) {
     <aside id="app-sidebar" className={"sidebar" + (open ? " open" : "")}>
       <div className="logo-section">
         <div className="logo-icon">🔴</div>
-        <div className="logo-text">인구감소 R&D</div>
+        <div>
+          <div className="logo-text">인구감소 R&D</div>
+          <div style={{ fontSize: 9, color: "var(--text-muted)", marginTop: 2, letterSpacing: "0.01em" }}>
+            예측 시뮬레이션 기반 자원 최적화 플랫폼
+          </div>
+        </div>
       </div>
 
       <nav className="nav-menu" aria-label="주요 탭" role="tablist">
