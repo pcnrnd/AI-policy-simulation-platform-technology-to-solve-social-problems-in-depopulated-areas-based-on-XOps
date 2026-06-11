@@ -2,6 +2,7 @@ import Card from "../components/Card.jsx";
 import ConsoleLog from "../components/ConsoleLog.jsx";
 import { useAppState } from "../context/AppStateContext.jsx";
 import { PIPELINE_NODES } from "../constants/pipeline.js";
+import { RETRAIN_PIPELINES } from "../constants/models.js";
 
 function nodeStatus(index, currentStep) {
   // index: 0-based, currentStep: 1-based (0 = not started)
@@ -22,8 +23,16 @@ function connectorStatus(index, currentStep) {
 }
 
 export default function OrchestratorPage() {
-  const { pipelineRunning, pipelineStep, consoleLogs, startPipeline, resetPipeline, addConsoleLog } =
-    useAppState();
+  const {
+    pipelineRunning,
+    pipelineStep,
+    pipelineRun,
+    pipelineHistory,
+    consoleLogs,
+    startPipeline,
+    resetPipeline,
+    addConsoleLog
+  } = useAppState();
 
   const handleReset = () => {
     resetPipeline();
@@ -37,18 +46,9 @@ export default function OrchestratorPage() {
         icon="fa-diagram-project"
         style={{ marginBottom: 24 }}
         headerRight={
-          <div style={{ display: "flex", gap: 12 }}>
-            <button className="btn btn-secondary" onClick={handleReset}>
-              <i className="fa-solid fa-rotate-left"></i> 파이프라인 초기화
-            </button>
-            <button
-              className="btn btn-primary"
-              onClick={startPipeline}
-              disabled={pipelineRunning}
-            >
-              <i className="fa-solid fa-play"></i> 재학습 파이프라인 실행
-            </button>
-          </div>
+          <button className="btn btn-secondary" onClick={handleReset}>
+            <i className="fa-solid fa-rotate-left"></i> 파이프라인 초기화
+          </button>
         }
       >
         <p style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 12 }}>
@@ -59,6 +59,53 @@ export default function OrchestratorPage() {
           </strong>
           를 전자동으로 수행합니다.
         </p>
+
+        {/* 실행 식별 정보 — 어떤 모델·실험·트리거의 파이프라인인지 표시 */}
+        {pipelineRun ? (
+          <div className="run-meta">
+            <span className="run-meta-item">
+              <span className="run-meta-label">파이프라인</span>
+              {pipelineRun.pipelineName} (<code>{pipelineRun.pipelineId}</code>)
+            </span>
+            <span className="run-meta-item">
+              <span className="run-meta-label">실행 ID</span>
+              <code>{pipelineRun.runId}</code>
+            </span>
+            <span className="run-meta-item">
+              <span className="run-meta-label">대상 모델</span>
+              {pipelineRun.model} {pipelineRun.baseVersion} → 후보 {pipelineRun.candidateVersion}
+            </span>
+            <span className="run-meta-item">
+              <span className="run-meta-label">실험</span>
+              <code>{pipelineRun.experiment}</code>
+            </span>
+            <span className="run-meta-item">
+              <span className="run-meta-label">트리거</span>
+              {pipelineRun.trigger}
+            </span>
+            <span className="run-meta-item">
+              <span className="run-meta-label">시작</span>
+              {pipelineRun.startedAt}
+            </span>
+            <span
+              className="system-status"
+              style={{
+                padding: "2px 10px",
+                fontSize: 11,
+                marginLeft: "auto",
+                color: pipelineRunning ? "var(--accent-orange)" : "var(--accent-teal)",
+                backgroundColor: pipelineRunning ? "rgba(245, 158, 11, 0.1)" : "rgba(16, 185, 129, 0.1)"
+              }}
+            >
+              {pipelineRunning ? "진행 중" : "완료"}
+            </span>
+          </div>
+        ) : (
+          <div className="run-meta run-meta-empty">
+            아직 실행 이력이 없습니다 — 모니터 탭에서 드리프트 감지 시 자동 실행되거나, 아래 재학습
+            파이프라인 목록에서 [실행]으로 시작할 수 있습니다.
+          </div>
+        )}
 
         <div className="pipeline-visualizer">
           {PIPELINE_NODES.map((node, idx) => (
@@ -74,6 +121,90 @@ export default function OrchestratorPage() {
               )}
             </div>
           ))}
+        </div>
+      </Card>
+
+      {/* 등록된 재학습 파이프라인 카탈로그 — 어떤 파이프라인을 재학습할지 선택·실행 */}
+      <Card
+        title="등록된 재학습 파이프라인"
+        icon="fa-list-check"
+        style={{ marginBottom: 24 }}
+        headerRight={
+          <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
+            {RETRAIN_PIPELINES.length}건 등록 · 모델 레지스트리 연동
+          </span>
+        }
+      >
+        <div className="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>파이프라인</th>
+                <th>대상 모델</th>
+                <th>트리거 조건</th>
+                <th>마지막 실행</th>
+                <th>상태</th>
+                <th style={{ textAlign: "right" }}>동작</th>
+              </tr>
+            </thead>
+            <tbody>
+              {RETRAIN_PIPELINES.map((pl) => {
+                const isRunning = pipelineRunning && pipelineRun?.pipelineId === pl.id;
+                const last = pipelineHistory[pl.id];
+                return (
+                  <tr key={pl.id}>
+                    <td>
+                      <strong style={{ fontSize: 13 }}>{pl.name}</strong>
+                      <div>
+                        <code style={{ fontSize: 11, color: "var(--accent-purple)" }}>{pl.id}</code>
+                      </div>
+                    </td>
+                    <td style={{ fontSize: 12 }}>
+                      {pl.model} {pl.baseVersion} → {pl.candidateVersion}
+                      <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{pl.experiment}</div>
+                    </td>
+                    <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>{pl.triggerPolicy}</td>
+                    <td style={{ fontSize: 11, color: "var(--text-secondary)" }}>
+                      {last ? (
+                        <>
+                          <code style={{ color: "var(--accent-purple)" }}>{last.runId}</code>
+                          <div style={{ color: "var(--text-muted)" }}>
+                            {last.finishedAt} · {last.result}
+                          </div>
+                        </>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td>
+                      <span
+                        className="system-status"
+                        style={{
+                          padding: "1px 8px",
+                          fontSize: 10,
+                          color: isRunning ? "var(--accent-orange)" : "var(--accent-teal)",
+                          backgroundColor: isRunning ? "rgba(245, 158, 11, 0.1)" : "rgba(16, 185, 129, 0.1)"
+                        }}
+                      >
+                        {isRunning ? "진행 중" : "대기"}
+                      </span>
+                    </td>
+                    <td style={{ textAlign: "right" }}>
+                      <button
+                        className="btn btn-primary"
+                        style={{ padding: "5px 14px", fontSize: 12 }}
+                        onClick={() => startPipeline("수동 실행 (파이프라인 카탈로그)", pl)}
+                        disabled={pipelineRunning}
+                        title={`${pl.name} 파이프라인을 즉시 실행합니다`}
+                      >
+                        <i className="fa-solid fa-play"></i> 실행
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </Card>
 
