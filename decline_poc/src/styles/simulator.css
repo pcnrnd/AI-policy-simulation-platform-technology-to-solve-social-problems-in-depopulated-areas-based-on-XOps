@@ -1,10 +1,240 @@
+/* ===== 하이브리드: 전체 지도 + 플로팅 패널 + 우측 독 ===== */
+.sim-map-zone {
+  display: flex;
+  gap: 24px;
+  align-items: stretch;
+}
+
+.sim-map-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 640px;
+}
+
 #map {
   width: 100%;
-  height: 480px;
+  height: 100%;
   border-radius: 12px;
   border: 1px solid var(--border-color);
-  z-index: 10;
+  z-index: 1;
   box-shadow: var(--glass-shadow);
+}
+
+/* 지도 위 플로팅 패널 */
+.map-float {
+  position: absolute;
+  z-index: 1000;
+  background: var(--bg-card);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  box-shadow: var(--glass-shadow);
+  padding: 12px;
+}
+
+.map-float-tl {
+  top: 14px;
+  left: 14px;
+  width: 220px;
+}
+
+.map-float-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 6px 10px;
+  color: var(--text-muted);
+}
+.map-float-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 13px;
+  outline: none;
+}
+
+.map-float-section-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin: 12px 0 6px;
+}
+
+.map-float-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-primary);
+  padding: 3px 0;
+  cursor: pointer;
+}
+.map-float-toggle input {
+  accent-color: var(--accent-blue);
+}
+
+.map-float-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+}
+.map-float-legend .legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.map-float-legend .legend-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  display: inline-block;
+}
+
+/* 우측 독 */
+.sim-dock {
+  flex: 0 0 340px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-height: 640px;
+  overflow-y: auto;
+}
+
+.sim-dock-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  box-shadow: var(--glass-shadow);
+  padding: 16px;
+}
+
+.sim-dock-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+.sim-dock-title i {
+  color: var(--accent-blue);
+}
+.sim-dock-count {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--surface-hover);
+  border-radius: 10px;
+  padding: 1px 8px;
+}
+
+.sim-dock-hint {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 14px;
+}
+
+/* 변수 그룹 구분 라벨 (제약요소 / 예산 배분 / 시설 조절변수) */
+.sim-var-group-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin: 16px 0 8px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border-color);
+}
+.sim-var-group-label:first-of-type {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 4px;
+}
+.sim-var-group-label i {
+  color: var(--accent-blue);
+}
+
+.sim-region-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sim-region-item {
+  text-align: left;
+  width: 100%;
+  background: var(--surface-hover);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: var(--transition-fast);
+}
+.sim-region-item:hover {
+  background: var(--bg-card-hover);
+}
+.sim-region-item.active {
+  border-color: var(--accent-blue);
+  box-shadow: inset 3px 0 0 var(--accent-blue);
+  background: rgba(var(--accent-blue-rgb), 0.08);
+}
+
+.sim-region-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+.sim-region-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+.grade-chip {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 8px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  flex-shrink: 0;
+}
+.sim-region-empty {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 16px 0;
+}
+
+@media (max-width: 1200px) {
+  .sim-map-zone {
+    flex-direction: column;
+  }
+  .sim-dock {
+    flex-basis: auto;
+    max-height: none;
+  }
+  .sim-map-wrap {
+    height: 480px;
+  }
 }
 
 .leaflet-container { background: var(--bg-primary) !important; }
