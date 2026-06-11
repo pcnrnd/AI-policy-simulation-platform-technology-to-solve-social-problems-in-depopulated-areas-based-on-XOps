@@ -18,8 +18,9 @@ export const POLICY_STRATEGIES = [
  * RICE 추천 점수를 계산하고 내림차순 정렬해 반환.
  * @param {object} region
  * @param {{ welfare:number, industry:number, housing:number }} [weights] 0~100 슬라이더 값
+ * @param {number} [budgetFactor] 총 예산 제약요소(√(예산/기준)) — 추천 점수를 일관 스케일링
  */
-export function rankStrategies(region, weights = { welfare: 50, industry: 50, housing: 50 }) {
+export function rankStrategies(region, weights = { welfare: 50, industry: 50, housing: 50 }, budgetFactor = 1) {
   const impacts = region.policyImpacts;
   const avgFit = (impacts.welfare + impacts.industry + impacts.housing) / 3;
   const avgWeight = (weights.welfare + weights.industry + weights.housing) / 3 / 100;
@@ -29,7 +30,8 @@ export function rankStrategies(region, weights = { welfare: 50, industry: 50, ho
     // 시뮬레이터 슬라이더 강조도(0~1) → 0.5~1.5배 가중. 강조한 정책 축의 전략이 부스트됨.
     const emphasis = s.fit ? weights[s.fit] / 100 : avgWeight;
     const adjImpact = s.impact * (1 + fitValue) * (0.5 + emphasis);
-    const score = (s.reach * adjImpact * s.confidence) / s.effort;
+    // 총 예산(제약요소)이 추천 실행 규모를 좌우 — 예산이 작으면 동일 전략도 점수↓.
+    const score = ((s.reach * adjImpact * s.confidence) / s.effort) * budgetFactor;
     return {
       ...s,
       fitValue,
