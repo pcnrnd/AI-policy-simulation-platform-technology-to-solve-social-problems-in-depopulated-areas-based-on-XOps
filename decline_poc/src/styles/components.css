@@ -373,3 +373,29 @@ tr:hover td { background-color: rgba(255, 255, 255, 0.01); }
 [data-theme="light"] .alert-icon-btn:hover {
   background-color: var(--bg-card-hover);
 }
+
+/* 모니터 운영 툴바 — 수집 상태 + 이상 시나리오 재현 */
+.monitor-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+.monitor-collected {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.monitor-collected > i {
+  color: var(--accent-teal);
+}
+.monitor-options {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
