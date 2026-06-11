@@ -213,8 +213,9 @@ export default function ReporterPage() {
     <div className="grid-details-split">
       <Card title="인구감소 사회문제해결 리포트 생성기" icon="fa-file-invoice">
         <p style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 20 }}>
-          지자체 실무자 보고 양식 규격에 맞춰, MLOps 모니터링 성능값, 데이터 드리프트 위험 분석 및
-          정책 가이드를 조합한 공식 R&D 보고서를 즉시 출력합니다.
+          지자체 실무자 보고 양식 규격에 맞춰, MLOps 모니터링 성능값과 데이터 드리프트 위험 분석을
+          조합해 정책 제안 · 자원 최적화 · 생활인구 유입 전략 인사이트를 담은 공식 R&D 보고서를 즉시
+          출력합니다.
         </p>
 
         <div
@@ -235,7 +236,7 @@ export default function ReporterPage() {
           >
             <div style={{ fontSize: 12, fontWeight: 600 }}>
               <i className="fa-solid fa-link" style={{ color: "var(--accent-teal)" }}></i>{" "}
-              Data source API 자동 바인딩
+              템플릿 가변 저장 구조 — Data source API 자동 바인딩
             </div>
             <PerfBadge ms={bindingMs} label="API 응답" />
           </div>
