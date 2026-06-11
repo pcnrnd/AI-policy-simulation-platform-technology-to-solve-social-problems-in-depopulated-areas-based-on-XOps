@@ -96,6 +96,14 @@ export function buildApiResponse({ method, schema, adapter, sql, payload, filter
     dataops_version: "3.0.0-R3",
     auth: { authenticated: true, sub: payload.sub, scope: payload.scope },
     db_adapter: adapter,
+    // 빅데이터 관리 아카이빙 — 응답에 아카이브 스토리지 메타를 동봉해 접근 이력·보존 정책을 노출
+    archive_meta: schema.archive
+      ? {
+          storage_tier: schema.archive.tier,
+          retention: schema.archive.retention,
+          loaded_at: schema.archive.loaded_at
+        }
+      : null,
     generated_sql: sql
   };
 
