@@ -14,6 +14,195 @@
   color: var(--accent-blue);
 }
 
+/* DataOps 워크플로우(DAG) 실행 상태 — 한 줄 상태 바 */
+.workflow-statusbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding: 7px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--surface-hover);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.workflow-statusbar code {
+  color: var(--accent-purple);
+  font-size: 11px;
+}
+.workflow-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: var(--accent-teal);
+  flex-shrink: 0;
+}
+
+/* 카탈로그 검색 행 */
+.catalog-search-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.catalog-search-row > i {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.catalog-search-row .input-control {
+  max-width: 360px;
+}
+.catalog-reg-btn {
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: 7px 14px;
+  font-size: 12px;
+}
+
+/* ===== 신규 아카이브 등록 폼 — 라이프사이클 "메타데이터 등록" 단계 ===== */
+.archive-reg-form {
+  border: 1px dashed var(--accent-blue);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+  background: rgba(var(--accent-blue-rgb), 0.04);
+}
+.archive-reg-head {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+.archive-reg-head i {
+  color: var(--accent-blue);
+  margin-right: 6px;
+}
+.archive-reg-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px 12px;
+}
+.archive-reg-grid .field-inline span {
+  flex: 0 0 86px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.archive-reg-grid .field-inline .select-control {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  padding-left: 0;
+}
+.archive-reg-desc {
+  grid-column: span 2;
+}
+.archive-reg-sub-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin: 14px 0 6px;
+}
+.archive-reg-sub-label span {
+  font-weight: 400;
+  color: var(--text-muted);
+}
+.archive-reg-col-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.4fr 34px;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.archive-reg-col-del {
+  padding: 4px 0;
+  font-size: 11px;
+}
+.archive-reg-col-add {
+  padding: 4px 12px;
+  font-size: 11px;
+}
+.archive-reg-range-row {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr;
+  gap: 8px;
+  max-width: 560px;
+}
+.archive-reg-error {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--accent-red);
+}
+.archive-reg-error i {
+  margin-right: 4px;
+}
+.archive-reg-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+@media (max-width: 900px) {
+  .archive-reg-grid {
+    grid-template-columns: 1fr;
+  }
+  .archive-reg-desc {
+    grid-column: span 1;
+  }
+}
+
+/* 사용자 등록 아카이브 칩 + 행 삭제 버튼 */
+.catalog-user-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent-teal);
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  vertical-align: middle;
+}
+.catalog-row-del {
+  margin-left: 8px;
+  padding: 2px 8px;
+  font-size: 10px;
+  vertical-align: middle;
+}
+
+/* 카탈로그 태그 칩 */
+.catalog-tag-chip {
+  margin-left: 6px;
+  font-size: 10px;
+  color: var(--accent-purple);
+  background: rgba(139, 92, 246, 0.1);
+  border: 1px solid rgba(139, 92, 246, 0.22);
+  border-radius: 999px;
+  padding: 1px 7px;
+  vertical-align: middle;
+}
+
+/* 스키마 리니지 + 데이터 버전 — 한 줄 메타 */
+.schema-meta-line {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.schema-meta-line i {
+  color: var(--accent-blue);
+  font-size: 11px;
+  margin-right: 2px;
+}
+.schema-meta-line code {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
 /* 데이터 라이프사이클 칩 라인 — 수집→적재(아카이빙)→메타데이터 등록→API 제공 */
 .lifecycle-line {
   display: flex;
@@ -183,6 +372,22 @@
   letter-spacing: 0.02em;
   color: var(--text-secondary);
   margin-bottom: 8px;
+}
+
+/* 저장소별 쿼리 언어 칩 — RDB(SQL)는 파랑, MongoDB(MQL)는 보라로 구분 */
+.query-lang-chip {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent-blue);
+  background: rgba(59, 130, 246, 0.1);
+}
+.query-lang-chip.is-mql {
+  color: var(--accent-purple);
+  background: rgba(139, 92, 246, 0.12);
 }
 
 .auth-box {
