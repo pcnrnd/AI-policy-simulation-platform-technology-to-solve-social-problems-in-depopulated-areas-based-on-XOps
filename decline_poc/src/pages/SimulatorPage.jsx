@@ -23,6 +23,24 @@ const ANALYSIS_STEPS = [
   { key: "fusion", label: "통계 분석 융합", icon: "fa-layer-group", log: "통계적 모델 분석 결과와 융합 — 상관·문제진단 도출" }
 ];
 
+// 지도 베이스 테마 — 전부 VWorld(국토교통부 공간정보)로 통일해 모든 테마가 한글 지명 표기.
+// 키가 있으면 공식 WMTS API(+회색 추가), 없으면 공개 타일 서버(xdworld)를 사용(데모용, 운영 시 인증키 권장).
+// 공개 서버 동작 확인: Base·white·midnight(라이브 타일 테스트). gray는 키 필요, Satellite는 라벨 없어 제외.
+const VWORLD_KEY = import.meta.env.VITE_VWORLD_KEY;
+const vworldUrl = (layer) =>
+  VWORLD_KEY
+    ? `https://api.vworld.kr/req/wmts/1.0.0/${VWORLD_KEY}/${layer}/{z}/{y}/{x}.png`
+    : `https://xdworld.vworld.kr/2d/${layer}/service/{z}/{x}/{y}.png`;
+
+const MAP_THEMES = [
+  { id: "vw-midnight", label: "다크", url: vworldUrl("midnight"), maxZoom: 19 },
+  { id: "vw-base", label: "일반", url: vworldUrl("Base"), maxZoom: 19 },
+  // 회색(gray)은 공개 타일 서버 미제공 — 인증키(공식 API)일 때만 노출
+  ...(VWORLD_KEY ? [{ id: "vw-gray", label: "회색", url: vworldUrl("gray"), maxZoom: 19 }] : [])
+];
+// 기본: 야간 — 다크 톤이라 대시보드와 정합, 지명이 한글로 표기됨.
+const DEFAULT_THEME_ID = "vw-midnight";
+
 // 소멸위험지수(낮을수록 위험) → 등급/색상.
 function riskGrade(ri) {
   if (ri < 0.15) return { label: "고위험", color: "var(--accent-red)", rgb: "239, 68, 68" };
@@ -189,8 +207,12 @@ export default function SimulatorPage() {
     return () => observer.disconnect();
   }, []);
 
+  // 지도 베이스 테마 (한글 VWorld 또는 CARTO 폴백)
+  const [mapTheme, setMapTheme] = useState(DEFAULT_THEME_ID);
+
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
+  const tileLayerRef = useRef(null);
   const markerLayerRef = useRef(null);
   const gridLayerRef = useRef(null);
   const facilityLayerRef = useRef(null);
@@ -199,15 +221,14 @@ export default function SimulatorPage() {
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return undefined;
 
-    const map = L.map(mapContainerRef.current, { zoomControl: false }).setView([35.1, 126.9], 8);
+    // 기본 attribution 컨트롤 비활성 — 출처는 좌하단 ⓘ 접이식 패널(.map-attribution)이 담당 (OSM 공간 제약 표기 방식)
+    const map = L.map(mapContainerRef.current, { zoomControl: false, attributionControl: false }).setView(
+      [35.1, 126.9],
+      8
+    );
     L.control.zoom({ position: "bottomright" }).addTo(map);
 
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-      attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-      subdomains: "abcd",
-      maxZoom: 20
-    }).addTo(map);
+    // 베이스 타일은 mapTheme 전환 effect가 생성·교체한다 (여기선 미생성)
 
     const markerLayer = L.layerGroup();
     const gridLayer = L.layerGroup();
@@ -290,11 +311,27 @@ export default function SimulatorPage() {
     return () => {
       map.remove();
       mapRef.current = null;
+      tileLayerRef.current = null;
       markerLayerRef.current = null;
       gridLayerRef.current = null;
       facilityLayerRef.current = null;
     };
   }, [appData, setCurrentRegion]);
+
+  // 베이스 테마 전환 — 기존 타일 제거 후 신규 타일 추가(오버레이는 별도 pane이라 위 유지)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const def = MAP_THEMES.find((t) => t.id === mapTheme) ?? MAP_THEMES[0];
+    if (tileLayerRef.current) map.removeLayer(tileLayerRef.current);
+    // subdomains에 undefined를 넘기면 Leaflet 기본값('abc')을 덮어써 크래시 — 미정의 시 키 자체를 생략
+    const tileOpts = { maxZoom: def.maxZoom };
+    if (def.subdomains) tileOpts.subdomains = def.subdomains;
+    const tile = L.tileLayer(def.url, tileOpts);
+    tile.addTo(map);
+    tile.bringToBack();
+    tileLayerRef.current = tile;
+  }, [mapTheme]);
 
   // 레이어 토글 반영
   useEffect(() => {
@@ -549,6 +586,26 @@ export default function SimulatorPage() {
               />
               시설물 (정주여건·스마트팜)
             </label>
+            <div className="map-float-section-label">지도 테마</div>
+            <div className="map-theme-switch">
+              {MAP_THEMES.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  className={"map-theme-btn" + (mapTheme === t.id ? " active" : "")}
+                  onClick={() => setMapTheme(t.id)}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            {!VWORLD_KEY && (
+              <p className="map-theme-note">
+                모든 테마 한글 지명(VWorld 공개 타일) — 운영 배포 시 <code>VITE_VWORLD_KEY</code>(인증키)
+                권장, 회색 테마 추가됨.
+              </p>
+            )}
+
             <div className="map-float-section-label">인구밀도(㎢당)</div>
             <div className="map-float-legend">
               {DENSITY_LEGEND.map((d) => (
@@ -558,6 +615,18 @@ export default function SimulatorPage() {
                 </span>
               ))}
             </div>
+          </div>
+
+          {/* 지도 출처 — 접이식 표기(ⓘ hover/포커스 시 펼침). 활성 타일 소스별 표기 의무 준수 */}
+          <div className="map-attribution" tabIndex={0} aria-label="지도 출처 정보">
+            <i className="fa-solid fa-circle-info" aria-hidden="true"></i>
+            <span className="map-attribution-text">
+              ©{" "}
+              <a href="https://www.vworld.kr" target="_blank" rel="noreferrer">
+                VWorld
+              </a>{" "}
+              · 국토교통부
+            </span>
           </div>
         </div>
 
