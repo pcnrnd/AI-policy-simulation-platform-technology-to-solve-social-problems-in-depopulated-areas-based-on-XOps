@@ -18,7 +18,7 @@ export const PIPELINE_STEPS = [
   {
     name: "node-eval",
     desc: "4. Evaluation",
-    log: "INFO: 학습 완료. 모델 메트릭 자동 비교 연산 수행. [SOTA 검증성공: Accuracy 기존 0.892 -> 신규 0.925 (+3.3% 향상, 승격 DoD 1.5% 돌파)]."
+    log: "INFO: 학습 완료. 모델 메트릭 자동 비교 연산 수행. [SOTA 검증성공: Accuracy 기존 0.892 -> 신규 0.925 (+3.3% 향상, 승급 기준 1.5% 돌파)]. 자동 테스트 통과 — 유닛 12/12 · 통합 5/5 · 성능 P95 138ms."
   },
   {
     name: "node-deploy",
