@@ -1,8 +1,10 @@
 import { Fragment, useEffect, useState } from "react";
 import Card from "../components/Card.jsx";
 import PerfBadge from "../components/PerfBadge.jsx";
+import TablePager, { paginate } from "../components/TablePager.jsx";
 import PipelineStepper from "../components/PipelineStepper.jsx";
 import CollapsibleStage from "../components/CollapsibleStage.jsx";
+import ArchiveRegisterForm from "../components/ArchiveRegisterForm.jsx";
 import { useAppState } from "../context/AppStateContext.jsx";
 import {
   HTTP_METHODS,
@@ -10,8 +12,8 @@ import {
   issueMockJwt,
   issueMockOAuth2,
   decodeJwtPayload,
-  pickAdapter,
-  buildSql,
+  adapterOf,
+  buildQuery,
   buildApiResponse,
   buildUnauthorized
 } from "../lib/dataopsApi.js";
@@ -37,23 +39,28 @@ const METHOD_COLORS = {
 // 빌드·등록된 API 목록 — "API생성기 + 요청 관리·기록" 명세 반영. 브라우저(localStorage)에 보존.
 const BUILT_APIS_KEY = "decline_poc_built_apis";
 const MAX_BUILT_APIS = 12;
+// 사용자 등록 아카이브(메타데이터) — 라이프사이클 "메타데이터 등록" 단계 산출물. localStorage 보존.
+const USER_SOURCES_KEY = "decline_poc_user_sources";
 
-function loadBuiltApis() {
+function loadStoredList(key) {
   try {
-    const arr = JSON.parse(localStorage.getItem(BUILT_APIS_KEY) ?? "[]");
+    const arr = JSON.parse(localStorage.getItem(key) ?? "[]");
     return Array.isArray(arr) ? arr : [];
   } catch {
     return [];
   }
 }
 
-function persistBuiltApis(list) {
+function persistStoredList(key, list) {
   try {
-    localStorage.setItem(BUILT_APIS_KEY, JSON.stringify(list));
+    localStorage.setItem(key, JSON.stringify(list));
   } catch {
     // 저장 불가 환경(시크릿 모드 등)에서는 목록을 세션 한정으로만 유지
   }
 }
+
+const loadBuiltApis = () => loadStoredList(BUILT_APIS_KEY);
+const persistBuiltApis = (list) => persistStoredList(BUILT_APIS_KEY, list);
 
 // 아카이브 스토리지 티어 칩 색상 (Hot/Warm/Cold)
 const TIER_COLORS = {
@@ -62,39 +69,41 @@ const TIER_COLORS = {
   Cold: { color: "var(--accent-blue)", bg: "rgba(59, 130, 246, 0.1)" }
 };
 
-// 데이터 라이프사이클 흐름 — "데이터 라이프사이클 관리 기술(DataOps)" 과제 구조 반영.
-const LIFECYCLE_STEPS = [
-  { icon: "fa-cloud-arrow-down", title: "수집", sub: "다기관·다기종 원천" },
-  { icon: "fa-box-archive", title: "적재 (아카이빙)", sub: "티어·보존 정책 관리" },
-  { icon: "fa-tags", title: "메타데이터 등록", sub: "카탈로그 가상화" },
-  { icon: "fa-plug-circle-bolt", title: "API 제공", sub: "저장소 비노출 연계" }
-];
-
-// 칩 한 줄로 압축 표시 — STEP ③의 가상화 라우팅 흐름 띠와 시각적 중복을 피한다.
-function LifecycleFlow() {
+// DataOps 워크플로우(DAG) 실행 상태 — 한 줄 상태 바 (2차년도 Workflow 관리 기술 기반).
+// Task 흐름·최근 실행·스케줄만 요약 표기해 STEP ①의 본래 작업(소스 선택)을 방해하지 않는다.
+function WorkflowStatus({ workflow }) {
+  if (!workflow) return null;
+  const fmtAgo = (minAgo) => {
+    const d = new Date(Date.now() - minAgo * 60000);
+    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  };
+  const batchTasks = workflow.tasks.filter((t) => t.lastRunMinAgo !== null);
+  const lastDone = batchTasks.length
+    ? fmtAgo(Math.min(...batchTasks.map((t) => t.lastRunMinAgo)))
+    : null;
   return (
-    <div className="lifecycle-line" aria-label="데이터 라이프사이클">
-      {LIFECYCLE_STEPS.map((s, i) => (
-        <span key={s.title} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-          <span className="lifecycle-chip" title={s.sub}>
-            <i className={"fa-solid " + s.icon} aria-hidden="true"></i> {s.title}
-          </span>
-          {i < LIFECYCLE_STEPS.length - 1 && (
-            <i className="fa-solid fa-chevron-right lifecycle-arrow" aria-hidden="true"></i>
-          )}
-        </span>
-      ))}
+    <div className="workflow-statusbar" aria-label="DataOps 워크플로우 실행 상태">
+      <span className="workflow-dot" aria-label="정상"></span>
+      워크플로우 <code>{workflow.dag_id}</code> 정상 —{" "}
+      {batchTasks.map((t) => t.label).join(" → ")} 완료
+      {lastDone && ` (최근 ${lastDone})`} · {batchTasks[0]?.schedule ?? ""} 스케줄 · API 상시 제공
     </div>
   );
 }
 
 // 메타데이터 가상화 라우팅 단계 — 이미지 "메타데이터를 이용한 데이터 관리 구조" 반영.
-function RoutingFlow({ method, source, adapter }) {
+// 저장소 유형(RDB/NoSQL)에 따라 Adapter가 생성하는 쿼리 언어(SQL/MQL)가 달라진다.
+function RoutingFlow({ method, source, adapter, queryLang }) {
+  const range = source.range;
   const steps = [
     { icon: "fa-paper-plane", title: `${method} 요청`, sub: "API Endpoint" },
-    { icon: "fa-magnifying-glass", title: "메타데이터 검색", sub: `${source.source} · ${source.object}` },
+    {
+      icon: "fa-magnifying-glass",
+      title: "메타데이터 검색",
+      sub: `${source.source} · ${source.object}${range ? ` · ${range.column} ${range.from}~${range.to}` : ""}`
+    },
     { icon: "fa-plug", title: "Adapter 선택", sub: adapter },
-    { icon: "fa-database", title: "SQL 실행", sub: "In-Memory 처리" },
+    { icon: "fa-database", title: `${queryLang} 생성·실행`, sub: "In-Memory 처리" },
     { icon: "fa-reply", title: "REST 응답", sub: "표준 JSON" }
   ];
   return (
@@ -117,7 +126,10 @@ function RoutingFlow({ method, source, adapter }) {
 
 export default function DataOpsPage() {
   const { appData, addConsoleLog } = useAppState();
-  const sources = appData.metadata_schemas;
+  // 사용자 등록 아카이브 — 기본 카탈로그(mock) 뒤에 병합되어 STEP ②③에서 동일하게 동작
+  const [userSources, setUserSources] = useState(() => loadStoredList(USER_SOURCES_KEY));
+  const [showRegForm, setShowRegForm] = useState(false);
+  const sources = [...appData.metadata_schemas, ...userSources];
 
   // 카탈로그·스키마·API 빌더가 모두 같은 소스를 바라보도록 선택 상태를 단일화.
   const [sourceId, setSourceId] = useState(sources[0].id);
@@ -138,6 +150,11 @@ export default function DataOpsPage() {
   const [sentAt, setSentAt] = useState(null);
   // 발급 API [호출] 결과 — 호출한 행 아래 인라인으로 표시 (빌더 응답 패널과 분리)
   const [builtResult, setBuiltResult] = useState(null);
+  // 카탈로그 검색 (소스명·태그·설명)
+  const [catalogQuery, setCatalogQuery] = useState("");
+  // 발급된 API 목록 페이징
+  const BUILT_PAGE_SIZE = 5;
+  const [builtPage, setBuiltPage] = useState(1);
 
   // 단계 접기/펼치기 + 스텝퍼 내비게이션 (시뮬레이터 탭과 동일 UX)
   const [openStages, setOpenStages] = useState({
@@ -178,11 +195,10 @@ export default function DataOpsPage() {
   }, []);
 
   const target = sources.find((s) => s.id === sourceId) ?? sources[0];
-  const adapter = pickAdapter(target.id);
-  const generatedSql = buildSql({
+  const adapter = adapterOf(target);
+  const generatedQuery = buildQuery({
     method,
-    table: target.object,
-    columns: target.columns,
+    schema: target,
     filter: filterText.trim(),
     sort: sortCol,
     page,
@@ -192,11 +208,37 @@ export default function DataOpsPage() {
   const handleSelectSource = (id) => {
     setSourceId(id);
     setSortCol(""); // 소스가 바뀌면 이전 소스의 정렬 컬럼은 무효
+    setFilterText(""); // filter도 이전 소스의 컬럼 기준이므로 함께 초기화
     // 이전 소스 기준 응답은 무효 — 완료 해제 + 응답 패널 초기화
     setResponseOk(false);
     setResponseText(READY_RESPONSE);
     setApiMs(null);
     setSentAt(null);
+  };
+
+  // 신규 아카이브 등록 — 라이프사이클 "메타데이터 등록 → 적재" 단계를 사용자 조작으로 수행
+  const handleRegisterSource = (schema) => {
+    setUserSources((prev) => {
+      const next = [...prev, schema];
+      persistStoredList(USER_SOURCES_KEY, next);
+      return next;
+    });
+    setShowRegForm(false);
+    handleSelectSource(schema.id); // 등록 즉시 STEP ②③ 대상으로 선택
+    addConsoleLog(
+      `INFO: 메타데이터 등록·적재 완료 — ${schema.label} (${schema.source}, ${schema.archive.tier} 티어, ${schema.archive.retention}) → /api/v3/dataops/${schema.id} 가상화 제공 시작`
+    );
+  };
+
+  const handleDeleteSource = (id) => {
+    setUserSources((prev) => {
+      const next = prev.filter((s) => s.id !== id);
+      persistStoredList(USER_SOURCES_KEY, next);
+      return next;
+    });
+    // 삭제한 소스를 보고 있었다면 기본 소스로 복귀
+    if (sourceId === id) handleSelectSource(appData.metadata_schemas[0].id);
+    addConsoleLog(`WARN: 사용자 등록 아카이브 삭제 — ${id} (메타데이터·가상화 API 제공 중지)`, false, true);
   };
 
   const handleIssueToken = () => {
@@ -216,11 +258,10 @@ export default function DataOpsPage() {
   // 인증·라우팅·SQL·응답 생성의 공용 경로 — 빌더 [전송]과 목록 [호출]이 결과 표시만 달리한다
   const executeRequest = (cfg) => {
     if (!token) return { ok: false, body: buildUnauthorized(cfg.source.id) };
-    const reqAdapter = pickAdapter(cfg.source.id);
-    const sql = buildSql({
+    const reqAdapter = adapterOf(cfg.source);
+    const query = buildQuery({
       method: cfg.method,
-      table: cfg.source.object,
-      columns: cfg.source.columns,
+      schema: cfg.source,
       filter: cfg.filter,
       sort: cfg.sort,
       page: cfg.page,
@@ -231,7 +272,7 @@ export default function DataOpsPage() {
       method: cfg.method,
       schema: cfg.source,
       adapter: reqAdapter,
-      sql,
+      query,
       payload,
       filter: cfg.filter,
       sort: cfg.sort,
@@ -331,6 +372,17 @@ export default function DataOpsPage() {
     setBuiltResult((r) => (r?.apiId === id ? null : r));
   };
 
+  // 카탈로그 검색 — 소스명·태그·설명·객체명 부분 일치 (1차년도 카탈로그 설계: 태그 기반 자산 검색)
+  const q = catalogQuery.trim().toLowerCase();
+  const filteredSources = q
+    ? sources.filter((s) =>
+        [s.label, s.description, s.object, ...(s.tags ?? [])].join(" ").toLowerCase().includes(q)
+      )
+    : sources;
+
+  // 발급된 API 목록 페이지 슬라이스
+  const builtPg = paginate(builtApis, builtPage, BUILT_PAGE_SIZE);
+
   // ①②는 유효한 기본 선택이 항상 존재하므로 완료, ③은 표준 응답 수신 시 완료
   const doneStages = ["dstep-source", "dstep-schema", ...(responseOk ? ["dstep-builder"] : [])];
 
@@ -365,12 +417,39 @@ export default function DataOpsPage() {
         onToggle={() => toggleStage("dstep-source")}
       >
         <Card>
-          <LifecycleFlow />
-          <p style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 16 }}>
+          <WorkflowStatus workflow={appData.dataops_workflow} />
+          <p style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 12 }}>
             수집·가공 데이터를 메타데이터 기반으로 아카이빙하고, 물리 저장소를 직접 노출하지 않고
             단일 API로 연계 제공합니다. 소스를 선택하면 STEP ② 스키마와 STEP ③ API 빌더 대상이 함께
             전환됩니다.
           </p>
+
+          <div className="catalog-search-row">
+            <i className="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+            <input
+              className="input-control"
+              placeholder="소스명·태그·설명 검색 (예: 인구이동, 시계열)"
+              value={catalogQuery}
+              onChange={(e) => setCatalogQuery(e.target.value)}
+              aria-label="데이터 소스 검색"
+            />
+            <button
+              type="button"
+              className={`btn ${showRegForm ? "btn-secondary" : "btn-primary"} catalog-reg-btn`}
+              onClick={() => setShowRegForm((v) => !v)}
+              aria-expanded={showRegForm}
+            >
+              <i className={`fa-solid ${showRegForm ? "fa-xmark" : "fa-plus"}`} aria-hidden="true"></i>{" "}
+              {showRegForm ? "등록 닫기" : "신규 아카이브 등록"}
+            </button>
+          </div>
+
+          {showRegForm && (
+            <ArchiveRegisterForm
+              onRegister={handleRegisterSource}
+              onCancel={() => setShowRegForm(false)}
+            />
+          )}
 
           <div className="table-container">
             <table className="catalog-table">
@@ -379,6 +458,7 @@ export default function DataOpsPage() {
                   <th>데이터 소스</th>
                   <th>저장소 유형</th>
                   <th>데이터 객체</th>
+                  <th>수집 범위</th>
                   <th>아카이브 티어</th>
                   <th>보존 정책</th>
                   <th>적재일</th>
@@ -386,7 +466,7 @@ export default function DataOpsPage() {
                 </tr>
               </thead>
               <tbody>
-                {sources.map((s) => {
+                {filteredSources.map((s) => {
                   const isActive = s.id === sourceId;
                   return (
                     <tr
@@ -398,15 +478,48 @@ export default function DataOpsPage() {
                     >
                       <td>
                         <strong>{s.label}</strong>
+                        {(s.tags ?? []).map((tag) => (
+                          <span key={tag} className="catalog-tag-chip">
+                            #{tag}
+                          </span>
+                        ))}
+                        {s.userRegistered && (
+                          <span className="catalog-user-chip" title="사용자가 등록한 아카이브 (브라우저에 보존)">
+                            <i className="fa-solid fa-user-pen" aria-hidden="true"></i> 사용자 등록
+                          </span>
+                        )}
                         {isActive && (
                           <span className="catalog-selected-chip">
                             <i className="fa-solid fa-check" aria-hidden="true"></i> 선택됨
                           </span>
                         )}
+                        {s.userRegistered && (
+                          <button
+                            type="button"
+                            className="btn btn-secondary catalog-row-del"
+                            onClick={(e) => {
+                              e.stopPropagation(); // 행 클릭(소스 선택)과 분리
+                              handleDeleteSource(s.id);
+                            }}
+                            aria-label={`${s.label} 아카이브 삭제`}
+                            title="등록 해제 (메타데이터·API 제공 중지)"
+                          >
+                            <i className="fa-solid fa-trash-can" aria-hidden="true"></i>
+                          </button>
+                        )}
                       </td>
                       <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>{s.source}</td>
                       <td>
                         <code style={{ fontSize: 11, color: "var(--accent-purple)" }}>{s.object}</code>
+                      </td>
+                      <td style={{ fontSize: 11, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
+                        {s.range ? (
+                          <span title={`Adapter가 쿼리에 자동 주입하는 적재 범위 (${s.range.column})`}>
+                            <code style={{ fontSize: 10 }}>{s.range.column}</code> {s.range.from}~{s.range.to}
+                          </span>
+                        ) : (
+                          "—"
+                        )}
                       </td>
                       <td>
                         {s.archive && (
@@ -436,6 +549,13 @@ export default function DataOpsPage() {
                     </tr>
                   );
                 })}
+                {filteredSources.length === 0 && (
+                  <tr>
+                    <td colSpan={8} style={{ textAlign: "center", color: "var(--text-muted)", fontSize: 12 }}>
+                      "{catalogQuery}" 검색 결과가 없습니다.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -471,9 +591,27 @@ export default function DataOpsPage() {
               {target.source} · {target.object}
             </span>
           </div>
-          <p style={{ fontSize: 12, color: "var(--text-secondary)", margin: "6px 0 12px", fontStyle: "italic" }}>
+          <p style={{ fontSize: 12, color: "var(--text-secondary)", margin: "6px 0 10px", fontStyle: "italic" }}>
             {target.description}
           </p>
+
+          {/* 데이터 리니지 + 버전 — 1차년도 카탈로그 설계(출처 추적) + 2차년도 표준 명세 편집기(버전 관리) */}
+          {target.lineage && (
+            <p className="schema-meta-line">
+              <i className="fa-solid fa-database" aria-hidden="true"></i> 원천 {target.lineage.origin}{" "}
+              · 아카이브 {target.archive?.tier ?? "-"} ·{" "}
+              <span title="Git/DVC 기반 데이터 버전 관리">
+                <i className="fa-solid fa-code-branch" aria-hidden="true"></i> 데이터 버전{" "}
+                {target.lineage.version} <code>({target.lineage.commit})</code>
+              </span>
+              {target.range && (
+                <span title="Adapter가 쿼리에 자동 주입하는 적재 범위">
+                  {" "}· <i className="fa-solid fa-arrows-left-right" aria-hidden="true"></i> 수집 범위{" "}
+                  <code>{target.range.column}</code> {target.range.from}~{target.range.to}
+                </span>
+              )}
+            </p>
+          )}
 
           <div className="table-container">
             <table>
@@ -657,11 +795,21 @@ export default function DataOpsPage() {
               </div>
             </div>
 
-            {/* 3-3 가상화 라우팅 + SQL */}
+            {/* 3-3 가상화 라우팅 + 저장소별 쿼리(SQL/MQL) */}
             <div className="builder-section">
-              <div className="builder-section-label">3-3 · 메타데이터 가상화 라우팅</div>
-              <RoutingFlow method={method} source={target} adapter={adapter} />
-              <pre className="sql-preview">{generatedSql}</pre>
+              <div className="builder-section-label">
+                3-3 · 메타데이터 가상화 라우팅
+                <span className={`query-lang-chip ${generatedQuery.lang === "MQL" ? "is-mql" : ""}`}>
+                  {generatedQuery.lang === "MQL" ? "MQL · MongoDB" : "SQL · RDB"}
+                </span>
+              </div>
+              <RoutingFlow
+                method={method}
+                source={target}
+                adapter={adapter}
+                queryLang={generatedQuery.lang}
+              />
+              <pre className="sql-preview">{generatedQuery.text}</pre>
             </div>
 
             <div className="builder-action-row">
@@ -725,7 +873,7 @@ export default function DataOpsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {builtApis.map((api) => {
+                  {builtPg.pageRows.map((api) => {
                     const rgb = METHOD_COLORS[api.method] ?? METHOD_COLORS.GET;
                     const isInvoked = builtResult?.apiId === api.id;
                     const querySummary =
@@ -823,6 +971,12 @@ export default function DataOpsPage() {
                   })}
                 </tbody>
               </table>
+              <TablePager
+                page={builtPg.safePage}
+                totalPages={builtPg.totalPages}
+                totalCount={builtApis.length}
+                onChange={setBuiltPage}
+              />
             </div>
           )}
         </Card>
