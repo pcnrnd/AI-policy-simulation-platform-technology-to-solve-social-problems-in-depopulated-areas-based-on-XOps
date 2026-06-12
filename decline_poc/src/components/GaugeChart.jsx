@@ -21,7 +21,7 @@ export default function GaugeChart({ value, label, goodThreshold = 0.85, lowerIs
         borderColor: "transparent",
         circumference: 180,
         rotation: 270,
-        cutout: "72%"
+        cutout: "78%"
       }
     ]
   };
@@ -32,22 +32,23 @@ export default function GaugeChart({ value, label, goodThreshold = 0.85, lowerIs
     plugins: { legend: { display: false }, tooltip: { enabled: false } }
   };
 
+  // 보조 지표용 컴팩트 게이지 — 칸 폭에 끌려 커지지 않도록 폭 상한 + 중앙 정렬
   return (
-    <div style={{ position: "relative", height: 150, width: "100%" }}>
+    <div style={{ position: "relative", height: 100, maxWidth: 180, width: "100%", margin: "0 auto" }}>
       <Doughnut data={data} options={options} />
       <div
         style={{
           position: "absolute",
-          bottom: 8,
+          bottom: 4,
           left: 0,
           width: "100%",
           textAlign: "center"
         }}
       >
-        <div style={{ fontSize: 28, fontWeight: 700, fontFamily: "'Outfit', sans-serif", color }}>
+        <div style={{ fontSize: 20, fontWeight: 700, fontFamily: "'Outfit', sans-serif", color }}>
           {displayText ?? `${(ratio * 100).toFixed(1)}%`}
         </div>
-        <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>{label}</div>
+        <div style={{ fontSize: 10, color: "var(--text-secondary)" }}>{label}</div>
       </div>
     </div>
   );
