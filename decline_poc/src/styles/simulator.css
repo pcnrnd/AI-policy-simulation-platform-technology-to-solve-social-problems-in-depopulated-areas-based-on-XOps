@@ -83,6 +83,45 @@
   accent-color: var(--accent-blue);
 }
 
+/* 지도 베이스 테마 스위처 */
+.map-theme-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.map-theme-btn {
+  flex: 1 1 auto;
+  min-width: 52px;
+  font-family: inherit;
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 5px 8px;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+.map-theme-btn:hover {
+  color: var(--text-primary);
+  border-color: var(--accent-blue);
+}
+.map-theme-btn.active {
+  color: #fff;
+  background: var(--accent-blue);
+  border-color: var(--accent-blue);
+}
+.map-theme-note {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin: 8px 0 0;
+  line-height: 1.4;
+}
+.map-theme-note code {
+  font-size: 10px;
+  color: var(--accent-purple);
+}
+
 .map-float-legend {
   display: flex;
   flex-wrap: wrap;
@@ -222,6 +261,57 @@
   color: var(--text-muted);
   text-align: center;
   padding: 16px 0;
+}
+
+/* 지도 출처 — 접이식 표기: 평소 ⓘ만, hover/포커스 시 출처 텍스트 펼침 */
+.map-attribution {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  background: var(--bg-card);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  padding: 4px 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: default;
+}
+.map-attribution i {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.map-attribution-text {
+  max-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  opacity: 0;
+  /* GPU 가속 규칙: opacity만 트랜지션 (폭은 즉시 전환) */
+  transition: opacity var(--transition-fast);
+}
+.map-attribution:hover .map-attribution-text,
+.map-attribution:focus-within .map-attribution-text,
+.map-attribution:focus .map-attribution-text {
+  max-width: 220px;
+  opacity: 1;
+  margin-left: 8px;
+}
+.map-attribution a {
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+.map-attribution a:hover {
+  color: var(--text-primary);
+  text-decoration: underline;
+}
+.map-attribution:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
 }
 
 @media (max-width: 1200px) {
