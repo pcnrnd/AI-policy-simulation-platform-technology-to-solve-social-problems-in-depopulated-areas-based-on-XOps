@@ -57,6 +57,8 @@
 }
 
 .stat-label {
+  display: inline-flex;
+  align-items: center;
   font-size: 13px;
   color: var(--text-secondary);
   font-weight: 500;
@@ -398,4 +400,86 @@ tr:hover td { background-color: rgba(255, 255, 255, 0.01); }
   align-items: center;
   gap: 8px;
   margin-left: auto;
+}
+
+/* 테이블 페이저 */
+.table-pager {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.table-pager-info {
+  margin-right: auto;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.table-pager-page {
+  min-width: 44px;
+  text-align: center;
+  font-weight: 600;
+}
+
+/* InfoTip — 회색 물음표 + 커스텀 툴팁 (hover/focus) */
+.infotip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  margin-left: 5px;
+  cursor: help;
+  color: var(--text-muted);
+  outline: none;
+}
+.infotip > i {
+  font-size: 11px;
+  transition: color var(--transition-fast);
+}
+.infotip:hover > i,
+.infotip:focus-visible > i {
+  color: var(--accent-blue);
+}
+.infotip-bubble {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  width: max-content;
+  max-width: 260px;
+  padding: 8px 11px;
+  border-radius: 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--popup-shadow);
+  backdrop-filter: blur(12px);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  text-align: left;
+  white-space: normal;
+  word-break: keep-all;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity var(--transition-fast), transform var(--transition-fast);
+  z-index: 1200;
+  pointer-events: none;
+}
+.infotip:hover .infotip-bubble,
+.infotip:focus-visible .infotip-bubble {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+/* 화면 가장자리 잘림 방지 — 우측 배치 카드용 변형 */
+.infotip-bubble::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: var(--border-color);
 }
