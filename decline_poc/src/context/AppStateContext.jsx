@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useCallback, useRef, useEffect } from "react";
 import mockData from "../assets/mock_data.json";
 import { PIPELINE_STEPS } from "../constants/pipeline.js";
-import { RETRAIN_PIPELINES } from "../constants/models.js";
+import { RETRAIN_PIPELINES, MODEL_STORE } from "../constants/models.js";
 
 const AppStateContext = createContext(null);
 
@@ -27,6 +27,8 @@ export function AppStateProvider({ children }) {
   const [pipelineRun, setPipelineRun] = useState(null);
   // 파이프라인별 마지막 실행 결과 (pipelineId → { runId, finishedAt, result })
   const [pipelineHistory, setPipelineHistory] = useState({});
+  // Model Store — 모델·실험 버전 이력 (승급 완료 시 신규 운영 버전 추가)
+  const [modelStore, setModelStore] = useState(MODEL_STORE);
 
   const [accuracyOverride, setAccuracyOverride] = useState(null);
   const [f1Override, setF1Override] = useState(null);
@@ -83,6 +85,7 @@ export function AppStateProvider({ children }) {
     }
     setPipelineRunning(false);
     setPipelineStep(0);
+    setPipelineRun(null); // 실행 상태 카드를 유휴(대기 중)로 복귀
   }, []);
 
   // trigger: 실행 사유 문자열(예: "드리프트 자동 감지 (PSI 0.384)"). 미지정 시 수동 실행으로 기록.
@@ -141,12 +144,41 @@ export function AppStateProvider({ children }) {
           ...prev,
           [pipelineRun.pipelineId]: { runId: pipelineRun.runId, finishedAt, result: "SOTA 승급" }
         }));
+        // Model Store 갱신 — 신규 버전을 운영으로 등록, 직전 운영 버전은 '이전'으로 강등 (최고 성능 자동 선택)
+        setModelStore((prev) => {
+          const prevServing = prev.find((m) => m.modelId === pipelineRun.model && m.status === "운영");
+          const newAcc = Number(((prevServing?.accuracy ?? 0.88) + 0.033).toFixed(3));
+          const ymd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+          const demoted = prev
+            .map((m) =>
+              m.modelId === pipelineRun.model && m.status === "운영" ? { ...m, status: "이전" } : m
+            )
+            // 동일 모델·버전 재승급 시 기존 행 교체 (중복 등록 방지)
+            .filter((m) => !(m.modelId === pipelineRun.model && m.version === pipelineRun.candidateVersion));
+          return [
+            {
+              modelId: pipelineRun.model,
+              version: pipelineRun.candidateVersion,
+              dataVersion: "ds-v13",
+              params: "auto-tuned (재학습 파이프라인)",
+              accuracy: newAcc,
+              status: "운영",
+              registeredAt: ymd
+            },
+            ...demoted
+          ];
+        });
       }
       return undefined;
     }
 
     const step = PIPELINE_STEPS[pipelineStep - 1];
-    addConsoleLog(step.log, false, step.warn || false);
+    // 카나리 배포 단계에는 실행 중인 파이프라인의 Docker 이미지 태그를 동봉 (2차년도 컨테이너 배포)
+    const dockerSuffix =
+      pipelineStep === 5 && pipelineRun
+        ? ` [Docker 이미지: ${pipelineRun.model}:${pipelineRun.candidateVersion} 컨테이너 배포]`
+        : "";
+    addConsoleLog(step.log + dockerSuffix, false, step.warn || false);
 
     pipelineTimerRef.current = setTimeout(() => {
       setPipelineStep((s) => s + 1);
@@ -207,6 +239,7 @@ export function AppStateProvider({ children }) {
     pipelineStep,
     pipelineRun,
     pipelineHistory,
+    modelStore,
     accuracyOverride,
     f1Override,
     consoleLogs,
