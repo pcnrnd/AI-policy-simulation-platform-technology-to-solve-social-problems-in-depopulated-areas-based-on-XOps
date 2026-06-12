@@ -17,7 +17,7 @@ export default function PerfBadge({ ms, label = "처리 응답속도", budget = 
         borderColor: ok ? "rgba(16,185,129,0.2)" : "var(--border-color)",
         color
       }}
-      title={`목표 ≤ ${budget}ms (공인인증 기준)`}
+      title={`성능 목표 ≤ ${budget}ms`}
     >
       <i className="fa-solid fa-stopwatch" aria-hidden="true"></i>
       {label}: {text} {measured && <span style={{ opacity: 0.6 }}>/ ≤{budget}ms</span>}
