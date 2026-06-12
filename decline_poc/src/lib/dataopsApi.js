@@ -54,8 +54,9 @@ export function decodeJwtPayload(token) {
   }
 }
 
-/** 데이터 소스 종류에 맞는 DB Adapter 선택 (공간정보는 PostGIS). */
+/** 데이터 소스 종류에 맞는 DB Adapter 선택 (공간정보는 PostGIS, 비정형 문서는 Mongo). */
 export function pickAdapter(sourceId) {
+  if (sourceId.includes("complaints")) return "MongoAdapter (Document Store)";
   if (sourceId.includes("spatial")) return "PostGISAdapter (EPSG:4326)";
   if (sourceId.includes("smartfarm")) return "TimescaleDBAdapter (시계열)";
   if (sourceId.includes("welfare") || sourceId.includes("industrial") || sourceId.includes("facility")) {
@@ -64,10 +65,37 @@ export function pickAdapter(sourceId) {
   return "PostgreSQLAdapter (In-Memory Cache)";
 }
 
-/** 메서드/필터/정렬/페이징으로부터 표준 SQL 문을 생성. */
-export function buildSql({ method, table, columns, filter, sort, page, pageSize }) {
+/** 문서형(NoSQL) 저장소 여부 — Adapter가 SQL 대신 MQL(Mongo Query Language)을 생성한다. */
+export function isDocumentStore(schema) {
+  return (schema.source ?? "").includes("MongoDB");
+}
+
+/**
+ * 스키마의 저장소 유형 문자열로 Adapter 결정 — 사용자 등록 소스처럼
+ * id 규칙이 없는 스키마도 처리하고, 기본 소스는 기존 id 휴리스틱으로 위임.
+ */
+export function adapterOf(schema) {
+  const src = schema.source ?? "";
+  if (src.includes("MongoDB")) return "MongoAdapter (Document Store)";
+  if (src.includes("PostGIS")) return "PostGISAdapter (EPSG:4326)";
+  if (src.includes("TimescaleDB")) return "TimescaleDBAdapter (시계열)";
+  return pickAdapter(schema.id);
+}
+
+const fmtSqlValue = (v) => (typeof v === "number" ? v : `'${v}'`);
+
+/** 메타데이터 적재 범위(range) → SQL BETWEEN 조건. 사용자 filter와 AND로 결합. */
+function sqlWhere(range, filter) {
+  const parts = [];
+  if (range) parts.push(`${range.column} BETWEEN ${fmtSqlValue(range.from)} AND ${fmtSqlValue(range.to)}`);
+  if (filter) parts.push(filter);
+  return parts.length ? ` WHERE ${parts.join(" AND ")}` : "";
+}
+
+/** 메서드/필터/정렬/페이징으로부터 표준 SQL 문을 생성 (메타데이터 range 자동 주입). */
+export function buildSql({ method, table, columns, range, filter, sort, page, pageSize }) {
   const colList = columns.map((c) => c.name).join(", ");
-  const where = filter ? ` WHERE ${filter}` : "";
+  const where = sqlWhere(range, filter);
   const order = sort ? ` ORDER BY ${sort} DESC` : "";
   const offset = (page - 1) * pageSize;
   const limit = ` LIMIT ${pageSize} OFFSET ${offset}`;
@@ -87,8 +115,63 @@ export function buildSql({ method, table, columns, filter, sort, page, pageSize 
   }
 }
 
+/** 사용자 filter(`col > 100` 형태)를 MQL 조건으로 변환. 해석 불가 시 $expr 주석으로 보존. */
+function mongoFilterOf(filter) {
+  if (!filter) return null;
+  const m = filter.match(/^(\w+)\s*(>=|<=|!=|=|>|<)\s*(.+)$/);
+  if (!m) return `/* 미해석 조건: ${filter} */`;
+  const [, col, op, rawVal] = m;
+  const num = Number(rawVal);
+  const val = Number.isFinite(num) ? num : `"${rawVal.replace(/^['"]|['"]$/g, "")}"`;
+  const OPS = { ">": "$gt", ">=": "$gte", "<": "$lt", "<=": "$lte", "!=": "$ne" };
+  return op === "=" ? `${col}: ${val}` : `${col}: { ${OPS[op]}: ${val} }`;
+}
+
+/** 메타데이터 range + filter → MQL match 식 (이미지의 db.obj1.find(seq:{$gt..,$lt..}) 재현). */
+function mongoMatch(range, filter) {
+  const parts = [];
+  if (range) parts.push(`${range.column}: { $gte: ${JSON.stringify(range.from)}, $lte: ${JSON.stringify(range.to)} }`);
+  const f = mongoFilterOf(filter);
+  if (f) parts.push(f);
+  return `{ ${parts.join(", ")} }`;
+}
+
+/** 문서형 저장소용 MQL 문 생성 — 동일 요청 구성이 저장소에 따라 다른 쿼리 언어로 변환됨을 보인다. */
+export function buildMql({ method, collection, columns, range, filter, sort, page, pageSize }) {
+  const match = mongoMatch(range, filter);
+  const docBody = `{ ${columns.map((c) => `${c.name}: <${c.type}>`).join(", ")} }`;
+  const sortSeg = sort ? `.sort({ ${sort}: -1 })` : "";
+  const skip = (page - 1) * pageSize;
+
+  switch (method) {
+    case "POST":
+      return `db.${collection}.insertOne(\n  ${docBody}\n);`;
+    case "PUT":
+      return `db.${collection}.updateMany(\n  ${match},\n  { $set: ${docBody} }\n);`;
+    case "PATCH":
+      return `db.${collection}.updateMany(\n  ${match},\n  { $set: { ${columns[0].name}: <${columns[0].type}> } }\n);`;
+    case "DELETE":
+      return `db.${collection}.deleteMany(${match});`;
+    case "GET":
+    default:
+      return `db.${collection}.find(\n  ${match}\n)${sortSeg}.skip(${skip}).limit(${pageSize});`;
+  }
+}
+
+/**
+ * 메타데이터 가상화 라우팅의 쿼리 생성 단계 — 저장소 유형에 맞춰 SQL 또는 MQL을 산출.
+ * @returns {{ lang: "SQL" | "MQL", text: string }}
+ */
+export function buildQuery({ method, schema, filter, sort, page, pageSize }) {
+  const common = { method, columns: schema.columns, range: schema.range, filter, sort, page, pageSize };
+  if (isDocumentStore(schema)) {
+    return { lang: "MQL", text: buildMql({ ...common, collection: schema.object }) };
+  }
+  return { lang: "SQL", text: buildSql({ ...common, table: schema.object }) };
+}
+
 /** 메서드별 표준 REST 응답 본문(JSON 직렬화 대상)을 생성. */
-export function buildApiResponse({ method, schema, adapter, sql, payload, filter, sort, page, pageSize }) {
+export function buildApiResponse({ method, schema, adapter, query, payload, filter, sort, page, pageSize }) {
   const base = {
     status: method === "POST" ? 201 : 200,
     method,
@@ -104,7 +187,12 @@ export function buildApiResponse({ method, schema, adapter, sql, payload, filter
           loaded_at: schema.archive.loaded_at
         }
       : null,
-    generated_sql: sql
+    // 메타데이터 적재 범위 — Adapter가 쿼리에 자동 주입한 스코프를 응답에서 추적 가능하게 노출
+    range_scope: schema.range
+      ? { column: schema.range.column, from: schema.range.from, to: schema.range.to }
+      : null,
+    query_language: query.lang,
+    generated_query: query.text
   };
 
   if (method === "GET") {
