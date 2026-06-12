@@ -10,6 +10,29 @@
   overflow-x: auto;
 }
 
+/* 유휴(미실행) 상태 — 레이아웃은 유지하고 노드만 흐리게. opacity 전용(GPU 가속) */
+.pipeline-visualizer.is-idle {
+  opacity: 0.35;
+}
+
+/* run-meta와 동일한 스트립 박스로 맞춰 유휴↔실행 전환 시 높이 변화 최소화 */
+.pipeline-idle-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px dashed var(--border-color);
+  border-radius: 10px;
+  background: var(--surface-hover);
+  min-height: 42px;
+}
+.pipeline-idle-hint i {
+  color: var(--accent-blue);
+}
+
 .pipeline-node {
   display: flex;
   flex-direction: column;
@@ -85,11 +108,13 @@
 
 .pipeline-connector.success { background-color: var(--accent-teal); }
 
-/* 파이프라인 실행 식별 정보 스트립 */
+/* 파이프라인 실행 식별 정보 스트립 — 한 줄 고정(좁으면 가로 스크롤)으로
+   유휴(.pipeline-idle-hint)와 높이를 일치시켜 전환 시 레이아웃 이동 방지 */
 .run-meta {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow-x: auto;
   gap: 10px 18px;
   padding: 10px 14px;
   border: 1px solid var(--border-color);
@@ -97,11 +122,14 @@
   background: var(--surface-hover);
   font-size: 12px;
   color: var(--text-primary);
+  min-height: 42px;
 }
 .run-meta-item {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .run-meta-label {
   font-size: 10px;
