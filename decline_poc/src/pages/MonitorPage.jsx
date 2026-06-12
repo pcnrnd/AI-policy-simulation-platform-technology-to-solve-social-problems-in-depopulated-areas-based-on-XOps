@@ -19,6 +19,7 @@ import { useAppState } from "../context/AppStateContext.jsx";
 import { useChartTheme } from "../hooks/useChartTheme.js";
 import { useRenderTiming } from "../lib/perf.js";
 import { MODEL_REGISTRY } from "../constants/models.js";
+import InfoTip from "../components/InfoTip.jsx";
 
 ChartJS.register(
   CategoryScale,
@@ -287,7 +288,10 @@ export default function MonitorPage() {
 
       <div className="grid-cols-3" style={{ marginBottom: 24 }}>
         <div className="card" style={{ padding: 18 }}>
-          <div className="stat-label">Model Accuracy / F1-Score</div>
+          <div className="stat-label">
+            Model Accuracy / F1-Score
+            <InfoTip text="운영 중인 모델의 정확도(Accuracy)와 정밀도·재현율의 조화평균(F1-Score). 재학습 승급 시 두 값이 함께 갱신됩니다." />
+          </div>
           <div
             style={{
               display: "flex",
@@ -307,7 +311,10 @@ export default function MonitorPage() {
         </div>
 
         <div className={"card" + (driftInjected ? " glow-red" : "")} style={{ padding: 18 }}>
-          <div className="stat-label">Data Drift Status (PSI)</div>
+          <div className="stat-label">
+            Data Drift Status (PSI)
+            <InfoTip text="PSI(Population Stability Index)는 원본 학습 분포와 실시간 유입 분포의 차이를 측정합니다. 0.2를 초과하면 데이터 드리프트로 판정해 자동 재학습을 트리거합니다." />
+          </div>
           <div
             style={{
               display: "flex",
@@ -332,7 +339,10 @@ export default function MonitorPage() {
         </div>
 
         <div className="card" style={{ padding: 18 }}>
-          <div className="stat-label">Outlier Detection (Z-Score)</div>
+          <div className="stat-label">
+            Outlier Detection (Z-Score)
+            <InfoTip text="유입 데이터의 Z-score(평균 대비 표준편차 거리)가 임계치를 넘는 이상치 건수입니다. 학습데이터 품질 저하를 사전에 차단합니다." />
+          </div>
           <div
             style={{
               display: "flex",
@@ -444,14 +454,22 @@ export default function MonitorPage() {
       </div>
 
       {/* 상단 stat 카드(Accuracy·F1)·6대 지표 차트와 중복되지 않는 지표만 게이지로 표시 */}
-      <Card title="모델 신뢰도 게이지 (실시간)" icon="fa-gauge-high">
+      <Card
+        title={
+          <>
+            모델 신뢰도 게이지 (실시간)
+            <InfoTip text="운영 모델의 Precision·Recall과 예측 지연(latency)을 표시합니다. 예측 지연이 자동 롤백 임계 200ms를 초과하면 직전 버전으로 자동 롤백됩니다." />
+          </>
+        }
+        icon="fa-gauge-high"
+      >
         <div className="grid-cols-3" style={{ marginBottom: 0 }}>
           <GaugeChart value={driftInjected ? 0.803 : 0.891} label="Precision" />
           <GaugeChart value={driftInjected ? 0.788 : 0.878} label="Recall" />
           <GaugeChart
             value={(driftInjected ? 178 : 120) / 200}
             displayText={`${driftInjected ? 178 : 120}ms`}
-            label="예측 지연 (자동 롤백 임계 200ms)"
+            label="예측 지연"
             goodThreshold={0.75}
             lowerIsBetter
           />
