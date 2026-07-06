@@ -411,7 +411,7 @@ export default function DataOpsPage() {
       <CollapsibleStage
         id="dstep-source"
         no="STEP ①"
-        title="데이터 소스 선택 — 빅데이터 아카이브 카탈로그"
+        title="데이터 소스 선택 - 빅데이터 아카이브"
         sub="아카이빙된 다기종 데이터 소스를 메타데이터 카탈로그에서 선택"
         open={openStages["dstep-source"]}
         onToggle={() => toggleStage("dstep-source")}
