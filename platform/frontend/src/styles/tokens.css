@@ -1,0 +1,95 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap');
+
+:root {
+  --bg-primary: #080d1a;
+  --bg-secondary: #0e1629;
+  --bg-card: rgba(20, 30, 55, 0.65);
+  --bg-card-hover: rgba(26, 38, 69, 0.8);
+  --border-color: rgba(255, 255, 255, 0.08);
+  --border-focus: rgba(59, 130, 246, 0.4);
+
+  --text-primary: #f3f4f6;
+  --text-secondary: #9ca3af;
+  --text-muted: #6b7480;
+
+  --accent-blue: #3b82f6;
+  --accent-blue-rgb: 59, 130, 246;
+  --accent-teal: #10b981;
+  --accent-teal-rgb: 16, 185, 129;
+  --accent-purple: #8b5cf6;
+  --accent-purple-rgb: 139, 92, 246;
+  --accent-red: #ef4444;
+  --accent-red-rgb: 239, 68, 68;
+  --accent-orange: #f59e0b;
+  --accent-orange-rgb: 245, 158, 11;
+
+  --grad-primary: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  --grad-teal: linear-gradient(135deg, #10b981 0%, #3b82f6 100%);
+  --grad-dark: linear-gradient(180deg, #0e1629 0%, #080d1a 100%);
+
+  --glow-shadow: 0 0 20px rgba(59, 130, 246, 0.15);
+  --glow-shadow-red: 0 0 20px rgba(239, 68, 68, 0.25);
+  --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  --card-hover-shadow: 0 12px 24px -10px rgba(0, 0, 0, 0.5);
+  --popup-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+
+  /* Surface backgrounds (theme-able) */
+  --sidebar-bg: linear-gradient(180deg, #090e1c 0%, #060a14 100%);
+  --header-bg: rgba(8, 13, 26, 0.8);
+  --logo-text-grad: linear-gradient(to right, #ffffff, #9ca3af);
+  --body-glow-1: rgba(59, 130, 246, 0.05);
+  --body-glow-2: rgba(139, 92, 246, 0.05);
+  --surface-hover: rgba(255, 255, 255, 0.03);
+  --scrollbar-thumb: rgba(255, 255, 255, 0.1);
+  --input-bg: rgba(10, 15, 29, 0.7);
+  --table-head-bg: rgba(10, 15, 29, 0.4);
+  --card-hover-border: rgba(255, 255, 255, 0.12);
+
+  --sidebar-width: 260px;
+  --header-height: 70px;
+  --transition-fast: 0.2s ease;
+  --transition-normal: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ===== Light theme overrides ===== */
+:root[data-theme="light"] {
+  /* 표면 계층 분리: 본문은 살짝 쿨다운, 카드는 불투명에 가깝게 → 카드가 떠 보이도록 */
+  --bg-primary: #e9eef5;
+  --bg-secondary: #ffffff;
+  --bg-card: rgba(255, 255, 255, 0.9);
+  --bg-card-hover: #ffffff;
+  --border-color: rgba(15, 23, 42, 0.1);
+  --border-focus: rgba(37, 99, 235, 0.45);
+
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
+
+  /* 라이트 전용 액센트: 흰 배경 대비 확보 위해 한 단계 진하게 */
+  --accent-blue: #2563eb;
+  --accent-blue-rgb: 37, 99, 235;
+  --accent-teal: #059669;
+  --accent-teal-rgb: 5, 150, 105;
+  --accent-purple: #7c3aed;
+  --accent-purple-rgb: 124, 58, 237;
+
+  --grad-dark: linear-gradient(180deg, #ffffff 0%, #e9eef5 100%);
+
+  /* 글로우/그림자: 밝은 배경에선 헤일로 대신 옅은 쿨그레이 섀도 */
+  --glow-shadow: 0 4px 14px rgba(37, 99, 235, 0.1);
+  --glass-shadow: 0 8px 28px 0 rgba(15, 23, 42, 0.08);
+  --card-hover-shadow: 0 10px 28px -12px rgba(15, 23, 42, 0.16);
+  --popup-shadow: 0 10px 30px -8px rgba(15, 23, 42, 0.2);
+
+  --sidebar-bg: #ffffff;
+  --header-bg: rgba(255, 255, 255, 0.82);
+  --logo-text-grad: linear-gradient(to right, #1e293b, #64748b);
+  /* 본문 라디얼 틴트는 흰 배경에서 얼룩이 되므로 거의 제거 */
+  --body-glow-1: rgba(59, 130, 246, 0.035);
+  --body-glow-2: rgba(139, 92, 246, 0.03);
+  --surface-hover: rgba(15, 23, 42, 0.04);
+  --scrollbar-thumb: rgba(15, 23, 42, 0.18);
+  --input-bg: #ffffff;
+  --table-head-bg: rgba(15, 23, 42, 0.04);
+  --card-hover-border: rgba(15, 23, 42, 0.14);
+}
