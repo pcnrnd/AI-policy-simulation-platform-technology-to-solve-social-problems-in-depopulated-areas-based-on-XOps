@@ -11,10 +11,11 @@ from typing import Any
 from fastapi import APIRouter, Query
 
 from src.core.seed import get_seed
-from src.mlops.monitoring.drift import DriftDetector
+from src.mlops.monitoring.drift import DriftDetector, DriftResult
 from src.mlops.monitoring.explain import ExplainabilityModule
 from src.mlops.monitoring.metrics import MetricCollector
 from src.mlops.monitoring.outliers import OutlierDetector
+from src.mlops.orchestration.registry import get_registry
 from src.schemas.monitoring import ClassificationInput, DriftInput, ExplainInput, OutlierInput, RegressionInput
 
 router = APIRouter(prefix="/monitoring", tags=["monitoring"])
@@ -24,6 +25,15 @@ _outliers = OutlierDetector()
 _explain = ExplainabilityModule()
 
 _SERIES = ("accuracy", "f1", "precision", "recall", "mse", "mae")
+
+
+def _maybe_retrain(result: DriftResult, model_id: str | None, auto_retrain: bool) -> dict[str, Any] | None:
+    """드리프트가 임계를 넘고 auto_retrain이면 해당 모델의 재학습을 자동 발화."""
+    if not (result.drifted and auto_retrain and model_id):
+        return None
+    from dataclasses import asdict as _asdict
+
+    return _asdict(get_registry().trigger(model_id=model_id, trigger="drift"))
 
 
 @router.get("/metrics")
@@ -47,18 +57,27 @@ def compute_classification(body: ClassificationInput) -> dict[str, float]:
 
 
 @router.get("/drift")
-def drift_from_seed(drifted: bool = Query(False, description="true면 드리프트 주입 분포 사용")) -> dict[str, Any]:
+def drift_from_seed(
+    drifted: bool = Query(False, description="true면 드리프트 주입 분포 사용"),
+    model_id: str | None = Query(None, description="드리프트 감지 시 재학습 대상 모델"),
+    auto_retrain: bool = Query(False, description="드리프트 임계 초과 시 재학습 자동 발화"),
+) -> dict[str, Any]:
     """시드 분포(reference vs current_normal|current_drifted)로 PSI/KL 판정."""
     dist = get_seed()["drift_distribution"]
     current = dist["current_drifted"] if drifted else dist["current_normal"]
     result = _drift.detect(dist["reference"], current)
-    return {**asdict(result), "buckets": dist["buckets"]}
+    return {**asdict(result), "buckets": dist["buckets"], "retrain": _maybe_retrain(result, model_id, auto_retrain)}
 
 
 @router.post("/drift")
-def compute_drift(body: DriftInput) -> dict[str, Any]:
+def compute_drift(
+    body: DriftInput,
+    model_id: str | None = Query(None, description="드리프트 감지 시 재학습 대상 모델"),
+    auto_retrain: bool = Query(False, description="드리프트 임계 초과 시 재학습 자동 발화"),
+) -> dict[str, Any]:
     """임의 분포로 PSI/KL 판정."""
-    return asdict(_drift.detect(body.reference, body.current))
+    result = _drift.detect(body.reference, body.current)
+    return {**asdict(result), "retrain": _maybe_retrain(result, model_id, auto_retrain)}
 
 
 @router.post("/outliers")

@@ -8,10 +8,13 @@ from __future__ import annotations
 
 from typing import Any
 
+from src.core.logger import get_logger
 from src.core.settings import get_settings
 from src.dataops.adapters import adapter_of
 from src.dataops.query_builder import build_query
 from src.dataops.safety import assert_safe_filter, assert_safe_sort, assert_safe_sql
+
+_logger = get_logger("xops.dataops")
 
 # ponytail: 실제 Adapter 연결 전까지 총 행수는 결정적 스텁(프론트 계약값과 동일). 실 연결 시 COUNT(*)로 대체.
 _TOTAL_ROWS = 1248
@@ -71,8 +74,9 @@ class DataService:
         settings = get_settings()
         page_size = page_size or settings.default_page_size
 
-        assert_safe_filter(filter_expr)
-        assert_safe_sort(sort, {c["name"] for c in schema["columns"]})
+        columns = {c["name"] for c in schema["columns"]}
+        assert_safe_filter(filter_expr, columns)
+        assert_safe_sort(sort, columns)
 
         query = build_query(
             method=method, schema=schema, filter_expr=filter_expr, sort=sort, page=page, page_size=page_size
@@ -81,6 +85,7 @@ class DataService:
             assert_safe_sql(query.text)
 
         adapter = adapter_of(schema)
+        _logger.info(f"dataops {method} source={schema['id']} adapter={adapter} lang={query.lang}")
         base = _base_response(method=method, schema=schema, adapter=adapter, payload=payload, query=query)
 
         if method == "GET":

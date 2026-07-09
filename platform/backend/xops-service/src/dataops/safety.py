@@ -15,12 +15,19 @@ _IDENT_RE = re.compile(r"^\w+$")
 _SQL_BLOCKLIST = ("--", "/*", "*/", "xp_", "\x00")
 
 
-def assert_safe_filter(filter_expr: str | None) -> None:
-    """사용자 filter는 `col op value` 단일 조건만 허용. 스택 쿼리/주석/함수 호출 차단."""
+def assert_safe_filter(filter_expr: str | None, allowed_columns: set[str] | None = None) -> None:
+    """사용자 filter는 `col op value` 단일 조건만 허용. 스택 쿼리/주석/함수 호출 차단.
+
+    allowed_columns가 주어지면 filter의 대상 컬럼이 스키마에 존재하는지도 검증한다
+    (소스 전환 시 이전 컬럼명 잔존으로 무효 쿼리가 생성되는 문제 예방).
+    """
     if not filter_expr:
         return
-    if not _FILTER_RE.match(filter_expr.strip()):
+    match = _FILTER_RE.match(filter_expr.strip())
+    if not match:
         raise UnsafeQueryError(f"허용되지 않는 filter 식입니다: {filter_expr!r}")
+    if allowed_columns is not None and match.group(1) not in allowed_columns:
+        raise UnsafeQueryError(f"스키마에 없는 filter 컬럼입니다: {match.group(1)!r}")
 
 
 def assert_safe_sort(sort: str | None, allowed_columns: set[str]) -> None:
