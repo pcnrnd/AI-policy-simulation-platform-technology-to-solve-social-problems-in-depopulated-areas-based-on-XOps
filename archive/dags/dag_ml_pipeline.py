@@ -20,44 +20,77 @@ with DAG(
 
     @task.virtualenv(
         task_id="load_and_validate_data",
-        requirements=['minio', 'pandas', 'numpy']
+        requirements=['pandas', 'numpy']  # minio 제거
     )
     def load_and_validate_data():
         """
-        MinIO에서 전처리된 데이터를 로드하고 데이터 품질을 검증하는 함수
+        더미 데이터를 생성하고 데이터 품질을 검증하는 함수
         
         Returns:
             dict: 검증된 데이터와 메타데이터를 포함한 딕셔너리
         """
-        from minio import Minio
-        from io import BytesIO
         import pandas as pd
         import numpy as np
         
-        minio_endpoint = 'minio:9000'
-        minio_access_key = 'minio'
-        minio_secret_key = 'minio123'
-        minio_bucket = "prepro"
-        minio_object = "prepro_data.csv"
+        # 더미 데이터 생성 설정
+        n_samples = 1000
+        np.random.seed(42)
         
-        # MinIO 클라이언트 생성
-        client = Minio(
-            minio_endpoint,
-            access_key=minio_access_key,
-            secret_key=minio_secret_key,
-            secure=False
+        # 인구 감소 예측을 위한 더미 데이터 생성
+        # 피처: 지역별 인구 통계, 경제 지표, 사회 지표 등
+        data = {
+            # 지역 정보
+            'region_id': np.random.randint(1, 21, n_samples),  # 20개 지역
+            'urban_ratio': np.random.uniform(0.3, 0.9, n_samples),  # 도시화 비율
+            
+            # 인구 통계
+            'total_population': np.random.randint(50000, 500000, n_samples),  # 총 인구
+            'population_density': np.random.uniform(100, 5000, n_samples),  # 인구 밀도
+            'age_median': np.random.uniform(30, 50, n_samples),  # 중위 연령
+            'elderly_ratio': np.random.uniform(0.1, 0.3, n_samples),  # 고령자 비율
+            'youth_ratio': np.random.uniform(0.15, 0.35, n_samples),  # 청년 비율
+            
+            # 경제 지표
+            'gdp_per_capita': np.random.uniform(20000, 60000, n_samples),  # 1인당 GDP
+            'unemployment_rate': np.random.uniform(0.02, 0.12, n_samples),  # 실업률
+            'income_median': np.random.uniform(30000, 70000, n_samples),  # 중위 소득
+            
+            # 사회 지표
+            'education_level': np.random.uniform(0.5, 0.95, n_samples),  # 고등교육 이수율
+            'marriage_rate': np.random.uniform(0.4, 0.8, n_samples),  # 결혼율
+            'birth_rate': np.random.uniform(0.5, 1.5, n_samples),  # 출생률
+            
+            # 인프라 지표
+            'medical_facilities': np.random.uniform(0.5, 3.0, n_samples),  # 의료시설 밀도
+            'school_density': np.random.uniform(0.3, 2.0, n_samples),  # 학교 밀도
+            'transport_accessibility': np.random.uniform(0.4, 0.95, n_samples),  # 교통 접근성
+        }
+        
+        # 타겟 변수 생성 (인구 감소율)
+        # 실제 관계를 모방하기 위해 여러 피처의 조합으로 생성
+        population_decline_rate = (
+            -0.001 * data['elderly_ratio'] +
+            -0.0005 * data['unemployment_rate'] +
+            -0.0003 * (1 - data['birth_rate']) +
+            -0.0002 * (1 - data['education_level']) +
+            -0.0001 * (1 - data['marriage_rate']) +
+            np.random.normal(0, 0.002, n_samples)  # 노이즈 추가
         )
         
-        # 데이터 로드
-        try:
-            response = client.get_object(minio_bucket, minio_object)
-            data_stream = BytesIO(response.read())
-            df = pd.read_csv(data_stream)
-            response.close()
-            response.release_conn()
-            print(f"데이터 로드 완료: {len(df)}행, {len(df.columns)}열")
-        except Exception as e:
-            raise ValueError(f"데이터 로드 실패: {str(e)}")
+        # 음수 값 제거 (감소율이므로 음수)
+        population_decline_rate = np.clip(population_decline_rate, -0.05, 0.01)
+        data['population_decline_rate'] = population_decline_rate
+        
+        # DataFrame 생성
+        df = pd.DataFrame(data)
+        
+        # 소량의 결측치 추가 (실제 데이터를 모방)
+        missing_indices = np.random.choice(df.index, size=int(n_samples * 0.02), replace=False)
+        for idx in missing_indices:
+            col = np.random.choice(df.columns[:-1])  # 타겟 변수 제외
+            df.loc[idx, col] = np.nan
+        
+        print(f"더미 데이터 생성 완료: {len(df)}행, {len(df.columns)}열")
         
         # 데이터 품질 검증
         validation_results = {
@@ -78,7 +111,7 @@ with DAG(
             raise ValueError("데이터가 비어있습니다.")
         
         # 스키마 검증 (기본 컬럼 존재 여부 확인)
-        required_columns = []  # 필요시 필수 컬럼 리스트 추가
+        required_columns = ['population_decline_rate']  # 타겟 변수는 필수
         missing_columns = [col for col in required_columns if col not in df.columns]
         if missing_columns:
             raise ValueError(f"필수 컬럼이 없습니다: {missing_columns}")
@@ -88,14 +121,18 @@ with DAG(
         print(f"  - 총 열 수: {validation_results['total_columns']}")
         print(f"  - 중복 행: {validation_results['duplicate_rows']}")
         print(f"  - 결측치 비율: {missing_ratio:.2%}")
+        print(f"  - 타겟 변수 범위: {df['population_decline_rate'].min():.4f} ~ {df['population_decline_rate'].max():.4f}")
         
         # 데이터 분할 정보 저장 (나중에 사용)
         train_ratio = 0.7
         val_ratio = 0.15
         test_ratio = 0.15
         
+        # XCom 크기 제한을 피하기 위해 메타데이터만 반환
+        # 다음 태스크에서 동일한 시드로 데이터 재생성
         return {
-            'data': df.to_dict('records'),  # JSON 직렬화를 위해 dict로 변환
+            'n_samples': n_samples,
+            'random_seed': 42,
             'columns': df.columns.tolist(),
             'validation_results': validation_results,
             'split_ratios': {
@@ -107,7 +144,7 @@ with DAG(
 
     @task.virtualenv(
         task_id="train_model",
-        requirements=['mlflow', 'pandas', 'numpy', 'scikit-learn', 'boto3']
+        requirements=['mlflow', 'pandas', 'numpy', 'scikit-learn', 'boto3', 'requests']
     )
     def train_model(data_info):
         """
@@ -127,15 +164,94 @@ with DAG(
         from sklearn.ensemble import RandomForestRegressor
         from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
         import os
+        import time
+        import requests
+        
+        # MLflow 서버 연결 대기 함수
+        def wait_for_mlflow_server(mlflow_uri="http://mlflow-server:5000", max_retries=30, retry_interval=2):
+            """MLflow 서버가 준비될 때까지 대기"""
+            for i in range(max_retries):
+                try:
+                    response = requests.get(f"{mlflow_uri}/health", timeout=2)
+                    if response.status_code == 200:
+                        print(f"MLflow 서버 연결 성공")
+                        return True
+                except Exception as e:
+                    if i < max_retries - 1:
+                        print(f"MLflow 서버 연결 대기 중... ({i+1}/{max_retries}): {str(e)}")
+                        time.sleep(retry_interval)
+                    else:
+                        raise ConnectionError(f"MLflow 서버에 연결할 수 없습니다: {mlflow_uri}")
+            return False
+        
+        # MLflow 서버 연결 대기
+        mlflow_uri = "http://mlflow-server:5001"
+        wait_for_mlflow_server(mlflow_uri)
         
         # MLflow 설정
-        mlflow.set_tracking_uri("http://mlflow-server:5000")
+        mlflow.set_tracking_uri(mlflow_uri)
         mlflow.set_experiment("population_decline_prediction")
         
-        # 데이터 복원
-        df = pd.DataFrame(data_info['data'])
+        # 데이터 재생성 (XCom 크기 제한을 피하기 위해)
+        n_samples = data_info['n_samples']
+        random_seed = data_info['random_seed']
+        np.random.seed(random_seed)
+        
+        # 인구 감소 예측을 위한 더미 데이터 생성
+        data = {
+            # 지역 정보
+            'region_id': np.random.randint(1, 21, n_samples),  # 20개 지역
+            'urban_ratio': np.random.uniform(0.3, 0.9, n_samples),  # 도시화 비율
+            
+            # 인구 통계
+            'total_population': np.random.randint(50000, 500000, n_samples),  # 총 인구
+            'population_density': np.random.uniform(100, 5000, n_samples),  # 인구 밀도
+            'age_median': np.random.uniform(30, 50, n_samples),  # 중위 연령
+            'elderly_ratio': np.random.uniform(0.1, 0.3, n_samples),  # 고령자 비율
+            'youth_ratio': np.random.uniform(0.15, 0.35, n_samples),  # 청년 비율
+            
+            # 경제 지표
+            'gdp_per_capita': np.random.uniform(20000, 60000, n_samples),  # 1인당 GDP
+            'unemployment_rate': np.random.uniform(0.02, 0.12, n_samples),  # 실업률
+            'income_median': np.random.uniform(30000, 70000, n_samples),  # 중위 소득
+            
+            # 사회 지표
+            'education_level': np.random.uniform(0.5, 0.95, n_samples),  # 고등교육 이수율
+            'marriage_rate': np.random.uniform(0.4, 0.8, n_samples),  # 결혼율
+            'birth_rate': np.random.uniform(0.5, 1.5, n_samples),  # 출생률
+            
+            # 인프라 지표
+            'medical_facilities': np.random.uniform(0.5, 3.0, n_samples),  # 의료시설 밀도
+            'school_density': np.random.uniform(0.3, 2.0, n_samples),  # 학교 밀도
+            'transport_accessibility': np.random.uniform(0.4, 0.95, n_samples),  # 교통 접근성
+        }
+        
+        # 타겟 변수 생성 (인구 감소율)
+        population_decline_rate = (
+            -0.001 * data['elderly_ratio'] +
+            -0.0005 * data['unemployment_rate'] +
+            -0.0003 * (1 - data['birth_rate']) +
+            -0.0002 * (1 - data['education_level']) +
+            -0.0001 * (1 - data['marriage_rate']) +
+            np.random.normal(0, 0.002, n_samples)  # 노이즈 추가
+        )
+        
+        # 음수 값 제거 (감소율이므로 음수)
+        population_decline_rate = np.clip(population_decline_rate, -0.05, 0.01)
+        data['population_decline_rate'] = population_decline_rate
+        
+        # DataFrame 생성
+        df = pd.DataFrame(data)
+        
+        # 소량의 결측치 추가 (실제 데이터를 모방)
+        missing_indices = np.random.choice(df.index, size=int(n_samples * 0.02), replace=False)
+        for idx in missing_indices:
+            col = np.random.choice(df.columns[:-1])  # 타겟 변수 제외
+            df.loc[idx, col] = np.nan
+        
+        # 컬럼 순서 보장
         columns = data_info['columns']
-        df = df[columns]  # 컬럼 순서 보장
+        df = df[columns]
         
         # 데이터 분할
         split_ratios = data_info['split_ratios']
@@ -241,16 +357,14 @@ with DAG(
                 'model_name': 'PopulationDeclineModel',
                 'feature_columns': feature_columns,
                 'target_column': target_column,
-                'test_data': {
-                    'X_test': X_test.to_dict('records'),
-                    'y_test': y_test.tolist(),
-                    'columns': X_test.columns.tolist()
-                }
+                'n_samples': n_samples,
+                'random_seed': random_seed,
+                'split_ratios': data_info['split_ratios']
             }
 
     @task.virtualenv(
         task_id="evaluate_model",
-        requirements=['mlflow', 'pandas', 'numpy', 'scikit-learn']
+        requirements=['mlflow', 'pandas', 'numpy', 'scikit-learn', 'requests']
     )
     def evaluate_model(training_result):
         """
@@ -267,20 +381,96 @@ with DAG(
         import pandas as pd
         import numpy as np
         from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+        import time
+        import requests
+        
+        # MLflow 서버 연결 대기 함수
+        def wait_for_mlflow_server(mlflow_uri="http://mlflow-server:5000", max_retries=30, retry_interval=2):
+            """MLflow 서버가 준비될 때까지 대기"""
+            for i in range(max_retries):
+                try:
+                    response = requests.get(f"{mlflow_uri}/health", timeout=2)
+                    if response.status_code == 200:
+                        print(f"MLflow 서버 연결 성공")
+                        return True
+                except Exception as e:
+                    if i < max_retries - 1:
+                        print(f"MLflow 서버 연결 대기 중... ({i+1}/{max_retries}): {str(e)}")
+                        time.sleep(retry_interval)
+                    else:
+                        raise ConnectionError(f"MLflow 서버에 연결할 수 없습니다: {mlflow_uri}")
+            return False
+        
+        # MLflow 서버 연결 대기
+        mlflow_uri = "http://mlflow-server:5000"
+        wait_for_mlflow_server(mlflow_uri)
         
         # MLflow 설정
-        mlflow.set_tracking_uri("http://mlflow-server:5000")
-        
-        # 테스트 데이터 복원
-        test_data = training_result['test_data']
-        X_test = pd.DataFrame(test_data['X_test'])
-        X_test = X_test[test_data['columns']]  # 컬럼 순서 보장
-        y_test = np.array(test_data['y_test'])
+        mlflow.set_tracking_uri(mlflow_uri)
         
         # 모델 로드
         run_id = training_result['run_id']
         model_uri = f"runs:/{run_id}/model"
         model = mlflow.sklearn.load_model(model_uri)
+        
+        # 테스트 데이터 재생성 (동일한 시드와 분할 비율 사용)
+        n_samples = training_result['n_samples']
+        random_seed = training_result['random_seed']
+        split_ratios = training_result['split_ratios']
+        feature_columns = training_result['feature_columns']
+        target_column = training_result['target_column']
+        
+        np.random.seed(random_seed)
+        
+        # 인구 감소 예측을 위한 더미 데이터 생성
+        data = {
+            'region_id': np.random.randint(1, 21, n_samples),
+            'urban_ratio': np.random.uniform(0.3, 0.9, n_samples),
+            'total_population': np.random.randint(50000, 500000, n_samples),
+            'population_density': np.random.uniform(100, 5000, n_samples),
+            'age_median': np.random.uniform(30, 50, n_samples),
+            'elderly_ratio': np.random.uniform(0.1, 0.3, n_samples),
+            'youth_ratio': np.random.uniform(0.15, 0.35, n_samples),
+            'gdp_per_capita': np.random.uniform(20000, 60000, n_samples),
+            'unemployment_rate': np.random.uniform(0.02, 0.12, n_samples),
+            'income_median': np.random.uniform(30000, 70000, n_samples),
+            'education_level': np.random.uniform(0.5, 0.95, n_samples),
+            'marriage_rate': np.random.uniform(0.4, 0.8, n_samples),
+            'birth_rate': np.random.uniform(0.5, 1.5, n_samples),
+            'medical_facilities': np.random.uniform(0.5, 3.0, n_samples),
+            'school_density': np.random.uniform(0.3, 2.0, n_samples),
+            'transport_accessibility': np.random.uniform(0.4, 0.95, n_samples),
+        }
+        
+        # 타겟 변수 생성
+        population_decline_rate = (
+            -0.001 * data['elderly_ratio'] +
+            -0.0005 * data['unemployment_rate'] +
+            -0.0003 * (1 - data['birth_rate']) +
+            -0.0002 * (1 - data['education_level']) +
+            -0.0001 * (1 - data['marriage_rate']) +
+            np.random.normal(0, 0.002, n_samples)
+        )
+        population_decline_rate = np.clip(population_decline_rate, -0.05, 0.01)
+        data['population_decline_rate'] = population_decline_rate
+        
+        # DataFrame 생성
+        df = pd.DataFrame(data)
+        
+        # 소량의 결측치 추가
+        missing_indices = np.random.choice(df.index, size=int(n_samples * 0.02), replace=False)
+        for idx in missing_indices:
+            col = np.random.choice(df.columns[:-1])
+            df.loc[idx, col] = np.nan
+        
+        # 데이터 분할 (동일한 random_state로 분할 보장)
+        from sklearn.model_selection import train_test_split
+        X = df[feature_columns]
+        y = df[target_column]
+        
+        X_temp, X_test, y_temp, y_test = train_test_split(
+            X, y, test_size=split_ratios['test'], random_state=42
+        )
         
         # 테스트 세트 예측
         y_test_pred = model.predict(X_test)
@@ -334,7 +524,7 @@ with DAG(
 
     @task.virtualenv(
         task_id="register_and_deploy_model",
-        requirements=['mlflow', 'boto3']
+        requirements=['mlflow', 'boto3', 'requests']
     )
     def register_and_deploy_model(evaluation_result):
         """
@@ -348,9 +538,32 @@ with DAG(
         """
         import mlflow
         from mlflow.tracking import MlflowClient
+        import time
+        import requests
+        
+        # MLflow 서버 연결 대기 함수
+        def wait_for_mlflow_server(mlflow_uri="http://mlflow-server:5000", max_retries=30, retry_interval=2):
+            """MLflow 서버가 준비될 때까지 대기"""
+            for i in range(max_retries):
+                try:
+                    response = requests.get(f"{mlflow_uri}/health", timeout=2)
+                    if response.status_code == 200:
+                        print(f"MLflow 서버 연결 성공")
+                        return True
+                except Exception as e:
+                    if i < max_retries - 1:
+                        print(f"MLflow 서버 연결 대기 중... ({i+1}/{max_retries}): {str(e)}")
+                        time.sleep(retry_interval)
+                    else:
+                        raise ConnectionError(f"MLflow 서버에 연결할 수 없습니다: {mlflow_uri}")
+            return False
+        
+        # MLflow 서버 연결 대기
+        mlflow_uri = "http://mlflow-server:5000"
+        wait_for_mlflow_server(mlflow_uri)
         
         # MLflow 설정
-        mlflow.set_tracking_uri("http://mlflow-server:5000")
+        mlflow.set_tracking_uri(mlflow_uri)
         client = MlflowClient()
         
         run_id = evaluation_result['run_id']
