@@ -102,11 +102,14 @@ with DAG(
         os.chdir(dvc_dir)
         
         # Git 저장소 초기화 (DVC는 Git이 필요함)
+        # 커밋 작성자 정보는 환경변수로 주입하고, 미설정 시 봇 계정 중립값을 사용한다.
         if not (dvc_dir / '.git').exists():
             print("Initializing Git repository...")
+            git_user_email = os.environ.get('DVC_GIT_USER_EMAIL', 'dataops-bot@localhost')
+            git_user_name = os.environ.get('DVC_GIT_USER_NAME', 'dataops-bot')
             subprocess.run(['git', 'init'], check=True, capture_output=True)
-            subprocess.run(['git', 'config', 'user.email', 'jwlee2301@pcninc.co.kr'], check=False)
-            subprocess.run(['git', 'config', 'user.name', 'jwlee'], check=False)
+            subprocess.run(['git', 'config', 'user.email', git_user_email], check=False)
+            subprocess.run(['git', 'config', 'user.name', git_user_name], check=False)
         
         # DVC 저장소 초기화 (없을 때만)
         if not (dvc_dir / '.dvc').exists():
