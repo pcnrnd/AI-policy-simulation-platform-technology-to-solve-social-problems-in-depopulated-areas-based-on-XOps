@@ -43,6 +43,7 @@ class PipelineRun:
     evaluation: dict[str, Any] | None = None
     deploy: dict[str, Any] | None = None
     active_version: str | None = None
+    candidate_metrics: dict[str, float] | None = None
 
 
 class Orchestrator:
@@ -78,6 +79,7 @@ class Orchestrator:
             run.stages.append({"stage": stage, "status": "done"})
 
         candidate = event.candidate_metrics or _derive_candidate(current_metrics)
+        run.candidate_metrics = candidate
         evaluation = self._evaluator.evaluate(current_metrics, candidate)
         run.evaluation = asdict(evaluation)
 

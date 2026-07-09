@@ -25,7 +25,7 @@ _SEED_STORE: dict[str, dict[str, Any]] = {
         "next_version": "v3.1",
         "metrics": {"accuracy": 0.892, "f1": 0.884, "precision": 0.891, "recall": 0.878, "mse": 0.041, "mae": 0.125},
     },
-    "living-population": {
+    "vital-population": {
         "version": "v2.4",
         "next_version": "v2.5",
         "metrics": {"accuracy": 0.861, "f1": 0.852, "precision": 0.858, "recall": 0.847, "mse": 0.058, "mae": 0.147},

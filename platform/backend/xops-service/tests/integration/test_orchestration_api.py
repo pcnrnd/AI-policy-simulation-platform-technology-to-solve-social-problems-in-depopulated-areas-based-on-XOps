@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 def test_list_models(client: TestClient) -> None:
     models = client.get("/api/v3/orchestration/models").json()
     ids = {m["model_id"] for m in models}
-    assert {"population-forecast", "living-population", "settlement-demand"} <= ids
+    assert {"population-forecast", "vital-population", "settlement-demand"} <= ids
 
 
 def test_unknown_model_404(client: TestClient) -> None:
@@ -29,7 +29,7 @@ def test_manual_event_promotes(client: TestClient) -> None:
 def test_high_latency_rolls_back(client: TestClient) -> None:
     r = client.post(
         "/api/v3/orchestration/events",
-        json={"model_id": "living-population", "trigger": "manual", "candidate_latency_ms": 250},
+        json={"model_id": "vital-population", "trigger": "manual", "candidate_latency_ms": 250},
     ).json()
     assert r["state"] == "rolled_back"
     assert r["active_version"] == "v2.4"  # 직전 버전 유지
