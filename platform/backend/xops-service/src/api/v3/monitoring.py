@@ -66,7 +66,13 @@ def drift_from_seed(
     dist = get_seed()["drift_distribution"]
     current = dist["current_drifted"] if drifted else dist["current_normal"]
     result = _drift.detect(dist["reference"], current)
-    return {**asdict(result), "buckets": dist["buckets"], "retrain": _maybe_retrain(result, model_id, auto_retrain)}
+    return {
+        **asdict(result),
+        "buckets": dist["buckets"],
+        "reference": dist["reference"],
+        "current": current,
+        "retrain": _maybe_retrain(result, model_id, auto_retrain),
+    }
 
 
 @router.post("/drift")

@@ -20,6 +20,10 @@ import { useChartTheme } from "../hooks/useChartTheme.js";
 import { useRenderTiming } from "../lib/perf.js";
 import { MODEL_REGISTRY } from "../constants/models.js";
 import InfoTip from "../components/InfoTip.jsx";
+import { apiGet } from "../lib/api.js";
+
+// 드리프트 자동 재학습 대상 — 인구이동 예측 모델(백엔드 오케스트레이션 시드 id)
+const DRIFT_MODEL_ID = "population-forecast";
 
 ChartJS.register(
   CategoryScale,
@@ -44,9 +48,51 @@ const COLLECT_REFRESH_MS = 30000;
 const WINDOW_OPTIONS = [3, 6, 10];
 
 export default function MonitorPage() {
-  const { appData, driftInjected, accuracyOverride, f1Override, pipelineRunning, injectDrift } =
+  const { appData, driftInjected, accuracyOverride, f1Override, pipelineRunning, injectDrift, addConsoleLog } =
     useAppState();
   const ct = useChartTheme();
+
+  // 백엔드(/api/v3/monitoring) 실데이터 — 없으면 mock으로 폴백해 로딩 중에도 렌더.
+  const [metricsResp, setMetricsResp] = useState(null);
+  const [shapResp, setShapResp] = useState(null);
+  const [driftResp, setDriftResp] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    Promise.all([apiGet("/api/v3/monitoring/metrics"), apiGet("/api/v3/monitoring/explain")])
+      .then(([m, s]) => {
+        if (!alive) return;
+        setMetricsResp(m);
+        setShapResp(s);
+      })
+      .catch((err) => addConsoleLog(`ERROR: 모니터링 지표 로드 실패 — ${err.message}`, false, true));
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 드리프트 상태 변경 시 백엔드 판정 재조회. 드리프트 발생 시 auto_retrain으로 재학습 자동 발화(⑤).
+  useEffect(() => {
+    let alive = true;
+    apiGet("/api/v3/monitoring/drift", {
+      params: { drifted: driftInjected, model_id: DRIFT_MODEL_ID, auto_retrain: driftInjected }
+    })
+      .then((d) => {
+        if (!alive) return;
+        setDriftResp(d);
+        if (driftInjected && d.retrain) {
+          addConsoleLog(
+            `INFO: 드리프트 감지(PSI ${d.psi}) → 재학습 자동 발화 — ${DRIFT_MODEL_ID} ${d.retrain.state} (run ${d.retrain.run_id})`
+          );
+        }
+      })
+      .catch((err) => addConsoleLog(`ERROR: 드리프트 조회 실패 — ${err.message}`, false, true));
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [driftInjected]);
 
   // 마지막 수집 시각 — 탭 진입·드리프트 상태 변경 시 갱신, 30초 주기 자동 갱신
   const [lastCollected, setLastCollected] = useState(() => new Date());
@@ -84,15 +130,20 @@ export default function MonitorPage() {
   };
 
   const driftData = useMemo(() => {
-    const current = driftInjected
-      ? appData.drift_distribution.current_drifted
-      : appData.drift_distribution.current_normal;
+    // 백엔드 응답(reference/current/buckets) 우선, 로딩 중엔 mock 폴백
+    const buckets = driftResp?.buckets ?? appData.drift_distribution.buckets;
+    const reference = driftResp?.reference ?? appData.drift_distribution.reference;
+    const current =
+      driftResp?.current ??
+      (driftInjected
+        ? appData.drift_distribution.current_drifted
+        : appData.drift_distribution.current_normal);
     return {
-      labels: appData.drift_distribution.buckets,
+      labels: buckets,
       datasets: [
         {
           label: "참조 분포 (Reference Dataset)",
-          data: appData.drift_distribution.reference,
+          data: reference,
           backgroundColor: "rgba(59, 130, 246, 0.4)",
           borderColor: "rgba(59, 130, 246, 1)",
           borderWidth: 1.5,
@@ -108,7 +159,7 @@ export default function MonitorPage() {
         }
       ]
     };
-  }, [appData, driftInjected]);
+  }, [appData, driftInjected, driftResp]);
 
   const metricsData = useMemo(() => {
     // 구간 슬라이스 + 모델별 결정적 오프셋(accDelta/errRatio)을 모든 지표 계열에 일괄 적용
@@ -118,7 +169,8 @@ export default function MonitorPage() {
           ? Number((v * targetModel.errRatio).toFixed(3))
           : Math.min(0.99, Math.max(0, Number((v + targetModel.accDelta).toFixed(3))))
       );
-    const series = (key, isError = false) => tune(appData.metrics_history[key], isError).slice(-windowHours);
+    const hist = metricsResp?.history ?? appData.metrics_history;
+    const series = (key, isError = false) => tune(hist[key], isError).slice(-windowHours);
 
     return {
       labels: hourlyLabels.slice(-windowHours),
@@ -174,28 +226,26 @@ export default function MonitorPage() {
         }
       ]
     };
-  }, [appData, hourlyLabels, targetModel, windowHours]);
+  }, [appData, hourlyLabels, targetModel, windowHours, metricsResp]);
 
-  const shapData = useMemo(
-    () => ({
-      labels: appData.shap_features.map((f) => f.feature.split(" (")[0]),
+  const shapData = useMemo(() => {
+    const feats = shapResp?.features ?? appData.shap_features;
+    return {
+      labels: feats.map((f) => f.feature.split(" (")[0]),
       datasets: [
         {
           label: "SHAP 기여도 기여 지수 (음수일수록 유출 기여)",
-          data: appData.shap_features.map((f) => f.value),
-          backgroundColor: appData.shap_features.map((f) =>
+          data: feats.map((f) => f.value),
+          backgroundColor: feats.map((f) =>
             f.value > 0 ? "rgba(16, 185, 129, 0.65)" : "rgba(239, 68, 68, 0.65)"
           ),
-          borderColor: appData.shap_features.map((f) =>
-            f.value > 0 ? "rgba(16, 185, 129, 1)" : "rgba(239, 68, 68, 1)"
-          ),
+          borderColor: feats.map((f) => (f.value > 0 ? "rgba(16, 185, 129, 1)" : "rgba(239, 68, 68, 1)")),
           borderWidth: 1.5,
           borderRadius: 4
         }
       ]
-    }),
-    [appData]
-  );
+    };
+  }, [appData, shapResp]);
 
   const shapOpts = {
     indexAxis: "y",
@@ -210,13 +260,18 @@ export default function MonitorPage() {
 
   const vizMs = useRenderTiming([driftData, metricsData, shapData]);
 
-  const accVal = accuracyOverride !== null ? accuracyOverride.toFixed(3) : "0.892";
-  const f1Val = f1Override !== null ? f1Override.toFixed(3) : "0.884";
+  // 승급 오버라이드(파이프라인 완료) 우선, 없으면 백엔드 최신 지표, 그다음 mock 폴백
+  const latest = metricsResp?.latest;
+  const accVal =
+    accuracyOverride !== null ? accuracyOverride.toFixed(3) : (latest?.accuracy ?? 0.892).toFixed(3);
+  const f1Val = f1Override !== null ? f1Override.toFixed(3) : (latest?.f1 ?? 0.884).toFixed(3);
 
-  const psiVal = driftInjected ? "0.384" : "0.045";
-  const psiColor = driftInjected ? "var(--accent-red)" : "var(--accent-teal)";
-  const driftLabel = driftInjected ? "위험 (Drift)" : "정상";
-  const driftLabelStyle = driftInjected
+  // PSI·드리프트 판정은 백엔드 실계산값(driftResp) 사용
+  const drifted = driftResp?.drifted ?? driftInjected;
+  const psiVal = driftResp ? driftResp.psi.toFixed(3) : driftInjected ? "0.384" : "0.045";
+  const psiColor = drifted ? "var(--accent-red)" : "var(--accent-teal)";
+  const driftLabel = drifted ? "위험 (Drift)" : "정상";
+  const driftLabelStyle = drifted
     ? { backgroundColor: "rgba(239, 68, 68, 0.15)", color: "var(--accent-red)" }
     : { backgroundColor: "rgba(16, 185, 129, 0.1)", color: "var(--accent-teal)" };
 
@@ -464,8 +519,8 @@ export default function MonitorPage() {
         icon="fa-gauge-high"
       >
         <div className="grid-cols-3" style={{ marginBottom: 0 }}>
-          <GaugeChart value={driftInjected ? 0.803 : 0.891} label="Precision" />
-          <GaugeChart value={driftInjected ? 0.788 : 0.878} label="Recall" />
+          <GaugeChart value={driftInjected ? 0.803 : latest?.precision ?? 0.891} label="Precision" />
+          <GaugeChart value={driftInjected ? 0.788 : latest?.recall ?? 0.878} label="Recall" />
           <GaugeChart
             value={(driftInjected ? 178 : 120) / 200}
             displayText={`${driftInjected ? 178 : 120}ms`}
