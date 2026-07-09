@@ -10,8 +10,20 @@ import json
 from functools import lru_cache
 from typing import Any
 
-from src.core.exceptions import SourceNotFoundError
+from src.core.exceptions import SourceNotFoundError, XopsError
 from src.core.settings import get_settings
+
+
+class DuplicateSourceError(XopsError):
+    """이미 존재하는 소스 id로 등록 시도."""
+
+    status_code = 409
+
+
+class ProtectedSourceError(XopsError):
+    """기본(시드) 소스는 삭제할 수 없음."""
+
+    status_code = 403
 
 
 class MetadataCatalog:
@@ -40,6 +52,22 @@ class MetadataCatalog:
         if not q:
             return self.list_sources()
         return [s for s in self._by_id.values() if _matches(s, q)]
+
+    def add(self, schema: dict[str, Any]) -> dict[str, Any]:
+        """사용자 소스 등록 — user_registered 표식 부여, id 중복 거부."""
+        source_id = schema["id"]
+        if source_id in self._by_id:
+            raise DuplicateSourceError(f"이미 존재하는 소스 id입니다: {source_id}")
+        stored = {**schema, "user_registered": True}
+        self._by_id[source_id] = stored
+        return stored
+
+    def remove(self, source_id: str) -> None:
+        """사용자 등록 소스만 삭제 — 기본 시드 소스는 보호."""
+        schema = self.get(source_id)
+        if not schema.get("user_registered"):
+            raise ProtectedSourceError(f"기본 소스는 삭제할 수 없습니다: {source_id}")
+        del self._by_id[source_id]
 
 
 def _matches(schema: dict[str, Any], q: str) -> bool:

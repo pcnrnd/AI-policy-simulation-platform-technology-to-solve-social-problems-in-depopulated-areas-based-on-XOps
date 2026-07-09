@@ -14,7 +14,7 @@ from src.api.dependencies import require_auth
 from src.auth.jwt import issue_jwt, issue_oauth2
 from src.dataops.catalog import get_catalog
 from src.dataops.service import DataService
-from src.schemas.dataops import SourceSummary, TokenResponse, WriteBody
+from src.schemas.dataops import ArchiveRegisterRequest, SourceSummary, TokenResponse, WriteBody
 
 router = APIRouter(prefix="/dataops", tags=["dataops"])
 _service = DataService()
@@ -46,6 +46,19 @@ def list_catalog(q: str = Query("", description="소스명·태그·설명·객�
 def get_source(source_id: str) -> dict[str, Any]:
     """단일 소스 메타데이터 조회."""
     return get_catalog().get(source_id)
+
+
+@router.post("/catalog", response_model=SourceSummary, status_code=201)
+def register_source(body: ArchiveRegisterRequest) -> dict[str, Any]:
+    """신규 아카이브(사용자 소스) 등록 → 카탈로그 병합. 등록 즉시 가상화 API 대상이 됨."""
+    return get_catalog().add(body.to_schema())
+
+
+@router.delete("/catalog/{source_id}")
+def delete_source(source_id: str) -> dict[str, str]:
+    """사용자 등록 소스 삭제 (기본 시드 소스는 보호)."""
+    get_catalog().remove(source_id)
+    return {"deleted": source_id}
 
 
 # ── CRUD (가상화 API) ──────────────────────────────────────
