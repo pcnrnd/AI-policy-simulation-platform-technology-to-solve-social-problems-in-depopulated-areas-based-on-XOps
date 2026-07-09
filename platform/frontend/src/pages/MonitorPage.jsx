@@ -72,21 +72,12 @@ export default function MonitorPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 드리프트 상태 변경 시 백엔드 판정 재조회. 드리프트 발생 시 auto_retrain으로 재학습 자동 발화(⑤).
+  // 드리프트 상태 변경 시 백엔드 PSI/KL 판정을 재조회(표시 전용).
+  // 재학습 발화는 injectDrift → 오케스트레이션 이벤트 경로가 단독 담당(중복 트리거 방지).
   useEffect(() => {
     let alive = true;
-    apiGet("/api/v3/monitoring/drift", {
-      params: { drifted: driftInjected, model_id: DRIFT_MODEL_ID, auto_retrain: driftInjected }
-    })
-      .then((d) => {
-        if (!alive) return;
-        setDriftResp(d);
-        if (driftInjected && d.retrain) {
-          addConsoleLog(
-            `INFO: 드리프트 감지(PSI ${d.psi}) → 재학습 자동 발화 — ${DRIFT_MODEL_ID} ${d.retrain.state} (run ${d.retrain.run_id})`
-          );
-        }
-      })
+    apiGet("/api/v3/monitoring/drift", { params: { drifted: driftInjected, model_id: DRIFT_MODEL_ID } })
+      .then((d) => alive && setDriftResp(d))
       .catch((err) => addConsoleLog(`ERROR: 드리프트 조회 실패 — ${err.message}`, false, true));
     return () => {
       alive = false;

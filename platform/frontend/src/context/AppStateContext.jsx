@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useCallback, useRef, useEffect } f
 import mockData from "../assets/mock_data.json";
 import { PIPELINE_STEPS } from "../constants/pipeline.js";
 import { RETRAIN_PIPELINES, MODEL_STORE } from "../constants/models.js";
+import { apiSend } from "../lib/api.js";
 
 const AppStateContext = createContext(null);
 
@@ -29,6 +30,8 @@ export function AppStateProvider({ children }) {
   const [pipelineHistory, setPipelineHistory] = useState({});
   // Model Store — 모델·실험 버전 이력 (승급 완료 시 신규 운영 버전 추가)
   const [modelStore, setModelStore] = useState(MODEL_STORE);
+  // 백엔드 오케스트레이션 이벤트 결과(PipelineRun) — 애니메이션 완료 시 실제 승급/롤백 반영
+  const [pipelineResult, setPipelineResult] = useState(null);
 
   const [accuracyOverride, setAccuracyOverride] = useState(null);
   const [f1Override, setF1Override] = useState(null);
@@ -86,15 +89,17 @@ export function AppStateProvider({ children }) {
     setPipelineRunning(false);
     setPipelineStep(0);
     setPipelineRun(null); // 실행 상태 카드를 유휴(대기 중)로 복귀
+    setPipelineResult(null);
   }, []);
 
   // trigger: 실행 사유 문자열(예: "드리프트 자동 감지 (PSI 0.384)"). 미지정 시 수동 실행으로 기록.
   // pipelineDef: RETRAIN_PIPELINES 항목. 미지정 시 기본(인구이동 예측) 파이프라인.
   const startPipeline = useCallback(
-    (trigger, pipelineDef) => {
+    async (trigger, pipelineDef) => {
       resetPipeline();
       const pl = pipelineDef ?? RETRAIN_PIPELINES[0];
       const triggerLabel = typeof trigger === "string" ? trigger : "수동 실행";
+      const backendTrigger = triggerLabel.includes("드리프트") ? "drift" : "manual";
       const now = new Date();
       const ymd = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
       const run = {
@@ -116,6 +121,20 @@ export function AppStateProvider({ children }) {
       addConsoleLog(
         `INFO: 대상 모델 ${run.model} ${run.baseVersion} → 후보 ${run.candidateVersion} · 실험 ${run.experiment}`
       );
+
+      // 백엔드 오케스트레이션 이벤트 발생 — 실제 승급/롤백 결정을 수신 (애니메이션은 UX)
+      try {
+        const backend = await apiSend("POST", "/api/v3/orchestration/events", {
+          body: { model_id: pl.model, trigger: backendTrigger, candidate_latency_ms: 120 }
+        });
+        setPipelineResult(backend);
+        addConsoleLog(
+          `INFO: 오케스트레이터 이벤트 접수 — ${backend.run_id} · 평가: ${backend.evaluation?.reason ?? backend.state}`
+        );
+      } catch (err) {
+        addConsoleLog(`ERROR: 오케스트레이션 이벤트 실패 — ${err.message}`, false, true);
+        setPipelineResult(null);
+      }
       setPipelineStep(1);
     },
     [resetPipeline, addConsoleLog]
@@ -127,16 +146,43 @@ export function AppStateProvider({ children }) {
 
     if (pipelineStep > PIPELINE_STEPS.length) {
       setPipelineRunning(false);
-      addConsoleLog("SUCCESS: 모든 모델 성능 모니터링 & 복원 오케스트레이션 수행이 완료되었습니다.");
-      setAccuracyOverride(0.925);
-      setF1Override(0.916);
+      const result = pipelineResult; // 백엔드 PipelineRun
+      const state = result?.state ?? "succeeded";
+
+      if (state !== "succeeded") {
+        // 롤백/반려/debounce — 승급 없음. 상태별 안내만 기록.
+        const msg =
+          state === "rolled_back"
+            ? `WARN: 헬스체크 실패 → 자동 롤백. 직전 버전(${result.active_version}) 유지 — ${result.deploy?.reason ?? ""}`
+            : state === "rejected"
+              ? "INFO: 후보 모델이 승급 기준 미달로 반려되었습니다."
+              : state === "debounced"
+                ? "INFO: 최근 재학습과 간격이 짧아 이벤트가 조정(debounce)되었습니다."
+                : "SUCCESS: 오케스트레이션 수행 완료.";
+        addConsoleLog(msg, false, state === "rolled_back");
+        pushNotification({
+          severity: state === "rolled_back" ? "warn" : "info",
+          title: state === "rolled_back" ? "자동 롤백 수행" : "재학습 결과",
+          message: msg.replace(/^\w+: /, "")
+        });
+        return undefined;
+      }
+
+      // 승급 성공 — 백엔드 후보 지표를 실제 반영 (하드코딩 제거)
+      const cm = result?.candidate_metrics ?? {};
+      const newAcc = cm.accuracy ?? null;
+      const newF1 = cm.f1 ?? null;
+      if (newAcc !== null) setAccuracyOverride(newAcc);
+      if (newF1 !== null) setF1Override(newF1);
       setDriftInjected(false);
+      addConsoleLog(
+        `SUCCESS: 승급·배포 완료 — ${pipelineRun?.model ?? "모델"} ${result?.active_version ?? pipelineRun?.candidateVersion} (primary ${result?.evaluation?.primary_metric ?? "-"})`
+      );
       pushNotification({
         severity: "success",
         title: "모델 승급·배포 완료",
-        message: `${pipelineRun?.pipelineName ?? "재학습"} — 신규 모델(Accuracy 0.925)이 SOTA로 승급되어 배포되었습니다.`
+        message: `${pipelineRun?.pipelineName ?? "재학습"} — 신규 모델(Accuracy ${newAcc ?? "-"})이 SOTA로 승급되어 배포되었습니다.`
       });
-      // 파이프라인 카탈로그의 "마지막 실행" 기록 갱신
       if (pipelineRun) {
         const now = new Date();
         const finishedAt = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
@@ -144,24 +190,22 @@ export function AppStateProvider({ children }) {
           ...prev,
           [pipelineRun.pipelineId]: { runId: pipelineRun.runId, finishedAt, result: "SOTA 승급" }
         }));
-        // Model Store 갱신 — 신규 버전을 운영으로 등록, 직전 운영 버전은 '이전'으로 강등 (최고 성능 자동 선택)
+        // Model Store 갱신 — 신규 버전을 운영으로 등록, 직전 운영 버전은 '이전'으로 강등
         setModelStore((prev) => {
           const prevServing = prev.find((m) => m.modelId === pipelineRun.model && m.status === "운영");
-          const newAcc = Number(((prevServing?.accuracy ?? 0.88) + 0.033).toFixed(3));
+          const acc = newAcc ?? Number(((prevServing?.accuracy ?? 0.88) + 0.033).toFixed(3));
           const ymd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+          const version = result?.active_version ?? pipelineRun.candidateVersion;
           const demoted = prev
-            .map((m) =>
-              m.modelId === pipelineRun.model && m.status === "운영" ? { ...m, status: "이전" } : m
-            )
-            // 동일 모델·버전 재승급 시 기존 행 교체 (중복 등록 방지)
-            .filter((m) => !(m.modelId === pipelineRun.model && m.version === pipelineRun.candidateVersion));
+            .map((m) => (m.modelId === pipelineRun.model && m.status === "운영" ? { ...m, status: "이전" } : m))
+            .filter((m) => !(m.modelId === pipelineRun.model && m.version === version));
           return [
             {
               modelId: pipelineRun.model,
-              version: pipelineRun.candidateVersion,
+              version,
               dataVersion: "ds-v13",
               params: "auto-tuned (재학습 파이프라인)",
-              accuracy: newAcc,
+              accuracy: acc,
               status: "운영",
               registeredAt: ymd
             },
@@ -187,7 +231,7 @@ export function AppStateProvider({ children }) {
     return () => {
       if (pipelineTimerRef.current) clearTimeout(pipelineTimerRef.current);
     };
-  }, [pipelineStep, pipelineRunning, addConsoleLog, pushNotification, pipelineRun]);
+  }, [pipelineStep, pipelineRunning, addConsoleLog, pushNotification, pipelineRun, pipelineResult]);
 
   const injectNormal = useCallback(() => {
     if (pipelineRunning) {
@@ -203,13 +247,13 @@ export function AppStateProvider({ children }) {
   const injectDrift = useCallback(() => {
     if (pipelineRunning) return;
     setDriftInjected(true);
-    addConsoleLog("WARN: 데이터 드리프트 심각수준 감지! (PSI: 0.384 > 0.20)", false, true);
+    addConsoleLog("WARN: 데이터 드리프트 심각수준 감지! (PSI 임계 0.20 초과)", false, true);
     addConsoleLog("INFO: MLOps 오케스트레이터가 재학습 자동 스케줄링을 시작합니다...");
     showAlert({
       title: "[경보] 데이터 드리프트 발생",
-      message: "실시간 수집 분포 불안정 (PSI: 0.384). MLOps 오케스트레이터 가동."
+      message: "실시간 수집 분포 불안정 (PSI 임계 초과). MLOps 오케스트레이터 가동."
     });
-    setTimeout(() => startPipeline("드리프트 자동 감지 (PSI 0.384 > 0.20)"), 1500);
+    setTimeout(() => startPipeline("드리프트 자동 감지 (PSI 임계 0.20 초과)"), 1500);
   }, [pipelineRunning, addConsoleLog, showAlert, startPipeline]);
 
   // 지자체를 선택하고 지정 탭으로 이동(예: 현황 테이블 → 정책 시뮬레이터).
