@@ -6,19 +6,11 @@ import PipelineStepper from "../components/PipelineStepper.jsx";
 import CollapsibleStage from "../components/CollapsibleStage.jsx";
 import ArchiveRegisterForm from "../components/ArchiveRegisterForm.jsx";
 import { useAppState } from "../context/AppStateContext.jsx";
-import {
-  HTTP_METHODS,
-  AUTH_METHODS,
-  issueMockJwt,
-  issueMockOAuth2,
-  decodeJwtPayload,
-  adapterOf,
-  buildQuery,
-  buildApiResponse,
-  buildUnauthorized
-} from "../lib/dataopsApi.js";
+import { apiGet, apiSend } from "../lib/api.js";
+import { HTTP_METHODS, AUTH_METHODS, adapterOf, buildQuery } from "../lib/dataopsApi.js";
 
 const READY_RESPONSE = `// [POST·GET·PUT·PATCH·DELETE] 요청을 전송하면 표준 REST 응답이 표시됩니다.`;
+const CATALOG_URL = "/api/v3/dataops/catalog";
 
 // 카탈로그 선택 → 스키마 검토 → API 호출의 순차 흐름 (시뮬레이터 탭과 동일 패턴)
 const DATAOPS_STAGES = [
@@ -36,11 +28,9 @@ const METHOD_COLORS = {
   DELETE: "239, 68, 68"
 };
 
-// 빌드·등록된 API 목록 — "API생성기 + 요청 관리·기록" 명세 반영. 브라우저(localStorage)에 보존.
+// 빌드·등록된 API 목록 — "API생성기 + 요청 관리·기록" 명세 반영. 브라우저(localStorage) UI 편의 스냅샷.
 const BUILT_APIS_KEY = "decline_poc_built_apis";
 const MAX_BUILT_APIS = 12;
-// 사용자 등록 아카이브(메타데이터) — 라이프사이클 "메타데이터 등록" 단계 산출물. localStorage 보존.
-const USER_SOURCES_KEY = "decline_poc_user_sources";
 
 function loadStoredList(key) {
   try {
@@ -62,6 +52,22 @@ function persistStoredList(key, list) {
 const loadBuiltApis = () => loadStoredList(BUILT_APIS_KEY);
 const persistBuiltApis = (list) => persistStoredList(BUILT_APIS_KEY, list);
 
+// ArchiveRegisterForm이 만든 schema를 백엔드 등록 DTO(ArchiveRegisterRequest)로 매핑.
+function toRegisterBody(schema) {
+  return {
+    id: schema.id,
+    label: schema.label,
+    source: schema.source,
+    object: schema.object,
+    description: schema.description,
+    tier: schema.archive.tier,
+    retention: schema.archive.retention,
+    tags: schema.tags,
+    columns: schema.columns,
+    ...(schema.range ? { range: schema.range } : {})
+  };
+}
+
 // 아카이브 스토리지 티어 칩 색상 (Hot/Warm/Cold)
 const TIER_COLORS = {
   Hot: { color: "var(--accent-red)", bg: "rgba(239, 68, 68, 0.1)" },
@@ -70,7 +76,6 @@ const TIER_COLORS = {
 };
 
 // DataOps 워크플로우(DAG) 실행 상태 — 한 줄 상태 바 (2차년도 Workflow 관리 기술 기반).
-// Task 흐름·최근 실행·스케줄만 요약 표기해 STEP ①의 본래 작업(소스 선택)을 방해하지 않는다.
 function WorkflowStatus({ workflow }) {
   if (!workflow) return null;
   const fmtAgo = (minAgo) => {
@@ -91,8 +96,7 @@ function WorkflowStatus({ workflow }) {
   );
 }
 
-// 메타데이터 가상화 라우팅 단계 — 이미지 "메타데이터를 이용한 데이터 관리 구조" 반영.
-// 저장소 유형(RDB/NoSQL)에 따라 Adapter가 생성하는 쿼리 언어(SQL/MQL)가 달라진다.
+// 메타데이터 가상화 라우팅 단계 — 저장소 유형(RDB/NoSQL)에 따라 쿼리 언어(SQL/MQL)가 달라진다.
 function RoutingFlow({ method, source, adapter, queryLang }) {
   const range = source.range;
   const steps = [
@@ -126,13 +130,13 @@ function RoutingFlow({ method, source, adapter, queryLang }) {
 
 export default function DataOpsPage() {
   const { appData, addConsoleLog } = useAppState();
-  // 사용자 등록 아카이브 — 기본 카탈로그(mock) 뒤에 병합되어 STEP ②③에서 동일하게 동작
-  const [userSources, setUserSources] = useState(() => loadStoredList(USER_SOURCES_KEY));
+  // 메타데이터 카탈로그 — 백엔드(/api/v3/dataops/catalog)에서 로드. 사용자 등록 소스 병합은 서버가 담당.
+  const [sources, setSources] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [showRegForm, setShowRegForm] = useState(false);
-  const sources = [...appData.metadata_schemas, ...userSources];
 
   // 카탈로그·스키마·API 빌더가 모두 같은 소스를 바라보도록 선택 상태를 단일화.
-  const [sourceId, setSourceId] = useState(sources[0].id);
+  const [sourceId, setSourceId] = useState(null);
   const [method, setMethod] = useState("GET");
   const [filterText, setFilterText] = useState("");
   const [sortCol, setSortCol] = useState("");
@@ -142,21 +146,42 @@ export default function DataOpsPage() {
   const [authMethod, setAuthMethod] = useState("JWT");
   const [responseText, setResponseText] = useState(READY_RESPONSE);
   const [apiMs, setApiMs] = useState(null);
-  // STEP ③ 완료 판정: 인증된 요청이 표준 응답(2xx)을 수신했는지
   const [responseOk, setResponseOk] = useState(false);
-  // 빌드·등록된 API 목록 (localStorage 보존)
   const [builtApis, setBuiltApis] = useState(loadBuiltApis);
-  // 우측 응답 카드의 최근 전송 시각 (빌더 [전송] 전용)
   const [sentAt, setSentAt] = useState(null);
-  // 발급 API [호출] 결과 — 호출한 행 아래 인라인으로 표시 (빌더 응답 패널과 분리)
   const [builtResult, setBuiltResult] = useState(null);
-  // 카탈로그 검색 (소스명·태그·설명)
   const [catalogQuery, setCatalogQuery] = useState("");
-  // 발급된 API 목록 페이징
   const BUILT_PAGE_SIZE = 5;
   const [builtPage, setBuiltPage] = useState(1);
 
-  // 단계 접기/펼치기 + 스텝퍼 내비게이션 (시뮬레이터 탭과 동일 UX)
+  // 카탈로그 최초 로드
+  useEffect(() => {
+    let alive = true;
+    apiGet(CATALOG_URL)
+      .then((list) => {
+        if (!alive) return;
+        setSources(list);
+        setSourceId((cur) => cur ?? list[0]?.id ?? null);
+        setLoading(false);
+      })
+      .catch((err) => {
+        if (!alive) return;
+        addConsoleLog(`ERROR: 카탈로그 로드 실패 — ${err.message}`, false, true);
+        setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const refreshCatalog = async () => {
+    const list = await apiGet(CATALOG_URL);
+    setSources(list);
+    return list;
+  };
+
+  // 단계 접기/펼치기 + 스텝퍼 내비게이션
   const [openStages, setOpenStages] = useState({
     "dstep-source": true,
     "dstep-schema": true,
@@ -166,7 +191,6 @@ export default function DataOpsPage() {
   const allOpen = Object.values(openStages).every(Boolean);
   const setAllStages = (open) =>
     setOpenStages({ "dstep-source": open, "dstep-schema": open, "dstep-builder": open });
-  // 스텝퍼/다음 단계 버튼 클릭 → 대상 단계를 펼친 뒤 스크롤 이동
   const jumpToStage = (id) => {
     setOpenStages((s) => ({ ...s, [id]: true }));
     setTimeout(() => {
@@ -174,9 +198,10 @@ export default function DataOpsPage() {
     }, 60);
   };
 
-  // 스크롤 스파이 — 화면 상단 밴드에 걸린 단계를 스텝퍼에 하이라이트
+  // 스크롤 스파이 — 카탈로그 로드 후 단계가 렌더되면 재부착 (deps: loading)
   const [activeStageId, setActiveStageId] = useState("dstep-source");
   useEffect(() => {
+    if (loading) return undefined;
     const ids = DATAOPS_STAGES.map((s) => s.id);
     const visibility = new Map();
     const observer = new IntersectionObserver(
@@ -192,94 +217,83 @@ export default function DataOpsPage() {
       if (el) observer.observe(el);
     });
     return () => observer.disconnect();
-  }, []);
-
-  const target = sources.find((s) => s.id === sourceId) ?? sources[0];
-  const adapter = adapterOf(target);
-  const generatedQuery = buildQuery({
-    method,
-    schema: target,
-    filter: filterText.trim(),
-    sort: sortCol,
-    page,
-    pageSize
-  });
+  }, [loading]);
 
   const handleSelectSource = (id) => {
     setSourceId(id);
-    setSortCol(""); // 소스가 바뀌면 이전 소스의 정렬 컬럼은 무효
-    setFilterText(""); // filter도 이전 소스의 컬럼 기준이므로 함께 초기화
-    // 이전 소스 기준 응답은 무효 — 완료 해제 + 응답 패널 초기화
+    setSortCol("");
+    setFilterText("");
     setResponseOk(false);
     setResponseText(READY_RESPONSE);
     setApiMs(null);
     setSentAt(null);
   };
 
-  // 신규 아카이브 등록 — 라이프사이클 "메타데이터 등록 → 적재" 단계를 사용자 조작으로 수행
-  const handleRegisterSource = (schema) => {
-    setUserSources((prev) => {
-      const next = [...prev, schema];
-      persistStoredList(USER_SOURCES_KEY, next);
-      return next;
-    });
-    setShowRegForm(false);
-    handleSelectSource(schema.id); // 등록 즉시 STEP ②③ 대상으로 선택
-    addConsoleLog(
-      `INFO: 메타데이터 등록·적재 완료 — ${schema.label} (${schema.source}, ${schema.archive.tier} 티어, ${schema.archive.retention}) → /api/v3/dataops/${schema.id} 가상화 제공 시작`
-    );
-  };
-
-  const handleDeleteSource = (id) => {
-    setUserSources((prev) => {
-      const next = prev.filter((s) => s.id !== id);
-      persistStoredList(USER_SOURCES_KEY, next);
-      return next;
-    });
-    // 삭제한 소스를 보고 있었다면 기본 소스로 복귀
-    if (sourceId === id) handleSelectSource(appData.metadata_schemas[0].id);
-    addConsoleLog(`WARN: 사용자 등록 아카이브 삭제 — ${id} (메타데이터·가상화 API 제공 중지)`, false, true);
-  };
-
-  const handleIssueToken = () => {
-    if (authMethod === "OAuth2") {
-      const grant = issueMockOAuth2(target.id);
-      setToken(grant.access_token);
+  // 신규 아카이브 등록 — 백엔드 카탈로그 CRUD로 서버 영속화 (localStorage 제거)
+  const handleRegisterSource = async (schema) => {
+    try {
+      await apiSend("POST", CATALOG_URL, { body: toRegisterBody(schema) });
+      await refreshCatalog();
+      setShowRegForm(false);
+      handleSelectSource(schema.id);
       addConsoleLog(
-        `INFO: OAuth2 토큰 발급 완료 (grant_type=authorization_code, code=${grant.authorization_code}, token_type=Bearer, expires_in=${grant.expires_in}).`
+        `INFO: 메타데이터 등록·적재 완료 — ${schema.label} (${schema.source}, ${schema.archive.tier} 티어, ${schema.archive.retention}) → /api/v3/dataops/${schema.id} 가상화 제공 시작`
       );
-      return;
+    } catch (err) {
+      addConsoleLog(`WARN: 아카이브 등록 실패 — ${err.message}`, false, true);
     }
-    const t = issueMockJwt(target.id);
-    setToken(t);
-    addConsoleLog("INFO: JWT 토큰 발급 완료 (scope: data:read data:write, exp: 1h).");
   };
 
-  // 인증·라우팅·SQL·응답 생성의 공용 경로 — 빌더 [전송]과 목록 [호출]이 결과 표시만 달리한다
-  const executeRequest = (cfg) => {
-    if (!token) return { ok: false, body: buildUnauthorized(cfg.source.id) };
-    const reqAdapter = adapterOf(cfg.source);
-    const query = buildQuery({
-      method: cfg.method,
-      schema: cfg.source,
-      filter: cfg.filter,
-      sort: cfg.sort,
-      page: cfg.page,
-      pageSize: cfg.pageSize
-    });
-    const payload = decodeJwtPayload(token);
-    const body = buildApiResponse({
-      method: cfg.method,
-      schema: cfg.source,
-      adapter: reqAdapter,
-      query,
-      payload,
-      filter: cfg.filter,
-      sort: cfg.sort,
-      page: cfg.page,
-      pageSize: cfg.pageSize
-    });
-    return { ok: true, body };
+  const handleDeleteSource = async (id) => {
+    try {
+      await apiSend("DELETE", `${CATALOG_URL}/${id}`, {});
+      const list = await refreshCatalog();
+      if (sourceId === id) handleSelectSource(list[0]?.id ?? null);
+      addConsoleLog(`WARN: 사용자 등록 아카이브 삭제 — ${id} (메타데이터·가상화 API 제공 중지)`, false, true);
+    } catch (err) {
+      addConsoleLog(`WARN: 아카이브 삭제 실패 — ${err.message}`, false, true);
+    }
+  };
+
+  const handleIssueToken = async () => {
+    try {
+      const path = authMethod === "OAuth2" ? `/api/v3/dataops/oauth2/${sourceId}` : `/api/v3/dataops/token/${sourceId}`;
+      const res = await apiSend("POST", path, {});
+      if (authMethod === "OAuth2") {
+        setToken(res.access_token);
+        addConsoleLog(
+          `INFO: OAuth2 토큰 발급 완료 (grant_type=${res.grant_type}, code=${res.authorization_code}, token_type=Bearer, expires_in=${res.expires_in}).`
+        );
+      } else {
+        setToken(res.access_token);
+        addConsoleLog(`INFO: JWT 토큰 발급 완료 (scope: ${res.scope}, exp: 1h).`);
+      }
+    } catch (err) {
+      addConsoleLog(`WARN: 토큰 발급 실패 — ${err.message}`, false, true);
+    }
+  };
+
+  // 인증·라우팅·쿼리·응답을 백엔드에 위임하는 공용 경로 — 빌더 [전송]과 목록 [호출]이 결과 표시만 달리한다
+  const executeRequest = async (cfg) => {
+    const path = `/api/v3/dataops/${cfg.source.id}`;
+    try {
+      let body;
+      if (cfg.method === "GET") {
+        body = await apiGet(path, {
+          token,
+          params: { filter: cfg.filter, sort: cfg.sort, page: cfg.page, page_size: cfg.pageSize }
+        });
+      } else if (cfg.method === "DELETE") {
+        body = await apiSend("DELETE", path, { token, params: { filter: cfg.filter } });
+      } else if (cfg.method === "POST") {
+        body = await apiSend("POST", path, { token, body: { data: {} } });
+      } else {
+        body = await apiSend(cfg.method, path, { token, params: { filter: cfg.filter }, body: { data: {} } });
+      }
+      return { ok: true, body };
+    } catch (err) {
+      return { ok: false, body: err.body ?? { status: err.status ?? 500, error: "RequestFailed", message: err.message } };
+    }
   };
 
   const logRequestResult = (cfg, result, elapsed) => {
@@ -288,29 +302,27 @@ export default function DataOpsPage() {
         `INFO: DataOps ${cfg.method} 성공 (${result.body.status}) - /api/v3/dataops/${cfg.source.id} (${elapsed.toFixed(0)}ms, 아카이브 ${cfg.source.archive?.tier ?? "-"} 티어 경유)`
       );
     } else {
-      addConsoleLog(`WARN: 미인증 ${cfg.method} 요청 거부 (401) - 토큰 미발급`, false, true);
+      addConsoleLog(`WARN: ${cfg.method} 요청 실패 (${result.body.status ?? "-"}) - ${result.body.message ?? "오류"}`, false, true);
     }
   };
 
   // 빌더 [전송] — 우측 응답 카드에 표시
-  const handleRunApi = () => {
+  const handleRunApi = async () => {
     const cfg = { method, source: target, filter: filterText.trim(), sort: sortCol, page, pageSize };
     const start = performance.now();
     setApiMs(null);
     setResponseText(`Sending ${cfg.method} request...`);
     setSentAt(new Date().toLocaleTimeString("ko-KR", { hour12: false }));
 
-    setTimeout(() => {
-      const elapsed = performance.now() - start;
-      setApiMs(elapsed);
-      const result = executeRequest(cfg);
-      setResponseText(JSON.stringify(result.body, null, 2));
-      setResponseOk(result.ok);
-      logRequestResult(cfg, result, elapsed);
-    }, 420);
+    const result = await executeRequest(cfg);
+    const elapsed = performance.now() - start;
+    setApiMs(elapsed);
+    setResponseText(JSON.stringify(result.body, null, 2));
+    setResponseOk(result.ok);
+    logRequestResult(cfg, result, elapsed);
   };
 
-  // 현재 구성을 API 자산으로 빌드·등록 — 동일 구성은 갱신(최신을 맨 위로)
+  // 현재 구성을 API 자산으로 빌드·등록 (localStorage UI 스냅샷) — 동일 구성은 갱신
   const handleBuildApi = () => {
     const sig = [method, target.id, filterText.trim(), sortCol, page, pageSize].join("|");
     const entry = {
@@ -338,7 +350,7 @@ export default function DataOpsPage() {
   };
 
   // 등록된 API [호출] — 빌더 상태를 건드리지 않고 스냅샷 그대로 실행, 결과는 해당 행 아래 인라인 표시
-  const handleInvokeBuilt = (api) => {
+  const handleInvokeBuilt = async (api) => {
     const source = sources.find((s) => s.id === api.sourceId);
     if (!source) {
       addConsoleLog(`WARN: 등록 API 호출 실패 — 데이터 소스(${api.sourceId})를 찾을 수 없습니다.`, false, true);
@@ -348,19 +360,17 @@ export default function DataOpsPage() {
     const start = performance.now();
     setBuiltResult({ apiId: api.id, text: `Sending ${api.method} request...`, ms: null, time: null, ok: false });
 
-    setTimeout(() => {
-      const elapsed = performance.now() - start;
-      const result = executeRequest(cfg);
-      setBuiltResult({
-        apiId: api.id,
-        text: JSON.stringify(result.body, null, 2),
-        ms: elapsed,
-        time: new Date().toLocaleTimeString("ko-KR", { hour12: false }),
-        ok: result.ok
-      });
-      if (result.ok) setResponseOk(true); // 발급 API의 정상 응답도 STEP ③ 완료 근거
-      logRequestResult(cfg, result, elapsed);
-    }, 420);
+    const result = await executeRequest(cfg);
+    const elapsed = performance.now() - start;
+    setBuiltResult({
+      apiId: api.id,
+      text: JSON.stringify(result.body, null, 2),
+      ms: elapsed,
+      time: new Date().toLocaleTimeString("ko-KR", { hour12: false }),
+      ok: result.ok
+    });
+    if (result.ok) setResponseOk(true);
+    logRequestResult(cfg, result, elapsed);
   };
 
   const handleDeleteBuilt = (id) => {
@@ -372,7 +382,38 @@ export default function DataOpsPage() {
     setBuiltResult((r) => (r?.apiId === id ? null : r));
   };
 
-  // 카탈로그 검색 — 소스명·태그·설명·객체명 부분 일치 (1차년도 카탈로그 설계: 태그 기반 자산 검색)
+  if (loading) {
+    return (
+      <Card>
+        <p style={{ fontSize: 13, color: "var(--text-secondary)" }}>
+          <i className="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> 메타데이터 카탈로그를 불러오는 중…
+        </p>
+      </Card>
+    );
+  }
+
+  const target = sources.find((s) => s.id === sourceId) ?? sources[0];
+  if (!target) {
+    return (
+      <Card>
+        <p style={{ fontSize: 13, color: "var(--text-muted)" }}>
+          등록된 데이터 소스가 없습니다. [신규 아카이브 등록]으로 소스를 추가하세요.
+        </p>
+      </Card>
+    );
+  }
+
+  const adapter = adapterOf(target);
+  const generatedQuery = buildQuery({
+    method,
+    schema: target,
+    filter: filterText.trim(),
+    sort: sortCol,
+    page,
+    pageSize
+  });
+
+  // 카탈로그 검색 — 소스명·태그·설명·객체명 부분 일치
   const q = catalogQuery.trim().toLowerCase();
   const filteredSources = q
     ? sources.filter((s) =>
@@ -380,10 +421,7 @@ export default function DataOpsPage() {
       )
     : sources;
 
-  // 발급된 API 목록 페이지 슬라이스
   const builtPg = paginate(builtApis, builtPage, BUILT_PAGE_SIZE);
-
-  // ①②는 유효한 기본 선택이 항상 존재하므로 완료, ③은 표준 응답 수신 시 완료
   const doneStages = ["dstep-source", "dstep-schema", ...(responseOk ? ["dstep-builder"] : [])];
 
   return (
@@ -483,8 +521,8 @@ export default function DataOpsPage() {
                             #{tag}
                           </span>
                         ))}
-                        {s.userRegistered && (
-                          <span className="catalog-user-chip" title="사용자가 등록한 아카이브 (브라우저에 보존)">
+                        {s.user_registered && (
+                          <span className="catalog-user-chip" title="사용자가 등록한 아카이브 (서버 보존)">
                             <i className="fa-solid fa-user-pen" aria-hidden="true"></i> 사용자 등록
                           </span>
                         )}
@@ -493,12 +531,12 @@ export default function DataOpsPage() {
                             <i className="fa-solid fa-check" aria-hidden="true"></i> 선택됨
                           </span>
                         )}
-                        {s.userRegistered && (
+                        {s.user_registered && (
                           <button
                             type="button"
                             className="btn btn-secondary catalog-row-del"
                             onClick={(e) => {
-                              e.stopPropagation(); // 행 클릭(소스 선택)과 분리
+                              e.stopPropagation();
                               handleDeleteSource(s.id);
                             }}
                             aria-label={`${s.label} 아카이브 삭제`}
@@ -544,7 +582,7 @@ export default function DataOpsPage() {
                         {s.archive?.loaded_at ?? "—"}
                       </td>
                       <td style={{ textAlign: "right", color: "var(--text-muted)" }}>
-                        {s.columns.length}
+                        {(s.columns ?? []).length}
                       </td>
                     </tr>
                   );
@@ -578,14 +616,7 @@ export default function DataOpsPage() {
         onToggle={() => toggleStage("dstep-schema")}
       >
         <Card>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "baseline",
-              gap: 8,
-              flexWrap: "wrap"
-            }}
-          >
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
             <h4 style={{ color: "var(--accent-blue)", margin: 0 }}>{target.label}</h4>
             <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
               {target.source} · {target.object}
@@ -595,7 +626,6 @@ export default function DataOpsPage() {
             {target.description}
           </p>
 
-          {/* 데이터 리니지 + 버전 — 1차년도 카탈로그 설계(출처 추적) + 2차년도 표준 명세 편집기(버전 관리) */}
           {target.lineage && (
             <p className="schema-meta-line">
               <i className="fa-solid fa-database" aria-hidden="true"></i> 원천 {target.lineage.origin}{" "}
@@ -710,12 +740,10 @@ export default function DataOpsPage() {
                 {authMethod === "OAuth2" && (
                   <div style={{ marginTop: 8, fontSize: 11, color: "var(--text-muted)", lineHeight: 1.5 }}>
                     <i className="fa-solid fa-circle-info" style={{ marginRight: 4 }}></i>
-                    OAuth2 Authorization Code Grant: 인가코드 발급 → access_token(JWT) 교환 흐름을 시뮬레이션합니다.
+                    OAuth2 Authorization Code Grant: 인가코드 발급 → access_token(JWT) 교환 흐름.
                   </div>
                 )}
-                {token && (
-                  <code className="token-line">Authorization: Bearer {token}</code>
-                )}
+                {token && <code className="token-line">Authorization: Bearer {token}</code>}
               </div>
             </div>
 
@@ -803,12 +831,7 @@ export default function DataOpsPage() {
                   {generatedQuery.lang === "MQL" ? "MQL · MongoDB" : "SQL · RDB"}
                 </span>
               </div>
-              <RoutingFlow
-                method={method}
-                source={target}
-                adapter={adapter}
-                queryLang={generatedQuery.lang}
-              />
+              <RoutingFlow method={method} source={target} adapter={adapter} queryLang={generatedQuery.lang} />
               <pre className="sql-preview">{generatedQuery.text}</pre>
             </div>
 
@@ -876,96 +899,95 @@ export default function DataOpsPage() {
                   {builtPg.pageRows.map((api) => {
                     const rgb = METHOD_COLORS[api.method] ?? METHOD_COLORS.GET;
                     const isInvoked = builtResult?.apiId === api.id;
-                    const querySummary =
-                      [
-                        api.filter ? `filter: ${api.filter}` : null,
-                        api.sort ? `sort: ${api.sort}` : null,
-                        `p${api.page} · ${api.pageSize}행`
-                      ]
-                        .filter(Boolean)
-                        .join(" / ");
+                    const querySummary = [
+                      api.filter ? `filter: ${api.filter}` : null,
+                      api.sort ? `sort: ${api.sort}` : null,
+                      `p${api.page} · ${api.pageSize}행`
+                    ]
+                      .filter(Boolean)
+                      .join(" / ");
                     return (
                       <Fragment key={api.id}>
-                      <tr className={isInvoked ? "built-row-active" : ""}>
-                        <td>
-                          <span
-                            className="system-status"
-                            style={{
-                              padding: "1px 8px",
-                              fontSize: 10,
-                              fontWeight: 700,
-                              color: `rgb(${rgb})`,
-                              backgroundColor: `rgba(${rgb}, 0.1)`
-                            }}
-                          >
-                            {api.method}
-                          </span>
-                        </td>
-                        <td>
-                          <code style={{ fontSize: 11, color: "var(--accent-purple)" }}>{api.endpoint}</code>
-                        </td>
-                        <td style={{ fontSize: 12 }}>{api.sourceLabel}</td>
-                        <td style={{ fontSize: 11, color: "var(--text-secondary)" }}>{querySummary}</td>
-                        <td style={{ fontSize: 11, color: "var(--text-secondary)" }}>{api.authMethod}</td>
-                        <td style={{ fontSize: 11, color: "var(--text-muted)" }}>{api.createdAt}</td>
-                        <td>
-                          <span
-                            className="system-status"
-                            style={{
-                              padding: "1px 8px",
-                              fontSize: 10,
-                              color: "var(--accent-teal)",
-                              backgroundColor: "rgba(16, 185, 129, 0.1)"
-                            }}
-                          >
-                            Active
-                          </span>
-                        </td>
-                        <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                          <button
-                            className="btn btn-secondary"
-                            style={{ padding: "4px 10px", fontSize: 11 }}
-                            onClick={() => handleInvokeBuilt(api)}
-                            title="등록된 구성으로 즉시 호출"
-                          >
-                            <i className="fa-solid fa-play"></i> 호출
-                          </button>
-                          <button
-                            className="btn btn-secondary"
-                            style={{ padding: "4px 8px", fontSize: 11, marginLeft: 6 }}
-                            onClick={() => handleDeleteBuilt(api.id)}
-                            aria-label={`${api.method} ${api.endpoint} 삭제`}
-                            title="목록에서 삭제"
-                          >
-                            <i className="fa-solid fa-trash-can"></i>
-                          </button>
-                        </td>
-                      </tr>
-                      {isInvoked && (
-                        <tr className="built-resp-row">
-                          <td colSpan={8}>
-                            <div className="built-resp-head">
-                              <span>
-                                <i className="fa-solid fa-reply" aria-hidden="true"></i> {api.method}{" "}
-                                {api.endpoint} 호출 응답
-                                {builtResult.time ? ` · ${builtResult.time}` : ""}
-                              </span>
-                              <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-                                <PerfBadge ms={builtResult.ms} label="API 응답" />
-                                <button
-                                  type="button"
-                                  className="btn btn-secondary"
-                                  style={{ padding: "3px 10px", fontSize: 11 }}
-                                  onClick={() => setBuiltResult(null)}
-                                >
-                                  닫기
-                                </button>
-                              </span>
-                            </div>
-                            <pre className="api-response built-resp-pre">{builtResult.text}</pre>
+                        <tr className={isInvoked ? "built-row-active" : ""}>
+                          <td>
+                            <span
+                              className="system-status"
+                              style={{
+                                padding: "1px 8px",
+                                fontSize: 10,
+                                fontWeight: 700,
+                                color: `rgb(${rgb})`,
+                                backgroundColor: `rgba(${rgb}, 0.1)`
+                              }}
+                            >
+                              {api.method}
+                            </span>
+                          </td>
+                          <td>
+                            <code style={{ fontSize: 11, color: "var(--accent-purple)" }}>{api.endpoint}</code>
+                          </td>
+                          <td style={{ fontSize: 12 }}>{api.sourceLabel}</td>
+                          <td style={{ fontSize: 11, color: "var(--text-secondary)" }}>{querySummary}</td>
+                          <td style={{ fontSize: 11, color: "var(--text-secondary)" }}>{api.authMethod}</td>
+                          <td style={{ fontSize: 11, color: "var(--text-muted)" }}>{api.createdAt}</td>
+                          <td>
+                            <span
+                              className="system-status"
+                              style={{
+                                padding: "1px 8px",
+                                fontSize: 10,
+                                color: "var(--accent-teal)",
+                                backgroundColor: "rgba(16, 185, 129, 0.1)"
+                              }}
+                            >
+                              Active
+                            </span>
+                          </td>
+                          <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                            <button
+                              className="btn btn-secondary"
+                              style={{ padding: "4px 10px", fontSize: 11 }}
+                              onClick={() => handleInvokeBuilt(api)}
+                              title="등록된 구성으로 즉시 호출"
+                            >
+                              <i className="fa-solid fa-play"></i> 호출
+                            </button>
+                            <button
+                              className="btn btn-secondary"
+                              style={{ padding: "4px 8px", fontSize: 11, marginLeft: 6 }}
+                              onClick={() => handleDeleteBuilt(api.id)}
+                              aria-label={`${api.method} ${api.endpoint} 삭제`}
+                              title="목록에서 삭제"
+                            >
+                              <i className="fa-solid fa-trash-can"></i>
+                            </button>
                           </td>
                         </tr>
-                      )}
+                        {isInvoked && (
+                          <tr className="built-resp-row">
+                            <td colSpan={8}>
+                              <div className="built-resp-head">
+                                <span>
+                                  <i className="fa-solid fa-reply" aria-hidden="true"></i> {api.method}{" "}
+                                  {api.endpoint} 호출 응답
+                                  {builtResult.time ? ` · ${builtResult.time}` : ""}
+                                </span>
+                                <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                                  <PerfBadge ms={builtResult.ms} label="API 응답" />
+                                  <button
+                                    type="button"
+                                    className="btn btn-secondary"
+                                    style={{ padding: "3px 10px", fontSize: 11 }}
+                                    onClick={() => setBuiltResult(null)}
+                                  >
+                                    닫기
+                                  </button>
+                                </span>
+                              </div>
+                              <pre className="api-response built-resp-pre">{builtResult.text}</pre>
+                            </td>
+                          </tr>
+                        )}
                       </Fragment>
                     );
                   })}

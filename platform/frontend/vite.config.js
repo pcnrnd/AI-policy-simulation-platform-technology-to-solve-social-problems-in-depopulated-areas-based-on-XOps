@@ -5,7 +5,11 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 8000,
-    open: true
+    open: true,
+    // dev에서 /api 요청을 xops-service(8010)로 프록시 — CORS 회피
+    proxy: {
+      "/api": { target: "http://localhost:8010", changeOrigin: true }
+    }
   },
   build: {
     outDir: "dist",
