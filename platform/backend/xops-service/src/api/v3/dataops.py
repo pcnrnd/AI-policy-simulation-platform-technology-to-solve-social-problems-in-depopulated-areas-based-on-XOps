@@ -10,7 +10,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 
-from src.api.dependencies import require_auth
+from src.api.dependencies import require_auth, require_client
 from src.auth.jwt import issue_jwt, issue_oauth2
 from src.dataops.catalog import get_catalog
 from src.dataops.service import DataService
@@ -22,7 +22,7 @@ _service = DataService()
 
 # ── 인증 발급 ──────────────────────────────────────────────
 @router.post("/token/{source_id}", response_model=TokenResponse)
-def issue_token(source_id: str) -> TokenResponse:
+def issue_token(source_id: str, _: None = Depends(require_client)) -> TokenResponse:
     """소스 접근용 JWT 발급 (HS256, scope data:read data:write)."""
     from src.core.settings import get_settings
 
@@ -30,7 +30,7 @@ def issue_token(source_id: str) -> TokenResponse:
 
 
 @router.post("/oauth2/{source_id}")
-def issue_oauth2_token(source_id: str) -> dict[str, Any]:
+def issue_oauth2_token(source_id: str, _: None = Depends(require_client)) -> dict[str, Any]:
     """OAuth2 Authorization Code Grant 흐름 발급."""
     return issue_oauth2(source_id)
 
