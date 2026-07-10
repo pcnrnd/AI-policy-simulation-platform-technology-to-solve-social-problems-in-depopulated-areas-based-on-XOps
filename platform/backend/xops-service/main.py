@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.api.v3.router import api_router
+from src.core.db import init_db
 from src.core.exceptions import register_exception_handlers
 from src.core.logger import get_logger
 from src.core.settings import get_settings
@@ -19,6 +20,7 @@ def create_app() -> FastAPI:
     """FastAPI 앱 구성 — CORS + /api/v3 라우터 + 예외 핸들러."""
     settings = get_settings()
     settings.validate_runtime()  # prod 기본 시크릿 사용 시 기동 거부
+    init_db()  # SQLite 테이블 준비 (사용자 소스·모델 버전·실행 이력)
     get_logger().info(f"xops-service 기동 env={settings.environment} prefix={settings.api_prefix}")
     app = FastAPI(title="xops-service", version="0.1.0")
 

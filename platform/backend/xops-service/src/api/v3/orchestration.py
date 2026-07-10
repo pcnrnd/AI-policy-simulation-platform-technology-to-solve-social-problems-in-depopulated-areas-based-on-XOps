@@ -25,7 +25,7 @@ def list_models() -> list[dict[str, Any]]:
 @router.get("/runs")
 def list_runs() -> list[dict[str, Any]]:
     """파이프라인 실행 이력 (최신 우선)."""
-    return [asdict(r) for r in reversed(get_registry().runs())]
+    return list(reversed(get_registry().runs()))
 
 
 @router.post("/events")

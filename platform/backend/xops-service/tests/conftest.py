@@ -2,10 +2,22 @@
 
 from __future__ import annotations
 
-import pytest
-from fastapi.testclient import TestClient
+import os
+import tempfile
 
-from main import app
+# 테스트는 격리된 임시 SQLite를 사용 — dev DB 오염 방지. app import 전에 설정해야 함.
+_TEST_DB = os.path.join(tempfile.gettempdir(), "xops_test.db")
+for _suffix in ("", "-wal", "-shm"):
+    try:
+        os.remove(_TEST_DB + _suffix)
+    except FileNotFoundError:
+        pass
+os.environ["XOPS_DB_PATH"] = _TEST_DB
+
+import pytest  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
+
+from main import app  # noqa: E402
 
 
 @pytest.fixture()
