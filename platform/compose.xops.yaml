@@ -1,0 +1,25 @@
+# xops-service(DataOps+MLOps) + frontend 통합 실행.
+# 기동: docker compose -f platform/compose.xops.yaml up -d --build
+# 접속: http://localhost:8080 (프론트) — /api는 nginx가 xops-service:8010으로 프록시
+services:
+  xops-service:
+    build: ./backend/xops-service
+    environment:
+      - XOPS_ENVIRONMENT=dev
+      # prod 전환 시: XOPS_ENVIRONMENT=prod + XOPS_JWT_SECRET(필수) + XOPS_CLIENT_ID/SECRET
+    volumes:
+      - xops-data:/app/data # SQLite 영속화 (사용자 소스·모델 버전·실행 이력)
+    ports:
+      - "8010:8010" # 직접 접근/디버깅용 (프론트는 내부 네트워크로 접근)
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    depends_on:
+      - xops-service
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+
+volumes:
+  xops-data:
