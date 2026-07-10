@@ -1,0 +1,10 @@
+# 런타임 SQLite (사용자 소스·모델 버전·실행 이력) — 커밋 대상 아님
+data/
+*.db
+*.db-wal
+*.db-shm
+
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage

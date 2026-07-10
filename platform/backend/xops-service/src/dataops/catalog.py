@@ -10,6 +10,7 @@ import json
 from functools import lru_cache
 from typing import Any
 
+from src.core import db
 from src.core.exceptions import SourceNotFoundError, XopsError
 from src.core.settings import get_settings
 
@@ -30,7 +31,8 @@ class MetadataCatalog:
     """데이터 소스 스키마 카탈로그 (id·태그·객체명·설명 검색)."""
 
     def __init__(self, schemas: list[dict[str, Any]]) -> None:
-        self._by_id: dict[str, dict[str, Any]] = {s["id"]: s for s in schemas}
+        # 시드 스키마(읽기 전용). 사용자 등록 소스는 SQLite가 소스오브트루스.
+        self._seed: dict[str, dict[str, Any]] = {s["id"]: s for s in schemas}
 
     @classmethod
     def from_file(cls, path: Any) -> "MetadataCatalog":
@@ -38,10 +40,10 @@ class MetadataCatalog:
         return cls(data.get("metadata_schemas", []))
 
     def list_sources(self) -> list[dict[str, Any]]:
-        return list(self._by_id.values())
+        return [*self._seed.values(), *db.list_user_sources()]
 
     def get(self, source_id: str) -> dict[str, Any]:
-        schema = self._by_id.get(source_id)
+        schema = self._seed.get(source_id) or db.get_user_source(source_id)
         if schema is None:
             raise SourceNotFoundError(f"데이터 소스를 찾을 수 없습니다: {source_id}")
         return schema
@@ -49,25 +51,24 @@ class MetadataCatalog:
     def search(self, query: str) -> list[dict[str, Any]]:
         """소스명·태그·설명·객체명 부분 일치 검색."""
         q = query.strip().lower()
-        if not q:
-            return self.list_sources()
-        return [s for s in self._by_id.values() if _matches(s, q)]
+        sources = self.list_sources()
+        return sources if not q else [s for s in sources if _matches(s, q)]
 
     def add(self, schema: dict[str, Any]) -> dict[str, Any]:
-        """사용자 소스 등록 — user_registered 표식 부여, id 중복 거부."""
+        """사용자 소스 등록 — user_registered 표식 부여, id 중복 거부 (SQLite 영속화)."""
         source_id = schema["id"]
-        if source_id in self._by_id:
+        if source_id in self._seed or db.get_user_source(source_id) is not None:
             raise DuplicateSourceError(f"이미 존재하는 소스 id입니다: {source_id}")
         stored = {**schema, "user_registered": True}
-        self._by_id[source_id] = stored
+        db.add_user_source(stored)
         return stored
 
     def remove(self, source_id: str) -> None:
         """사용자 등록 소스만 삭제 — 기본 시드 소스는 보호."""
-        schema = self.get(source_id)
-        if not schema.get("user_registered"):
+        if source_id in self._seed:
             raise ProtectedSourceError(f"기본 소스는 삭제할 수 없습니다: {source_id}")
-        del self._by_id[source_id]
+        if not db.delete_user_source(source_id):
+            raise SourceNotFoundError(f"데이터 소스를 찾을 수 없습니다: {source_id}")
 
 
 def _matches(schema: dict[str, Any], q: str) -> bool:

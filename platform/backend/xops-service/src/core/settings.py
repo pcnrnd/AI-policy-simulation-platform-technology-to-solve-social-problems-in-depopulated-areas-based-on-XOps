@@ -30,11 +30,18 @@ class Settings(BaseSettings):
     # 데이터 소스 (메타데이터 카탈로그 시드)
     mock_data_path: Path = _DEFAULT_MOCK
 
+    # 영속화 SQLite 경로 — 사용자 등록 소스·모델 버전·재학습 실행 이력 (재시작·멀티워커 대비)
+    db_path: Path = SERVICE_ROOT / "data" / "xops.db"
+
     # 인증 (HS256) — 시크릿은 반드시 환경변수로 주입
     jwt_secret: str = _DEFAULT_JWT_SECRET
     jwt_algorithm: str = "HS256"
     jwt_expiry_seconds: int = 3600
     jwt_scope: str = "data:read data:write"
+
+    # 토큰 발급 클라이언트 자격증명 — prod에서 설정 시 발급 요청에 요구(dev는 개방)
+    client_id: str = ""
+    client_secret: str = ""
 
     # DataOps 기본 페이징
     default_page_size: int = 20

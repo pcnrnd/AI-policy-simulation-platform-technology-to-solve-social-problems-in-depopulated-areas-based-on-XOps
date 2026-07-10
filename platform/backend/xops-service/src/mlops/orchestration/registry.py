@@ -8,9 +8,11 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import asdict
 from functools import lru_cache
 from typing import Any
 
+from src.core import db
 from src.core.exceptions import SourceNotFoundError
 from src.core.logger import get_logger
 from src.mlops.orchestration.events import RetrainEvent
@@ -42,15 +44,17 @@ class ModelRegistry:
     """운영 모델 상태와 재학습 파이프라인 실행을 관리."""
 
     def __init__(self, store: dict[str, dict[str, Any]]) -> None:
-        self._store = store
+        self._store = store  # 시드(지표·next_version). 현재 버전·실행 이력은 SQLite가 소스오브트루스.
         self._orchestrator = Orchestrator()
-        self._runs: list[PipelineRun] = []
+
+    def _version(self, model_id: str, seed_version: str) -> str:
+        return db.get_model_version(model_id) or seed_version
 
     def models(self) -> list[dict[str, Any]]:
-        return [{"model_id": mid, **info} for mid, info in self._store.items()]
+        return [{"model_id": mid, **info, "version": self._version(mid, info["version"])} for mid, info in self._store.items()]
 
-    def runs(self) -> list[PipelineRun]:
-        return list(self._runs)
+    def runs(self) -> list[dict[str, Any]]:
+        return db.list_runs()
 
     def trigger(
         self,
@@ -60,7 +64,7 @@ class ModelRegistry:
         candidate_metrics: dict[str, float] | None = None,
         candidate_latency_ms: float | None = None,
     ) -> PipelineRun:
-        """재학습 이벤트를 상태머신에 태우고 승급 성공 시 버전을 갱신."""
+        """재학습 이벤트를 상태머신에 태우고 승급 성공 시 버전을 갱신(SQLite 영속화)."""
         model = self._store.get(model_id)
         if model is None:
             raise SourceNotFoundError(f"등록된 모델이 아닙니다: {model_id}")
@@ -74,12 +78,12 @@ class ModelRegistry:
         run = self._orchestrator.handle_event(
             event,
             current_metrics=model["metrics"],
-            current_version=model["version"],
+            current_version=self._version(model_id, model["version"]),
             candidate_version=model["next_version"],
         )
-        self._runs.append(run)
+        db.append_run(asdict(run))
         if run.state == "succeeded":
-            model["version"] = model["next_version"]
+            db.set_model_version(model_id, model["next_version"])
         _logger.info(f"retrain model={model_id} trigger={trigger} run={run.run_id} state={run.state}")
         return run
 
