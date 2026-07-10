@@ -1,0 +1,5 @@
+# Docker/CI용 런타임 의존성 (pyproject.toml과 동기화)
+fastapi>=0.115
+uvicorn[standard]>=0.30
+pydantic>=2.6
+pydantic-settings>=2.2
