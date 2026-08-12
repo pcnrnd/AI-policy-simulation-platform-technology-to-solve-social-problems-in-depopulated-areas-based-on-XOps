@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     # API
     api_prefix: str = "/api/v3"
     dataops_version: str = "3.0.0-R3"
-    cors_origins: list[str] = ["http://localhost:8000", "http://localhost:5173"]
+    cors_origins: list[str] = ["http://localhost:5173"]
 
     # 데이터 소스 (메타데이터 카탈로그 시드)
     mock_data_path: Path = _DEFAULT_MOCK

@@ -1,5 +1,5 @@
 // xops-service 백엔드 호출 클라이언트 — native fetch 래퍼.
-// base가 빈값이면 상대경로(/api/v3/...)로 요청 → dev는 vite proxy(8010), prod는 VITE_API_BASE_URL.
+// base가 빈값이면 상대경로(/api/v3/...)로 요청 → dev는 vite proxy(8000), prod는 VITE_API_BASE_URL.
 
 const BASE = import.meta.env.VITE_API_BASE_URL || "";
 
