@@ -436,7 +436,7 @@ export default function MonitorPage() {
                 <tr>
                   <th>시간</th>
                   <th>지자체</th>
-                  <th>Z-score</th>
+                  <th className="cell-num">Z-score</th>
                   <th>상태</th>
                 </tr>
               </thead>
@@ -451,7 +451,7 @@ export default function MonitorPage() {
                       {row.time}
                     </td>
                     <td>{row.target}</td>
-                    <td>{row.z}</td>
+                    <td className="cell-num">{row.z}</td>
                     <td>
                       {row.outlier ? (
                         <span className="outlier-tag">Outlier</span>

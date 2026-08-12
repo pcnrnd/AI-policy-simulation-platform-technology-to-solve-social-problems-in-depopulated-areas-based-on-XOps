@@ -32,6 +32,7 @@ export default function RegionStatusCard({ regions, currentRegionId, onSelectReg
     <Card
       title="지자체별 인구감소 현황"
       icon="fa-triangle-exclamation"
+      style={{ marginBottom: 24 }}
       headerRight={
         <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
           위험지수 오름차순 · 행 클릭 시 시뮬레이터 이동
@@ -43,10 +44,10 @@ export default function RegionStatusCard({ regions, currentRegionId, onSelectReg
           <thead>
             <tr>
               <th>지자체</th>
-              <th>인구수</th>
-              <th>10년 증감</th>
-              <th>고령화지수</th>
-              <th>출산율</th>
+              <th className="cell-num">인구수</th>
+              <th className="cell-num">10년 증감</th>
+              <th className="cell-num">고령화지수</th>
+              <th className="cell-num">출산율</th>
               <th>위험등급</th>
             </tr>
           </thead>
@@ -74,12 +75,12 @@ export default function RegionStatusCard({ regions, currentRegionId, onSelectReg
                       </div>
                     )}
                   </td>
-                  <td>{region.population.toLocaleString()}명</td>
-                  <td style={{ color: "var(--accent-red)" }}>
+                  <td className="cell-num">{region.population.toLocaleString()}명</td>
+                  <td className="cell-num" style={{ color: "var(--accent-red)" }}>
                     {decline !== null ? `${decline}%` : "—"}
                   </td>
-                  <td>{region.agingIndex}%</td>
-                  <td>{region.birthRate}</td>
+                  <td className="cell-num">{region.agingIndex}%</td>
+                  <td className="cell-num">{region.birthRate}</td>
                   <td>
                     <span
                       className="system-status"

@@ -87,11 +87,11 @@ export default function PolicyRecommendation({ region, ranked }) {
               <th>순위</th>
               <th>정책 전략</th>
               <th>대응 유형</th>
-              <th>Reach</th>
-              <th>Impact(보정)</th>
-              <th>Confidence</th>
-              <th>Effort</th>
-              <th>추천 점수</th>
+              <th className="cell-num">Reach</th>
+              <th className="cell-num">Impact(보정)</th>
+              <th className="cell-num">Confidence</th>
+              <th className="cell-num">Effort</th>
+              <th className="cell-num">추천 점수</th>
               <th>추천</th>
             </tr>
           </thead>
@@ -101,11 +101,11 @@ export default function PolicyRecommendation({ region, ranked }) {
                 <td style={{ fontWeight: 700 }}>{MEDAL[i] ?? i + 1}</td>
                 <td style={{ fontWeight: 600 }}>{s.name}</td>
                 <td style={{ color: "var(--text-secondary)", fontSize: 12 }}>{s.category}</td>
-                <td>{s.reach.toLocaleString()}</td>
-                <td>{s.adjImpact}</td>
-                <td>{s.confidence}</td>
-                <td>{s.effort}</td>
-                <td style={{ fontWeight: 700, color: "var(--accent-blue)" }}>
+                <td className="cell-num">{s.reach.toLocaleString()}</td>
+                <td className="cell-num">{s.adjImpact}</td>
+                <td className="cell-num">{s.confidence}</td>
+                <td className="cell-num">{s.effort}</td>
+                <td className="cell-num" style={{ fontWeight: 700, color: "var(--accent-blue)" }}>
                   {s.score.toLocaleString()}
                 </td>
                 <td>

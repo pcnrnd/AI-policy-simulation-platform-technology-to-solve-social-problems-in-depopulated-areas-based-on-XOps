@@ -107,7 +107,8 @@ export default function Overview() {
         <StatCard
           label="AI 예측 소멸위기 지역수 (전국 기준)"
           icon="fa-triangle-exclamation"
-          value="89개소"
+          value="89"
+          unit="개소"
           footer={
             <>
               <span className="trend-up">
@@ -133,7 +134,8 @@ export default function Overview() {
         <StatCard
           label="연동 데이터 소스"
           icon="fa-network-wired"
-          value={`${sourceCount}개 실시간`}
+          value={sourceCount}
+          unit="개 실시간"
           footer={
             <>
               <span className="trend-up">
