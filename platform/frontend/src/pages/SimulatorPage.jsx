@@ -7,6 +7,7 @@ import PipelineStepper from "../components/PipelineStepper.jsx";
 import CollapsibleStage from "../components/CollapsibleStage.jsx";
 import FactorAnalysisStage from "../components/FactorAnalysisStage.jsx";
 import FactorResultStage from "../components/FactorResultStage.jsx";
+import PendingData from "../components/PendingData.jsx";
 import ScenarioCompare from "../components/ScenarioCompare.jsx";
 import { useAppState } from "../context/AppStateContext.jsx";
 import { useChartTheme } from "../hooks/useChartTheme.js";
@@ -498,7 +499,6 @@ export default function SimulatorPage() {
         open={openStages["stage-result"]}
         onToggle={() => toggleStage("stage-result")}
         locked={analysisStatus !== "done"}
-        onRun={handleRunAnalysis}
         running={analysisStatus === "running"}
       />
 
@@ -511,8 +511,6 @@ export default function SimulatorPage() {
         open={openStages["stage-sim"]}
         onToggle={() => toggleStage("stage-sim")}
       >
-        <div className="pl-result-zone">
-        <div className={analysisDone ? "" : "pl-locked"}>
         {/* 강화학습 변수 프레임 (case.simulation) */}
         <div className="pl-sim-frame">
           <div className="pl-sim-cell pl-sim-obj">
@@ -717,9 +715,19 @@ export default function SimulatorPage() {
               />
             ))}
 
-            <button className="btn btn-primary" style={{ width: "100%", marginTop: 8 }} onClick={handleRecommend}>
+            <button
+              className="btn btn-primary"
+              style={{ width: "100%", marginTop: 8 }}
+              onClick={handleRecommend}
+              disabled={!analysisDone}
+            >
               <i className="fa-solid fa-lightbulb"></i> 정책 추천 도출
             </button>
+            {!analysisDone && (
+              <p style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 8, textAlign: "center" }}>
+                <i className="fa-solid fa-circle-info"></i> STAGE ① 요인분석 실행 후 추천을 도출할 수 있습니다.
+              </p>
+            )}
             {recoStale && (
               <p style={{ fontSize: 11, color: "var(--accent-orange)", marginTop: 8, textAlign: "center" }}>
                 <i className="fa-solid fa-triangle-exclamation"></i> 변수가 변경되었습니다. 추천을 다시 도출하세요.
@@ -732,34 +740,46 @@ export default function SimulatorPage() {
       {/* ── 분석: 인구 예측 + 전 지자체 분포 ── */}
       <div className="grid-cols-2" style={{ marginTop: 24 }}>
         <Card title="10개년 인구 예측 시뮬레이션 결과" icon="fa-wand-magic-sparkles">
-          <div style={{ position: "relative", height: 200, width: "100%" }}>
-            <Line data={chartData} options={chartOpts} />
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-around", marginTop: 16, textAlign: "center" }}>
-            <div>
-              <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>시뮬레이션 인구 (10년 후)</div>
-              <div style={{ fontSize: 18, fontWeight: 700, color: "var(--accent-blue)" }}>
-                {finalPop.toLocaleString()}명
+          {analysisDone ? (
+            <>
+              <div style={{ position: "relative", height: 200, width: "100%" }}>
+                <Line data={chartData} options={chartOpts} />
               </div>
-            </div>
-            <div>
-              <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>인구 증가율 예측</div>
-              <div className={growthClass} style={{ fontSize: 18, fontWeight: 700 }}>
-                {parseFloat(growthPercent) > 0 ? "+" : ""}
-                {growthPercent}%
+              <div style={{ display: "flex", justifyContent: "space-around", marginTop: 16, textAlign: "center" }}>
+                <div>
+                  <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>시뮬레이션 인구 (10년 후)</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: "var(--accent-blue)" }}>
+                    {finalPop.toLocaleString()}명
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>인구 증가율 예측</div>
+                  <div className={growthClass} style={{ fontSize: 18, fontWeight: 700 }}>
+                    {parseFloat(growthPercent) > 0 ? "+" : ""}
+                    {growthPercent}%
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+            </>
+          ) : (
+            <PendingData running={analysisRunning} text="[요인분석 실행] 후 인구 예측 결과가 표시됩니다." />
+          )}
         </Card>
 
         <Card title="전 지자체 위험지수 vs 인구 분포" icon="fa-braille">
-          <p style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 12 }}>
-            전국 인구감소 지역(회색 점) 분포 속 시범 분석 대상 지자체의 상대 위치. 파란 점이 현재 선택
-            지자체입니다.
-          </p>
-          <div style={{ position: "relative", height: 220, width: "100%" }}>
-            <Scatter data={scatterData} options={scatterOpts} />
-          </div>
+          {analysisDone ? (
+            <>
+              <p style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 12 }}>
+                전국 인구감소 지역(회색 점) 분포 속 시범 분석 대상 지자체의 상대 위치. 파란 점이 현재 선택
+                지자체입니다.
+              </p>
+              <div style={{ position: "relative", height: 220, width: "100%" }}>
+                <Scatter data={scatterData} options={scatterOpts} />
+              </div>
+            </>
+          ) : (
+            <PendingData running={analysisRunning} text="[요인분석 실행] 후 전 지자체 분포 분석이 표시됩니다." />
+          )}
         </Card>
       </div>
 
@@ -783,28 +803,6 @@ export default function SimulatorPage() {
         }}
         addConsoleLog={addConsoleLog}
       />
-        </div>
-
-        {!analysisDone && (
-          <div className="pl-result-overlay" role="status">
-            <i
-              className={"fa-solid " + (analysisRunning ? "fa-spinner fa-spin" : "fa-lock")}
-              aria-hidden="true"
-            ></i>
-            <strong>{analysisRunning ? "요인분석 진행 중..." : "시뮬레이션 대기"}</strong>
-            <p>
-              {analysisRunning
-                ? "분석이 완료되면 도출 파라미터로 시뮬레이션이 활성화됩니다."
-                : "STAGE ①에서 요인분석을 실행하면 도출된 파라미터로 시뮬레이션이 활성화됩니다."}
-            </p>
-            {!analysisRunning && (
-              <button type="button" className="btn btn-primary" onClick={handleRunAnalysis}>
-                <i className="fa-solid fa-play"></i> 요인분석 실행
-              </button>
-            )}
-          </div>
-        )}
-        </div>
       </CollapsibleStage>
 
       {/* ── STAGE ④ 리포팅: 정책 추천 + AI 보고서 연계 ── */}
@@ -816,8 +814,6 @@ export default function SimulatorPage() {
         open={openStages["stage-report"]}
         onToggle={() => toggleStage("stage-report")}
       >
-        <div className="pl-result-zone">
-        <div className={analysisDone ? "" : "pl-locked"}>
         {recommendation ? (
           <PolicyRecommendation region={currentRegion} ranked={recommendation} />
         ) : (
@@ -844,19 +840,6 @@ export default function SimulatorPage() {
           <button className="btn btn-primary" onClick={() => setActiveTab("tab-reporter")}>
             보고서 생성으로 이동 <i className="fa-solid fa-arrow-right"></i>
           </button>
-        </div>
-        </div>
-
-        {!analysisDone && (
-          <div className="pl-result-overlay" role="status">
-            <i
-              className={"fa-solid " + (analysisRunning ? "fa-spinner fa-spin" : "fa-lock")}
-              aria-hidden="true"
-            ></i>
-            <strong>{analysisRunning ? "요인분석 진행 중..." : "리포팅 대기"}</strong>
-            <p>요인분석 → 시뮬레이션 → 정책 추천이 완료되면 보고서 연계가 활성화됩니다.</p>
-          </div>
-        )}
         </div>
       </CollapsibleStage>
     </>
