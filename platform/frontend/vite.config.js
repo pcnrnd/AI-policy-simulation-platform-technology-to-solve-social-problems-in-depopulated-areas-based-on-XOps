@@ -4,11 +4,11 @@ import react from "@vitejs/plugin-react";
 export default defineConfig({
   plugins: [react()],
   server: {
-    port: 8000,
+    // 포트는 Vite 기본(5173) 사용
     open: true,
-    // dev에서 /api 요청을 xops-service(8010)로 프록시 — CORS 회피
+    // dev에서 /api 요청을 xops-service(8000, uvicorn 기본)로 프록시 — CORS 회피
     proxy: {
-      "/api": { target: "http://localhost:8010", changeOrigin: true }
+      "/api": { target: "http://localhost:8000", changeOrigin: true }
     }
   },
   build: {
