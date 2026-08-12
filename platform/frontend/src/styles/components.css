@@ -27,6 +27,8 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  /* 우측 컨트롤(select 등) 유무와 무관하게 헤더 높이·제목 위치 통일 */
+  min-height: 36px;
   margin-bottom: 20px;
 }
 

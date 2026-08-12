@@ -98,7 +98,8 @@ export default function Overview() {
         suggestedMax: 100
       }
     },
-    plugins: { legend: { labels: { color: ct.legend, boxWidth: 12 } } }
+    // 단일 데이터셋 — 지자체명이 카드 제목·select와 중복되므로 범례 숨김(차트 수직 중앙 정렬)
+    plugins: { legend: { display: false } }
   };
 
   return (
