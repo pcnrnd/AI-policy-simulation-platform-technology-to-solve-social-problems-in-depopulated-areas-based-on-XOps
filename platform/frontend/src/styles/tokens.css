@@ -10,7 +10,7 @@
 
   --text-primary: #f3f4f6;
   --text-secondary: #9ca3af;
-  --text-muted: #6b7480;
+  --text-muted: #7b8494; /* WCAG AA — 카드(#10182d) 위 4.68:1, 배경 위 5.14:1 */
 
   --accent-blue: #3b82f6;
   --accent-blue-rgb: 59, 130, 246;
@@ -63,7 +63,7 @@
 
   --text-primary: #0f172a;
   --text-secondary: #475569;
-  --text-muted: #64748b;
+  --text-muted: #5d6b80; /* WCAG AA — 배경(#e9eef5) 위 4.64:1, 카드 위 5.32:1 */
 
   /* 라이트 전용 액센트: 흰 배경 대비 확보 위해 한 단계 진하게 */
   --accent-blue: #2563eb;
