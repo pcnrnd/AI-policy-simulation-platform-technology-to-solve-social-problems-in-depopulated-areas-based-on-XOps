@@ -284,7 +284,7 @@ export default function OrchestratorPage() {
                 <th>버전</th>
                 <th>학습데이터</th>
                 <th>하이퍼파라미터</th>
-                <th style={{ textAlign: "right" }}>Accuracy</th>
+                <th className="cell-num">Accuracy</th>
                 <th>상태</th>
                 <th>등록일</th>
               </tr>
@@ -308,7 +308,7 @@ export default function OrchestratorPage() {
                     </td>
                     <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>{m.dataVersion}</td>
                     <td style={{ fontSize: 11, color: "var(--text-secondary)" }}>{m.params}</td>
-                    <td style={{ textAlign: "right", fontWeight: 600 }}>{m.accuracy.toFixed(3)}</td>
+                    <td className="cell-num" style={{ fontWeight: 600 }}>{m.accuracy.toFixed(3)}</td>
                     <td>
                       <span
                         className="system-status"

@@ -1,4 +1,4 @@
-export default function StatCard({ label, icon, value, footer, valueStyle }) {
+export default function StatCard({ label, icon, value, unit, footer, valueStyle }) {
   return (
     <div className="card stat-card">
       <div className="stat-header">
@@ -11,6 +11,7 @@ export default function StatCard({ label, icon, value, footer, valueStyle }) {
       </div>
       <div className="stat-value" style={valueStyle}>
         {value}
+        {unit && <span className="stat-unit">{unit}</span>}
       </div>
       {footer && <div className="stat-footer">{footer}</div>}
     </div>

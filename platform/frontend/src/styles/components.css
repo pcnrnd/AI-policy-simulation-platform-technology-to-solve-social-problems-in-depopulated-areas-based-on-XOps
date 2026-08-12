@@ -84,6 +84,14 @@
   font-family: 'Outfit', sans-serif;
 }
 
+/* stat 수치의 단위/수식어 — 수치보다 작게(보조색)로 분리해 카드 간 시각 무게 균형 유지 */
+.stat-unit {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-left: 4px;
+}
+
 .stat-footer {
   font-size: 12px;
   margin-top: 4px;
@@ -127,7 +135,8 @@
 }
 
 .system-status {
-  display: flex;
+  /* inline-flex: 테이블 셀 등 블록 문맥에서 내용 맞춤 폭 유지 (flex는 셀 폭만큼 늘어남) */
+  display: inline-flex;
   align-items: center;
   gap: 8px;
   font-size: 13px;
@@ -309,6 +318,13 @@ td {
 }
 
 tr:hover td { background-color: rgba(255, 255, 255, 0.01); }
+
+/* 수치 컬럼 — 우측 정렬 + 자릿수 고정폭 (헤더·셀 공용) */
+th.cell-num,
+td.cell-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
 
 .outlier-tag {
   background-color: rgba(239, 68, 68, 0.1);
