@@ -6,25 +6,30 @@
   --bg-card: rgba(20, 30, 55, 0.65);
   --bg-card-hover: rgba(26, 38, 69, 0.8);
   --border-color: rgba(255, 255, 255, 0.08);
-  --border-focus: rgba(59, 130, 246, 0.4);
+  --border-control: #64748b;
+  --border-focus: #3b82f6; /* 정보성 보더 — 인접색 대비 3:1 이상 확보(솔리드) */
 
   --text-primary: #f3f4f6;
   --text-secondary: #9ca3af;
-  --text-muted: #7b8494; /* WCAG AA — 카드(#10182d) 위 4.68:1, 배경 위 5.14:1 */
+  --text-muted: #808a9a; /* WCAG AA — 기본·카드·hover 표면에서 4.5:1 이상 */
+  --text-disabled: #808a9a; /* 비활성 컨트롤 텍스트 — opacity 낮춤 대신 사용 */
 
   --accent-blue: #3b82f6;
   --accent-blue-rgb: 59, 130, 246;
+  --accent-blue-strong: #2563eb;
   --accent-teal: #10b981;
   --accent-teal-rgb: 16, 185, 129;
   --accent-purple: #8b5cf6;
   --accent-purple-rgb: 139, 92, 246;
+  --accent-purple-text: #a78bfa;
   --accent-red: #ef4444;
   --accent-red-rgb: 239, 68, 68;
   --accent-orange: #f59e0b;
   --accent-orange-rgb: 245, 158, 11;
 
-  --grad-primary: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-  --grad-teal: linear-gradient(135deg, #10b981 0%, #3b82f6 100%);
+  /* 흰색 텍스트 4.5:1 이상 유지를 위해 진한 조합 사용 (양 테마 동일) */
+  --grad-primary: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+  --grad-teal: linear-gradient(135deg, #047857 0%, #1d4ed8 100%);
   --grad-dark: linear-gradient(180deg, #0e1629 0%, #080d1a 100%);
 
   --glow-shadow: 0 0 20px rgba(59, 130, 246, 0.15);
@@ -49,6 +54,15 @@
   --header-height: 70px;
   --transition-fast: 0.2s ease;
   --transition-normal: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* 스페이싱 스케일 (DESIGN.md §4) — UI 간격은 이 스케일만 사용 */
+  --space-xs: 4px;
+  --space-s: 8px;
+  --space-m: 12px;
+  --space-l: 16px;
+  --space-xl: 20px;
+  --space-xxl: 24px;
+  --space-xxxl: 32px;
 }
 
 /* ===== Light theme overrides ===== */
@@ -59,24 +73,33 @@
   --bg-card: rgba(255, 255, 255, 0.9);
   --bg-card-hover: #ffffff;
   --border-color: rgba(15, 23, 42, 0.1);
-  --border-focus: rgba(37, 99, 235, 0.45);
+  --border-control: #64748b;
+  --border-focus: #2563eb; /* 정보성 보더 — 솔리드로 3:1 이상 */
 
   --text-primary: #0f172a;
   --text-secondary: #475569;
   --text-muted: #5d6b80; /* WCAG AA — 배경(#e9eef5) 위 4.64:1, 카드 위 5.32:1 */
+  --text-disabled: #5d6b80;
 
-  /* 라이트 전용 액센트: 흰 배경 대비 확보 위해 한 단계 진하게 */
+  /* 라이트 전용 액센트: 흰 배경 대비 4.5:1 확보 위해 진하게 (DESIGN.md §2.3) */
   --accent-blue: #2563eb;
   --accent-blue-rgb: 37, 99, 235;
-  --accent-teal: #059669;
-  --accent-teal-rgb: 5, 150, 105;
+  --accent-blue-strong: #2563eb;
+  --accent-teal: #047857;
+  --accent-teal-rgb: 4, 120, 87;
   --accent-purple: #7c3aed;
   --accent-purple-rgb: 124, 58, 237;
+  --accent-purple-text: #6d28d9;
+  --accent-red: #dc2626;
+  --accent-red-rgb: 220, 38, 38;
+  --accent-orange: #b45309;
+  --accent-orange-rgb: 180, 83, 9;
 
   --grad-dark: linear-gradient(180deg, #ffffff 0%, #e9eef5 100%);
 
   /* 글로우/그림자: 밝은 배경에선 헤일로 대신 옅은 쿨그레이 섀도 */
   --glow-shadow: 0 4px 14px rgba(37, 99, 235, 0.1);
+  --glow-shadow-red: 0 4px 14px rgba(220, 38, 38, 0.14);
   --glass-shadow: 0 8px 28px 0 rgba(15, 23, 42, 0.08);
   --card-hover-shadow: 0 10px 28px -12px rgba(15, 23, 42, 0.16);
   --popup-shadow: 0 10px 30px -8px rgba(15, 23, 42, 0.2);

@@ -27,14 +27,14 @@ export function ThemeProvider({ children }) {
     setTheme((prev) => (prev === DARK ? LIGHT : DARK));
   }, []);
 
-  // 전자정부 표준(밝은 고대비) 모드 직접 적용 — 라이트 테마로 고정.
-  const applyStandardMode = useCallback(() => setTheme(LIGHT), []);
+  // 고대비 라이트 모드 직접 적용. 공식 KRDS 준수를 의미하는 명칭은 사용하지 않는다.
+  const applyHighContrastLightMode = useCallback(() => setTheme(LIGHT), []);
 
   const value = {
     theme,
     isDark: theme === DARK,
     toggleTheme,
-    applyStandardMode
+    applyHighContrastLightMode
   };
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

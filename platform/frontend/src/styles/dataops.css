@@ -29,7 +29,7 @@
   color: var(--text-secondary);
 }
 .workflow-statusbar code {
-  color: var(--accent-purple);
+  color: var(--accent-purple-text);
   font-size: 11px;
 }
 .workflow-dot {
@@ -53,6 +53,17 @@
 }
 .catalog-search-row .input-control {
   max-width: 360px;
+}
+
+.catalog-result-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-s);
+  min-height: 28px;
+  margin-bottom: var(--space-s);
+  color: var(--text-muted);
+  font-size: 11px;
 }
 .catalog-reg-btn {
   margin-left: auto;
@@ -115,6 +126,26 @@
   gap: 8px;
   margin-bottom: 6px;
 }
+.archive-reg-field {
+  min-width: 0;
+  margin: 0;
+}
+.archive-reg-field > span {
+  display: block;
+  margin-bottom: var(--space-xs);
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+.field-error {
+  display: block;
+  margin: var(--space-xs) 0 var(--space-s);
+  color: var(--accent-red);
+  font-size: 11px;
+  line-height: 1.4;
+}
+.archive-reg-grid > .field-error {
+  grid-column: 1 / -1;
+}
 .archive-reg-col-del {
   padding: 4px 0;
   font-size: 11px;
@@ -153,6 +184,40 @@
   }
 }
 
+@media (max-width: 600px) {
+  .catalog-search-row,
+  .archive-reg-actions,
+  .builder-action-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .catalog-reg-btn {
+    width: 100%;
+    margin-left: 0;
+  }
+  .archive-reg-col-row,
+  .archive-reg-range-row,
+  .builder-control-grid {
+    grid-template-columns: 1fr;
+    max-width: none;
+  }
+  .archive-reg-col-del {
+    width: 100%;
+  }
+  .archive-reg-actions .btn,
+  .builder-action-row .btn {
+    width: 100%;
+  }
+  .auth-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .control-field.is-compact .select-control,
+  .auth-controls .btn {
+    width: 100%;
+  }
+}
+
 /* 사용자 등록 아카이브 칩 + 행 삭제 버튼 */
 .catalog-user-chip {
   display: inline-flex;
@@ -179,7 +244,7 @@
 .catalog-tag-chip {
   margin-left: 6px;
   font-size: 10px;
-  color: var(--accent-purple);
+  color: var(--accent-purple-text);
   background: rgba(139, 92, 246, 0.1);
   border: 1px solid rgba(139, 92, 246, 0.22);
   border-radius: 999px;
@@ -386,7 +451,7 @@
   background: rgba(59, 130, 246, 0.1);
 }
 .query-lang-chip.is-mql {
-  color: var(--accent-purple);
+  color: var(--accent-purple-text);
   background: rgba(139, 92, 246, 0.12);
 }
 
@@ -395,12 +460,38 @@
   border-radius: 10px;
   padding: 12px;
 }
+.auth-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-s);
+  flex-shrink: 0;
+}
+.control-field {
+  min-width: 0;
+  margin: 0;
+}
+.control-field > span {
+  display: block;
+  margin-bottom: var(--space-xs);
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+.control-field.is-compact .select-control {
+  width: 110px;
+  padding: 6px 8px;
+}
+.builder-control-grid {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.45fr) minmax(0, 1.55fr);
+  gap: var(--space-s);
+  margin-bottom: var(--space-s);
+}
 
 .token-line {
   display: block;
   margin-top: 8px;
   font-size: 10px;
-  color: var(--accent-purple);
+  color: var(--accent-purple-text);
   word-break: break-all;
   line-height: 1.4;
 }
@@ -411,7 +502,7 @@
   align-items: center;
   gap: 8px;
   background: var(--input-bg);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-control);
   border-radius: 8px;
   padding: 0 10px;
 }

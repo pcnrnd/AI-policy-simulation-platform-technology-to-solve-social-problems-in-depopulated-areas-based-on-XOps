@@ -1,4 +1,5 @@
 import { useCallback } from "react";
+import { getScrollBehavior } from "../lib/motion.js";
 
 // 단계 흐름 네비게이터 — 클릭 시 해당 섹션(anchor)으로 부드럽게 스크롤한다.
 // stages 미지정 시 정책 시뮬레이터의 4단계가 기본값(기존 호출부 호환).
@@ -23,7 +24,7 @@ export default function PipelineStepper({
         return;
       }
       const el = document.getElementById(id);
-      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+      if (el) el.scrollIntoView({ behavior: getScrollBehavior(), block: "start" });
     },
     [onJump]
   );
@@ -41,6 +42,7 @@ export default function PipelineStepper({
             }
             onClick={() => jump(s.id)}
             aria-current={activeId === s.id ? "step" : undefined}
+            aria-label={`${s.no} ${s.label}${isDone ? " 완료" : activeId === s.id ? " 현재 단계" : ""}`}
           >
             <span className="pipeline-step-no">{s.no}</span>
             <span className="pipeline-step-body">

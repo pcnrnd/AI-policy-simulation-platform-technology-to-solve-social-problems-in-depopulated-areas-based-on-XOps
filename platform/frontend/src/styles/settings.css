@@ -96,7 +96,7 @@
   color: var(--text-primary);
 }
 
-/* 세로 스택 행(버튼 + 설명) — 전자정부 표준 모드 */
+/* 세로 스택 행(버튼 + 설명) — 고대비 라이트 모드 */
 .settings-row-stack {
   flex-direction: column;
   align-items: stretch;

@@ -13,14 +13,14 @@ export default function PerfBadge({ ms, label = "처리 응답속도", budget = 
       style={{
         padding: "2px 10px",
         fontSize: 11,
-        backgroundColor: ok ? "rgba(16, 185, 129, 0.1)" : "rgba(255,255,255,0.03)",
-        borderColor: ok ? "rgba(16,185,129,0.2)" : "var(--border-color)",
+        backgroundColor: ok ? "rgba(var(--accent-teal-rgb), 0.02)" : "var(--surface-hover)",
+        borderColor: "currentColor",
         color
       }}
       title={`성능 목표 ≤ ${budget}ms`}
     >
       <i className="fa-solid fa-stopwatch" aria-hidden="true"></i>
-      {label}: {text} {measured && <span style={{ opacity: 0.6 }}>/ ≤{budget}ms</span>}
+      {label}: {text} {measured && <span className="perf-badge-target">/ ≤{budget}ms</span>}
     </span>
   );
 }

@@ -43,3 +43,24 @@
 }
 
 .report-preview-panel li { margin-bottom: 6px; }
+
+.reporter-action-row {
+  display: flex;
+  gap: var(--space-m);
+  align-items: center;
+}
+
+@media (max-width: 480px) {
+  .reporter-action-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .reporter-action-row .btn {
+    width: 100%;
+  }
+
+  .report-preview-panel {
+    padding: var(--space-xl);
+  }
+}

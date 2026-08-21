@@ -6,10 +6,11 @@ export default function AlertPopupContainer() {
   return (
     <div id="popup-container">
       {alerts.map((alert) => (
-        <div className="alert-popup" key={alert.id}>
+        <div className="alert-popup" key={alert.id} role="alert">
           <i
             className="fa-solid fa-triangle-exclamation"
             style={{ fontSize: 24, color: "var(--accent-red)" }}
+            aria-hidden="true"
           ></i>
           <div>
             <div style={{ fontWeight: 700, color: "var(--text-primary)", fontSize: 14 }}>{alert.title}</div>
@@ -27,7 +28,7 @@ export default function AlertPopupContainer() {
             className="alert-icon-btn btn-danger"
             style={{ width: 24, height: 24, fontSize: 10, marginLeft: 12 }}
             onClick={() => dismissAlert(alert.id)}
-            aria-label="알림 닫기"
+            aria-label={`${alert.title} 알림 닫기`}
           >
             X
           </button>

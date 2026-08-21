@@ -8,6 +8,11 @@
   z-index: 1000;
 }
 
+body.drawer-open #popup-container {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 /* 헤더 벨 알림 드롭다운 */
 .alert-badge-container {
   position: relative;
@@ -17,7 +22,8 @@
   top: calc(100% + 10px);
   right: 0;
   width: 340px;
-  max-height: 380px;
+  max-width: calc(100vw - 24px);
+  max-height: min(380px, calc(100dvh - var(--header-height) - 24px));
   overflow-y: auto;
   background-color: var(--bg-card);
   border: 1px solid var(--border-color);
@@ -90,4 +96,20 @@
   gap: 12px;
   animation: slideInRight 0.3s ease-out forwards;
   min-width: 320px;
+  max-width: calc(100vw - 24px);
+}
+
+@media (max-width: 480px) {
+  .notif-dropdown {
+    max-height: calc(100dvh - 118px);
+  }
+  #popup-container {
+    right: 12px;
+    bottom: 12px;
+    left: 12px;
+  }
+  .alert-popup {
+    width: 100%;
+    min-width: 0;
+  }
 }
