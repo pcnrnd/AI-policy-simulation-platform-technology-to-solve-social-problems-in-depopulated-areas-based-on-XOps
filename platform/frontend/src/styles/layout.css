@@ -6,6 +6,8 @@
 }
 
 .sidebar {
+  /* 본문 폭에 밀려 축소되면 렌더 폭이 --sidebar-width(=resizer의 aria-valuenow)와 어긋난다 */
+  flex: 0 0 var(--sidebar-width);
   width: var(--sidebar-width);
   background: var(--sidebar-bg);
   border-right: 1px solid var(--border-color);
@@ -151,8 +153,16 @@
   line-height: 1.5;
 }
 
+.sidebar-version {
+  margin-top: var(--space-xs);
+  color: var(--text-muted);
+  font-size: 9px;
+}
+
 .main-content {
   flex-grow: 1;
+  /* 넓은 표·차트가 있어도 사이드바 대신 본문이 줄어들도록 최소 폭 해제 */
+  min-width: 0;
   display: flex;
   flex-direction: column;
   height: 100vh;
@@ -161,6 +171,8 @@
 
 .main-header {
   height: var(--header-height);
+  /* .main-content(100vh 세로 flex)의 스크롤 영역이 헤더를 min-height까지 눌러 2행 헤더가 잘리는 것을 방지 */
+  flex-shrink: 0;
   border-bottom: 1px solid var(--border-color);
   background-color: var(--header-bg);
   backdrop-filter: blur(12px);
@@ -217,9 +229,13 @@
 
 .content-body {
   flex-grow: 1;
-  padding: 32px;
+  padding: var(--space-xxxl);
   overflow-y: auto;
   position: relative;
+}
+
+body.drawer-open {
+  overflow: hidden;
 }
 
 .page-tab {
@@ -230,22 +246,27 @@
 .grid-cols-3 {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 24px;
-  margin-bottom: 24px;
+  gap: var(--space-xxl);
+  margin-bottom: var(--space-xxl);
 }
 
 .grid-cols-2 {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 24px;
-  margin-bottom: 24px;
+  gap: var(--space-xxl);
+  margin-bottom: var(--space-xxl);
 }
 
 .grid-details-split {
   display: grid;
   grid-template-columns: 2fr 1fr;
-  gap: 24px;
-  margin-bottom: 24px;
+  gap: var(--space-xxl);
+  margin-bottom: var(--space-xxl);
+}
+
+/* 그리드에 속하지 않는 단독 카드 섹션의 수직 리듬 — 인라인 marginBottom 대신 사용 (§4) */
+.page-section {
+  margin-bottom: var(--space-xxl);
 }
 
 @media (max-width: 1200px) {
@@ -266,6 +287,7 @@
     transition: transform var(--transition-normal);
     box-shadow: var(--glass-shadow);
     will-change: transform;
+    overflow-y: auto;
   }
   .sidebar.open {
     transform: translateX(0);
@@ -295,4 +317,44 @@
   .grid-cols-3, .grid-cols-2 { grid-template-columns: 1fr; }
   .main-header { padding: 0 16px; }
   .header-title-area h2 { font-size: 17px; }
+}
+
+@media (max-width: 480px) {
+  .main-header {
+    height: auto;
+    min-height: var(--header-height);
+    flex-wrap: wrap;
+    gap: var(--space-s);
+    padding: var(--space-s) var(--space-m);
+  }
+  .header-left,
+  .header-controls {
+    width: 100%;
+  }
+  .header-controls {
+    justify-content: space-between;
+    gap: var(--space-s);
+  }
+  .header-controls .system-status {
+    max-width: calc(100% - 48px);
+    padding: var(--space-xs) var(--space-s);
+    font-size: 11px;
+  }
+  .header-controls .system-status > span:last-child {
+    white-space: normal;
+  }
+  .content-body {
+    padding: var(--space-l);
+  }
+  .monitor-options {
+    width: 100%;
+  }
+  .compact-select-field {
+    width: 100%;
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .compact-select-field .select-control {
+    width: 100%;
+  }
 }

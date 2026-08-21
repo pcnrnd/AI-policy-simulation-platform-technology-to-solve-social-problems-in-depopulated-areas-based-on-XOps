@@ -3,9 +3,9 @@ import Card from "./Card.jsx";
 
 // 소멸위험지수(낮을수록 위험) → 등급/색상 매핑.
 function riskGrade(riskIndex) {
-  if (riskIndex < 0.15) return { label: "소멸 고위험", color: "var(--accent-red)", rgb: "239, 68, 68" };
-  if (riskIndex < 0.18) return { label: "소멸 주의", color: "var(--accent-orange)", rgb: "245, 158, 11" };
-  return { label: "관찰 단계", color: "var(--accent-teal)", rgb: "16, 185, 129" };
+  if (riskIndex < 0.15) return { label: "소멸 고위험", color: "var(--accent-red)", rgbToken: "--accent-red-rgb" };
+  if (riskIndex < 0.18) return { label: "소멸 주의", color: "var(--accent-orange)", rgbToken: "--accent-orange-rgb" };
+  return { label: "관찰 단계", color: "var(--accent-teal)", rgbToken: "--accent-teal-rgb" };
 }
 
 // 10개년 history 첫값 대비 최근값 감소율(%).
@@ -32,23 +32,24 @@ export default function RegionStatusCard({ regions, currentRegionId, onSelectReg
     <Card
       title="지자체별 인구감소 현황"
       icon="fa-triangle-exclamation"
-      style={{ marginBottom: 24 }}
+      className="page-section"
       headerRight={
         <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
-          위험지수 오름차순 · 행 클릭 시 시뮬레이터 이동
+          위험지수 오름차순 · 지자체명 선택 시 시뮬레이터 이동
         </span>
       }
     >
       <div className="table-container" style={{ marginTop: 10 }}>
         <table>
+          <caption className="sr-only">지자체별 인구감소 지표와 소멸 위험등급</caption>
           <thead>
             <tr>
-              <th>지자체</th>
-              <th className="cell-num">인구수</th>
-              <th className="cell-num">10년 증감</th>
-              <th className="cell-num">고령화지수</th>
-              <th className="cell-num">출산율</th>
-              <th>위험등급</th>
+              <th scope="col">지자체</th>
+              <th scope="col" className="cell-num">인구수</th>
+              <th scope="col" className="cell-num">10년 증감</th>
+              <th scope="col" className="cell-num">고령화지수</th>
+              <th scope="col" className="cell-num">출산율</th>
+              <th scope="col">위험등급</th>
             </tr>
           </thead>
           <tbody>
@@ -59,15 +60,19 @@ export default function RegionStatusCard({ regions, currentRegionId, onSelectReg
               return (
                 <tr
                   key={region.id}
-                  onClick={() => onSelectRegion(region)}
-                  style={{
-                    cursor: "pointer",
-                    backgroundColor: isActive ? "rgba(59,130,246,0.08)" : undefined
-                  }}
-                  title={`${region.name} 정책 시뮬레이터로 이동`}
+                  className={isActive ? "table-row-selected" : ""}
+                    style={undefined}
                 >
                   <td>
-                    <strong>{region.name}</strong>
+                    <button
+                      type="button"
+                      className="table-row-action"
+                      onClick={() => onSelectRegion(region)}
+                      aria-current={isActive ? "true" : undefined}
+                    >
+                      {region.name}
+                      <span className="sr-only"> 정책 시뮬레이터로 이동</span>
+                    </button>
                     {region.theme && (
                       <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
                         <i className="fa-solid fa-circle-exclamation" style={{ marginRight: 4 }}></i>
@@ -87,8 +92,8 @@ export default function RegionStatusCard({ regions, currentRegionId, onSelectReg
                       style={{
                         padding: "2px 8px",
                         fontSize: 11,
-                        backgroundColor: `rgba(${grade.rgb}, 0.1)`,
-                        borderColor: `rgba(${grade.rgb}, 0.25)`,
+                        backgroundColor: `rgba(var(${grade.rgbToken}), 0.02)`,
+                        borderColor: grade.color,
                         color: grade.color
                       }}
                     >

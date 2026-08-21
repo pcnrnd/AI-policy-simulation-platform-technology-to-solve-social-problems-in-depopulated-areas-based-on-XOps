@@ -147,7 +147,7 @@
   font-weight: 700;
   letter-spacing: 0.06em;
   color: #fff;
-  background: var(--accent-blue);
+  background: var(--accent-blue-strong);
   border-radius: 8px;
   padding: 3px 10px;
 }
@@ -247,10 +247,7 @@
 .pl-run-bar .btn {
   flex-shrink: 0;
 }
-.pl-run-bar .btn:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
-}
+/* 비활성 스타일은 전역 .btn:disabled(§5.3) 사용 — opacity 오버라이드 금지 */
 
 /* 데이터 대기 플레이스홀더 — UI는 상시 노출, 데이터는 요인분석 실행 후 표시 */
 .pl-pending {
@@ -565,7 +562,16 @@
 .scenario-save-row .input-control {
   flex: 1;
 }
+.scenario-name-field {
+  flex: 1;
+  margin: 0;
+}
+.scenario-name-field > span {
+  display: block;
+  margin-bottom: var(--space-xs);
+}
 .scenario-save-row .btn {
+  align-self: flex-end;
   flex-shrink: 0;
 }
 .scenario-empty {
@@ -609,6 +615,15 @@
 .scenario-del-btn:hover {
   color: var(--accent-red, #ef4444);
   border-color: rgba(239, 68, 68, 0.4);
+}
+
+@media (max-width: 600px) {
+  .scenario-save-row {
+    flex-direction: column;
+  }
+  .scenario-save-row .btn {
+    width: 100%;
+  }
 }
 
 /* STAGE④ 보고서 연계 */

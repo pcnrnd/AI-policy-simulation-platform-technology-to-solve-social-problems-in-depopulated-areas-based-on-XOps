@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import Card from "../components/Card.jsx";
 import PerfBadge from "../components/PerfBadge.jsx";
 import { useAppState } from "../context/AppStateContext.jsx";
@@ -95,12 +95,12 @@ function buildPreview(region, template, driftInjected, live) {
 }
 
 export default function ReporterPage() {
-  const { appData, driftInjected, addConsoleLog } = useAppState();
+  const { appData, currentRegion, setCurrentRegion, driftInjected, addConsoleLog } = useAppState();
   const templates = appData.report_templates;
   const regions = appData.regions;
 
   const [templateId, setTemplateId] = useState(templates[0].id);
-  const [regionId, setRegionId] = useState(regions[0].id);
+  const [regionId, setRegionId] = useState(currentRegion?.id ?? regions[0].id);
   const [format, setFormat] = useState("docx");
   const [preview, setPreview] = useState(null);
 
@@ -111,6 +111,9 @@ export default function ReporterPage() {
   const [refreshCount, setRefreshCount] = useState(0);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [usedNames, setUsedNames] = useState(() => new Set());
+  const [bindingFeedback, setBindingFeedback] = useState(null);
+  const [reportFeedback, setReportFeedback] = useState(null);
+  const refreshRequestRef = useRef(0);
 
   const region = useMemo(() => regions.find((r) => r.id === regionId) ?? regions[0], [
     regions,
@@ -124,21 +127,38 @@ export default function ReporterPage() {
   // 양식에 연결된 Data source를 API로 호출해 지표를 자동 갱신.
   const refreshBinding = useCallback(
     async (count) => {
+      const requestId = ++refreshRequestRef.current;
       setRefreshing(true);
+      setPreview(null);
+      setReportFeedback(null);
+      setBinding(null);
+      setBindingMs(null);
+      setLastUpdated(null);
+      setBindingFeedback({ tone: "pending", message: `${region.name} 데이터를 갱신하고 있습니다.` });
       try {
         const { result, ms } = await measureAsync(() =>
           fetchReportData(region, driftInjected, count)
         );
+        if (requestId !== refreshRequestRef.current) return;
         setBinding(result);
         setBindingMs(ms);
         setLastUpdated(new Date().toLocaleTimeString("ko-KR"));
+        setBindingFeedback({
+          tone: "success",
+          message: `${region.name} 데이터 ${result.collected_rows.toLocaleString()}행을 갱신했습니다.`
+        });
         addConsoleLog(
           `INFO: 리포트 지표 API 자동 갱신 (${result.source}) - 수집 ${result.collected_rows}행, Accuracy ${result.indicators.accuracy}`
         );
       } catch (err) {
+        if (requestId !== refreshRequestRef.current) return;
+        setBindingFeedback({
+          tone: "error",
+          message: `데이터를 갱신하지 못했습니다. ${err?.message ?? "잠시 후 다시 시도하세요."}`
+        });
         addConsoleLog(`ERROR: 리포트 데이터 바인딩 실패 - ${err?.message ?? "알 수 없는 오류"}`);
       } finally {
-        setRefreshing(false);
+        if (requestId === refreshRequestRef.current) setRefreshing(false);
       }
     },
     [region, driftInjected, addConsoleLog]
@@ -151,6 +171,16 @@ export default function ReporterPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [regionId, driftInjected]);
 
+  useEffect(() => {
+    if (currentRegion?.id && currentRegion.id !== regionId) setRegionId(currentRegion.id);
+  }, [currentRegion, regionId]);
+
+  // 템플릿이 바뀌면 기존 템플릿으로 만든 미리보기를 현재 결과처럼 남기지 않는다.
+  useEffect(() => {
+    setPreview(null);
+    setReportFeedback(null);
+  }, [templateId]);
+
   const handleManualRefresh = () => {
     const next = refreshCount + 1;
     setRefreshCount(next);
@@ -159,6 +189,7 @@ export default function ReporterPage() {
 
   const handleGenerate = () => {
     setPreview(buildPreview(region, template, driftInjected, binding));
+    setReportFeedback({ tone: "success", message: `${region.name} 보고서 미리보기를 생성했습니다.` });
     addConsoleLog(`INFO: 보고서 미리보기 생성 성공 - ${region.name}`);
   };
 
@@ -203,8 +234,13 @@ export default function ReporterPage() {
       }
 
       downloadBlob(blob, filename);
+      setReportFeedback({ tone: "success", message: `${filename} 다운로드를 시작했습니다.` });
       addConsoleLog(`INFO: 보고서 다운로드 성공 (${fmt.label}) - ${filename}`);
     } catch (err) {
+      setReportFeedback({
+        tone: "error",
+        message: `보고서를 저장하지 못했습니다. ${err?.message ?? "파일 형식을 확인하고 다시 시도하세요."}`
+      });
       addConsoleLog(`ERROR: 보고서 저장 실패 (${fmt.label}) - ${err?.message ?? "알 수 없는 오류"}`);
     }
   };
@@ -220,6 +256,7 @@ export default function ReporterPage() {
 
         <div
           className="card"
+          aria-busy={refreshing}
           style={{
             marginBottom: 20,
             backgroundColor: "rgba(16, 185, 129, 0.05)",
@@ -260,6 +297,15 @@ export default function ReporterPage() {
             <i className={"fa-solid " + (refreshing ? "fa-spinner fa-spin" : "fa-rotate")}></i>{" "}
             {refreshing ? "데이터 갱신 중…" : "데이터 새로고침"}
           </button>
+          {bindingFeedback && (
+            <div
+              className={`async-feedback is-${bindingFeedback.tone}`}
+              role={bindingFeedback.tone === "error" ? "alert" : "status"}
+              aria-live={bindingFeedback.tone === "error" ? "assertive" : "polite"}
+            >
+              {bindingFeedback.message}
+            </div>
+          )}
         </div>
 
         <div className="slider-container">
@@ -284,7 +330,12 @@ export default function ReporterPage() {
             id="reporter-region"
             className="select-control"
             value={regionId}
-            onChange={(e) => setRegionId(e.target.value)}
+            onChange={(e) => {
+              const nextId = e.target.value;
+              setRegionId(nextId);
+              const nextRegion = regions.find((item) => item.id === nextId);
+              if (nextRegion) setCurrentRegion(nextRegion);
+            }}
           >
             {regions.map((r) => (
               <option key={r.id} value={r.id}>
@@ -310,17 +361,23 @@ export default function ReporterPage() {
           </select>
         </div>
 
-        <div
-          className="slider-container"
-          style={{ display: "flex", gap: 12, alignItems: "center" }}
-        >
-          <button className="btn btn-secondary" style={{ flexGrow: 1 }} onClick={handleGenerate}>
-            <i className="fa-solid fa-pen-nib"></i> 보고서 실시간 본문 생성
+        <div className="slider-container reporter-action-row">
+          <button className="btn btn-secondary" style={{ flexGrow: 1 }} onClick={handleGenerate} disabled={refreshing || !binding}>
+            <i className="fa-solid fa-pen-nib" aria-hidden="true"></i> 보고서 실시간 본문 생성
           </button>
-          <button className="btn btn-primary" style={{ flexGrow: 1 }} onClick={handleDownload}>
-            <i className="fa-solid fa-file-arrow-down"></i> 보고서 다운로드
+          <button className="btn btn-primary" style={{ flexGrow: 1 }} onClick={handleDownload} disabled={refreshing || !binding}>
+            <i className="fa-solid fa-file-arrow-down" aria-hidden="true"></i> 보고서 다운로드
           </button>
         </div>
+        {reportFeedback && (
+          <div
+            className={`async-feedback is-${reportFeedback.tone}`}
+            role={reportFeedback.tone === "error" ? "alert" : "status"}
+            aria-live={reportFeedback.tone === "error" ? "assertive" : "polite"}
+          >
+            {reportFeedback.message}
+          </div>
+        )}
 
         <div
           className="card"

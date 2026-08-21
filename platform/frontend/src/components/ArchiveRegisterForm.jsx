@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useRef, useState } from "react";
 
 // 신규 아카이브 등록 폼 — DataOps 라이프사이클의 "메타데이터 등록" 단계를 사용자 조작으로 실증.
 // 저장소 유형 선택에 따라 Adapter·쿼리 언어(SQL/MQL)가 자동 결정되며,
@@ -41,21 +41,67 @@ const coerce = (v) => {
   return v !== "" && Number.isFinite(n) ? n : v;
 };
 
-export default function ArchiveRegisterForm({ onRegister, onCancel }) {
+export default function ArchiveRegisterForm({ onRegister, onCancel, onSubmittingChange }) {
   const [form, setForm] = useState(INITIAL_FORM);
-  const [error, setError] = useState("");
+  const [errors, setErrors] = useState({});
+  const [submitError, setSubmitError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const formId = useId();
+  const labelRef = useRef(null);
+  const objectRef = useRef(null);
+  const columnRefs = useRef([]);
+  const rangeFromRef = useRef(null);
+  const rangeToRef = useRef(null);
+  const errorSummaryRef = useRef(null);
 
-  const setField = (key, value) => setForm((f) => ({ ...f, [key]: value }));
+  const setField = (key, value) => {
+    setForm((f) => ({ ...f, [key]: value }));
+    setErrors((current) => {
+      const hasValue = String(value ?? "").trim() !== "";
+      const clearsRangeError =
+        (key === "rangeColumn" && !hasValue && current.range) ||
+        (key === "rangeFrom" && hasValue && current.range?.field === "from") ||
+        (key === "rangeTo" && hasValue && current.range?.field === "to");
+      const clearsFieldError = current[key] && hasValue;
+      if (!clearsFieldError && !clearsRangeError) return current;
+      const next = { ...current };
+      if (clearsFieldError) delete next[key];
+      if (clearsRangeError) delete next.range;
+      return next;
+    });
+    setSubmitError("");
+  };
 
-  const setColumn = (idx, key, value) =>
-    setForm((f) => ({
-      ...f,
-      columns: f.columns.map((c, i) => (i === idx ? { ...c, [key]: value } : c))
-    }));
+  const setColumn = (idx, key, value) => {
+    setForm((f) => {
+      const previousName = f.columns[idx]?.name;
+      const updates =
+        key === "name" && f.rangeColumn !== "" && previousName === f.rangeColumn
+          ? { rangeColumn: String(value), rangeFrom: f.rangeFrom, rangeTo: f.rangeTo }
+          : {};
+      return {
+        ...f,
+        ...updates,
+        columns: f.columns.map((c, i) => (i === idx ? { ...c, [key]: value } : c))
+      };
+    });
+    setErrors((current) => {
+      if (
+        !String(value ?? "").trim() ||
+        !current.columns ||
+        current.columns.index !== idx ||
+        current.columns.field !== key
+      ) return current;
+      const next = { ...current };
+      delete next.columns;
+      return next;
+    });
+    setSubmitError("");
+  };
 
   const addColumn = () => setForm((f) => ({ ...f, columns: [...f.columns, { ...EMPTY_COLUMN }] }));
 
-  const removeColumn = (idx) =>
+  const removeColumn = (idx) => {
     setForm((f) => ({
       ...f,
       columns: f.columns.filter((_, i) => i !== idx),
@@ -64,16 +110,60 @@ export default function ArchiveRegisterForm({ onRegister, onCancel }) {
         ? { rangeColumn: "", rangeFrom: "", rangeTo: "" }
         : {})
     }));
+    setErrors((current) => {
+      if (!current.columns) return current;
+      const next = { ...current };
+      delete next.columns;
+      return next;
+    });
+  };
 
   const typeDef = SOURCE_TYPES.find((t) => t.value === form.source) ?? SOURCE_TYPES[0];
   const validColumns = form.columns.filter((c) => c.name.trim() && c.type.trim());
 
-  const handleSubmit = () => {
-    if (!form.label.trim()) return setError("데이터 소스명을 입력하세요.");
-    if (!form.object.trim()) return setError(`데이터 객체명을 입력하세요. (예: ${typeDef.prefix}new_dataset)`);
-    if (validColumns.length === 0) return setError("컬럼을 1개 이상 정의하세요 (이름·타입 필수).");
-    if (form.rangeColumn && (form.rangeFrom === "" || form.rangeTo === ""))
-      return setError("수집 범위를 설정하려면 from~to 값을 모두 입력하세요.");
+  const validate = () => {
+    const next = {};
+    if (!form.label.trim()) next.label = "데이터 소스명을 입력하세요.";
+    if (!form.object.trim()) next.object = `데이터 객체명을 입력하세요. 예: ${typeDef.prefix}new_dataset`;
+    const incompleteColumn = form.columns.findIndex(
+      (column) => !column.name.trim() || !column.type.trim()
+    );
+    if (validColumns.length === 0 || incompleteColumn >= 0) {
+      const field = !form.columns[Math.max(0, incompleteColumn)]?.name.trim() ? "name" : "type";
+      next.columns = {
+        index: Math.max(0, incompleteColumn),
+        field,
+        message: `컬럼 ${Math.max(0, incompleteColumn) + 1}의 ${field === "name" ? "이름" : "타입"}을 입력하세요.`
+      };
+    }
+    if (form.rangeColumn && !String(form.rangeFrom).trim()) {
+      next.range = { field: "from", message: "수집 범위의 시작값을 입력하세요." };
+    } else if (form.rangeColumn && !String(form.rangeTo).trim()) {
+      next.range = { field: "to", message: "수집 범위의 종료값을 입력하세요." };
+    }
+    return next;
+  };
+
+  const focusFirstError = (nextErrors) => {
+    const first = [
+      ["label", labelRef.current],
+      ["object", objectRef.current],
+      ["columns", nextErrors.columns ? columnRefs.current[nextErrors.columns.index]?.[nextErrors.columns.field] : null],
+      ["range", nextErrors.range?.field === "to" ? rangeToRef.current : rangeFromRef.current]
+    ].find(([key]) => nextErrors[key]);
+    requestAnimationFrame(() => first?.[1]?.focus());
+  };
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    if (submitting) return;
+    const nextErrors = validate();
+    if (Object.keys(nextErrors).length > 0) {
+      setErrors(nextErrors);
+      setSubmitError("");
+      focusFirstError(nextErrors);
+      return;
+    }
 
     const id = `ds_user_${Date.now().toString(36)}`;
     const schema = {
@@ -92,7 +182,7 @@ export default function ArchiveRegisterForm({ onRegister, onCancel }) {
       ...(form.rangeColumn
         ? {
             range: {
-              column: form.rangeColumn,
+              column: form.rangeColumn.trim(),
               from: coerce(form.rangeFrom.trim()),
               to: coerce(form.rangeTo.trim())
             }
@@ -109,13 +199,30 @@ export default function ArchiveRegisterForm({ onRegister, onCancel }) {
       })),
       userRegistered: true
     };
-    setError("");
-    setForm(INITIAL_FORM);
-    onRegister(schema);
+    setErrors({});
+    setSubmitError("");
+    setSubmitting(true);
+    onSubmittingChange?.(true);
+    try {
+      await onRegister(schema);
+      setForm({ ...INITIAL_FORM, columns: [{ ...EMPTY_COLUMN }] });
+    } catch (error) {
+      setSubmitError(error?.message || "등록하지 못했습니다. 입력값을 확인한 뒤 다시 시도하세요.");
+      requestAnimationFrame(() => errorSummaryRef.current?.focus());
+    } finally {
+      setSubmitting(false);
+      onSubmittingChange?.(false);
+    }
   };
 
   return (
-    <div className="archive-reg-form" role="form" aria-label="신규 아카이브 등록">
+    <form
+      className="archive-reg-form"
+      aria-label="신규 아카이브 등록"
+      aria-busy={submitting}
+      onSubmit={handleSubmit}
+      noValidate
+    >
       <div className="archive-reg-head">
         <i className="fa-solid fa-box-archive" aria-hidden="true"></i> 신규 아카이브 등록 —
         메타데이터를 정의하면 적재(아카이빙) 후 즉시 가상화 API 대상이 됩니다
@@ -125,12 +232,21 @@ export default function ArchiveRegisterForm({ onRegister, onCancel }) {
         <label className="field-inline">
           <span>소스명 *</span>
           <input
+            ref={labelRef}
+            id={`${formId}-label`}
             className="input-control"
             placeholder="예: 빈집 실태조사"
             value={form.label}
             onChange={(e) => setField("label", e.target.value)}
+            onBlur={() => {
+              if (!form.label.trim()) setErrors((current) => ({ ...current, label: "데이터 소스명을 입력하세요." }));
+            }}
+            required
+            aria-invalid={Boolean(errors.label)}
+            aria-describedby={errors.label ? `${formId}-label-error` : undefined}
           />
         </label>
+        {errors.label && <span id={`${formId}-label-error`} className="field-error">{errors.label}</span>}
         <label className="field-inline">
           <span>저장소 유형 *</span>
           <select
@@ -148,12 +264,26 @@ export default function ArchiveRegisterForm({ onRegister, onCancel }) {
         <label className="field-inline">
           <span>데이터 객체 *</span>
           <input
+            ref={objectRef}
+            id={`${formId}-object`}
             className="input-control"
             placeholder={`예: ${typeDef.prefix}new_dataset`}
             value={form.object}
             onChange={(e) => setField("object", e.target.value)}
+            onBlur={() => {
+              if (!form.object.trim()) {
+                setErrors((current) => ({
+                  ...current,
+                  object: `데이터 객체명을 입력하세요. 예: ${typeDef.prefix}new_dataset`
+                }));
+              }
+            }}
+            required
+            aria-invalid={Boolean(errors.object)}
+            aria-describedby={errors.object ? `${formId}-object-error` : undefined}
           />
         </label>
+        {errors.object && <span id={`${formId}-object-error`} className="field-error">{errors.object}</span>}
         <label className="field-inline">
           <span>태그</span>
           <input
@@ -209,27 +339,67 @@ export default function ArchiveRegisterForm({ onRegister, onCancel }) {
       </div>
       {form.columns.map((col, idx) => (
         <div className="archive-reg-col-row" key={idx}>
-          <input
-            className="input-control"
-            placeholder="컬럼명 (예: house_id)"
-            value={col.name}
-            onChange={(e) => setColumn(idx, "name", e.target.value)}
-            aria-label={`컬럼 ${idx + 1} 이름`}
-          />
-          <input
-            className="input-control"
-            placeholder={typeDef.lang === "MQL" ? "타입 (예: String)" : "타입 (예: VARCHAR(10))"}
-            value={col.type}
-            onChange={(e) => setColumn(idx, "type", e.target.value)}
-            aria-label={`컬럼 ${idx + 1} 타입`}
-          />
-          <input
-            className="input-control"
-            placeholder="설명"
-            value={col.description}
-            onChange={(e) => setColumn(idx, "description", e.target.value)}
-            aria-label={`컬럼 ${idx + 1} 설명`}
-          />
+          <label className="archive-reg-field">
+            <span>컬럼 {idx + 1} 이름 *</span>
+            <input
+              ref={(node) => {
+                columnRefs.current[idx] = { ...(columnRefs.current[idx] ?? {}), name: node };
+              }}
+              className="input-control"
+              placeholder="예: house_id"
+              value={col.name}
+              onChange={(e) => setColumn(idx, "name", e.target.value)}
+              required
+              onBlur={() => {
+                if (!col.name.trim()) {
+                  setErrors((current) => ({
+                    ...current,
+                    columns: { index: idx, field: "name", message: `컬럼 ${idx + 1}의 이름을 입력하세요.` }
+                  }));
+                }
+              }}
+              aria-invalid={errors.columns?.index === idx && errors.columns.field === "name"}
+              aria-describedby={errors.columns?.index === idx && errors.columns.field === "name" ? `${formId}-column-${idx}-name-error` : undefined}
+            />
+            {errors.columns?.index === idx && errors.columns.field === "name" && (
+              <span id={`${formId}-column-${idx}-name-error`} className="field-error">{errors.columns.message}</span>
+            )}
+          </label>
+          <label className="archive-reg-field">
+            <span>컬럼 {idx + 1} 타입 *</span>
+            <input
+              ref={(node) => {
+                columnRefs.current[idx] = { ...(columnRefs.current[idx] ?? {}), type: node };
+              }}
+              className="input-control"
+              placeholder={typeDef.lang === "MQL" ? "예: String" : "예: VARCHAR(10)"}
+              value={col.type}
+              onChange={(e) => setColumn(idx, "type", e.target.value)}
+              required
+              onBlur={() => {
+                if (!col.type.trim()) {
+                  setErrors((current) => ({
+                    ...current,
+                    columns: { index: idx, field: "type", message: `컬럼 ${idx + 1}의 타입을 입력하세요.` }
+                  }));
+                }
+              }}
+              aria-invalid={errors.columns?.index === idx && errors.columns.field === "type"}
+              aria-describedby={errors.columns?.index === idx && errors.columns.field === "type" ? `${formId}-column-${idx}-type-error` : undefined}
+            />
+            {errors.columns?.index === idx && errors.columns.field === "type" && (
+              <span id={`${formId}-column-${idx}-type-error`} className="field-error">{errors.columns.message}</span>
+            )}
+          </label>
+          <label className="archive-reg-field">
+            <span>컬럼 {idx + 1} 설명 (선택)</span>
+            <input
+              className="input-control"
+              placeholder="컬럼 설명"
+              value={col.description}
+              onChange={(e) => setColumn(idx, "description", e.target.value)}
+            />
+          </label>
           <button
             type="button"
             className="btn btn-secondary archive-reg-col-del"
@@ -250,51 +420,89 @@ export default function ArchiveRegisterForm({ onRegister, onCancel }) {
         수집 범위 <span>(선택 — Adapter가 쿼리에 자동 주입하는 적재 스코프)</span>
       </div>
       <div className="archive-reg-range-row">
-        <select
-          className="select-control"
-          value={form.rangeColumn}
-          onChange={(e) => setField("rangeColumn", e.target.value)}
-          aria-label="범위 기준 컬럼"
-        >
-          <option value="">범위 없음</option>
-          {validColumns.map((c) => (
-            <option key={c.name} value={c.name}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-        <input
-          className="input-control"
-          placeholder="from (예: 20240101)"
-          value={form.rangeFrom}
-          onChange={(e) => setField("rangeFrom", e.target.value)}
-          disabled={!form.rangeColumn}
-          aria-label="범위 시작값"
-        />
-        <input
-          className="input-control"
-          placeholder="to (예: 20261231)"
-          value={form.rangeTo}
-          onChange={(e) => setField("rangeTo", e.target.value)}
-          disabled={!form.rangeColumn}
-          aria-label="범위 종료값"
-        />
+        <label className="archive-reg-field">
+          <span>기준 컬럼 (선택)</span>
+          <select
+            className="select-control"
+            value={form.rangeColumn}
+            onChange={(e) => setField("rangeColumn", e.target.value)}
+          >
+            <option value="">범위 없음</option>
+            {validColumns.map((c) => (
+              <option key={c.name} value={c.name}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="archive-reg-field">
+          <span>시작값 {form.rangeColumn ? "*" : "(선택)"}</span>
+          <input
+            ref={rangeFromRef}
+            className="input-control"
+            placeholder="예: 20240101"
+            value={form.rangeFrom}
+            onChange={(e) => setField("rangeFrom", e.target.value)}
+            onBlur={() => {
+              if (form.rangeColumn && !String(form.rangeFrom).trim()) {
+                setErrors((current) => ({
+                  ...current,
+                  range: { field: "from", message: "수집 범위의 시작값을 입력하세요." }
+                }));
+              }
+            }}
+            disabled={!form.rangeColumn}
+            required={Boolean(form.rangeColumn)}
+            aria-invalid={errors.range?.field === "from"}
+            aria-describedby={errors.range?.field === "from" ? `${formId}-range-from-error` : undefined}
+          />
+          {errors.range?.field === "from" && (
+            <span id={`${formId}-range-from-error`} className="field-error">{errors.range.message}</span>
+          )}
+        </label>
+        <label className="archive-reg-field">
+          <span>종료값 {form.rangeColumn ? "*" : "(선택)"}</span>
+          <input
+            ref={rangeToRef}
+            className="input-control"
+            placeholder="예: 20261231"
+            value={form.rangeTo}
+            onChange={(e) => setField("rangeTo", e.target.value)}
+            onBlur={() => {
+              if (form.rangeColumn && !String(form.rangeTo).trim()) {
+                setErrors((current) => ({
+                  ...current,
+                  range: { field: "to", message: "수집 범위의 종료값을 입력하세요." }
+                }));
+              }
+            }}
+            disabled={!form.rangeColumn}
+            required={Boolean(form.rangeColumn)}
+            aria-invalid={errors.range?.field === "to"}
+            aria-describedby={errors.range?.field === "to" ? `${formId}-range-to-error` : undefined}
+          />
+          {errors.range?.field === "to" && (
+            <span id={`${formId}-range-to-error`} className="field-error">{errors.range.message}</span>
+          )}
+        </label>
       </div>
 
-      {error && (
-        <p className="archive-reg-error" role="alert">
-          <i className="fa-solid fa-circle-exclamation" aria-hidden="true"></i> {error}
+      {(Object.keys(errors).length > 0 || submitError) && (
+        <p ref={errorSummaryRef} className="archive-reg-error" role="alert" tabIndex="-1">
+          <i className="fa-solid fa-circle-exclamation" aria-hidden="true"></i>{" "}
+          {submitError || "입력한 내용을 확인해 주세요. 오류가 있는 첫 번째 항목으로 이동했습니다."}
         </p>
       )}
 
       <div className="archive-reg-actions">
-        <button type="button" className="btn btn-secondary" onClick={onCancel}>
+        <button type="button" className="btn btn-secondary" onClick={onCancel} disabled={submitting}>
           취소
         </button>
-        <button type="button" className="btn btn-primary" onClick={handleSubmit}>
-          <i className="fa-solid fa-tags" aria-hidden="true"></i> 메타데이터 등록 · 적재
+        <button type="submit" className="btn btn-primary" disabled={submitting}>
+          <i className={`fa-solid ${submitting ? "fa-spinner fa-spin" : "fa-tags"}`} aria-hidden="true"></i>{" "}
+          {submitting ? "등록 중" : "메타데이터 등록 · 적재"}
         </button>
       </div>
-    </div>
+    </form>
   );
 }

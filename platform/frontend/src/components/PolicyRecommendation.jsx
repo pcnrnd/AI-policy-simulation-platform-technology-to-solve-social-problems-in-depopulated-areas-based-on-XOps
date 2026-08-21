@@ -82,17 +82,18 @@ export default function PolicyRecommendation({ region, ranked }) {
 
       <div className="table-container">
         <table>
+          <caption className="sr-only">RICE 방식으로 산정한 맞춤 정책 추천 순위와 구성 점수</caption>
           <thead>
             <tr>
-              <th>순위</th>
-              <th>정책 전략</th>
-              <th>대응 유형</th>
-              <th className="cell-num">Reach</th>
-              <th className="cell-num">Impact(보정)</th>
-              <th className="cell-num">Confidence</th>
-              <th className="cell-num">Effort</th>
-              <th className="cell-num">추천 점수</th>
-              <th>추천</th>
+              <th scope="col">순위</th>
+              <th scope="col">정책 전략</th>
+              <th scope="col">대응 유형</th>
+              <th scope="col" className="cell-num">Reach</th>
+              <th scope="col" className="cell-num">Impact(보정)</th>
+              <th scope="col" className="cell-num">Confidence</th>
+              <th scope="col" className="cell-num">Effort</th>
+              <th scope="col" className="cell-num">추천 점수</th>
+              <th scope="col">추천</th>
             </tr>
           </thead>
           <tbody>

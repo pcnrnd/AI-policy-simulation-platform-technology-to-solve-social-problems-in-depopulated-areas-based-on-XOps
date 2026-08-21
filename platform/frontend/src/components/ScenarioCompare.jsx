@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Line } from "react-chartjs-2";
 import Card from "./Card.jsx";
+import ConfirmDialog from "./ConfirmDialog.jsx";
 import { useChartTheme } from "../hooks/useChartTheme.js";
 import { YEAR_LABELS, computeTrends, computeScenarioTrend, budgetToFactor, controlBoostOf } from "../lib/simulation.js";
 
@@ -21,8 +22,10 @@ function loadScenarios() {
 function persistScenarios(scenarios) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(scenarios));
+    return true;
   } catch {
     // 저장공간 초과 등 — 비교 기능은 메모리 상태로 계속 동작
+    return false;
   }
 }
 
@@ -33,6 +36,8 @@ export default function ScenarioCompare({ region, snapshot, onApply, addConsoleL
   const [scenarios, setScenarios] = useState(loadScenarios);
   const [name, setName] = useState("");
   const [compared, setCompared] = useState(() => new Set());
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [saveFeedback, setSaveFeedback] = useState(null);
 
   const regionScenarios = scenarios.filter((s) => s.regionId === region.id);
 
@@ -44,12 +49,15 @@ export default function ScenarioCompare({ region, snapshot, onApply, addConsoleL
 
   const updateScenarios = (next) => {
     setScenarios(next);
-    persistScenarios(next);
+    return persistScenarios(next);
   };
 
-  const handleSave = () => {
+  const handleSave = (event) => {
+    event?.preventDefault();
     if (regionScenarios.length >= MAX_PER_REGION) {
-      addConsoleLog(`WARN: 시나리오는 지자체당 최대 ${MAX_PER_REGION}개까지 저장됩니다.`, false, true);
+      const message = `시나리오는 지자체당 최대 ${MAX_PER_REGION}개까지 저장됩니다. 기존 시나리오를 삭제한 뒤 다시 시도하세요.`;
+      setSaveFeedback({ tone: "error", message });
+      addConsoleLog(`WARN: ${message}`);
       return;
     }
     const label = name.trim() || `시나리오 ${regionScenarios.length + 1}`;
@@ -60,9 +68,15 @@ export default function ScenarioCompare({ region, snapshot, onApply, addConsoleL
       createdAt: new Date().toISOString(),
       ...snapshot
     };
-    updateScenarios([...scenarios, scenario]);
+    const persisted = updateScenarios([...scenarios, scenario]);
     setCompared((prev) => new Set(prev).add(scenario.id));
     setName("");
+    setSaveFeedback({
+      tone: persisted ? "success" : "error",
+      message: persisted
+        ? `‘${label}’ 시나리오를 저장했습니다.`
+        : `‘${label}’ 시나리오는 현재 세션에만 유지됩니다. 브라우저 저장공간을 확인하세요.`
+    });
     addConsoleLog(
       `INFO: 시나리오 '${label}' 저장 — 예산 ${scenario.budgetTotal.toLocaleString()}억, ` +
         `복지 ${scenario.welfareWeight}/산업 ${scenario.industryWeight}/주거 ${scenario.housingWeight}.`
@@ -70,11 +84,31 @@ export default function ScenarioCompare({ region, snapshot, onApply, addConsoleL
   };
 
   const handleDelete = (id) => {
-    updateScenarios(scenarios.filter((s) => s.id !== id));
+    const persisted = updateScenarios(scenarios.filter((s) => s.id !== id));
     setCompared((prev) => {
       const next = new Set(prev);
       next.delete(id);
       return next;
+    });
+    const deleted = scenarios.find((scenario) => scenario.id === id);
+    if (deleted) {
+      addConsoleLog(`WARN: 시나리오 '${deleted.name}' 삭제.`);
+      setSaveFeedback({
+        tone: persisted ? "success" : "error",
+        message: persisted
+          ? `‘${deleted.name}’ 시나리오를 삭제했습니다.`
+          : `‘${deleted.name}’은 현재 화면에서만 삭제됐습니다. 브라우저 저장소를 갱신하지 못해 새로고침하면 다시 나타날 수 있습니다.`
+      });
+    }
+    setDeleteTarget(null);
+  };
+
+  const requestDelete = (scenario, rowIndex) => {
+    const next = regionScenarios[rowIndex + 1] ?? regionScenarios[rowIndex - 1];
+    setDeleteTarget({
+      scenario,
+      nextFocusSelector: next ? `[data-scenario-delete="${next.id}"]` : "#scenario-comparison-title",
+      fallbackFocusSelector: "#scenario-comparison-title"
     });
   };
 
@@ -157,33 +191,51 @@ export default function ScenarioCompare({ region, snapshot, onApply, addConsoleL
     return { scenario, finalPop, growth };
   });
   const currentFinal = currentTrend.simTrend[9];
+  const baseFinal = currentTrend.baseTrend[9];
+  const currentVsBase = currentFinal - baseFinal;
   const currentGrowth = (((currentFinal - region.population) / region.population) * 100).toFixed(1);
 
   return (
     <div style={{ marginTop: 24 }}>
-      <Card title={`시나리오 저장·비교 — ${region.name}`} icon="fa-code-compare">
+      <Card
+        title={`시나리오 저장·비교 — ${region.name}`}
+        titleId="scenario-comparison-title"
+        titleTabIndex={-1}
+        icon="fa-code-compare"
+      >
         <p style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 14 }}>
           현재 예산·배분·시설 변수 조합을 시나리오로 저장하고, 10개년 인구 추이를 나란히 비교합니다.
-          저장된 시나리오는 브라우저에 보존됩니다.
+          저장된 시나리오는 브라우저 저장소가 허용된 환경에서 보존됩니다.
         </p>
 
         {/* 저장 입력 */}
-        <div className="scenario-save-row">
-          <input
-            className="input-control"
-            placeholder={`시나리오 이름 (기본: 시나리오 ${regionScenarios.length + 1})`}
-            value={name}
-            maxLength={30}
-            onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") handleSave();
-            }}
-            aria-label="시나리오 이름"
-          />
-          <button type="button" className="btn btn-primary" onClick={handleSave}>
-            <i className="fa-solid fa-floppy-disk"></i> 현재 설정 저장
+        <form className="scenario-save-row" onSubmit={handleSave}>
+          <label className="scenario-name-field">
+            <span>시나리오 이름 (선택)</span>
+            <input
+              className="input-control"
+              placeholder={`비워두면 시나리오 ${regionScenarios.length + 1}`}
+              value={name}
+              maxLength={30}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </label>
+          <button type="submit" className="btn btn-primary" disabled={regionScenarios.length >= MAX_PER_REGION}>
+            <i className="fa-solid fa-floppy-disk" aria-hidden="true"></i> 현재 설정 저장
           </button>
-        </div>
+        </form>
+        {saveFeedback && (
+          <p
+            className={`async-feedback is-${saveFeedback.tone}`}
+            role={saveFeedback.tone === "error" ? "alert" : "status"}
+            aria-live="polite"
+          >
+            {saveFeedback.message}
+          </p>
+        )}
+        {regionScenarios.length >= MAX_PER_REGION && (
+          <p className="field-error">최대 {MAX_PER_REGION}개를 저장했습니다. 새로 저장하려면 기존 시나리오를 삭제하세요.</p>
+        )}
 
         {regionScenarios.length === 0 ? (
           <div className="scenario-empty">
@@ -196,19 +248,27 @@ export default function ScenarioCompare({ region, snapshot, onApply, addConsoleL
             <div style={{ position: "relative", height: 220, width: "100%" }}>
               <Line data={chartData} options={chartOpts} />
             </div>
+            <p className="chart-summary">
+              자연감소 기준은 10년 후 {baseFinal.toLocaleString()}명이며, 현재 설정은 {currentFinal.toLocaleString()}명
+              ({parseFloat(currentGrowth) > 0 ? "+" : ""}{currentGrowth}%)으로 기준 대비 {currentVsBase >= 0 ? "+" : ""}{currentVsBase.toLocaleString()}명입니다.
+              {scenarioTrends.length > 0
+                ? ` 비교 중인 저장 시나리오 ${scenarioTrends.length}개의 연도별 추이는 차트와 아래 요약표에서 확인할 수 있습니다.`
+                : " 비교할 저장 시나리오를 선택하면 추이가 함께 표시됩니다."}
+            </p>
 
             {/* 요약 테이블 */}
             <div className="table-container" style={{ marginTop: 14 }}>
-              <table>
+              <table id="scenario-comparison-table" tabIndex="-1">
+                <caption className="sr-only">현재 설정과 저장한 인구 예측 시나리오 비교</caption>
                 <thead>
                   <tr>
-                    <th>비교</th>
-                    <th>시나리오</th>
-                    <th style={{ textAlign: "right" }}>예산</th>
-                    <th style={{ textAlign: "right" }}>복지/산업/주거</th>
-                    <th style={{ textAlign: "right" }}>10년 후 인구</th>
-                    <th style={{ textAlign: "right" }}>증감률</th>
-                    <th style={{ textAlign: "right" }}>동작</th>
+                    <th scope="col">비교</th>
+                    <th scope="col">시나리오</th>
+                    <th scope="col" className="cell-num">예산</th>
+                    <th scope="col" className="cell-num">복지/산업/주거</th>
+                    <th scope="col" className="cell-num">10년 후 인구</th>
+                    <th scope="col" className="cell-num">증감률</th>
+                    <th scope="col" className="cell-actions">동작</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -219,21 +279,20 @@ export default function ScenarioCompare({ region, snapshot, onApply, addConsoleL
                     <td>
                       <strong>현재 설정</strong>
                     </td>
-                    <td style={{ textAlign: "right" }}>{snapshot.budgetTotal.toLocaleString()}억</td>
-                    <td style={{ textAlign: "right" }}>
+                    <td className="cell-num">{snapshot.budgetTotal.toLocaleString()}억</td>
+                    <td className="cell-num">
                       {snapshot.welfareWeight}/{snapshot.industryWeight}/{snapshot.housingWeight}
                     </td>
-                    <td style={{ textAlign: "right" }}>{currentFinal.toLocaleString()}명</td>
+                    <td className="cell-num">{currentFinal.toLocaleString()}명</td>
                     <td
-                      style={{ textAlign: "right" }}
-                      className={parseFloat(currentGrowth) >= 0 ? "trend-up" : "trend-down"}
+                      className={`cell-num ${parseFloat(currentGrowth) >= 0 ? "trend-up" : "trend-down"}`}
                     >
                       {parseFloat(currentGrowth) > 0 ? "+" : ""}
                       {currentGrowth}%
                     </td>
-                    <td></td>
+                    <td className="cell-actions">–</td>
                   </tr>
-                  {regionScenarios.map((s) => {
+                  {regionScenarios.map((s, rowIndex) => {
                     const row = summaryRows.find((r) => r.scenario.id === s.id);
                     const colorIdx = comparedScenarios.findIndex((cs) => cs.id === s.id);
                     return (
@@ -258,33 +317,35 @@ export default function ScenarioCompare({ region, snapshot, onApply, addConsoleL
                           </label>
                         </td>
                         <td>{s.name}</td>
-                        <td style={{ textAlign: "right" }}>{s.budgetTotal.toLocaleString()}억</td>
-                        <td style={{ textAlign: "right" }}>
+                        <td className="cell-num">{s.budgetTotal.toLocaleString()}억</td>
+                        <td className="cell-num">
                           {s.welfareWeight}/{s.industryWeight}/{s.housingWeight}
                         </td>
-                        <td style={{ textAlign: "right" }}>
-                          {row ? `${row.finalPop.toLocaleString()}명` : "—"}
+                        <td className="cell-num">
+                          {row ? `${row.finalPop.toLocaleString()}명` : "–"}
                         </td>
                         <td
-                          style={{ textAlign: "right" }}
-                          className={row && parseFloat(row.growth) >= 0 ? "trend-up" : "trend-down"}
+                          className={`cell-num ${row && parseFloat(row.growth) >= 0 ? "trend-up" : "trend-down"}`}
                         >
-                          {row ? `${parseFloat(row.growth) > 0 ? "+" : ""}${row.growth}%` : "—"}
+                          {row ? `${parseFloat(row.growth) > 0 ? "+" : ""}${row.growth}%` : "–"}
                         </td>
-                        <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                        <td className="cell-actions">
                           <button
                             type="button"
                             className="btn btn-secondary scenario-mini-btn"
                             onClick={() => onApply(s)}
                             title="이 시나리오 변수를 슬라이더에 적용"
+                            aria-label={`${s.name} 시나리오 적용`}
                           >
                             <i className="fa-solid fa-arrow-rotate-left"></i> 적용
                           </button>
                           <button
                             type="button"
                             className="btn btn-secondary scenario-mini-btn scenario-del-btn"
-                            onClick={() => handleDelete(s.id)}
+                            onClick={() => requestDelete(s, rowIndex)}
+                            data-scenario-delete={s.id}
                             title="시나리오 삭제"
+                            aria-label={`${s.name} 시나리오 삭제`}
                           >
                             <i className="fa-solid fa-trash-can"></i>
                           </button>
@@ -298,6 +359,16 @@ export default function ScenarioCompare({ region, snapshot, onApply, addConsoleL
           </div>
         )}
       </Card>
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        title="저장한 시나리오를 삭제할까요?"
+        description={deleteTarget ? `${region.name}의 '${deleteTarget.scenario.name}' 시나리오를 브라우저 저장 목록에서 삭제합니다. 이 작업은 되돌릴 수 없습니다.` : ""}
+        confirmLabel="시나리오 삭제"
+        nextFocusSelector={deleteTarget?.nextFocusSelector}
+        fallbackFocusSelector={deleteTarget?.fallbackFocusSelector}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={() => handleDelete(deleteTarget.scenario.id)}
+      />
     </div>
   );
 }

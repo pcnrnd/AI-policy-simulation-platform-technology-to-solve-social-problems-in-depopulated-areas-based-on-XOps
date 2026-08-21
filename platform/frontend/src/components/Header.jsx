@@ -7,21 +7,35 @@ const SEVERITY_ICONS = {
   info: { icon: "fa-circle-info", color: "var(--accent-blue)" }
 };
 
-export default function Header({ title, onToggleSidebar, sidebarOpen }) {
+export default function Header({ title, onToggleSidebar, sidebarOpen, menuButtonRef }) {
   const { driftInjected, pipelineRunning, notifications, unreadCount, markNotificationsRead } =
     useAppState();
 
   // 알림 벨 드롭다운 — 열 때 읽음 처리, 외부 클릭 시 닫힘
   const [notifOpen, setNotifOpen] = useState(false);
   const bellRef = useRef(null);
+  const notifRef = useRef(null);
 
   useEffect(() => {
     if (!notifOpen) return undefined;
+    const frame = requestAnimationFrame(() => notifRef.current?.focus());
     const onOutside = (e) => {
       if (bellRef.current && !bellRef.current.contains(e.target)) setNotifOpen(false);
     };
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setNotifOpen(false);
+        bellRef.current?.querySelector("button")?.focus();
+      }
+    };
     document.addEventListener("mousedown", onOutside);
-    return () => document.removeEventListener("mousedown", onOutside);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      cancelAnimationFrame(frame);
+      document.removeEventListener("mousedown", onOutside);
+      document.removeEventListener("keydown", onKeyDown);
+    };
   }, [notifOpen]);
 
   const toggleNotif = () => {
@@ -37,14 +51,17 @@ export default function Header({ title, onToggleSidebar, sidebarOpen }) {
     statusClass = "system-status retraining";
     statusText = "자동 재학습 및 배포 파이프라인 수행 중...";
   } else if (driftInjected) {
+    // PSI 수치는 모니터 화면의 실계산값(/monitoring/drift)이 단독 표기한다.
+    // 헤더가 별도 상수를 표시하면 실제 판정값과 어긋나므로 정성 상태만 전달한다.
     statusClass = "system-status drift-alert";
-    statusText = "이상 현상: 데이터 드리프트 감지 (PSI: 0.384)";
+    statusText = "이상 현상: 데이터 드리프트 감지 (임계 초과)";
   }
 
   return (
     <header className="main-header">
       <div className="header-left">
         <button
+          ref={menuButtonRef}
           type="button"
           className="sidebar-toggle-btn"
           onClick={onToggleSidebar}
@@ -59,8 +76,8 @@ export default function Header({ title, onToggleSidebar, sidebarOpen }) {
         </div>
       </div>
       <div className="header-controls">
-        <div className={statusClass}>
-          <span className="status-indicator"></span>
+        <div className={statusClass} role="status" aria-live="polite">
+          <span className="status-indicator" aria-hidden="true"></span>
           <span>{statusText}</span>
         </div>
         <div className="alert-badge-container" ref={bellRef}>
@@ -68,14 +85,21 @@ export default function Header({ title, onToggleSidebar, sidebarOpen }) {
             className="alert-icon-btn"
             aria-label={`알림 (읽지 않음 ${unreadCount}건)`}
             aria-expanded={notifOpen}
-            aria-haspopup="true"
+            aria-controls="recent-notifications"
             onClick={toggleNotif}
           >
-            <i className="fa-solid fa-bell"></i>
+            <i className="fa-solid fa-bell" aria-hidden="true"></i>
           </button>
-          {unreadCount > 0 && <div className="alert-dot"></div>}
+          {unreadCount > 0 && <div className="alert-dot" aria-hidden="true"></div>}
           {notifOpen && (
-            <div className="notif-dropdown" role="region" aria-label="최근 알림">
+            <div
+              ref={notifRef}
+              id="recent-notifications"
+              className="notif-dropdown"
+              role="region"
+              aria-label="최근 알림"
+              tabIndex="-1"
+            >
               <div className="notif-head">최근 알림</div>
               {notifications.length === 0 ? (
                 <div className="notif-empty">새 알림이 없습니다.</div>

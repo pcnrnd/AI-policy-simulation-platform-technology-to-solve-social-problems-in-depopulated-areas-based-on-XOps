@@ -42,7 +42,7 @@ export default function FactorAnalysisStage({
           </div>
         </div>
 
-        <div className="pl-run-steps" aria-label="요인분석 진행 단계">
+        <div className="pl-run-steps" role="status" aria-live="polite" aria-label="요인분석 진행 단계">
           {steps.map((s, i) => {
             const stepNo = i + 1;
             const isDone = done || (running && stepIndex > stepNo);
@@ -53,11 +53,12 @@ export default function FactorAnalysisStage({
                 className={
                   "pl-run-step" + (isDone ? " is-done" : "") + (isActive ? " is-active" : "")
                 }
+                aria-current={isActive ? "step" : undefined}
               >
                 <i
                   className={
                     "fa-solid " +
-                    (isDone ? "fa-circle-check" : isActive ? "fa-spinner fa-spin" : s.icon)
+                    (isDone ? "fa-circle-check" : isActive ? "fa-circle-dot" : s.icon)
                   }
                   aria-hidden="true"
                 ></i>
@@ -75,15 +76,15 @@ export default function FactorAnalysisStage({
         >
           {running ? (
             <>
-              <i className="fa-solid fa-spinner fa-spin"></i> 분석 중...
+              <i className="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> 분석 중...
             </>
           ) : done ? (
             <>
-              <i className="fa-solid fa-rotate-right"></i> 재실행
+              <i className="fa-solid fa-rotate-right" aria-hidden="true"></i> 재실행
             </>
           ) : (
             <>
-              <i className="fa-solid fa-play"></i> 요인분석 실행
+              <i className="fa-solid fa-play" aria-hidden="true"></i> 요인분석 실행
             </>
           )}
         </button>

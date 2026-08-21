@@ -28,4 +28,9 @@ ChartJS.register(
   Filler
 );
 
+// CSS media query가 제어하지 못하는 canvas 애니메이션도 운영체제 모션 축소 설정을 따른다.
+if (typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+  ChartJS.defaults.animation = false;
+}
+
 export default ChartJS;

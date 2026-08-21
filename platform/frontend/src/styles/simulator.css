@@ -16,11 +16,10 @@
   width: 100%;
   height: 100%;
   border-radius: 12px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-control);
   z-index: 1;
   box-shadow: var(--glass-shadow);
 }
-
 /* 지도 위 플로팅 패널 */
 .map-float {
   position: absolute;
@@ -28,7 +27,7 @@
   background: var(--bg-card);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-control);
   border-radius: 12px;
   box-shadow: var(--glass-shadow);
   padding: 12px;
@@ -45,10 +44,14 @@
   align-items: center;
   gap: 8px;
   background: var(--input-bg);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-control);
   border-radius: 8px;
   padding: 6px 10px;
   color: var(--text-muted);
+}
+.map-float-search:focus-within {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 2px rgba(var(--accent-blue-rgb), 0.2);
 }
 .map-float-search input {
   flex: 1;
@@ -108,8 +111,8 @@
 }
 .map-theme-btn.active {
   color: #fff;
-  background: var(--accent-blue);
-  border-color: var(--accent-blue);
+  background: var(--accent-blue-strong);
+  border-color: var(--accent-blue-strong);
 }
 .map-theme-note {
   font-size: 10px;
@@ -119,7 +122,7 @@
 }
 .map-theme-note code {
   font-size: 10px;
-  color: var(--accent-purple);
+  color: var(--accent-purple-text);
 }
 
 .map-float-legend {
@@ -350,4 +353,35 @@
   border: 1px solid var(--border-color) !important;
   box-shadow: var(--glass-shadow) !important;
   border-radius: 8px !important;
+}
+
+.map-data-details {
+  margin-top: var(--space-s);
+  padding: var(--space-s) var(--space-m);
+  border: 1px solid var(--border-control);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.map-data-details summary {
+  color: var(--text-primary);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.map-data-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-l);
+  margin-top: var(--space-s);
+}
+
+.map-data-grid h4 { margin: 0 0 var(--space-s); }
+.map-data-grid ul { margin: 0; padding-left: var(--space-xl); }
+.map-data-grid li { margin-bottom: var(--space-xs); }
+
+@media (max-width: 768px) {
+  .map-data-grid { grid-template-columns: 1fr; }
 }

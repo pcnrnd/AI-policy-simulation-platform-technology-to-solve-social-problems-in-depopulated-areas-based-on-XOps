@@ -1,4 +1,4 @@
-/* 전자정부 UI·UX 가이드라인 대응 — 키보드 포커스 가시성, 모션 축소, 스크린리더 보조. */
+/* 공통 접근성 규칙 — 키보드 포커스 가시성, 모션 축소, 스크린리더 보조. */
 
 /* 1. 포커스 가시성: 키보드 탐색 시 명확한 포커스 링 (마우스 클릭에는 미표시) */
 a:focus-visible,
@@ -7,8 +7,10 @@ button:focus-visible,
 .nav-item:focus-visible,
 input:focus-visible,
 select:focus-visible,
-[role="tab"]:focus-visible {
-  outline: 2px solid var(--accent-blue);
+[role="tab"]:focus-visible,
+.card-title[tabindex]:focus-visible,
+.confirm-dialog:focus-visible {
+  outline: 2px solid var(--border-focus);
   outline-offset: 2px;
   border-radius: 6px;
 }

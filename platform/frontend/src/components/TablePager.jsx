@@ -1,10 +1,12 @@
-// 테이블 하단 페이저 — 행이 페이지 크기를 넘을 때만 렌더된다.
-// 사용처: Model Store, 재학습 파이프라인 카탈로그, 발급된 API 목록 등 증가형 목록.
-export default function TablePager({ page, totalPages, totalCount, onChange }) {
-  if (totalPages <= 1) return null;
+// 테이블 하단 페이저 — 한 페이지뿐이어도 전체 건수와 현재 표시 범위를 유지한다.
+export default function TablePager({ page, totalPages, totalCount, pageSize = 5, onChange }) {
+  const first = totalCount === 0 ? 0 : (page - 1) * pageSize + 1;
+  const last = Math.min(totalCount, page * pageSize);
   return (
-    <div className="table-pager">
-      <span className="table-pager-info">총 {totalCount}건</span>
+    <nav className="table-pager" aria-label="표 페이지 탐색">
+      <span className="table-pager-info" aria-live="polite">
+        총 {totalCount}건 · {first}–{last}건 표시
+      </span>
       <button
         type="button"
         className="btn btn-secondary"
@@ -15,7 +17,7 @@ export default function TablePager({ page, totalPages, totalCount, onChange }) {
       >
         <i className="fa-solid fa-chevron-left" aria-hidden="true"></i> 이전
       </button>
-      <span className="table-pager-page">
+      <span className="table-pager-page" aria-live="polite">
         {page} / {totalPages}
       </span>
       <button
@@ -28,7 +30,7 @@ export default function TablePager({ page, totalPages, totalCount, onChange }) {
       >
         다음 <i className="fa-solid fa-chevron-right" aria-hidden="true"></i>
       </button>
-    </div>
+    </nav>
   );
 }
 

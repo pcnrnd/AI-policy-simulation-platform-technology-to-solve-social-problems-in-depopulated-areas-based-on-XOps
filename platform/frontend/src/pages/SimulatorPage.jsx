@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Line, Scatter } from "react-chartjs-2";
 import L from "leaflet";
 import Card from "../components/Card.jsx";
@@ -12,6 +12,7 @@ import ScenarioCompare from "../components/ScenarioCompare.jsx";
 import { useAppState } from "../context/AppStateContext.jsx";
 import { useChartTheme } from "../hooks/useChartTheme.js";
 import { buildRegionGrid, densityColor, DENSITY_LEGEND } from "../lib/geo.js";
+import { getScrollBehavior, prefersReducedMotion } from "../lib/motion.js";
 import { rankStrategies } from "../constants/policyStrategies.js";
 import { YEAR_LABELS, computeTrends, budgetToFactor, controlBoostOf } from "../lib/simulation.js";
 
@@ -42,11 +43,36 @@ const MAP_THEMES = [
 // 기본: 야간 — 다크 톤이라 대시보드와 정합, 지명이 한글로 표기됨.
 const DEFAULT_THEME_ID = "vw-midnight";
 
-// 소멸위험지수(낮을수록 위험) → 등급/색상.
-function riskGrade(ri) {
-  if (ri < 0.15) return { label: "고위험", color: "var(--accent-red)", rgb: "239, 68, 68" };
-  if (ri < 0.18) return { label: "주의", color: "var(--accent-orange)", rgb: "245, 158, 11" };
-  return { label: "관찰", color: "var(--accent-teal)", rgb: "16, 185, 129" };
+// 소멸위험지수(낮을수록 위험) → 지도·목록·팝업에서 함께 쓰는 등급/색상.
+const RISK_GRADES = [
+  {
+    label: "고위험",
+    rangeLabel: "0.15 미만",
+    maxExclusive: 0.15,
+    color: "var(--accent-red)",
+    markerColor: "#ef4444",
+    rgb: "239, 68, 68"
+  },
+  {
+    label: "주의",
+    rangeLabel: "0.15 이상 0.18 미만",
+    maxExclusive: 0.18,
+    color: "var(--accent-orange)",
+    markerColor: "#f59e0b",
+    rgb: "245, 158, 11"
+  },
+  {
+    label: "관찰",
+    rangeLabel: "0.18 이상",
+    maxExclusive: Number.POSITIVE_INFINITY,
+    color: "var(--accent-teal)",
+    markerColor: "#10b981",
+    rgb: "16, 185, 129"
+  }
+];
+
+function riskGrade(riskIndex) {
+  return RISK_GRADES.find((grade) => riskIndex < grade.maxExclusive) ?? RISK_GRADES.at(-1);
 }
 
 export default function SimulatorPage() {
@@ -63,7 +89,7 @@ export default function SimulatorPage() {
     budgetTotal,
     setBudgetTotal,
     addConsoleLog,
-    setActiveTab
+    navigateToTab
   } = useAppState();
   const ct = useChartTheme();
 
@@ -106,7 +132,7 @@ export default function SimulatorPage() {
     // 결과는 STAGE ④에 렌더되므로 — 펼친 뒤 화면으로 이동해 즉시 보이게 한다
     setOpenStages((s) => ({ ...s, "stage-report": true }));
     setTimeout(() => {
-      document.getElementById("stage-report")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      document.getElementById("stage-report")?.scrollIntoView({ behavior: getScrollBehavior(), block: "start" });
     }, 60);
   };
 
@@ -132,6 +158,8 @@ export default function SimulatorPage() {
     }
     setAnalysisStatus("idle");
     setAnalysisStep(0);
+    setRecommendation(null);
+    setRecoSig("");
   }, [currentRegion]);
 
   // 분석 단계 진행 — 단계별 로그 출력 후 완료 시 STAGE② 자동 펼침
@@ -149,7 +177,9 @@ export default function SimulatorPage() {
       setOpenStages((s) => ({ ...s, "stage-result": true, "stage-sim": true }));
       // 분석 결과가 갱신된 STAGE ②로 이동해 완료가 즉시 보이게 한다
       setTimeout(() => {
-        document.getElementById("stage-result")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        document
+          .getElementById("stage-result")
+          ?.scrollIntoView({ behavior: getScrollBehavior(), block: "start" });
       }, 120);
       return undefined;
     }
@@ -166,6 +196,8 @@ export default function SimulatorPage() {
   const handleRunAnalysis = () => {
     if (analysisStatus === "running") return;
     setOpenStages((s) => ({ ...s, "stage-factor": true }));
+    setRecommendation(null);
+    setRecoSig("");
     setAnalysisStatus("running");
     setAnalysisStep(1);
     addConsoleLog(`INFO: ${currentRegion.name} 사회문제 요인분석 실행 — XAI·딥러닝·통계 융합 파이프라인 시작.`);
@@ -184,7 +216,7 @@ export default function SimulatorPage() {
   const jumpToStage = (id) => {
     setOpenStages((s) => ({ ...s, [id]: true }));
     setTimeout(() => {
-      document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      document.getElementById(id)?.scrollIntoView({ behavior: getScrollBehavior(), block: "start" });
     }, 60);
   };
 
@@ -208,7 +240,7 @@ export default function SimulatorPage() {
     return () => observer.disconnect();
   }, []);
 
-  // 지도 베이스 테마 (한글 VWorld 또는 CARTO 폴백)
+  // 지도 베이스 테마 (한글 지명을 제공하는 VWorld 타일)
   const [mapTheme, setMapTheme] = useState(DEFAULT_THEME_ID);
 
   const mapContainerRef = useRef(null);
@@ -254,7 +286,7 @@ export default function SimulatorPage() {
       });
       fMarker.bindPopup(`
         <div style="font-family: 'Inter', sans-serif;">
-          <h4 style="margin-bottom:6px; color: ${fColor};">${f.name}</h4>
+          <h4 style="margin-bottom:6px; color:var(--text-primary);"><span aria-hidden="true" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${fColor};margin-right:6px;"></span>${f.name}</h4>
           <p style="font-size:12px; margin: 2px 0;">시설 유형: <strong>${f.type}</strong></p>
           <p style="font-size:12px; margin: 2px 0;">${f.metric}</p>
           <p style="font-size:12px; margin: 2px 0;">운영 예산: <strong>${f.operating_budget}억</strong></p>
@@ -264,7 +296,8 @@ export default function SimulatorPage() {
     });
 
     appData.regions.forEach((region) => {
-      const color = region.riskIndex < 0.15 ? "#ef4444" : "#f59e0b";
+      const grade = riskGrade(region.riskIndex);
+      const color = grade.markerColor;
       const marker = L.circleMarker([region.lat, region.lng], {
         radius: 10,
         fillColor: color,
@@ -275,9 +308,9 @@ export default function SimulatorPage() {
       });
       marker.bindPopup(`
         <div style="font-family: 'Inter', sans-serif;">
-          <h4 style="margin-bottom:6px; color: ${color};">${region.name}</h4>
+          <h4 style="margin-bottom:6px; color:var(--text-primary);"><span aria-hidden="true" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${color};margin-right:6px;"></span>${region.name}</h4>
           <p style="font-size:12px; margin: 2px 0;">인구수: <strong>${region.population.toLocaleString()}명</strong></p>
-          <p style="font-size:12px; margin: 2px 0;">위험지수: <strong>${region.riskIndex}</strong> (소멸위기)</p>
+          <p style="font-size:12px; margin: 2px 0;">위험지수: <strong>${region.riskIndex}</strong> (${grade.label})</p>
           <p style="font-size:11px; margin-top:6px; color: var(--text-muted);">우측 패널에서 정책 변수를 설정하세요.</p>
         </div>
       `);
@@ -350,7 +383,11 @@ export default function SimulatorPage() {
 
   // 선택 지자체로 지도 이동
   useEffect(() => {
-    if (mapRef.current) mapRef.current.panTo([currentRegion.lat, currentRegion.lng]);
+    if (mapRef.current) {
+      mapRef.current.panTo([currentRegion.lat, currentRegion.lng], {
+        animate: !prefersReducedMotion()
+      });
+    }
   }, [currentRegion]);
 
   // STAGE③ 재펼침/잠금해제 시 지도 크기 재계산 (display:none·blur 해제 후 타일 깨짐 방지)
@@ -401,6 +438,8 @@ export default function SimulatorPage() {
   };
 
   const finalPop = simTrend[9] ?? currentRegion.population;
+  const baseFinalPop = baseTrend[9] ?? currentRegion.population;
+  const policyDifference = finalPop - baseFinalPop;
   const growthPercent = (((finalPop - currentRegion.population) / currentRegion.population) * 100).toFixed(1);
   const growthClass = parseFloat(growthPercent) >= 0 ? "trend-up" : "trend-down";
 
@@ -461,6 +500,9 @@ export default function SimulatorPage() {
   const filteredRegions = appData.regions.filter((r) =>
     r.name.toLowerCase().includes(searchText.trim().toLowerCase())
   );
+  const distributionRegions = [...(appData.benchmark_regions ?? []), ...appData.regions];
+  const riskRank = distributionRegions.filter((region) => region.riskIndex < currentRegion.riskIndex).length + 1;
+  const populationRank = distributionRegions.filter((region) => region.population > currentRegion.population).length + 1;
 
   const sim = currentRegion.case.simulation;
   const analysisDone = analysisStatus === "done";
@@ -469,7 +511,7 @@ export default function SimulatorPage() {
   // 스텝퍼 완료 표시: ①② 요인분석 완료, ③④ 정책 추천 도출 완료 기준
   const doneStages = [
     ...(analysisDone ? ["stage-factor", "stage-result"] : []),
-    ...(recommendation && !recoStale ? ["stage-sim", "stage-report"] : [])
+    ...(analysisDone && recommendation && !recoStale ? ["stage-sim", "stage-report"] : [])
   ];
 
   return (
@@ -545,8 +587,18 @@ export default function SimulatorPage() {
       {/* 공간정보 탐색: 전체 지도 + 플로팅 패널 + 우측 지자체 독 */}
       <div className="sim-map-zone">
         <div className="sim-map-wrap">
-          <div id="map" ref={mapContainerRef}></div>
-
+          <div
+            id="map"
+            ref={mapContainerRef}
+            role="region"
+            aria-label="VWorld 지자체 소멸위험·인구밀도·시설물 지도"
+            aria-describedby="map-accessible-summary"
+          ></div>
+          <p id="map-accessible-summary" className="sr-only">
+            현재 선택 지역은 {currentRegion.name}, 위험지수 {currentRegion.riskIndex}, {riskGrade(currentRegion.riskIndex).label}입니다.
+            위험등급 마커 {layerVis.markers ? "표시" : "숨김"}, 인구밀도 격자 {layerVis.grid ? "표시" : "숨김"},
+            시설물 {layerVis.facilities ? "표시" : "숨김"} 상태입니다. 지역은 오른쪽 지자체 목록에서 키보드로 선택할 수 있습니다.
+          </p>
           {/* 플로팅: 검색 + 레이어 + 범례 */}
           <div className="map-float map-float-tl">
             <div className="map-float-search">
@@ -591,6 +643,7 @@ export default function SimulatorPage() {
                   key={t.id}
                   type="button"
                   className={"map-theme-btn" + (mapTheme === t.id ? " active" : "")}
+                  aria-pressed={mapTheme === t.id}
                   onClick={() => setMapTheme(t.id)}
                 >
                   {t.label}
@@ -604,11 +657,21 @@ export default function SimulatorPage() {
               </p>
             )}
 
+            <div className="map-float-section-label">소멸위험지수</div>
+            <div className="map-float-legend" aria-label="소멸위험지수 등급 범례">
+              {RISK_GRADES.map((grade) => (
+                <span key={grade.label} className="legend-item">
+                  <span className="legend-swatch" style={{ backgroundColor: grade.markerColor }} aria-hidden="true"></span>
+                  {grade.label} ({grade.rangeLabel})
+                </span>
+              ))}
+            </div>
+
             <div className="map-float-section-label">인구밀도(㎢당)</div>
-            <div className="map-float-legend">
+            <div className="map-float-legend" aria-label="인구밀도 범례">
               {DENSITY_LEGEND.map((d) => (
                 <span key={d.label} className="legend-item">
-                  <span className="legend-swatch" style={{ backgroundColor: d.color }}></span>
+                  <span className="legend-swatch" style={{ backgroundColor: d.color }} aria-hidden="true"></span>
                   {d.label}
                 </span>
               ))}
@@ -633,7 +696,9 @@ export default function SimulatorPage() {
           <div className="sim-dock-section">
             <div className="sim-dock-title">
               <i className="fa-solid fa-list-ul"></i> 분석 대상 지자체
-              <span className="sim-dock-count">{filteredRegions.length}</span>
+              <span className="sim-dock-count" role="status" aria-live="polite">
+                검색 결과 {filteredRegions.length}건
+              </span>
             </div>
             <div className="sim-region-list">
               {filteredRegions.map((r) => {
@@ -645,6 +710,7 @@ export default function SimulatorPage() {
                     key={r.id}
                     className={"sim-region-item" + (active ? " active" : "")}
                     onClick={() => setCurrentRegion(r)}
+                    aria-pressed={active}
                   >
                     <div className="sim-region-head">
                       <strong>{r.name}</strong>
@@ -666,7 +732,12 @@ export default function SimulatorPage() {
                 );
               })}
               {filteredRegions.length === 0 && (
-                <div className="sim-region-empty">검색 결과가 없습니다.</div>
+                <div className="sim-region-empty">
+                  <p>“{searchText}” 검색 결과가 없습니다.</p>
+                  <button type="button" className="btn btn-secondary" onClick={() => setSearchText("")}>
+                    검색 해제
+                  </button>
+                </div>
               )}
             </div>
           </div>
@@ -737,6 +808,30 @@ export default function SimulatorPage() {
         </div>
       </div>
 
+      <details className="map-data-details">
+        <summary>지도 시설물·선택 지역 격자 정보</summary>
+        <div className="map-data-grid">
+          <section>
+            <h4>시설물</h4>
+            <ul>
+              {(appData.facilities ?? []).map((facility) => (
+                <li key={`${facility.name}-${facility.lat}-${facility.lng}`}>
+                  <strong>{facility.name}</strong> — {facility.type}, {facility.metric}, 운영 예산 {facility.operating_budget}억
+                </li>
+              ))}
+            </ul>
+          </section>
+          <section>
+            <h4>{currentRegion.name} 인구밀도 격자</h4>
+            <ul>
+              {buildRegionGrid(currentRegion).map((cell) => (
+                <li key={cell.gridId}>격자 {cell.gridId} — ㎢당 {cell.density}명</li>
+              ))}
+            </ul>
+          </section>
+        </div>
+      </details>
+
       {/* ── 분석: 인구 예측 + 전 지자체 분포 ── */}
       <div className="grid-cols-2" style={{ marginTop: 24 }}>
         <Card title="10개년 인구 예측 시뮬레이션 결과" icon="fa-wand-magic-sparkles">
@@ -760,6 +855,10 @@ export default function SimulatorPage() {
                   </div>
                 </div>
               </div>
+              <p className="chart-summary">
+                자연감소 기준 10년 후 {baseFinalPop.toLocaleString()}명, 정책 적용 시 {finalPop.toLocaleString()}명으로
+                기준 대비 {policyDifference >= 0 ? "+" : ""}{policyDifference.toLocaleString()}명입니다.
+              </p>
             </>
           ) : (
             <PendingData running={analysisRunning} text="[요인분석 실행] 후 인구 예측 결과가 표시됩니다." />
@@ -776,6 +875,11 @@ export default function SimulatorPage() {
               <div style={{ position: "relative", height: 220, width: "100%" }}>
                 <Scatter data={scatterData} options={scatterOpts} />
               </div>
+              <p className="chart-summary">
+                {currentRegion.name}은 위험지수 {currentRegion.riskIndex}, 인구 {currentRegion.population.toLocaleString()}명입니다.
+                비교 대상 {distributionRegions.length}곳 중 위험지수는 낮은 순 {riskRank}위(낮을수록 고위험), 인구는 큰 순 {populationRank}위입니다.
+                회색은 전국 비교군, 주황은 분석 대상, 파랑은 현재 선택 지역입니다.
+              </p>
             </>
           ) : (
             <PendingData running={analysisRunning} text="[요인분석 실행] 후 전 지자체 분포 분석이 표시됩니다." />
@@ -814,7 +918,7 @@ export default function SimulatorPage() {
         open={openStages["stage-report"]}
         onToggle={() => toggleStage("stage-report")}
       >
-        {recommendation ? (
+        {analysisDone && recommendation && !recoStale ? (
           <PolicyRecommendation region={currentRegion} ranked={recommendation} />
         ) : (
           <Card title="맞춤 정책 추천" icon="fa-lightbulb">
@@ -837,7 +941,7 @@ export default function SimulatorPage() {
               <p>{currentRegion.name} · {currentRegion.case.reportFocus}</p>
             </div>
           </div>
-          <button className="btn btn-primary" onClick={() => setActiveTab("tab-reporter")}>
+          <button className="btn btn-primary" onClick={() => navigateToTab("tab-reporter")}>
             보고서 생성으로 이동 <i className="fa-solid fa-arrow-right"></i>
           </button>
         </div>
@@ -847,21 +951,33 @@ export default function SimulatorPage() {
 }
 
 function Slider({ label, value, onChange, min = 0, max = 100, step = 1, unit = "%" }) {
+  const inputId = useId();
+  const rangeDescriptionId = `${inputId}-range-description`;
+
   return (
     <div className="slider-container">
       <div className="slider-header">
-        <span>{label}</span>
-        <span className="slider-val">
+        <label htmlFor={inputId}>{label}</label>
+        <output className="slider-val" htmlFor={inputId} aria-hidden="true">
           {value.toLocaleString()}
           {unit}
-        </span>
+        </output>
       </div>
+      <span id={rangeDescriptionId} className="sr-only">
+        조절 범위: {min.toLocaleString()}
+        {unit}부터 {max.toLocaleString()}
+        {unit}까지, {step.toLocaleString()}
+        {unit} 단위
+      </span>
       <input
+        id={inputId}
         type="range"
         min={min}
         max={max}
         step={step}
         value={value}
+        aria-valuetext={`${value.toLocaleString()}${unit}`}
+        aria-describedby={rangeDescriptionId}
         onChange={(e) => onChange(parseInt(e.target.value, 10))}
       />
     </div>
