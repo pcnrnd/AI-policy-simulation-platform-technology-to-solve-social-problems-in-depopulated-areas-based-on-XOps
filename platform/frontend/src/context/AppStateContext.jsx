@@ -8,6 +8,16 @@ const AppStateContext = createContext(null);
 
 const STEP_DELAY_MS = 2500;
 const ALERT_AUTO_DISMISS_MS = 5000;
+const MOCK_DATA_STORAGE_KEY = "decline-poc-mock-data";
+
+// 목업 데이터 전역 표시 여부. 저장값이 없거나 손상됐거나 스토리지를 못 쓰면 기본 노출(true).
+function readMockDataVisible() {
+  try {
+    return localStorage.getItem(MOCK_DATA_STORAGE_KEY) !== "false";
+  } catch {
+    return true;
+  }
+}
 
 const LOG_LEVEL_CLASS = {
   INFO: "log-info",
@@ -40,6 +50,9 @@ function normalizeConsoleMessage(message, isSystem = false, isWarning = false) {
 export function AppStateProvider({ children }) {
   const [ready] = useState(true);
   const [appData] = useState(mockData);
+
+  // 목업 데이터 노출 스위치 — 끄면 화면에서 숨기기만 하고 mock_data.json 원본은 그대로 둔다.
+  const [mockDataVisible, setMockDataVisible] = useState(readMockDataVisible);
 
   const [activeTab, setActiveTab] = useState("tab-overview");
   const [tabFocusRequest, setTabFocusRequest] = useState(0);
@@ -86,6 +99,16 @@ export function AppStateProvider({ children }) {
     setActiveTab(tabId);
     setTabFocusRequest((request) => request + 1);
   }, []);
+
+  const toggleMockDataVisible = useCallback(() => setMockDataVisible((prev) => !prev), []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(MOCK_DATA_STORAGE_KEY, String(mockDataVisible));
+    } catch {
+      // 저장공간 초과·프라이빗 모드 등 — 이번 세션 동안은 메모리 상태로 계속 동작
+    }
+  }, [mockDataVisible]);
 
   const addConsoleLog = useCallback((message, isSystem = false, isWarning = false) => {
     const now = new Date();
@@ -403,6 +426,8 @@ export function AppStateProvider({ children }) {
   const value = {
     ready,
     appData,
+    mockDataVisible,
+    toggleMockDataVisible,
     activeTab,
     setActiveTab,
     navigateToTab,
