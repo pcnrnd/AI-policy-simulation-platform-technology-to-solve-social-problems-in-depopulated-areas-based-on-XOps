@@ -1,0 +1,22 @@
+# docker compose -f cert-compose.yml up -d --build
+# 두 서비스는 같은 이미지(Dockerfile)를 쓰고 APP / PORT 환경변수로 앱을 고른다.
+services:
+  speed:
+    build: .
+    environment:
+      APP: chart_speed
+      PORT: "8505"
+      CHART_SLEEP_MS: "350"   # 응답속도 데모용 차트당 지연 — Firefox 기준 총 ~2초. 조절 가능
+    ports:
+      - "8505:8505"
+    volumes:
+      - .:/app
+  types:
+    build: .
+    environment:
+      APP: chart_type
+      PORT: "8506"
+    ports:
+      - "8506:8506"
+    volumes:
+      - .:/app
