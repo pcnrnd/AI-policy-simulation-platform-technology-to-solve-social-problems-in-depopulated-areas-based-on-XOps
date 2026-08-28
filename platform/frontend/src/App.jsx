@@ -30,7 +30,7 @@ export default function App() {
   const alertsRef = useRef(null);
   const contentBodyRef = useRef(null);
   const handledTabFocusRequestRef = useRef(0);
-  const { ready, activeTab, setActiveTab, tabFocusRequest } = useAppState();
+  const { ready, activeTab, setActiveTab, tabFocusRequest, mockDataVisible } = useAppState();
   const { width, resizing, startResize, resizeBy, resetWidth } = useResizableSidebar();
 
   const handleResizerKeyDown = useCallback(
@@ -188,7 +188,10 @@ export default function App() {
         onClick={closeSidebar}
         aria-hidden="true"
       />
-      <main ref={mainRef} className="main-content">
+      <main
+        ref={mainRef}
+        className={"main-content" + (mockDataVisible ? "" : " mock-values-hidden")}
+      >
         <Header
           title={activeLabel}
           onToggleSidebar={toggleSidebar}
@@ -214,7 +217,7 @@ export default function App() {
           })}
         </div>
       </main>
-      <div ref={alertsRef}>
+      <div ref={alertsRef} className={mockDataVisible ? "" : "mock-values-hidden"}>
         <AlertPopupContainer />
       </div>
     </div>
