@@ -180,3 +180,46 @@
   outline: 2px solid var(--border-focus);
   outline-offset: 2px;
 }
+
+/* ===== 목업 데이터 ON/OFF 스위치 ===== */
+/* 트랙·썸은 테마 스위치를 재사용하고, 아이콘 대신 상태 텍스트를 얹는다. */
+.mock-switch .theme-switch-track {
+  /* OFF: 썸이 왼쪽에 있으므로 상태 텍스트는 오른쪽 */
+  justify-content: flex-end;
+  background: var(--input-bg);
+}
+
+.mock-switch.is-on .theme-switch-track {
+  justify-content: flex-start;
+  background: rgba(var(--accent-teal-rgb), 0.22);
+}
+
+.mock-switch.is-on .theme-switch-thumb {
+  transform: translate(28px, -50%);
+}
+
+.mock-switch-state {
+  z-index: 1;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text-secondary);
+}
+
+.mock-switch.is-on .mock-switch-state {
+  color: var(--accent-teal);
+}
+
+/* 라이트 테마 보정 — 흰 팝오버 위에서 트랙 경계와 ON 상태 텍스트가 묻히는 문제.
+   OFF 트랙은 --input-bg 가 팝오버와 같은 흰색(1.00:1)이라 테두리가 유일한 경계인데,
+   기본 --border-color 는 1.23:1 에 그친다. ON 상태 텍스트도 --accent-teal(#047857)이
+   22% 틴트 트랙 위에서 3.99:1 로, 10px 텍스트 기준 4.5:1 에 못 미친다.
+   ON 의미색은 트랙 틴트가 계속 전달하므로 텍스트만 본문색으로 낮춘다.
+   다크 테마는 ON 텍스트가 4.85:1 로 이미 충족하므로 그대로 둔다. */
+[data-theme="light"] .mock-switch .theme-switch-track {
+  border-color: var(--border-control); /* 흰 팝오버 대비 4.76:1 */
+}
+
+[data-theme="light"] .mock-switch.is-on .mock-switch-state {
+  color: var(--text-primary); /* 22% 틴트 트랙 대비 12.98:1 */
+}
