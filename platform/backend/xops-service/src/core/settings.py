@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     # 영속화 SQLite 경로 — 사용자 등록 소스·모델 버전·재학습 실행 이력 (재시작·멀티워커 대비)
     db_path: Path = SERVICE_ROOT / "data" / "xops.db"
 
+    # 학습 아티팩트(모델 계수·실측 지표) 로컬 저장 경로 — db_path와 같은 data/ 볼륨
+    model_artifact_dir: Path = SERVICE_ROOT / "data" / "models"
+
     # 인증 (HS256) — 시크릿은 반드시 환경변수로 주입
     jwt_secret: str = _DEFAULT_JWT_SECRET
     jwt_algorithm: str = "HS256"
@@ -51,6 +54,15 @@ class Settings(BaseSettings):
     kl_threshold: float = 0.1
     zscore_threshold: float = 3.0
     iqr_multiplier: float = 1.5
+
+    # 인프로세스 재학습 — 하이퍼파라미터 그리드(lag × ridge lambda)와 라벨 임계
+    # lag: 관측 창 길이(기간). 최대값이 표본 창을 정하므로 후보 간 표본 집합이 고정된다.
+    train_lag_windows: list[int] = [2, 3]
+    train_ridge_lambdas: list[float] = [0.1, 1.0, 10.0]
+    # 분류 라벨 기준 — 기간당 감소율(%). 실제 임계는 이 값 × 예측 지평.
+    train_decline_threshold_pct: float = 1.2
+    # 모델별 지평이 지정되지 않았을 때 쓰는 기본 예측 지평(기간)
+    train_default_horizon: int = 1
 
     # 오케스트레이션 — 자동 롤백 임계 지연(ms)
     rollback_latency_ms: float = 200.0
