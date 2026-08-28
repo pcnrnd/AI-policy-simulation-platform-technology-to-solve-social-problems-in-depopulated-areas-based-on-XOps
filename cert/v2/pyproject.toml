@@ -1,0 +1,20 @@
+[project]
+name = "cert-v2"
+version = "2026.0.0"
+description = "2026 공인인증 — 데이터 시각화 처리 응답속도/유형 (Streamlit + DuckDB)"
+# duckdb 1.0.0 wheel 이 3.12 까지만 제공됨
+requires-python = ">=3.10,<3.13"
+dependencies = [
+    "streamlit==1.45.1",
+    "pandas==2.2.3",
+    "plotly==6.3.0",
+    "duckdb==1.0.0",
+]
+
+[dependency-groups]
+# 응답속도 실측(measure_speed.py)용 playwright + 데이터 점검 노트북(data_check_2026.ipynb)용 jupyterlab.
+# 설치 후 `uv run playwright install firefox chromium`
+dev = ["playwright>=1.61", "jupyterlab>=4"]
+
+[tool.uv]
+package = false  # 배포 대상은 스크립트 3개 — 패키지로 빌드/설치하지 않음
