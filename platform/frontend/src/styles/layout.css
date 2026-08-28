@@ -269,6 +269,70 @@ body.drawer-open {
   margin-bottom: var(--space-xxl);
 }
 
+/* 목업 표시 OFF: 화면 구조와 컨트롤은 유지하고 값이 담긴 출력 영역만 가린다. */
+.mock-values-hidden .content-body :where(
+  canvas,
+  tbody,
+  .stat-value,
+  .stat-unit,
+  .stat-footer,
+  .chart-summary,
+  .trend-up,
+  .trend-down,
+  .system-status,
+  .async-feedback,
+  .monitor-collected,
+  .monitor-state-slot,
+  .outlier-tag,
+  .gauge-status,
+  .run-meta,
+  .node-status,
+  .promotion-criteria,
+  .console-log,
+  .workflow-statusbar,
+  .schema-meta-line,
+  .catalog-result-status,
+  .catalog-selected-chip,
+  .token-line,
+  .sql-preview,
+  .api-response,
+  .built-resp-head,
+  .mock-data-output,
+  .pl-factor-list,
+  .pl-stat-baseline,
+  .pl-corr-grid,
+  .pl-diag-list,
+  .sim-dock-count,
+  .sim-region-item strong,
+  .sim-region-meta,
+  .grade-chip,
+  .slider-val,
+  .map-float-legend,
+  .map-data-details,
+  .reco-rank,
+  .reco-name,
+  .reco-cat,
+  .reco-score,
+  .report-preview-panel
+) {
+  visibility: hidden !important;
+}
+
+/* 베이스 지도와 조작 패널은 남기고, 목업 위치·격자·시설 레이어만 숨긴다. */
+.mock-values-hidden .content-body :where(
+  .leaflet-overlay-pane,
+  .leaflet-marker-pane,
+  .leaflet-tooltip-pane,
+  .leaflet-popup-pane
+) {
+  visibility: hidden !important;
+}
+
+/* 팝업 껍데기는 마운트 상태로 두되 목업 경보 값은 노출하지 않는다. */
+.mock-values-hidden .alert-popup {
+  visibility: hidden !important;
+}
+
 @media (max-width: 1200px) {
   .grid-cols-3 { grid-template-columns: repeat(2, 1fr); }
   .grid-details-split { grid-template-columns: 1fr; }
