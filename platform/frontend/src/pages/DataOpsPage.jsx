@@ -931,13 +931,13 @@ export default function DataOpsPage() {
         onToggle={() => toggleStage("dstep-schema")}
       >
         <Card>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+          <div className="mock-data-output" style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
             <h4 style={{ color: "var(--accent-blue)", margin: 0 }}>{target.label}</h4>
             <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
               {target.source} · {target.object}
             </span>
           </div>
-          <p style={{ fontSize: 12, color: "var(--text-secondary)", margin: "6px 0 10px", fontStyle: "italic" }}>
+          <p className="mock-data-output" style={{ fontSize: 12, color: "var(--text-secondary)", margin: "6px 0 10px", fontStyle: "italic" }}>
             {target.description}
           </p>
 
