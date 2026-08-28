@@ -557,7 +557,7 @@ export default function SimulatorPage() {
         <div className="pl-sim-frame">
           <div className="pl-sim-cell pl-sim-obj">
             <span className="pl-sim-tag">목적함수</span>
-            {sim.objective}
+            <span className="mock-data-output">{sim.objective}</span>
             {analysisDone && (
               <span className="pl-param-chip">
                 <i className="fa-solid fa-circle-check" aria-hidden="true"></i> STAGE ② 도출 파라미터 적용
@@ -567,19 +567,21 @@ export default function SimulatorPage() {
           <div className="pl-sim-vars">
             <div className="pl-sim-cell">
               <span className="pl-sim-tag">수요 (x)</span>
-              {sim.factors.demand}
+              <span className="mock-data-output">{sim.factors.demand}</span>
             </div>
             <div className="pl-sim-cell">
               <span className="pl-sim-tag">공급 (y)</span>
-              {sim.factors.supply}
+              <span className="mock-data-output">{sim.factors.supply}</span>
             </div>
             <div className="pl-sim-cell">
               <span className="pl-sim-tag">조절변수</span>
-              {sim.factors.adjust}
+              <span className="mock-data-output">{sim.factors.adjust}</span>
             </div>
             <div className="pl-sim-cell pl-sim-constraint">
               <span className="pl-sim-tag">제약요소</span>
-              {sim.constraint} · {budgetTotal.toLocaleString()}억
+              <span className="mock-data-output">
+                {sim.constraint} · {budgetTotal.toLocaleString()}억
+              </span>
             </div>
           </div>
         </div>
@@ -594,7 +596,7 @@ export default function SimulatorPage() {
             aria-label="VWorld 지자체 소멸위험·인구밀도·시설물 지도"
             aria-describedby="map-accessible-summary"
           ></div>
-          <p id="map-accessible-summary" className="sr-only">
+          <p id="map-accessible-summary" className="sr-only mock-data-output">
             현재 선택 지역은 {currentRegion.name}, 위험지수 {currentRegion.riskIndex}, {riskGrade(currentRegion.riskIndex).label}입니다.
             위험등급 마커 {layerVis.markers ? "표시" : "숨김"}, 인구밀도 격자 {layerVis.grid ? "표시" : "숨김"},
             시설물 {layerVis.facilities ? "표시" : "숨김"} 상태입니다. 지역은 오른쪽 지자체 목록에서 키보드로 선택할 수 있습니다.
@@ -843,7 +845,7 @@ export default function SimulatorPage() {
               <div style={{ display: "flex", justifyContent: "space-around", marginTop: 16, textAlign: "center" }}>
                 <div>
                   <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>시뮬레이션 인구 (10년 후)</div>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: "var(--accent-blue)" }}>
+                  <div className="mock-data-output" style={{ fontSize: 18, fontWeight: 700, color: "var(--accent-blue)" }}>
                     {finalPop.toLocaleString()}명
                   </div>
                 </div>
@@ -938,7 +940,7 @@ export default function SimulatorPage() {
             <i className="fa-solid fa-file-invoice" aria-hidden="true"></i>
             <div>
               <strong>AI 정책 보고서 생성 및 평가</strong>
-              <p>{currentRegion.name} · {currentRegion.case.reportFocus}</p>
+              <p className="mock-data-output">{currentRegion.name} · {currentRegion.case.reportFocus}</p>
             </div>
           </div>
           <button className="btn btn-primary" onClick={() => navigateToTab("tab-reporter")}>
