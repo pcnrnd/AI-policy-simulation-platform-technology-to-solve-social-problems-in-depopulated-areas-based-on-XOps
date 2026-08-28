@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useCallback, useRef, useEffect } f
 import mockData from "../assets/mock_data.json";
 import { PIPELINE_STEPS } from "../constants/pipeline.js";
 import { RETRAIN_PIPELINES, MODEL_STORE } from "../constants/models.js";
-import { apiSend } from "../lib/api.js";
+import { apiGet, apiSend } from "../lib/api.js";
 
 const AppStateContext = createContext(null);
 
@@ -45,6 +45,31 @@ function normalizeConsoleMessage(message, isSystem = false, isWarning = false) {
     level,
     type: LOG_LEVEL_CLASS[level]
   };
+}
+
+const formatYmd = (date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+
+// Model Store 승급 규칙 — 신규 버전을 운영으로 맨 앞에 등록하고 직전 운영 버전은 '이전'으로 강등한다.
+// 원본 배열은 건드리지 않고 새 배열을 반환한다. accuracy를 넘기지 않으면 직전 운영 지표에서 파생한다.
+function promoteVersion(store, modelId, version, accuracy, registeredAt) {
+  const prevServing = store.find((m) => m.modelId === modelId && m.status === "운영");
+  const acc = accuracy ?? Number(((prevServing?.accuracy ?? 0.88) + 0.033).toFixed(3));
+  const demoted = store
+    .map((m) => (m.modelId === modelId && m.status === "운영" ? { ...m, status: "이전" } : m))
+    .filter((m) => !(m.modelId === modelId && m.version === version));
+  return [
+    {
+      modelId,
+      version,
+      dataVersion: "ds-v13",
+      params: "auto-tuned (재학습 파이프라인)",
+      accuracy: acc,
+      status: "운영",
+      registeredAt: registeredAt ?? formatYmd(new Date())
+    },
+    ...demoted
+  ];
 }
 
 export function AppStateProvider({ children }) {
@@ -116,6 +141,33 @@ export function AppStateProvider({ children }) {
     const normalizedLog = normalizeConsoleMessage(message, isSystem, isWarning);
     setConsoleLogs((prev) => [...prev, { time, ...normalizedLog }]);
   }, []);
+
+  // 새로고침 시 modelStore는 상수(MODEL_STORE)로 리셋되므로, 백엔드가 보관 중인 현재 운영 버전에 맞춘다.
+  // 동기화에 실패하면 상수 이력을 그대로 유지한다(화면은 계속 동작).
+  useEffect(() => {
+    let alive = true;
+    apiGet("/api/v3/orchestration/models")
+      .then((models) => {
+        if (!alive || !Array.isArray(models)) return;
+        setModelStore((prev) =>
+          models.reduce((store, m) => {
+            if (typeof m?.model_id !== "string" || typeof m?.version !== "string") return store;
+            const alreadyServing = store.some(
+              (row) => row.modelId === m.model_id && row.status === "운영" && row.version === m.version
+            );
+            // 지표는 넘기지 않는다 — 백엔드 metrics는 승급 후보가 아닌 현재 모델 지표라 파생 로직에 맡긴다.
+            return alreadyServing ? store : promoteVersion(store, m.model_id, m.version, null);
+          }, prev)
+        );
+      })
+      .catch((err) => {
+        if (!alive) return;
+        addConsoleLog(`WARN: 모델 레지스트리 동기화 실패 — ${err?.message ?? "알 수 없는 오류"}`);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [addConsoleLog]);
 
   const dismissAlert = useCallback((id) => {
     setAlerts((prev) => prev.filter((a) => a.id !== id));
@@ -358,27 +410,15 @@ export function AppStateProvider({ children }) {
           [pipelineRun.pipelineId]: { runId: pipelineRun.runId, finishedAt, result: "SOTA 승급" }
         }));
         // Model Store 갱신 — 신규 버전을 운영으로 등록, 직전 운영 버전은 '이전'으로 강등
-        setModelStore((prev) => {
-          const prevServing = prev.find((m) => m.modelId === pipelineRun.model && m.status === "운영");
-          const acc = newAcc ?? Number(((prevServing?.accuracy ?? 0.88) + 0.033).toFixed(3));
-          const ymd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-          const version = result?.active_version ?? pipelineRun.candidateVersion;
-          const demoted = prev
-            .map((m) => (m.modelId === pipelineRun.model && m.status === "운영" ? { ...m, status: "이전" } : m))
-            .filter((m) => !(m.modelId === pipelineRun.model && m.version === version));
-          return [
-            {
-              modelId: pipelineRun.model,
-              version,
-              dataVersion: "ds-v13",
-              params: "auto-tuned (재학습 파이프라인)",
-              accuracy: acc,
-              status: "운영",
-              registeredAt: ymd
-            },
-            ...demoted
-          ];
-        });
+        setModelStore((prev) =>
+          promoteVersion(
+            prev,
+            pipelineRun.model,
+            result?.active_version ?? pipelineRun.candidateVersion,
+            newAcc,
+            formatYmd(now)
+          )
+        );
       }
       return undefined;
     }
