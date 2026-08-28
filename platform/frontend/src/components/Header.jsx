@@ -8,13 +8,24 @@ const SEVERITY_ICONS = {
 };
 
 export default function Header({ title, onToggleSidebar, sidebarOpen, menuButtonRef }) {
-  const { driftInjected, pipelineRunning, notifications, unreadCount, markNotificationsRead } =
-    useAppState();
+  const {
+    driftInjected,
+    pipelineRunning,
+    notifications,
+    unreadCount,
+    markNotificationsRead,
+    mockDataVisible
+  } = useAppState();
 
   // 알림 벨 드롭다운 — 열 때 읽음 처리, 외부 클릭 시 닫힘
   const [notifOpen, setNotifOpen] = useState(false);
   const bellRef = useRef(null);
   const notifRef = useRef(null);
+
+  // 목업 표시를 끄면 벨 드롭다운도 함께 접는다 — 다시 켤 때 열린 채로 되살아나지 않도록.
+  useEffect(() => {
+    if (!mockDataVisible) setNotifOpen(false);
+  }, [mockDataVisible]);
 
   useEffect(() => {
     if (!notifOpen) return undefined;
@@ -57,6 +68,11 @@ export default function Header({ title, onToggleSidebar, sidebarOpen, menuButton
     statusText = "이상 현상: 데이터 드리프트 감지 (임계 초과)";
   }
 
+  if (!mockDataVisible) {
+    statusClass = "system-status mock-data-visibility-status";
+    statusText = "";
+  }
+
   return (
     <header className="main-header">
       <div className="header-left">
@@ -83,14 +99,15 @@ export default function Header({ title, onToggleSidebar, sidebarOpen, menuButton
         <div className="alert-badge-container" ref={bellRef}>
           <button
             className="alert-icon-btn"
-            aria-label={`알림 (읽지 않음 ${unreadCount}건)`}
-            aria-expanded={notifOpen}
+            aria-label={mockDataVisible ? `알림 (읽지 않음 ${unreadCount}건)` : "알림"}
+            aria-expanded={mockDataVisible && notifOpen}
             aria-controls="recent-notifications"
             onClick={toggleNotif}
+            disabled={!mockDataVisible}
           >
             <i className="fa-solid fa-bell" aria-hidden="true"></i>
           </button>
-          {unreadCount > 0 && <div className="alert-dot" aria-hidden="true"></div>}
+          {mockDataVisible && unreadCount > 0 && <div className="alert-dot" aria-hidden="true"></div>}
           {notifOpen && (
             <div
               ref={notifRef}
