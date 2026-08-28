@@ -1,8 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useTheme } from "../context/ThemeContext.jsx";
+import { useAppState } from "../context/AppStateContext.jsx";
 
 export default function SettingsPanel() {
-  const { isDark, toggleTheme, applyHighContrastLightMode } = useTheme();
+  const { isDark, toggleTheme } = useTheme();
+  const { mockDataVisible, toggleMockDataVisible } = useAppState();
   const [open, setOpen] = useState(false);
   const containerRef = useRef(null);
   const triggerRef = useRef(null);
@@ -65,22 +67,26 @@ export default function SettingsPanel() {
             </button>
           </div>
 
-          <div className="settings-row settings-row-stack">
+          <div className="settings-row">
+            <div className="settings-row-label">
+              <i className="fa-solid fa-flask-vial" aria-hidden="true"></i>
+              <span id="mock-data-switch-label">목업 데이터 표시</span>
+            </div>
             <button
               type="button"
-              className="btn btn-secondary"
-              style={{ width: "100%", justifyContent: "center" }}
-              onClick={applyHighContrastLightMode}
-              disabled={!isDark}
+              role="switch"
+              aria-checked={mockDataVisible}
+              aria-labelledby="mock-data-switch-label"
+              className={"theme-switch mock-switch" + (mockDataVisible ? " is-on" : "")}
+              onClick={toggleMockDataVisible}
             >
-              <i className="fa-solid fa-universal-access" aria-hidden="true"></i>
-              고대비 라이트 모드 적용
+              <span className="theme-switch-track">
+                <span className="mock-switch-state">{mockDataVisible ? "ON" : "OFF"}</span>
+                <span className="theme-switch-thumb"></span>
+              </span>
             </button>
-            <p className="settings-hint">
-              밝은 테마로 전환합니다. 명도대비·키보드 포커스·모션 축소 등 이 제품의 접근성 규칙을
-              적용하며 공식 KRDS 적합성을 의미하지 않습니다.
-            </p>
           </div>
+
         </div>
       )}
 
