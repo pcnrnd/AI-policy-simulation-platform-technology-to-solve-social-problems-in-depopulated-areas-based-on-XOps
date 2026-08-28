@@ -277,7 +277,7 @@ export default function ReporterPage() {
             </div>
             <PerfBadge ms={bindingMs} label="API 응답" />
           </div>
-          <div style={{ fontSize: 11, color: "var(--text-secondary)", lineHeight: 1.6 }}>
+          <div className="mock-data-output" style={{ fontSize: 11, color: "var(--text-secondary)", lineHeight: 1.6 }}>
             <div>
               엔드포인트:{" "}
               <code style={{ color: "var(--accent-blue)" }}>{binding?.source ?? "연결 중…"}</code>
