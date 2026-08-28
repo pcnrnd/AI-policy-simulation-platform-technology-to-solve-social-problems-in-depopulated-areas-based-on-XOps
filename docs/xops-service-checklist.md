@@ -1,6 +1,6 @@
 # xops-service 개발내용 체크리스트
 
-> 원 개발내용(명세) 대비 구현 완료 현황 · 최종 갱신 2026-07-10
+> 원 개발내용(명세) 대비 구현 완료 현황 · 최종 갱신 2026-08-28
 > 범례: ✅ 완료(xops-service) · 🟡 완료(단, 실 인프라는 seam/후속) · 🔷 프론트엔드 담당(백엔드 범위 밖) · ⬜ 미착수
 
 ---
@@ -37,7 +37,7 @@
 - [x] ✅ 드리프트 모니터링(데이터 분포 변화) — `drift.py` PSI(≥0.2)·KL(≥0.1) 실계산
 - [x] ✅ 이상값(Outlier) 모니터링 — `outliers.py` Z-score·IQR
 - [x] ✅ 설명 가능 데이터 모니터링(feature 중요도·XAI) — `explain.py` SHAP + fallback
-- [x] 🟡 통계 데이터 분석 → 최적화·지속 개선 — 지표/드리프트/이상치 실계산 제공. **자동 개선 루프는 오케스트레이션이 담당**
+- [x] ✅ 통계 데이터 분석 → 최적화·지속 개선 — 지표/드리프트/이상치 실계산 + 드리프트 감지→실제 재학습→실측 지표 승급 판정으로 개선 루프가 닫힘(`training/` + `orchestrator.py`)
 
 ### 나) 오케스트레이션 기술
 - [x] ✅ 이벤트 기반 오케스트레이션 — `events.py`(EventBus·debounce) + `/orchestration/events`
@@ -45,7 +45,7 @@
 - [x] ✅ 승급 판정(최고 성능 자동 선택 = SOTA) — `evaluator.py` (f1>acc>mae>mse)
 - [x] ✅ canary→full 배포 + 자동 롤백(latency>200ms) — `deployer.py`
 - [x] ✅ 드리프트 감지 → 재학습 자동 발화 — `/monitoring/drift?auto_retrain` + 프론트 injectDrift 경로
-- [x] 🟡 SOTA 모델 도출 — 승급 로직 완비. **실제 학습·MLflow/MinIO 연동은 후속(현재 결정적 후보지표)**
+- [x] ✅ SOTA 모델 도출 — `training/`에서 하이퍼파라미터 그리드(lag×λ 6후보)를 **실제 학습**하고 LOO 교차검증 예측으로 6지표를 실측해 최고 후보를 선택. 승급 기준은 절편-only 기준선(최초) → 직전 실측 아티팩트(이후)로 올라간다. 모델 레지스트리는 SQLite(`model_artifacts`) + 로컬 JSON 아티팩트 — **MLflow/MinIO 없이 완결**
 
 ---
 
@@ -65,14 +65,19 @@
 |---|---|---|
 | DataOps | ✅ 전 항목 | In-memory 처리(실 DB는 seam) |
 | MLOps 모니터링 | ✅ 전 항목 | 6지표·드리프트·이상치·XAI 실계산 |
-| MLOps 오케스트레이션 | ✅ 전 항목 | 실 학습·MLflow/MinIO는 후속 |
+| MLOps 오케스트레이션 | ✅ 전 항목 | 인프로세스 실 학습·실측 승급(외부 학습 인프라 불요) |
 | 시뮬레이션 UI/공간정보 | 🔷 프론트 담당 | xops 범위 밖 |
 
-**xops-service 담당 범위(DataOps + MLOps)의 명세 항목은 전부 구현 완료.** 테스트 79건 / 커버리지 95%.
+**xops-service 담당 범위(DataOps + MLOps)의 명세 항목은 전부 구현 완료.** 테스트 117건 / 커버리지 96.9%.
 
 ### 🟡·후속으로 남긴 실 인프라 연동
 - 실제 Postgres/PostGIS/Mongo/Timescale 연결 (현재 In-Memory + Adapter seam)
-- MLflow(실험 추적)·MinIO(아티팩트) 연동, 실제 모델 재학습 파이프라인
 - 배포: `docker compose up` 실물 기동 검증(현재 파일 정적 검증만)
+
+### 실물화로 해소된 항목 (재학습 파이프라인)
+「실제 모델 재학습 파이프라인」은 `src/mlops/training/`(순수 Python 릿지 회귀 + LOO 실측)과
+SQLite 모델 레지스트리로 구현돼 후속 목록에서 제외했다. MLflow(실험 추적)·MinIO(아티팩트)는
+현재 UI가 요구하는 기능(재학습·버전관리·승급·롤백)을 이 구성이 이미 충족하므로 **의도적으로 도입하지
+않았다** — 필요해지면 `registry.py`의 provider seam에 어댑터로 끼운다.
 
 상세 설계는 [xops-service.md](xops-service.md) 참조.
