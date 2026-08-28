@@ -7,8 +7,12 @@ services:
     environment:
       - XOPS_ENVIRONMENT=dev
       # prod 전환 시: XOPS_ENVIRONMENT=prod + XOPS_JWT_SECRET(필수) + XOPS_CLIENT_ID/SECRET
+      - XOPS_MOCK_DATA_PATH=/app/seed/mock_data.json # settings.py 기본 경로는 컨테이너(/app)에서 안 풀림
     volumes:
       - xops-data:/app/data # SQLite 영속화 (사용자 소스·모델 버전·실행 이력)
+      # Dockerfile이 main.py·src만 COPY해 이미지에 시드가 없다 → 프론트와 같은 파일을 읽기전용 마운트.
+      # bind mount라 호스트 체크아웃이 필요하다. 이미지 단독 배포가 필요하면 build context를 platform/으로 올려 COPY할 것.
+      - ./frontend/src/assets/mock_data.json:/app/seed/mock_data.json:ro
     ports:
       - "8000:8000" # 직접 접근/디버깅용 (프론트는 내부 네트워크로 접근)
     restart: unless-stopped
