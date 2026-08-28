@@ -18,6 +18,22 @@ _PRIORITY: tuple[tuple[str, bool], ...] = (
 )
 
 
+def ranking_key(metrics: Mapping[str, float]) -> tuple[float, ...]:
+    """여러 후보를 한 줄로 세우기 위한 사전식 정렬 키(클수록 우수).
+
+    승급 판정(`Evaluator.evaluate`)은 두 모델을 **최우선 공통 지표 하나로만** 비교한다.
+    반면 그리드 학습은 후보 N개의 순위를 매겨야 하므로, 같은 우선순위(f1>accuracy>mae>mse)를
+    동점 시 다음 지표로 넘어가는 사전식 키로 확장해 쓴다. 오차 지표는 부호를 뒤집어
+    "클수록 우수"로 통일한다. 지표가 없으면 최하위로 둔다.
+    """
+    def signed(metric: str, higher_is_better: bool) -> float:
+        if metric not in metrics:
+            return float("-inf")
+        return metrics[metric] if higher_is_better else -metrics[metric]
+
+    return tuple(signed(metric, higher) for metric, higher in _PRIORITY)
+
+
 @dataclass(frozen=True)
 class EvaluationResult:
     """승급 판정 결과."""

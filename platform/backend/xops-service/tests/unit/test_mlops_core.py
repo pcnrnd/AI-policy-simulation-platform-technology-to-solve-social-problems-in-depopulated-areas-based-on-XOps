@@ -13,6 +13,7 @@ from src.mlops.monitoring.outliers import OutlierDetector
 from src.mlops.orchestration.deployer import AutoDeployer
 from src.mlops.orchestration.evaluator import Evaluator
 from src.mlops.orchestration.events import EventBus, RetrainEvent
+from src.mlops.orchestration.orchestrator import Orchestrator
 
 
 # ── metrics ──
@@ -105,6 +106,28 @@ def test_drift_event_debounced_within_interval() -> None:
     assert bus.accept(RetrainEvent("m", "drift"), now=now) is True
     assert bus.accept(RetrainEvent("m", "drift"), now=now + timedelta(minutes=5)) is False
     assert bus.accept(RetrainEvent("m", "drift"), now=now + timedelta(minutes=31)) is True
+
+
+# ── orchestrator ──
+def test_debounced_event_skips_training_entirely() -> None:
+    """디바운스로 걸러진 이벤트는 학습·평가·배포에 들어가지 않는다 — 재학습 비용을 아낀다."""
+    orchestrator = Orchestrator()  # 새 인스턴스라 EventBus 이력이 비어 있다
+    seed_metrics = {"f1": 0.5}
+    kwargs = {"current_metrics": seed_metrics, "current_version": "v1.0", "candidate_version": "v1.1"}
+    now = datetime.now(timezone.utc)
+
+    first = orchestrator.handle_event(RetrainEvent("m", "drift", created_at=now), **kwargs)
+    assert first.state != "debounced"
+
+    second = orchestrator.handle_event(
+        RetrainEvent("m", "drift", created_at=now + timedelta(minutes=1)), **kwargs
+    )
+    assert second.state == "debounced"
+    assert second.stages == []
+    assert second.training is None
+    assert second.candidate_metrics is None
+    assert second.evaluation is None
+    assert second.deploy is None
 
 
 def test_explain_backend_and_ranking() -> None:

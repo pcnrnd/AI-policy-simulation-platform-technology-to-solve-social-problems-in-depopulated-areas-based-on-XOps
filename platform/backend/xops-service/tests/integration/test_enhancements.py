@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Callable
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -9,7 +11,10 @@ from src.core.settings import Settings
 
 
 # ── ⑤ 드리프트 → 재학습 자동 연결 ──
-def test_drift_breach_triggers_retrain(client: TestClient) -> None:
+def test_drift_breach_triggers_retrain(client: TestClient, reset_model: Callable[[str], None]) -> None:
+    # 실측 학습에서는 승급이 보장되지 않는다 — 승급 이력이 남으면 같은 시드 재학습은 반려된다.
+    # 다른 테스트의 승급 여부에 결과가 좌우되지 않도록 시작 상태를 고정한다.
+    reset_model("population-forecast")
     r = client.get(
         "/api/v3/monitoring/drift",
         params={"drifted": "true", "model_id": "population-forecast", "auto_retrain": "true"},

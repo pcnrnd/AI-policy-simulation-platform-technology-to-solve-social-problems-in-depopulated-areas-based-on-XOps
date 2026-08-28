@@ -33,6 +33,12 @@ def init_db() -> None:
         CREATE TABLE IF NOT EXISTS user_sources (id TEXT PRIMARY KEY, schema_json TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS model_versions (model_id TEXT PRIMARY KEY, version TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS runs (seq INTEGER PRIMARY KEY AUTOINCREMENT, run_json TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS model_artifacts (
+            model_id TEXT NOT NULL,
+            version TEXT NOT NULL,
+            artifact_json TEXT NOT NULL,
+            PRIMARY KEY (model_id, version)
+        );
         """
     )
     conn.commit()
@@ -76,6 +82,26 @@ def set_model_version(model_id: str, version: str) -> None:
         (model_id, version),
     )
     _conn().commit()
+
+
+# ── 학습 아티팩트 (승급된 버전의 실측 지표·파일 경로) ───────
+def set_model_artifact(model_id: str, version: str, artifact: dict[str, Any]) -> None:
+    """승급된 버전의 아티팩트 메타를 기록. 모델 가중치는 로컬 파일에 있고 여기엔 경로만 둔다."""
+    _conn().execute(
+        "INSERT INTO model_artifacts (model_id, version, artifact_json) VALUES (?, ?, ?) "
+        "ON CONFLICT(model_id, version) DO UPDATE SET artifact_json = excluded.artifact_json",
+        (model_id, version, json.dumps(artifact, ensure_ascii=False)),
+    )
+    _conn().commit()
+
+
+def get_model_artifact(model_id: str, version: str) -> dict[str, Any] | None:
+    """특정 버전의 아티팩트 메타 — 없으면 None."""
+    row = _conn().execute(
+        "SELECT artifact_json FROM model_artifacts WHERE model_id = ? AND version = ?",
+        (model_id, version),
+    ).fetchone()
+    return json.loads(row["artifact_json"]) if row else None
 
 
 # ── 재학습 실행 이력 ────────────────────────────────────────
