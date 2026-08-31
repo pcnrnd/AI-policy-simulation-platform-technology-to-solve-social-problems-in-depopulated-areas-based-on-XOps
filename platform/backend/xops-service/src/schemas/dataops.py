@@ -5,7 +5,12 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from src.dataops.safety import MAX_IDENTIFIER_LENGTH, SQL_IDENTIFIER_RE, assert_safe_value
+
+# pydantic Field(pattern=...) 에 넘길 문자열 — safety 의 정규식과 같은 출처를 쓴다.
+_IDENTIFIER_PATTERN = SQL_IDENTIFIER_RE.pattern
 
 
 class TokenResponse(BaseModel):
@@ -39,30 +44,45 @@ class WriteBody(BaseModel):
 
 
 class ColumnDef(BaseModel):
-    """컬럼 정의."""
+    """컬럼 정의. name 은 생성 SQL에 식별자로 조립되므로 allowlist 패턴을 강제한다."""
 
-    name: str = Field(min_length=1)
-    type: str = Field(min_length=1)
+    name: str = Field(min_length=1, max_length=MAX_IDENTIFIER_LENGTH, pattern=_IDENTIFIER_PATTERN)
+    type: str = Field(min_length=1, max_length=64)
     description: str = ""
 
 
 class RangeDef(BaseModel):
-    """메타데이터 적재 범위."""
+    """메타데이터 적재 범위. column 은 식별자, from/to 는 SQL 리터럴로 들어간다."""
 
-    column: str
+    column: str = Field(min_length=1, max_length=MAX_IDENTIFIER_LENGTH, pattern=_IDENTIFIER_PATTERN)
     from_: Any = Field(alias="from")
     to: Any
 
     model_config = {"populate_by_name": True}
 
+    @field_validator("from_", "to")
+    @classmethod
+    def _safe_boundary(cls, value: Any) -> Any:
+        """따옴표·세미콜론·괄호가 섞인 경계값을 등록 단계에서 거부한다."""
+        assert_safe_value(value, kind="range 경계값")
+        return value
+
 
 class ArchiveRegisterRequest(BaseModel):
     """신규 아카이브 등록 요청 — metadata_schema 형태로 정규화된다."""
 
-    id: str = Field(min_length=1, pattern=r"^[A-Za-z0-9_\-]+$")
+    id: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_\-]+$")
     label: str = ""
-    source: str = Field(min_length=1, description="저장소 유형 문자열 (예: 'RDB · PostgreSQL')")
-    object: str = Field(min_length=1, description="테이블/컬렉션명")
+    source: str = Field(
+        min_length=1, max_length=128, description="저장소 유형 문자열 (예: 'RDB · PostgreSQL')"
+    )
+    # object 는 생성 SQL의 FROM 절에 그대로 들어가므로 식별자 패턴을 강제한다.
+    object: str = Field(
+        min_length=1,
+        max_length=MAX_IDENTIFIER_LENGTH,
+        pattern=_IDENTIFIER_PATTERN,
+        description="테이블/컬렉션명 (영문·숫자·밑줄, 숫자 시작 불가)",
+    )
     description: str = ""
     tier: str = Field("Warm", pattern="^(Hot|Warm|Cold)$")
     retention: str = ""

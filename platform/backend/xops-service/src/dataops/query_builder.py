@@ -27,7 +27,14 @@ class GeneratedQuery:
 
 
 def _fmt_sql_value(value: Any) -> str:
-    return str(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else f"'{value}'"
+    """SQL 리터럴 포맷. 문자열은 표준 방식(`'` → `''`)으로 이스케이프한다.
+
+    safety.assert_safe_value 가 따옴표를 이미 배제하지만, 생성기 단독으로도 문자열이
+    리터럴을 벗어나지 못하게 한다(방어 이중화).
+    """
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return str(value)
+    return "'{}'".format(str(value).replace("'", "''"))
 
 
 def _sql_where(range_: Range, filter_expr: str | None) -> str:

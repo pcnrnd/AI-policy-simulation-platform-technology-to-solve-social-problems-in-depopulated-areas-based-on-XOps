@@ -13,7 +13,12 @@ from src.core.settings import get_settings
 from src.dataops.adapters import adapter_of, get_adapter
 from src.dataops.query_builder import build_query
 from src.dataops.results import ExecutionRequest, ExecutionResult
-from src.dataops.safety import assert_safe_filter, assert_safe_sort, assert_safe_sql
+from src.dataops.safety import (
+    assert_safe_filter,
+    assert_safe_schema,
+    assert_safe_sort,
+    assert_safe_sql,
+)
 
 _logger = get_logger("xops.dataops")
 
@@ -97,6 +102,10 @@ class DataService:
     ) -> dict[str, Any]:
         settings = get_settings()
         page_size = page_size or settings.default_page_size
+
+        # 카탈로그 메타데이터가 먼저다 — object·컬럼명·range 가 SQL에 조립되므로
+        # 등록 검증 이전에 저장된 행이라도 여기서 막아야 한다.
+        assert_safe_schema(schema)
 
         columns = {c["name"] for c in schema["columns"]}
         assert_safe_filter(filter_expr, columns)
