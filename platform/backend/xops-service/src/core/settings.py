@@ -49,6 +49,16 @@ class Settings(BaseSettings):
     # DataOps 기본 페이징
     default_page_size: int = 20
 
+    # 실 저장소 연결 — 비우면(기본) In-Memory 어댑터로 degrade한다.
+    # PostgreSQL과 PostGIS는 같은 인스턴스(postgis 이미지)를 쓰므로 DSN을 공유한다.
+    pg_dsn: str = ""
+    timescale_dsn: str = ""
+    mongo_uri: str = ""
+    # 연결·조회 타임아웃(초) — DB가 죽었을 때 요청이 매달리지 않게 한다.
+    db_timeout_seconds: float = 5.0
+    # 실 조회 시 1회 응답 최대 행수 — page_size가 더 커도 이 값으로 자른다.
+    db_max_rows: int = 200
+
     # MLOps 드리프트/이상치 임계 (Notion 명세)
     psi_threshold: float = 0.2
     kl_threshold: float = 0.1

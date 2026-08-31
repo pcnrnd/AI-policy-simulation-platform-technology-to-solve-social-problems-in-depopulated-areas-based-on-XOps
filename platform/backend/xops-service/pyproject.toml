@@ -21,6 +21,12 @@ ml = [
     "numpy>=1.26",
     "shap>=0.44",
 ]
+# 선택: 실 저장소 연결 드라이버. 미설치 시 InMemoryAdapter 로 degrade한다.
+# PostgreSQL·PostGIS·TimescaleDB 는 psycopg 하나로 처리한다(모두 Postgres 프로토콜).
+db = [
+    "psycopg[binary]>=3.1",
+    "pymongo>=4.6",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
