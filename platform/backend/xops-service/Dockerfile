@@ -6,6 +6,11 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# 실 저장소 드라이버 — compose 의 XOPS_*_DSN 을 실제로 쓰려면 이미지에 있어야 한다.
+# 별 레이어로 두어 런타임 의존성 캐시를 깨지 않는다. 빼고 빌드해도 InMemory 로 degrade한다.
+COPY requirements-db.txt .
+RUN pip install --no-cache-dir -r requirements-db.txt
+
 # 애플리케이션 소스 (임포트가 `from src...`이므로 cwd=/app 유지)
 COPY main.py ./
 COPY src ./src

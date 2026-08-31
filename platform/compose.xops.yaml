@@ -1,6 +1,12 @@
-# xops-service(DataOps+MLOps) + frontend 통합 실행.
+# xops-service(DataOps+MLOps) + frontend + 실 저장소 3종 통합 실행.
 # 기동: docker compose -f platform/compose.xops.yaml up -d --build
 # 접속: http://localhost:8080 (프론트) — /api는 nginx가 xops-service:8000으로 프록시
+#
+# 저장소는 3개 컨테이너로 충분하다:
+#   pg        — postgis 이미지라 PostgreSQL과 PostGIS를 한 인스턴스에서 제공 (ds_01~04, ds_06)
+#   timescale — 시계열 (ds_05). 카탈로그가 소스 유형으로 Adapter를 나누므로 별 인스턴스로 둔다
+#   mongo     — 문서형 (ds_07)
+# DSN을 비우면 xops-service는 InMemoryAdapter로 degrade하므로 DB 없이도 기동된다.
 services:
   xops-service:
     build: ./backend/xops-service
@@ -8,6 +14,11 @@ services:
       - XOPS_ENVIRONMENT=dev
       # prod 전환 시: XOPS_ENVIRONMENT=prod + XOPS_JWT_SECRET(필수) + XOPS_CLIENT_ID/SECRET
       - XOPS_MOCK_DATA_PATH=/app/seed/mock_data.json # settings.py 기본 경로는 컨테이너(/app)에서 안 풀림
+      # 실 저장소 DSN — 컨테이너 네트워크 DNS 사용(호스트 포트가 아니라 내부 5432/27017).
+      # 드라이버(requirements-db.txt)가 이미지에 없으면 이 값이 있어도 In-Memory로 degrade한다.
+      - XOPS_PG_DSN=postgresql://xops:xops@pg:5432/xops_dataops
+      - XOPS_TIMESCALE_DSN=postgresql://xops:xops@timescale:5432/xops_timeseries
+      - XOPS_MONGO_URI=mongodb://xops:xops@mongo:27017/xops_documents?authSource=admin
     volumes:
       - xops-data:/app/data # SQLite 영속화 (사용자 소스·모델 버전·실행 이력)
       # Dockerfile이 main.py·src만 COPY해 이미지에 시드가 없다 → 프론트와 같은 파일을 읽기전용 마운트.
@@ -15,6 +26,13 @@ services:
       - ./frontend/src/assets/mock_data.json:/app/seed/mock_data.json:ro
     ports:
       - "8000:8000" # 직접 접근/디버깅용 (프론트는 내부 네트워크로 접근)
+    depends_on:
+      pg:
+        condition: service_healthy
+      timescale:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
     restart: unless-stopped
 
   frontend:
@@ -25,5 +43,67 @@ services:
       - "8080:80"
     restart: unless-stopped
 
+  # PostgreSQL + PostGIS 겸용 — project/metadata/Dockerfile.postgres 는 pgvector까지 넣지만
+  # DataOps 카탈로그에 벡터 컬럼이 없어 공식 postgis 이미지를 그대로 쓴다(빌드 단계 불필요).
+  pg:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: xops
+      POSTGRES_PASSWORD: xops
+      POSTGRES_DB: xops_dataops
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+      - ./initdb/postgres:/docker-entrypoint-initdb.d:ro # 최초 기동 1회만 실행됨
+    ports:
+      - "5433:5432" # 로컬 5432 충돌 회피
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U xops -d xops_dataops"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+  timescale:
+    image: timescale/timescaledb:latest-pg16
+    environment:
+      POSTGRES_USER: xops
+      POSTGRES_PASSWORD: xops
+      POSTGRES_DB: xops_timeseries
+    volumes:
+      - timescale-data:/var/lib/postgresql/data
+      - ./initdb/timescale:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5434:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U xops -d xops_timeseries"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+  mongo:
+    image: mongo:7
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: xops
+      MONGO_INITDB_ROOT_PASSWORD: xops
+      MONGO_INITDB_DATABASE: xops_documents
+    volumes:
+      - mongo-data:/data/db
+      - ./initdb/mongo:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "27017:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
 volumes:
   xops-data:
+  pg-data:
+  timescale-data:
+  mongo-data:
