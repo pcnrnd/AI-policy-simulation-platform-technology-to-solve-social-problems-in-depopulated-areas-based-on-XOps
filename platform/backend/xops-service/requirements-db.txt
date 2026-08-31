@@ -1,0 +1,5 @@
+# 실 저장소 연결 드라이버 (pyproject.toml [project.optional-dependencies] db 와 동기화).
+# 미설치 시 InMemoryAdapter 로 degrade하므로 기본 이미지에는 넣지 않는다.
+# 설치: pip install -r requirements.txt -r requirements-db.txt
+psycopg[binary]>=3.1
+pymongo>=4.6

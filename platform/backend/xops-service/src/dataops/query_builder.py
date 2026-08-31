@@ -130,6 +130,44 @@ def build_mql(
     return f"db.{collection}.find(\n  {match}\n){sort_seg}.skip({skip}).limit({page_size});"
 
 
+def build_count_sql(*, table: str, range_: Range, filter_expr: str | None) -> str:
+    """총 행수 조회 SQL — 페이징 total 을 실제 저장소에서 얻을 때 쓴다.
+
+    본 조회와 같은 `_sql_where` 를 쓰므로 range·filter 범위가 어긋나지 않는다.
+    """
+    return f"SELECT COUNT(*) AS total FROM {table}{_sql_where(range_, filter_expr)};"
+
+
+def _mongo_value(raw: str) -> Any:
+    """MQL 값 문자열을 파이썬 값으로 — 표시용 `_mongo_filter_of` 와 같은 규칙."""
+    try:
+        return int(raw)
+    except ValueError:
+        try:
+            return float(raw)
+        except ValueError:
+            return raw.strip("'").strip('"')
+
+
+def build_mongo_query(*, range_: Range, filter_expr: str | None) -> dict[str, Any]:
+    """pymongo 에 그대로 넘기는 필터 dict.
+
+    표시용 MQL 문자열(`build_mql`)과 달리 이쪽은 드라이버 호출용이다. 문자열을 다시
+    파싱하지 않고 같은 입력(range·filter)에서 각각 만들어 파서 이중화를 피한다.
+    """
+    query: dict[str, Any] = {}
+    if range_:
+        query[range_["column"]] = {"$gte": range_["from"], "$lte": range_["to"]}
+    if filter_expr:
+        match = _FILTER_RE.match(filter_expr.strip())
+        if match is None:  # safety 가 이미 막지만, 방어적으로 무시한다.
+            return query
+        column, op, raw = match.group(1), match.group(2), match.group(3)
+        value = _mongo_value(raw)
+        query[column] = value if op == "=" else {_OPS_MQL[op]: value}
+    return query
+
+
 def is_document_store(schema: dict[str, Any]) -> bool:
     """문서형(NoSQL) 저장소 여부 — MQL 생성 대상."""
     return "MongoDB" in str(schema.get("source", ""))

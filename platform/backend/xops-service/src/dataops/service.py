@@ -10,8 +10,9 @@ from typing import Any
 
 from src.core.logger import get_logger
 from src.core.settings import get_settings
-from src.dataops.adapters import adapter_of
+from src.dataops.adapters import adapter_of, get_adapter
 from src.dataops.query_builder import build_query
+from src.dataops.results import ExecutionRequest, ExecutionResult
 from src.dataops.safety import assert_safe_filter, assert_safe_sort, assert_safe_sql
 
 _logger = get_logger("xops.dataops")
@@ -42,19 +43,42 @@ def _base_response(*, method: str, schema: dict[str, Any], adapter: str, payload
     }
 
 
-def _get_extras(schema: dict[str, Any], filter_expr: str | None, sort: str | None, page: int, page_size: int) -> dict[str, Any]:
-    total = _TOTAL_ROWS
-    return {
+def _stub_result_rows(total: int, page: int, page_size: int) -> int:
+    """저장소 미연결 시의 결정적 행수 — 페이지 경계에서 남은 행수로 자른다."""
+    return max(0, min(page_size, total - (page - 1) * page_size))
+
+
+def _get_extras(
+    schema: dict[str, Any],
+    filter_expr: str | None,
+    sort: str | None,
+    page: int,
+    page_size: int,
+    result: ExecutionResult,
+) -> dict[str, Any]:
+    """GET 응답의 조회 관련 필드.
+
+    실 저장소에서 실행됐으면 총 행수와 실제 행을 쓰고, 아니면 기존 결정적 스텁을 유지한다
+    (DB 없이도 프론트 계약이 그대로 성립해야 한다).
+    """
+    total = result.total if result.executed and result.total is not None else _TOTAL_ROWS
+    extras: dict[str, Any] = {
         "query": {"filter": filter_expr or None, "sort": sort or None},
         "pagination": {
             "page": page,
             "page_size": page_size,
             "total": total,
-            "total_pages": -(-total // page_size),  # ceil
+            "total_pages": -(-total // page_size) if page_size else 0,  # ceil
         },
-        "result_rows": max(0, min(page_size, total - (page - 1) * page_size)),
+        "result_rows": (
+            len(result.rows) if result.executed else _stub_result_rows(total, page, page_size)
+        ),
         "sample": {c["name"]: f"<{c['type']}>" for c in schema["columns"]},
+        "source_kind": "database" if result.executed else "in-memory",
     }
+    if result.executed:
+        extras["rows"] = result.rows  # 실 저장소에서 읽은 행 (미연결 시에는 키 자체가 없다)
+    return extras
 
 
 class DataService:
@@ -85,11 +109,55 @@ class DataService:
             assert_safe_sql(query.text)
 
         adapter = adapter_of(schema)
-        _logger.info(f"dataops {method} source={schema['id']} adapter={adapter} lang={query.lang}")
+        result = self._run(
+            schema=schema,
+            method=method,
+            query_text=query.text,
+            filter_expr=filter_expr,
+            sort=sort,
+            page=page,
+            page_size=page_size,
+        )
+        _logger.info(
+            f"dataops {method} source={schema['id']} adapter={adapter} lang={query.lang} "
+            f"executed={result.executed}"
+        )
         base = _base_response(method=method, schema=schema, adapter=adapter, payload=payload, query=query)
 
         if method == "GET":
-            return {**base, **_get_extras(schema, filter_expr, sort, page, page_size)}
+            return {**base, **_get_extras(schema, filter_expr, sort, page, page_size, result)}
         if method == "DELETE":
             return {**base, "affected_rows": 1 if filter_expr else 0, "message": "Row(s) deleted via virtualized API."}
         return {**base, "affected_rows": 1, "message": f"{method} processed through Data API Builder (storage abstracted)."}
+
+    @staticmethod
+    def _run(
+        *,
+        schema: dict[str, Any],
+        method: str,
+        query_text: str,
+        filter_expr: str | None,
+        sort: str | None,
+        page: int,
+        page_size: int,
+    ) -> ExecutionResult:
+        """실행 어댑터에 위임. 어떤 실패도 응답을 깨뜨리지 않고 스텁으로 degrade한다.
+
+        DB가 내려가 있거나 스키마가 어긋나도 대시보드는 계속 동작해야 한다 —
+        실패 사유는 경고 로그와 `source_kind` 로 드러난다.
+        """
+        request = ExecutionRequest(
+            schema=schema,
+            method=method,
+            sql=query_text,
+            filter_expr=filter_expr,
+            sort=sort,
+            page=page,
+            page_size=page_size,
+        )
+        try:
+            return get_adapter(schema).execute(request)
+        except Exception as exc:  # noqa: BLE001 - 드라이버 예외 계층이 다양해 경계에서 일괄 degrade
+            source_id = schema.get("id")
+            _logger.warning(f"adapter 실행 실패 source={source_id} reason={exc} — In-Memory 응답 유지")
+            return ExecutionResult.not_executed(f"실행 실패: {exc}")
