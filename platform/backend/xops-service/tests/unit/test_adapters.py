@@ -117,9 +117,14 @@ class _FakeCursor:
     def __exit__(self, *exc: object) -> bool:
         return False
 
-    def execute(self, sql: str) -> None:
+    def execute(self, sql: str, params: Sequence[Any] | None = None) -> None:
         self._owner.executed.append(sql)
+        self._owner.params.append(list(params) if params is not None else None)
         self._is_count = "COUNT(*)" in sql
+
+    @property
+    def rowcount(self) -> int:
+        return self._owner.write_rowcount
 
     @property
     def description(self) -> Sequence[tuple[str, ...]] | None:
@@ -139,7 +144,9 @@ class _FakeConnection:
         self.rows = list(rows)
         self.total = total
         self.executed: list[str] = []
+        self.params: list[list[Any] | None] = []
         self.fetch_sizes: list[int] = []
+        self.write_rowcount = 1
 
     def __enter__(self) -> _FakeConnection:
         return self
@@ -186,13 +193,48 @@ def test_sql_adapter_returns_rows_and_total_from_connection() -> None:
     assert conn.fetch_sizes == [100]  # max_rows 로 잘라 가져온다
 
 
-def test_sql_adapter_skips_write_methods() -> None:
+def test_sql_adapter_skips_writes_without_values_or_filter() -> None:
+    """본문 값 없는 POST/PUT/PATCH·filter 없는 PUT/PATCH/DELETE 는 저장소를 건드리지 않는다."""
     conn = _FakeConnection(columns=["a"], rows=[("x",)], total=1)
     for method in ("POST", "PUT", "PATCH", "DELETE"):
         result = _InjectedSqlAdapter(conn).execute(_request(_PG, method=method))
         assert result.executed is False
-        assert "쓰기" in result.reason
-    assert conn.executed == []  # 쓰기 경로에서는 저장소를 건드리지 않는다
+        assert "실행 조건 미충족" in result.reason
+    assert conn.executed == []
+
+
+def test_sql_adapter_insert_binds_values_as_parameters() -> None:
+    conn = _FakeConnection(columns=[], rows=[], total=0)
+    schema = {**_PG, "range": _RANGE}
+    request = _request(
+        schema, method="POST", values={"reg_date": "20260101", "in_flow_count": 7}
+    )
+
+    result = _InjectedSqlAdapter(conn).execute(request)
+
+    assert result.executed is True
+    assert result.affected_rows == 1  # 드라이버 rowcount
+    assert conn.executed == [
+        "INSERT INTO tb_resident_movement (reg_date, in_flow_count) VALUES (%s, %s);"
+    ]
+    assert conn.params == [["20260101", 7]]
+
+
+def test_sql_adapter_delete_binds_range_and_filter() -> None:
+    conn = _FakeConnection(columns=[], rows=[], total=0)
+    conn.write_rowcount = 4
+    schema = {**_PG, "range": _RANGE}
+
+    result = _InjectedSqlAdapter(conn).execute(
+        _request(schema, method="DELETE", filter_expr="in_flow_count > 100")
+    )
+
+    assert result.executed is True and result.affected_rows == 4
+    assert conn.executed == [
+        "DELETE FROM tb_resident_movement"
+        " WHERE reg_date BETWEEN %s AND %s AND in_flow_count > %s;"
+    ]
+    assert conn.params == [["20210101", "20261231", 100]]
 
 
 def test_sql_adapter_jsonables_non_primitive_values() -> None:
@@ -240,6 +282,18 @@ class _FakeCollection:
         self._calls["count"] = query
         return 4242
 
+    def insert_one(self, document: dict[str, Any]) -> Any:
+        self._calls["insert"] = document
+        return type("R", (), {"inserted_id": "x"})()
+
+    def update_many(self, query: dict[str, Any], update: dict[str, Any]) -> Any:
+        self._calls["update"] = (query, update)
+        return type("R", (), {"modified_count": 3})()
+
+    def delete_many(self, query: dict[str, Any]) -> Any:
+        self._calls["delete"] = query
+        return type("R", (), {"deleted_count": 2})()
+
 
 class _FakeMongoClient:
     def __init__(self, documents: list[dict[str, Any]], calls: dict[str, Any]) -> None:
@@ -281,12 +335,39 @@ def test_mongo_adapter_builds_filter_and_returns_documents() -> None:
     assert calls["closed"] is True  # 커넥션을 반드시 닫는다
 
 
-def test_mongo_adapter_skips_write_methods() -> None:
+def test_mongo_adapter_skips_writes_without_values_or_filter() -> None:
     calls: dict[str, Any] = {}
     client = _FakeMongoClient([], calls)
-    result = _InjectedMongoAdapter(client).execute(_request(_MONGO, method="DELETE"))
-    assert result.executed is False
-    assert "find" not in calls
+    adapter = _InjectedMongoAdapter(client)
+    # filter 없는 DELETE, 본문 값 없는 POST — 둘 다 저장소를 건드리지 않는다.
+    assert adapter.execute(_request(_MONGO, method="DELETE")).executed is False
+    assert adapter.execute(_request(_MONGO, method="POST")).executed is False
+    assert "find" not in calls and "delete" not in calls and "insert" not in calls
+
+
+def test_mongo_adapter_write_operations() -> None:
+    calls: dict[str, Any] = {}
+    client = _FakeMongoClient([], calls)
+    adapter = _InjectedMongoAdapter(client)
+    schema = {**_MONGO, "range": {"column": "seq", "from": 25032, "to": 53024}}
+
+    inserted = adapter.execute(_request(schema, method="POST", values={"seq": 30000, "category": "교통"}))
+    assert inserted.executed is True and inserted.affected_rows == 1
+    assert calls["insert"] == {"seq": 30000, "category": "교통"}
+
+    updated = adapter.execute(
+        _request(schema, method="PATCH", filter_expr="seq = 30000", values={"category": "복지"})
+    )
+    assert updated.executed is True and updated.affected_rows == 3
+    assert calls["update"] == (
+        {"seq": 30000},  # 단일 조건 filter 가 range 주입보다 좁으므로 그대로 대상 선정에 쓰인다
+        {"$set": {"category": "복지"}},
+    )
+
+    deleted = adapter.execute(_request(schema, method="DELETE", filter_expr="seq = 30000"))
+    assert deleted.executed is True and deleted.affected_rows == 2
+    assert calls["delete"] == {"seq": 30000}
+    assert calls["closed"] is True
 
 
 # ── 드라이버 미설치 degrade ──

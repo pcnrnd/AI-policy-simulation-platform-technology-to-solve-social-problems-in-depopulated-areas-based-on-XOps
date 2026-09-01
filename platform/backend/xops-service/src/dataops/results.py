@@ -24,6 +24,8 @@ class ExecutionRequest:
     sort: str | None = None
     page: int = 1
     page_size: int = 20
+    # 쓰기 본문(컬럼→값) — safety.assert_safe_write_values 검증 후 파라미터로 바인딩된다.
+    values: dict[str, Any] | None = None
 
     @property
     def range_(self) -> dict[str, Any] | None:

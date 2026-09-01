@@ -98,17 +98,74 @@ def test_adapter_exception_degrades_instead_of_500(
     assert body["pagination"]["total"] == 1248
 
 
-def test_write_path_is_not_delegated_to_real_storage(
+def test_write_executes_with_bound_values_and_returns_rowcount(
     client: TestClient, auth_headers: dict[str, str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """쓰기는 어댑터가 실행하지 않도록 설계했다 — 응답은 결정적 스텁을 유지한다."""
-    adapter = _StubAdapter(ExecutionResult.not_executed("쓰기 경로는 실 저장소 실행 대상이 아닙니다(후속)."))
+    """본문 값이 있는 쓰기는 어댑터로 관통되고 드라이버 rowcount 가 응답에 실린다."""
+    adapter = _StubAdapter(ExecutionResult(affected_rows=3, executed=True))
+    _inject(monkeypatch, adapter)
+    values = {"reg_date": "20260101", "region_code": "45190", "in_flow_count": 7}
+
+    body = client.post(_URL, json={"data": values}, headers=auth_headers).json()
+
+    assert body["affected_rows"] == 3
+    assert body["source_kind"] == "database"
+    # 본문 값이 그대로(파라미터 바인딩 대상으로) 어댑터에 전달된다.
+    assert adapter.requests[0].method == "POST"
+    assert adapter.requests[0].values == values
+
+
+def test_write_degrades_to_stub_when_not_executed(
+    client: TestClient, auth_headers: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """본문 값 없는 POST 는 실행되지 않고 기존 결정적 스텁 응답이 유지된다."""
+    adapter = _StubAdapter(ExecutionResult.not_executed("실행 조건 미충족"))
     _inject(monkeypatch, adapter)
 
     body = client.post(_URL, json={"data": {}}, headers=auth_headers).json()
 
     assert body["affected_rows"] == 1
+    assert body["source_kind"] == "in-memory"
     assert adapter.requests[0].method == "POST"
+
+
+def test_delete_returns_real_rowcount_when_executed(
+    client: TestClient, auth_headers: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _inject(monkeypatch, _StubAdapter(ExecutionResult(affected_rows=2, executed=True)))
+
+    body = client.delete(_URL, params={"filter": "in_flow_count > 100"}, headers=auth_headers).json()
+
+    assert body["affected_rows"] == 2
+    assert body["source_kind"] == "database"
+
+
+def test_write_with_unknown_column_is_rejected_400(
+    client: TestClient, auth_headers: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """스키마에 없는 컬럼은 어댑터 도달 전에 400 — 읽기 주입 차단과 같은 경계."""
+    adapter = _StubAdapter(ExecutionResult(affected_rows=1, executed=True))
+    _inject(monkeypatch, adapter)
+
+    response = client.post(_URL, json={"data": {"no_such_col": 1}}, headers=auth_headers)
+
+    assert response.status_code == 400
+    assert adapter.requests == []
+
+
+def test_write_with_non_scalar_value_is_rejected_400(
+    client: TestClient, auth_headers: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """dict 값은 Mongo `$set` 연산자 주입 경로가 되므로 스칼라만 허용한다."""
+    adapter = _StubAdapter(ExecutionResult(affected_rows=1, executed=True))
+    _inject(monkeypatch, adapter)
+
+    response = client.post(
+        _URL, json={"data": {"in_flow_count": {"$gt": 0}}}, headers=auth_headers
+    )
+
+    assert response.status_code == 400
+    assert adapter.requests == []
 
 
 def test_mongo_source_rows_pass_through(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:

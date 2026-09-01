@@ -56,3 +56,66 @@ def test_mongo_filter_translation() -> None:
 def test_is_document_store() -> None:
     assert is_document_store(_MONGO_SCHEMA) is True
     assert is_document_store(_SQL_SCHEMA) is False
+
+
+# ── 쓰기 실행용 파라미터 바인딩 SQL ──
+def test_build_write_sql_post_binds_only_provided_columns() -> None:
+    from src.dataops.query_builder import build_write_sql
+
+    statement = build_write_sql(
+        method="POST",
+        table="tb_resident_movement",
+        range_=_SQL_SCHEMA["range"],
+        filter_expr=None,
+        values={"reg_date": "20260101", "in_flow_count": 7},
+    )
+    assert statement is not None
+    sql, params = statement
+    assert sql == "INSERT INTO tb_resident_movement (reg_date, in_flow_count) VALUES (%s, %s);"
+    assert params == ["20260101", 7]
+
+
+def test_build_write_sql_update_appends_range_and_filter_params() -> None:
+    from src.dataops.query_builder import build_write_sql
+
+    statement = build_write_sql(
+        method="PATCH",
+        table="tb_resident_movement",
+        range_=_SQL_SCHEMA["range"],
+        filter_expr="in_flow_count > 100",
+        values={"in_flow_count": 0},
+    )
+    assert statement is not None
+    sql, params = statement
+    assert sql == (
+        "UPDATE tb_resident_movement SET in_flow_count = %s"
+        " WHERE reg_date BETWEEN %s AND %s AND in_flow_count > %s;"
+    )
+    # filter 값은 리터럴 조립 없이 숫자로 강제 변환돼 바인딩된다.
+    assert params == [0, "20210101", "20261231", 100]
+
+
+def test_build_write_sql_delete_requires_filter() -> None:
+    from src.dataops.query_builder import build_write_sql
+
+    common = {"table": "tb_x", "range_": None, "values": None}
+    assert build_write_sql(method="DELETE", filter_expr=None, **common) is None
+    statement = build_write_sql(method="DELETE", filter_expr="a = 'x'", **common)
+    assert statement == ("DELETE FROM tb_x WHERE a = %s;", ["x"])
+
+
+def test_build_write_sql_returns_none_without_values() -> None:
+    from src.dataops.query_builder import build_write_sql
+
+    for method in ("POST", "PUT", "PATCH"):
+        assert (
+            build_write_sql(
+                method=method, table="tb_x", range_=None, filter_expr="a = 1", values={}
+            )
+            is None
+        )
+    # PUT/PATCH 는 filter 가 없어도 실행하지 않는다(범위 전체 덮어쓰기 차단).
+    assert (
+        build_write_sql(method="PUT", table="tb_x", range_=None, filter_expr=None, values={"a": 1})
+        is None
+    )

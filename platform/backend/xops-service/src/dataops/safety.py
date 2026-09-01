@@ -29,6 +29,9 @@ MAX_IDENTIFIER_LENGTH = 63
 # range 값 — 리터럴로 들어가므로 따옴표·세미콜론·괄호를 원천 배제한다(시드는 하이픈을 쓴다: NW-SF-001).
 SQL_VALUE_RE = re.compile(r"^[A-Za-z0-9_.:\- ]*$")
 MAX_VALUE_LENGTH = 128
+# 쓰기 본문 값 — 파라미터 바인딩으로 전달되므로 주입은 성립하지 않지만,
+# 스칼라 강제(Mongo 연산자 dict 차단)와 상한·NUL 배제는 여기서 건다.
+MAX_WRITE_VALUE_LENGTH = 2000
 
 
 def assert_safe_filter(filter_expr: str | None, allowed_columns: set[str] | None = None) -> None:
@@ -101,6 +104,27 @@ def assert_safe_schema(schema: dict[str, Any]) -> None:
     assert_safe_identifier(range_.get("column"), kind="range 컬럼명")
     assert_safe_value(range_.get("from"), kind="range 시작값")
     assert_safe_value(range_.get("to"), kind="range 종료값")
+
+
+def assert_safe_write_values(values: dict[str, Any] | None, allowed_columns: set[str]) -> None:
+    """쓰기 본문(data) 검증 — 컬럼명은 스키마 대조, 값은 스칼라만 허용.
+
+    값은 SQL에 조립되지 않고 파라미터로 바인딩되지만(주입 불가), dict/list 값이
+    Mongo `$set` 에 그대로 들어가면 연산자 주입이 되므로 스칼라를 강제한다.
+    """
+    if not values:
+        return
+    for key, value in values.items():
+        if key not in allowed_columns:
+            raise UnsafeQueryError(f"스키마에 없는 쓰기 컬럼입니다: {key!r}")
+        if value is None or isinstance(value, (bool, int, float)):
+            continue
+        if not isinstance(value, str):
+            raise UnsafeQueryError(f"쓰기 값은 스칼라(문자열·숫자·불리언·null)만 허용합니다: {key!r}")
+        if len(value) > MAX_WRITE_VALUE_LENGTH:
+            raise UnsafeQueryError(f"쓰기 값이 너무 깁니다({len(value)} > {MAX_WRITE_VALUE_LENGTH}): {key!r}")
+        if "\x00" in value:
+            raise UnsafeQueryError(f"쓰기 값에 NUL 문자가 포함되었습니다: {key!r}")
 
 
 def assert_safe_sql(sql: str) -> None:

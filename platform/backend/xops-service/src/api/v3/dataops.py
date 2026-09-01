@@ -84,8 +84,10 @@ def create(
     body: WriteBody | None = None,
     payload: dict[str, Any] = Depends(require_auth("data:write")),
 ) -> dict[str, Any]:
-    """POST — 신규 행 생성."""
-    return _service.execute(method="POST", schema=get_catalog().get(source_id), payload=payload)
+    """POST — 신규 행 생성. body.data 가 있으면 실 저장소에 파라미터 바인딩으로 INSERT 된다."""
+    return _service.execute(
+        method="POST", schema=get_catalog().get(source_id), payload=payload, values=body.data if body else None
+    )
 
 
 @router.put("/{source_id}")
@@ -95,8 +97,14 @@ def replace(
     filter: str | None = Query(None),
     payload: dict[str, Any] = Depends(require_auth("data:write")),
 ) -> dict[str, Any]:
-    """PUT — 조건에 맞는 행 치환."""
-    return _service.execute(method="PUT", schema=get_catalog().get(source_id), payload=payload, filter_expr=filter)
+    """PUT — 조건에 맞는 행 치환. filter + body.data 가 있으면 실 저장소에 UPDATE 된다."""
+    return _service.execute(
+        method="PUT",
+        schema=get_catalog().get(source_id),
+        payload=payload,
+        filter_expr=filter,
+        values=body.data if body else None,
+    )
 
 
 @router.patch("/{source_id}")
@@ -106,8 +114,14 @@ def modify(
     filter: str | None = Query(None),
     payload: dict[str, Any] = Depends(require_auth("data:write")),
 ) -> dict[str, Any]:
-    """PATCH — 부분 수정."""
-    return _service.execute(method="PATCH", schema=get_catalog().get(source_id), payload=payload, filter_expr=filter)
+    """PATCH — 부분 수정. filter + body.data 가 있으면 실 저장소에 UPDATE 된다."""
+    return _service.execute(
+        method="PATCH",
+        schema=get_catalog().get(source_id),
+        payload=payload,
+        filter_expr=filter,
+        values=body.data if body else None,
+    )
 
 
 @router.delete("/{source_id}")

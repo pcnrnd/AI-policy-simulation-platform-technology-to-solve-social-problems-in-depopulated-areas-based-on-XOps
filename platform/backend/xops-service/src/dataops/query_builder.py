@@ -175,6 +175,63 @@ def build_mongo_query(*, range_: Range, filter_expr: str | None) -> dict[str, An
     return query
 
 
+def _write_where(range_: Range, filter_expr: str | None) -> tuple[str, list[Any]]:
+    """쓰기 실행용 WHERE — 값을 리터럴로 조립하지 않고 %s 파라미터로 분리한다.
+
+    표시용 `_sql_where` 와 같은 입력(range·filter)에서 만들며, filter 는 이미
+    safety.assert_safe_filter 를 통과한 `col op value` 단일 조건이다.
+    """
+    parts: list[str] = []
+    params: list[Any] = []
+    if range_:
+        parts.append(f"{range_['column']} BETWEEN %s AND %s")
+        params.extend([range_["from"], range_["to"]])
+    if filter_expr:
+        match = _FILTER_RE.match(filter_expr.strip())
+        if match:
+            column, op, raw = match.group(1), match.group(2), match.group(3)
+            parts.append(f"{column} {op} %s")
+            params.append(_mongo_value(raw))
+    return (f" WHERE {' AND '.join(parts)}" if parts else "", params)
+
+
+def build_write_sql(
+    *,
+    method: str,
+    table: str,
+    range_: Range,
+    filter_expr: str | None,
+    values: dict[str, Any] | None,
+) -> tuple[str, list[Any]] | None:
+    """실 저장소 쓰기용 파라미터 바인딩 SQL — (sql, params) 또는 실행 불가 시 None.
+
+    표시용 `build_sql`(? 플레이스홀더)을 되파싱하지 않고 같은 입력에서 따로 만든다.
+    실행 조건: POST/PUT/PATCH 는 바인딩할 본문 값이 있어야 하고, 기존 행을 바꾸는
+    PUT/PATCH/DELETE 는 filter 가 있어야 한다(범위 전체를 덮어쓰는 실행을 차단).
+    """
+    if method == "POST":
+        if not values:
+            return None
+        keys = list(values)
+        placeholders = ", ".join("%s" for _ in keys)
+        return (
+            f"INSERT INTO {table} ({', '.join(keys)}) VALUES ({placeholders});",
+            [values[k] for k in keys],
+        )
+    if not filter_expr:
+        return None
+    where, where_params = _write_where(range_, filter_expr)
+    if method in ("PUT", "PATCH"):
+        if not values:
+            return None
+        keys = list(values)
+        assigns = ", ".join(f"{k} = %s" for k in keys)
+        return (f"UPDATE {table} SET {assigns}{where};", [values[k] for k in keys] + where_params)
+    if method == "DELETE":
+        return (f"DELETE FROM {table}{where};", where_params)
+    return None
+
+
 def is_document_store(schema: dict[str, Any]) -> bool:
     """문서형(NoSQL) 저장소 여부 — MQL 생성 대상."""
     return "MongoDB" in str(schema.get("source", ""))
