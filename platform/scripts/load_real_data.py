@@ -60,6 +60,18 @@ def _read_csv(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(f))
 
 
+def _optional_int(value: str | None, *, field: str) -> int | None:
+    """빈 값은 NULL로, 잘못된 정수는 경고 후 NULL로 정규화한다."""
+    raw = (value or "").strip()
+    if not raw:
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        _log.warning("%s 값 %r을 정수로 변환할 수 없어 NULL로 적재합니다.", field, value)
+        return None
+
+
 def load_boundaries(cur: Any, data_dir: Path) -> int:
     """전국 시군구 경계 GeoJSON → geo_admin_boundary. Polygon 은 ST_Multi 로 승격."""
     features = json.loads((data_dir / "admin_boundary_kostat2013.geojson").read_text(encoding="utf-8"))[
@@ -121,7 +133,7 @@ def _sinan_rows(data_dir: Path) -> list[tuple[Any, ...]]:
                 r.get("시설유형") or "장애인복지시설",
                 r.get("소재지도로명주소") or None,
                 r.get("전화번호") or None,
-                int(r["종사원"]) if r.get("종사원") else None,
+                _optional_int(r.get("종사원"), field=f"{r.get('시설명', '<unknown>')} 종사원"),
                 float(r["위도"]) if r.get("위도") else None,
                 float(r["경도"]) if r.get("경도") else None,
                 r["데이터기준일자"],

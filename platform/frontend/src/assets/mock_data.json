@@ -342,7 +342,7 @@
       "object": "tb_welfare_facility",
       "description": "남원시 사회복지시설현황 + 신안군 장애인복지시설현황 (공공데이터포털 15094099·15114967)",
       "archive": { "tier": "Hot", "retention": "10년 보존", "loaded_at": "2026-09-01", "rows": 17 },
-      "lineage": { "origin": "공공데이터포털 지자체 파일데이터 (CP949→UTF-8 변환만 수행)", "version": "v1", "commit": "189bc9" },
+      "lineage": { "origin": "공공데이터포털 지자체 파일데이터 (CP949→UTF-8 변환만 수행)", "version": "v1", "commit": "189bc9·e9afef" },
       "range": { "column": "facility_id", "from": "NW-WF-001", "to": "SA-WF-999" },
       "tags": ["복지", "시설", "실데이터"],
       "columns": [

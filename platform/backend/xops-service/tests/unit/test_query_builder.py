@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from itertools import product
+
+from src.dataops import query_builder, safety
 from src.dataops.query_builder import build_query, is_document_store
 
 _SQL_SCHEMA = {
@@ -56,6 +59,21 @@ def test_mongo_filter_translation() -> None:
 def test_is_document_store() -> None:
     assert is_document_store(_MONGO_SCHEMA) is True
     assert is_document_store(_SQL_SCHEMA) is False
+
+
+def test_builder_filter_regex_covers_every_safe_filter_shape() -> None:
+    """safety가 허용한 filter를 builder가 놓쳐 WHERE를 무음 탈락시키지 않는다."""
+    identifiers = ("column", "컬럼_1")
+    operators = (">=", "<=", "!=", "=", ">", "<")
+    values = ("'서울 특별시'", '""', "-42", "0.5", "서울_1")
+    whitespace = ("", " ", "\t")
+
+    for identifier, operator, value, left_gap, right_gap in product(
+        identifiers, operators, values, whitespace, whitespace
+    ):
+        expression = f"{identifier}{left_gap}{operator}{right_gap}{value}"
+        assert safety._FILTER_RE.fullmatch(expression) is not None, expression
+        assert query_builder._FILTER_RE.fullmatch(expression) is not None, expression
 
 
 # ── 쓰기 실행용 파라미터 바인딩 SQL ──
