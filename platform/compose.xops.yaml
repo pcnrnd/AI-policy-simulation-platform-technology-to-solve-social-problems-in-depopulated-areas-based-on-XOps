@@ -25,7 +25,9 @@ services:
       # bind mount라 호스트 체크아웃이 필요하다. 이미지 단독 배포가 필요하면 build context를 platform/으로 올려 COPY할 것.
       - ./frontend/src/assets/mock_data.json:/app/seed/mock_data.json:ro
     ports:
-      - "8000:8000" # 직접 접근/디버깅용 (프론트는 내부 네트워크로 접근)
+      # 직접 접근/디버깅용 (프론트는 내부 네트워크로 접근). 호스트 8000이 다른 프로젝트에
+      # 점유된 개발 환경에서는 XOPS_HOST_PORT 로 바꾼다 — 컨테이너 내부 포트는 8000 고정.
+      - "${XOPS_HOST_PORT:-8000}:8000"
     depends_on:
       pg:
         condition: service_healthy
@@ -40,7 +42,8 @@ services:
     depends_on:
       - xops-service
     ports:
-      - "8080:80"
+      # 호스트 8080 점유 시 XOPS_FRONTEND_HOST_PORT 로 변경 (내부 80 고정)
+      - "${XOPS_FRONTEND_HOST_PORT:-8080}:80"
     restart: unless-stopped
 
   # PostgreSQL + PostGIS 겸용 — project/metadata/Dockerfile.postgres 는 pgvector까지 넣지만
