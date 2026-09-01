@@ -33,3 +33,31 @@ def test_assert_safe_sql_blocks_comments_and_stacking() -> None:
         assert_safe_sql("SELECT a FROM t; DROP TABLE t;")
     with pytest.raises(UnsafeQueryError):
         assert_safe_sql("SELECT a FROM t -- x")
+
+
+# ── 쓰기 본문 값 검증 ──
+def test_write_values_accept_scalars_of_known_columns() -> None:
+    from src.dataops.safety import assert_safe_write_values
+
+    cols = {"reg_date", "in_flow_count", "note"}
+    assert_safe_write_values(None, cols)
+    assert_safe_write_values({}, cols)
+    assert_safe_write_values(
+        {"reg_date": "20260101", "in_flow_count": 7, "note": None}, cols
+    )
+
+
+def test_write_values_reject_unknown_column_and_non_scalars() -> None:
+    from src.dataops.safety import MAX_WRITE_VALUE_LENGTH, assert_safe_write_values
+
+    cols = {"a"}
+    with pytest.raises(UnsafeQueryError, match="스키마에 없는"):
+        assert_safe_write_values({"b": 1}, cols)
+    with pytest.raises(UnsafeQueryError, match="스칼라"):
+        assert_safe_write_values({"a": {"$gt": 0}}, cols)  # Mongo 연산자 주입 차단
+    with pytest.raises(UnsafeQueryError, match="스칼라"):
+        assert_safe_write_values({"a": [1, 2]}, cols)
+    with pytest.raises(UnsafeQueryError, match="깁니다"):
+        assert_safe_write_values({"a": "x" * (MAX_WRITE_VALUE_LENGTH + 1)}, cols)
+    with pytest.raises(UnsafeQueryError, match="NUL"):
+        assert_safe_write_values({"a": "x\x00y"}, cols)

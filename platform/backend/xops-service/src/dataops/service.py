@@ -18,6 +18,7 @@ from src.dataops.safety import (
     assert_safe_schema,
     assert_safe_sort,
     assert_safe_sql,
+    assert_safe_write_values,
 )
 
 _logger = get_logger("xops.dataops")
@@ -86,6 +87,25 @@ def _get_extras(
     return extras
 
 
+def _write_extras(method: str, filter_expr: str | None, result: ExecutionResult) -> dict[str, Any]:
+    """쓰기 응답의 실행 관련 필드 — 실 실행 시 드라이버 rowcount, 아니면 기존 스텁."""
+    if result.executed:
+        affected = result.affected_rows or 0
+        message = f"{method} executed against real storage (parameter-bound)."
+    else:
+        affected = (1 if filter_expr else 0) if method == "DELETE" else 1
+        message = (
+            "Row(s) deleted via virtualized API."
+            if method == "DELETE"
+            else f"{method} processed through Data API Builder (storage abstracted)."
+        )
+    return {
+        "affected_rows": affected,
+        "message": message,
+        "source_kind": "database" if result.executed else "in-memory",
+    }
+
+
 class DataService:
     """Data API Builder — 요청을 검증·라우팅하고 표준 REST 응답을 생성."""
 
@@ -99,6 +119,7 @@ class DataService:
         sort: str | None = None,
         page: int = 1,
         page_size: int | None = None,
+        values: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         settings = get_settings()
         page_size = page_size or settings.default_page_size
@@ -110,6 +131,7 @@ class DataService:
         columns = {c["name"] for c in schema["columns"]}
         assert_safe_filter(filter_expr, columns)
         assert_safe_sort(sort, columns)
+        assert_safe_write_values(values, columns)
 
         query = build_query(
             method=method, schema=schema, filter_expr=filter_expr, sort=sort, page=page, page_size=page_size
@@ -126,6 +148,7 @@ class DataService:
             sort=sort,
             page=page,
             page_size=page_size,
+            values=values,
         )
         _logger.info(
             f"dataops {method} source={schema['id']} adapter={adapter} lang={query.lang} "
@@ -135,9 +158,7 @@ class DataService:
 
         if method == "GET":
             return {**base, **_get_extras(schema, filter_expr, sort, page, page_size, result)}
-        if method == "DELETE":
-            return {**base, "affected_rows": 1 if filter_expr else 0, "message": "Row(s) deleted via virtualized API."}
-        return {**base, "affected_rows": 1, "message": f"{method} processed through Data API Builder (storage abstracted)."}
+        return {**base, **_write_extras(method, filter_expr, result)}
 
     @staticmethod
     def _run(
@@ -149,6 +170,7 @@ class DataService:
         sort: str | None,
         page: int,
         page_size: int,
+        values: dict[str, Any] | None = None,
     ) -> ExecutionResult:
         """실행 어댑터에 위임. 어떤 실패도 응답을 깨뜨리지 않고 스텁으로 degrade한다.
 
@@ -163,6 +185,7 @@ class DataService:
             sort=sort,
             page=page,
             page_size=page_size,
+            values=values,
         )
         try:
             return get_adapter(schema).execute(request)
