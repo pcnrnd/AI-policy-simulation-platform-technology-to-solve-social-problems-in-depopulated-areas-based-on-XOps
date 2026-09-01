@@ -1,6 +1,6 @@
 # xops-service 개발내용 체크리스트
 
-> 원 개발내용(명세) 대비 구현 완료 현황 · 최종 갱신 2026-08-28
+> 원 개발내용(명세) 대비 구현 완료 현황 · 최종 갱신 2026-09-01
 > 범례: ✅ 완료(xops-service) · 🟡 완료(단, 실 인프라는 seam/후속) · 🔷 프론트엔드 담당(백엔드 범위 밖) · ⬜ 미착수
 
 ---
@@ -18,7 +18,7 @@
 
 ### 나) 데이터 처리 API 기술 (Data API 빌더)
 - [x] ✅ 표준 SQL 설정 기반 데이터 처리(CRUD) — `query_builder.py`
-- [x] 🟡 In-memory 기반 처리로 속도 보장 — `InMemoryAdapter`(결정적) + 응답속도 배지. **실제 DB 연결은 `QueryAdapter` Protocol seam(후속)**
+- [x] ✅ In-memory 기반 처리로 속도 보장 + 실 DB 실행 — `InMemoryAdapter`(DSN 부재 시 degrade) 위에 `backends.py` 실 실행 계층(psycopg/pymongo). 읽기·쓰기(파라미터 바인딩) 모두 PostGIS·TimescaleDB·MongoDB 실 저장소 관통, 실데이터 2건(ds_08 경계 251·ds_09 복지시설 17) 적재
 - [x] ✅ API생성기 → 표준 REST 응답 — 5개 메서드 라우트 + 발급 API 목록(프론트)
 - [x] ✅ CRUD(POST/GET/PUT/PATCH/DELETE) — `/dataops/{source_id}` 전 메서드
 - [x] ✅ 필터링·정렬·페이징 REST — `filter`·`sort`·`page`·`page_size` 쿼리
@@ -63,16 +63,18 @@
 
 | 부문 | 완료 | 비고 |
 |---|---|---|
-| DataOps | ✅ 전 항목 | In-memory 처리(실 DB는 seam) |
+| DataOps | ✅ 전 항목 | 실 저장소 3종(PostGIS·Timescale·Mongo) 읽기·쓰기 관통 + 실데이터 적재 |
 | MLOps 모니터링 | ✅ 전 항목 | 6지표·드리프트·이상치·XAI 실계산 |
 | MLOps 오케스트레이션 | ✅ 전 항목 | 인프로세스 실 학습·실측 승급(외부 학습 인프라 불요) |
 | 시뮬레이션 UI/공간정보 | 🔷 프론트 담당 | xops 범위 밖 |
 
-**xops-service 담당 범위(DataOps + MLOps)의 명세 항목은 전부 구현 완료.** 테스트 117건 / 커버리지 96.9%.
+**xops-service 담당 범위(DataOps + MLOps)의 명세 항목은 전부 구현 완료.** 테스트 183건 / 커버리지 96.4%.
 
-### 🟡·후속으로 남긴 실 인프라 연동
-- 실제 Postgres/PostGIS/Mongo/Timescale 연결 (현재 In-Memory + Adapter seam)
-- 배포: `docker compose up` 실물 기동 검증(현재 파일 정적 검증만)
+### 실물화로 해소된 항목 (실 인프라 연동, 2026-08-31 ~ 09-01)
+「실제 Postgres/PostGIS/Mongo/Timescale 연결」과 「compose 실물 기동 검증」은 후속 목록에서
+제외했다 — `backends.py` 실 실행 계층(읽기 + 파라미터 바인딩 쓰기), compose 실 저장소 3종,
+실 공공데이터 2건 적재(`platform/data/real/`), `docker compose up -d --build` 완전체 기동·
+쓰기 왕복 실측(xops-service.md §11·§12)으로 완결됐다.
 
 ### 실물화로 해소된 항목 (재학습 파이프라인)
 「실제 모델 재학습 파이프라인」은 `src/mlops/training/`(순수 Python 릿지 회귀 + LOO 실측)과

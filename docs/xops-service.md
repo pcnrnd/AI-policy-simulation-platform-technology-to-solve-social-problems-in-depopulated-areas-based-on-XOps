@@ -1,7 +1,7 @@
 # xops-service 기술문서
 
 > 인구감소 R&D 플랫폼 — DataOps + MLOps 운영 평면 백엔드
-> 경로: `platform/backend/xops-service/` · FastAPI (Python 3.10+) · 최종 갱신 2026-07-10
+> 경로: `platform/backend/xops-service/` · FastAPI (Python 3.10+) · 최종 갱신 2026-09-01
 
 ---
 
@@ -44,7 +44,7 @@ platform/backend/xops-service/
 │   │       ├── monitoring.py
 │   │       └── orchestration.py
 │   ├── schemas/                # Pydantic DTO (dataops·monitoring·orchestration)
-│   ├── dataops/                # catalog·adapters·query_builder·safety·service
+│   ├── dataops/                # catalog·adapters·backends·query_builder·safety·service·results
 │   └── mlops/
 │       ├── monitoring/         # metrics·drift·outliers·explain
 │       └── orchestration/      # events·evaluator·deployer·orchestrator·registry
@@ -87,14 +87,21 @@ python -m pytest tests/ --cov=src --cov-report=term-missing   # 80% 게이트
 
 | 모듈 | 역할 |
 |---|---|
-| `catalog.py` | `MetadataCatalog` — 시드(mock_data.json 7종)는 읽기전용, 사용자 등록 소스는 SQLite. id·태그·객체명·설명 검색, add/remove |
-| `adapters.py` | 저장소 유형별 Adapter 결정 — PostgreSQL / PostGIS(공간) / MongoDB(문서) / TimescaleDB(시계열). 실제 연결은 후속(`QueryAdapter` Protocol seam) |
-| `query_builder.py` | 표준 SQL / MQL 생성. 메서드·필터·정렬·페이징 + 메타데이터 적재범위(range) 자동 주입(SQL `BETWEEN` / MQL `$gte·$lte`) |
-| `safety.py` | 인젝션 가드 — filter는 `col op value` 단일 조건만 허용, 정렬·filter 컬럼을 스키마와 대조, 생성 SQL의 주석/스택쿼리 차단 |
+| `catalog.py` | `MetadataCatalog` — 시드(mock_data.json 9종 = 합성 7 + 실데이터 2)는 읽기전용, 사용자 등록 소스는 SQLite. id·태그·객체명·설명 검색, add/remove |
+| `adapters.py` | 표시용 Adapter 이름(프론트 계약) + 실행 어댑터 팩토리 `get_adapter`. DSN·드라이버가 없으면 `InMemoryAdapter` 로 degrade |
+| `backends.py` | 실 저장소 실행 — psycopg(PostgreSQL·PostGIS·TimescaleDB)/pymongo. 읽기는 표시 SQL 그대로, 쓰기는 `build_write_sql` 파라미터 바인딩 문장 실행 |
+| `results.py` | `ExecutionRequest`/`ExecutionResult` 계약 — `executed=False` 가 degrade 신호 |
+| `query_builder.py` | 표준 SQL / MQL 생성 + 쓰기 실행용 `build_write_sql`(%s 바인딩)·`build_mongo_query`. 메서드·필터·정렬·페이징 + 메타데이터 적재범위(range) 자동 주입(SQL `BETWEEN` / MQL `$gte·$lte`) |
+| `safety.py` | 인젝션 가드 — filter 단일 조건, 정렬·filter 컬럼 스키마 대조, 카탈로그 식별자·range 값 allowlist(`assert_safe_schema`), 쓰기 본문 스칼라 강제(`assert_safe_write_values`), 생성 SQL 주석/스택쿼리 차단 |
 | `service.py` | `DataService` — 위 흐름을 엮어 `buildApiResponse` 계약(status·endpoint·adapter·archive_meta·range_scope·query_language·generated_query + GET 페이지네이션) 생성 |
 
 - 모든 `/dataops/{source_id}` CRUD는 **JWT 필수**(GET=`data:read`, 쓰기=`data:write`).
 - 저장소 유형에 따라 동일 요청이 SQL 또는 MQL로 변환됨(다기종). Mongo 소스는 `db.col.find({seq:{$gte,$lte}})` 형태 재현.
+- **실 실행 조건**: 읽기는 DSN·드라이버가 있으면 항상 실 저장소를 탄다(`source_kind: "database"`,
+  실패 시 스텁으로 degrade). 쓰기는 본문 값 있는 POST/PUT/PATCH·filter 있는 PUT/PATCH/DELETE 만
+  실행하고 값은 전부 드라이버 파라미터로 바인딩한다 — 조건 미충족이면 종전 결정적 스텁 유지.
+- **실데이터**: ds_08(전국 시군구 경계 251, PostGIS)·ds_09(남원·신안 사회복지시설 17, PostgreSQL)는
+  `platform/data/real/` 원본을 `platform/scripts/load_real_data.py` 로 적재한 실제 공공데이터다.
 
 ### 4.2 MLOps 모니터링 (`src/mlops/monitoring/`)
 
@@ -217,20 +224,24 @@ python -m pytest tests/ --cov=src --cov-report=term-missing   # 80% 게이트
 
 ## 10. 테스트
 
-- **unit**: query_builder, safety, jwt, client_gate, metrics/drift/outliers/evaluator/deployer/events, persistence
-- **integration**: dataops·monitoring·orchestration API, catalog CRUD, enhancements(드리프트→재학습·filter 검증·prod 시크릿)
-- **총 79건 통과 / 커버리지 95%** (게이트 80%)
+- **unit**: query_builder(쓰기 바인딩 SQL 포함), safety(주입·쓰기 값 검증), adapters(fake 커넥션 실행 경로),
+  jwt, client_gate, compose 계약, metrics/drift/outliers/evaluator/deployer/events, training, persistence
+- **integration**: dataops·monitoring·orchestration API, catalog CRUD, 카탈로그 주입 차단,
+  실 저장소 어댑터 주입(읽기·쓰기·degrade), enhancements(드리프트→재학습·filter 검증·prod 시크릿)
+- **총 183건 통과 / 커버리지 96.4%** (게이트 80%)
 
 ---
 
 ## 11. 배포 (Docker)
 
-- `backend/xops-service/Dockerfile` — python:3.11-slim, requirements 설치, uvicorn 8000, `/app/data` 볼륨
+- `backend/xops-service/Dockerfile` — python:3.11-slim, requirements(+DB 드라이버) 설치, uvicorn 8000, `/app/data` 볼륨
 - `frontend/Dockerfile` — 멀티스테이지(node build → nginx), `nginx.conf`가 `/api`를 `xops-service:8000`으로 프록시 + SPA 폴백
-- `platform/compose.xops.yaml` — 프론트(8080) + 백엔드(8000) + `xops-data` 볼륨(상태 영속)
+- `platform/compose.xops.yaml` — 프론트(8080) + 백엔드(8000) + 실 저장소 3종(postgis 5433·timescale 5434·mongo 27017) + named volume 4개.
+  호스트 포트 충돌 시 `XOPS_HOST_PORT`/`XOPS_FRONTEND_HOST_PORT` 로 오버라이드(내부 포트·프록시 계약 불변)
 - prod 전환 시 `XOPS_ENVIRONMENT=prod` + `XOPS_JWT_SECRET`(+선택 `XOPS_CLIENT_ID/SECRET`) 주입
 
-> 현 상태: 파일 정적 검증(YAML·참조파일·프론트 빌드) 통과. **`docker compose up` 실물 기동은 Docker 설치 환경에서 최종 확인 필요.**
+> 현 상태: **`docker compose up -d --build` 완전체 실물 기동 검증 완료(2026-09-01)** — 컨테이너 경유로
+> 헬스·카탈로그 9종·실 저장소 3종 조회(`source_kind=database`)·쓰기 왕복(SQL 17→18→17행, MQL POST/PATCH/DELETE)을 실측했다.
 
 ---
 
@@ -238,5 +249,15 @@ python -m pytest tests/ --cov=src --cov-report=term-missing   # 80% 게이트
 
 - Overview·Simulator·Reporter 페이지 연동
 - report-service(리포팅/내보내기), dashboard-service(조회/집계)
-- 실제 Postgres/PostGIS/Mongo/Timescale·MLflow/MinIO 연결(현재 In-Memory + provider seam)
 - 로그인 기반 인증, 오케스트레이션 비동기 run + 상태 폴링, E2E(Playwright) 자동화
+
+### 해소된 항목 (2026-08-31 ~ 09-01)
+
+- ~~실제 Postgres/PostGIS/Mongo/Timescale 연결~~ → **완료.** `QueryAdapter` seam 을 실제 실행
+  계층(backends.py)으로 채우고 compose 에 실 저장소 3종을 편성했다. 읽기·쓰기(파라미터 바인딩)
+  모두 실 저장소를 관통하며, DSN·드라이버 부재 시 In-Memory 로 degrade 하는 이중 구조는 유지된다.
+  실데이터 2건(행정구역경계 251·사회복지시설 17)도 적재·카탈로그 등록됐다(ds_08·ds_09,
+  `platform/data/real/README.md`).
+- ~~compose 실물 기동 검증~~ → **완료.** §11 참조.
+- MLflow/MinIO 는 재학습 파이프라인 실물화(SQLite 레지스트리 + 로컬 아티팩트) 때 **의도적으로
+  도입하지 않았다** — 필요 시 `registry.py` provider seam 에 어댑터로 끼운다(체크리스트 참조).
