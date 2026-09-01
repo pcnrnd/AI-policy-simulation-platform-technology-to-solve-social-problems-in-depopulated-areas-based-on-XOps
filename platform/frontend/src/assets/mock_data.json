@@ -316,6 +316,48 @@
         { "name": "sentiment_score", "type": "Double", "description": "감성 분석 점수 (-1.0 ~ 1.0)" },
         { "name": "created_at", "type": "ISODate", "description": "민원 접수 일시" }
       ]
+    },
+    {
+      "id": "ds_08_admin_boundary",
+      "label": "행정구역경계(실데이터)",
+      "source": "공간 DB · PostGIS",
+      "object": "geo_admin_boundary",
+      "description": "전국 시군구 행정구역경계 251개 (통계청 2013, EPSG:4326) — platform/data/real 원본 적재",
+      "archive": { "tier": "Cold", "retention": "영구 보존", "loaded_at": "2026-09-01", "rows": 251 },
+      "lineage": { "origin": "통계청 행정구역경계 2013 (southkorea-maps GeoJSON 재배포본)", "version": "v1", "commit": "8c406e" },
+      "range": { "column": "adm_code", "from": "11010", "to": "39020" },
+      "tags": ["공간", "경계", "실데이터"],
+      "columns": [
+        { "name": "adm_code", "type": "VARCHAR(5)", "description": "통계청 행정구역분류 코드 (남원시 35050, 신안군 36480)" },
+        { "name": "adm_name", "type": "VARCHAR(40)", "description": "시군구 명칭" },
+        { "name": "adm_name_eng", "type": "VARCHAR(80)", "description": "시군구 영문 명칭" },
+        { "name": "base_year", "type": "VARCHAR(4)", "description": "경계 기준 연도" },
+        { "name": "geom_boundary", "type": "GEOMETRY(MultiPolygon, 4326)", "description": "시군구 경계 폴리곤" }
+      ]
+    },
+    {
+      "id": "ds_09_welfare_facility",
+      "label": "사회복지시설(실데이터)",
+      "source": "RDB · PostgreSQL",
+      "object": "tb_welfare_facility",
+      "description": "남원시 사회복지시설현황 + 신안군 장애인복지시설현황 (공공데이터포털 15094099·15114967)",
+      "archive": { "tier": "Hot", "retention": "10년 보존", "loaded_at": "2026-09-01", "rows": 17 },
+      "lineage": { "origin": "공공데이터포털 지자체 파일데이터 (CP949→UTF-8 변환만 수행)", "version": "v1", "commit": "189bc9" },
+      "range": { "column": "facility_id", "from": "NW-WF-001", "to": "SA-WF-999" },
+      "tags": ["복지", "시설", "실데이터"],
+      "columns": [
+        { "name": "facility_id", "type": "VARCHAR(12)", "description": "시설 식별자 (NW-WF-*: 남원, SA-WF-*: 신안)" },
+        { "name": "region_code", "type": "VARCHAR(5)", "description": "법정 시군구 코드 (남원 45190, 신안 46910)" },
+        { "name": "sigungu_name", "type": "VARCHAR(20)", "description": "시군구 명칭" },
+        { "name": "facility_name", "type": "VARCHAR(80)", "description": "시설명" },
+        { "name": "facility_type", "type": "VARCHAR(40)", "description": "시설 유형 (신안: 원본 시설유형, 남원: 사회복지시설)" },
+        { "name": "road_address", "type": "VARCHAR(200)", "description": "도로명주소" },
+        { "name": "phone", "type": "VARCHAR(20)", "description": "전화번호" },
+        { "name": "staff_count", "type": "INTEGER", "description": "종사원 수 (남원 파일 미제공 — NULL)" },
+        { "name": "latitude", "type": "DOUBLE PRECISION", "description": "위도 (남원 파일 미제공 — NULL)" },
+        { "name": "longitude", "type": "DOUBLE PRECISION", "description": "경도 (남원 파일 미제공 — NULL)" },
+        { "name": "data_base_date", "type": "VARCHAR(10)", "description": "데이터 기준일자" }
+      ]
     }
   ],
   "benchmark_regions": [
