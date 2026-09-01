@@ -11,7 +11,7 @@ def test_health(client: TestClient) -> None:
 
 def test_catalog_list_and_search(client: TestClient) -> None:
     all_sources = client.get("/api/v3/dataops/catalog").json()
-    assert len(all_sources) == 7
+    assert len(all_sources) == 9  # 시드 7종 + 실데이터 2종(ds_08 경계, ds_09 복지시설)
     filtered = client.get("/api/v3/dataops/catalog", params={"q": "MongoDB"}).json()
     assert all("MongoDB" in (s.get("source") or "") for s in filtered)
 

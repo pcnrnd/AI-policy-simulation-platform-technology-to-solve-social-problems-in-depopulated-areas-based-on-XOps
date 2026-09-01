@@ -1,5 +1,9 @@
 # === Data ===
 data
+# 실 공공데이터 원본(platform/data/real)은 적재 재현을 위해 추적한다
+!platform/data/
+!platform/data/real/
+!platform/data/real/**
 data_2025
 data_2026
 data_raw
