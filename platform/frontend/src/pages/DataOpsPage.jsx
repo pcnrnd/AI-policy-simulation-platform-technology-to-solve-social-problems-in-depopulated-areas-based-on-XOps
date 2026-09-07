@@ -275,9 +275,10 @@ export default function DataOpsPage() {
   };
 
   // 신규 아카이브 등록 — 백엔드 카탈로그 CRUD로 서버 영속화 (localStorage 제거)
+  // 카탈로그 쓰기는 서버가 data:write 스코프를 요구하므로 발급받은 토큰을 함께 보낸다.
   const handleRegisterSource = async (schema) => {
     try {
-      await apiSend("POST", CATALOG_URL, { body: toRegisterBody(schema) });
+      await apiSend("POST", CATALOG_URL, { token, body: toRegisterBody(schema) });
       await refreshCatalog();
       setShowRegForm(false);
       handleSelectSource(schema.id);
@@ -293,7 +294,7 @@ export default function DataOpsPage() {
 
   const handleDeleteSource = async (id) => {
     try {
-      await apiSend("DELETE", `${CATALOG_URL}/${id}`, {});
+      await apiSend("DELETE", `${CATALOG_URL}/${id}`, { token });
       const list = await refreshCatalog();
       if (sourceId === id) handleSelectSource(list[0]?.id ?? null);
       addConsoleLog(`WARN: 사용자 등록 아카이브 삭제 — ${id} (메타데이터·가상화 API 제공 중지)`, false, true);
@@ -620,6 +621,8 @@ export default function DataOpsPage() {
           <div className="empty-state">
             <i className="fa-solid fa-box-open" aria-hidden="true"></i>
             <p>등록된 데이터 소스가 없습니다. 아카이브 메타데이터를 등록해 시작하세요.</p>
+            {/* 소스가 하나도 없는 퇴화 상태 — 이 분기에는 토큰 발급 UI(③ 단계)가 렌더되지 않아
+                비활성화하면 진입 경로가 막힌다. 시도는 허용하고 서버 401 을 폼 오류로 노출한다. */}
             {!showRegForm && (
               <button type="button" className="btn btn-primary" onClick={() => setShowRegForm(true)}>
                 <i className="fa-solid fa-plus" aria-hidden="true"></i> 신규 아카이브 등록
@@ -759,12 +762,14 @@ export default function DataOpsPage() {
                 <option value="loaded">최근 적재일</option>
               </select>
             </label>
+            {/* 토큰 없이는 등록 폼을 열지 않는다(닫기는 항상 허용해 폼에 갇히지 않도록) */}
             <button
               type="button"
               className={`btn ${showRegForm ? "btn-secondary" : "btn-primary"} catalog-reg-btn`}
               onClick={() => setShowRegForm((v) => !v)}
               aria-expanded={showRegForm}
-              disabled={registrationSubmitting}
+              disabled={registrationSubmitting || (!token && !showRegForm)}
+              aria-describedby={token ? undefined : "catalog-auth-hint"}
             >
               <i className={`fa-solid ${showRegForm ? "fa-xmark" : "fa-plus"}`} aria-hidden="true"></i>{" "}
               {showRegForm ? "등록 닫기" : "신규 아카이브 등록"}
@@ -777,6 +782,12 @@ export default function DataOpsPage() {
               <button type="button" className="btn btn-tertiary" onClick={() => { setCatalogQuery(""); setCatalogPage(1); }}>
                 검색 해제
               </button>
+            )}
+            {/* 버튼 비활성은 UX 안내일 뿐이고, 실제 보안 경계는 서버의 401(data:write 스코프)이다. */}
+            {!token && (
+              <span id="catalog-auth-hint" style={{ fontSize: 11, color: "var(--text-muted)" }}>
+                <i className="fa-solid fa-lock" aria-hidden="true"></i> ③ 단계에서 토큰 발급 후 등록·삭제 가능
+              </span>
             )}
           </div>
 
@@ -842,9 +853,10 @@ export default function DataOpsPage() {
                             className="btn btn-secondary catalog-row-del"
                             onClick={() => requestDeleteSource(s)}
                             data-source-delete={s.id}
-                            disabled={Boolean(pendingAction)}
+                            disabled={Boolean(pendingAction) || !token}
                             aria-label={`${s.label} 아카이브 삭제`}
-                            title="등록 해제 (메타데이터·API 제공 중지)"
+                            aria-describedby={token ? undefined : "catalog-auth-hint"}
+                            title={token ? "등록 해제 (메타데이터·API 제공 중지)" : "토큰 발급 후 삭제 가능"}
                           >
                             <i className="fa-solid fa-trash-can" aria-hidden="true"></i>
                           </button>

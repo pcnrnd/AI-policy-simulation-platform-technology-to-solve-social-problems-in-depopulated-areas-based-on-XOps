@@ -1,6 +1,6 @@
 # xops-service 개발내용 체크리스트
 
-> 원 개발내용(명세) 대비 구현 완료 현황 · 최종 갱신 2026-09-01
+> 원 개발내용(명세) 대비 구현 완료 현황 · 최종 갱신 2026-09-07
 > 범례: ✅ 완료(xops-service) · 🟡 완료(단, 실 인프라는 seam/후속) · 🔷 프론트엔드 담당(백엔드 범위 밖) · ⬜ 미착수
 
 ---
@@ -25,7 +25,7 @@
 - [x] ✅ JWT / OAuth2 인증 — `auth/jwt.py` (`/token`·`/oauth2`)
 - [x] ✅ 데이터 요청 관리·기록 — 구조화 JSON 로깅 + 발급 API 목록 보존
 - [x] ✅ 다기종 확장(NoSQL/MQL) — Mongo 소스 `db.col.find({..$gte,$lte})` 재현
-- [x] ✅ 사용자 아카이브 등록·삭제 (메타데이터 등록 단계) — `POST/DELETE /dataops/catalog`, SQLite 영속화
+- [x] ✅ 사용자 아카이브 등록·삭제 (메타데이터 등록 단계) — `POST/DELETE /dataops/catalog`, SQLite 영속화, 쓰기는 `data:write` JWT 요구(조회 2개는 공개)
 
 ---
 
@@ -68,7 +68,7 @@
 | MLOps 오케스트레이션 | ✅ 전 항목 | 인프로세스 실 학습·실측 승급(외부 학습 인프라 불요) |
 | 시뮬레이션 UI/공간정보 | 🔷 프론트 담당 | xops 범위 밖 |
 
-**xops-service 담당 범위(DataOps + MLOps)의 명세 항목은 전부 구현 완료.** 테스트 183건 / 커버리지 96.4%.
+**xops-service 담당 범위(DataOps + MLOps)의 명세 항목은 전부 구현 완료.** 테스트 187건 / 커버리지 96.5%.
 
 ### 실물화로 해소된 항목 (실 인프라 연동, 2026-08-31 ~ 09-01)
 「실제 Postgres/PostGIS/Mongo/Timescale 연결」과 「compose 실물 기동 검증」은 후속 목록에서
@@ -81,5 +81,11 @@
 SQLite 모델 레지스트리로 구현돼 후속 목록에서 제외했다. MLflow(실험 추적)·MinIO(아티팩트)는
 현재 UI가 요구하는 기능(재학습·버전관리·승급·롤백)을 이 구성이 이미 충족하므로 **의도적으로 도입하지
 않았다** — 필요해지면 `registry.py`의 provider seam에 어댑터로 끼운다.
+
+### 남은 한계 — 카탈로그 쓰기 인증 (2026-09-07)
+`POST/DELETE /dataops/catalog` 에 `data:write` 스코프를 요구하도록 보강했지만, dev 환경은
+토큰 발급(`/dataops/token/{source_id}`)이 개방이라 **최소 계약 보강**에 그친다. 후속: prod
+client 자격증명 필수 기동 검증, 토큰-source 결합(현재는 어떤 source 토큰으로도 쓰기 가능),
+읽기·쓰기와 분리된 `catalog:write` 스코프 도입 검토.
 
 상세 설계는 [xops-service.md](xops-service.md) 참조.
