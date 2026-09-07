@@ -1,7 +1,8 @@
 """카탈로그 메타데이터 주입 방어 테스트.
 
-`POST /dataops/catalog` 은 인증 없이 열려 있고, 등록된 object·컬럼명·range 가 생성 SQL에
-그대로 조립된다. 실 저장소가 붙으면 그 SQL이 그대로 실행되므로 등록·실행 양쪽에서 막아야 한다.
+`POST /dataops/catalog` 은 `data:write` 토큰 보유자에게 열려 있고(dev는 토큰 발급이 개방),
+등록된 object·컬럼명·range 가 생성 SQL에 그대로 조립된다. 실 저장소가 붙으면 그 SQL이
+그대로 실행되므로 인증과 별개로 등록·실행 양쪽에서 막아야 한다.
 
 각 케이스는 (1) 등록이 거부되는지 (2) 등록 검증을 우회해 저장된 행이라도 실행 단계에서
 거부되는지 를 함께 본다. (2)는 이번 검증 도입 이전에 SQLite에 남은 행을 상정한 것이다.
@@ -31,8 +32,8 @@ def _payload(**overrides: Any) -> dict[str, Any]:
     return body
 
 
-def _register(client: TestClient, **overrides: Any) -> int:
-    return client.post(_CATALOG, json=_payload(**overrides)).status_code
+def _register(client: TestClient, headers: dict[str, str], **overrides: Any) -> int:
+    return client.post(_CATALOG, json=_payload(**overrides), headers=headers).status_code
 
 
 # ── 등록 경계 ──
@@ -49,8 +50,10 @@ def _register(client: TestClient, **overrides: Any) -> int:
         "a" * 64,  # 길이 상한(63) 초과
     ],
 )
-def test_malicious_object_name_rejected(client: TestClient, object_name: str) -> None:
-    assert _register(client, object=object_name) == 422
+def test_malicious_object_name_rejected(
+    client: TestClient, auth_headers: dict[str, str], object_name: str
+) -> None:
+    assert _register(client, auth_headers, object=object_name) == 422
 
 
 @pytest.mark.parametrize(
@@ -65,8 +68,10 @@ def test_malicious_object_name_rejected(client: TestClient, object_name: str) ->
         "",
     ],
 )
-def test_malicious_column_name_rejected(client: TestClient, column_name: str) -> None:
-    assert _register(client, columns=[{"name": column_name, "type": "int"}]) == 422
+def test_malicious_column_name_rejected(
+    client: TestClient, auth_headers: dict[str, str], column_name: str
+) -> None:
+    assert _register(client, auth_headers, columns=[{"name": column_name, "type": "int"}]) == 422
 
 
 @pytest.mark.parametrize(
@@ -77,8 +82,10 @@ def test_malicious_column_name_rejected(client: TestClient, column_name: str) ->
         {"column": "1a", "from": "1", "to": "2"},
     ],
 )
-def test_malicious_range_column_rejected(client: TestClient, range_def: dict[str, Any]) -> None:
-    assert _register(client, range=range_def) == 422
+def test_malicious_range_column_rejected(
+    client: TestClient, auth_headers: dict[str, str], range_def: dict[str, Any]
+) -> None:
+    assert _register(client, auth_headers, range=range_def) == 422
 
 
 @pytest.mark.parametrize(
@@ -92,14 +99,21 @@ def test_malicious_range_column_rejected(client: TestClient, range_def: dict[str
         "a" * 129,  # 길이 상한(128) 초과
     ],
 )
-def test_malicious_range_boundary_rejected(client: TestClient, boundary: str) -> None:
+def test_malicious_range_boundary_rejected(
+    client: TestClient, auth_headers: dict[str, str], boundary: str
+) -> None:
     """range 경계값은 SQL 리터럴로 들어가므로 따옴표·세미콜론·괄호를 배제한다."""
-    status = _register(client, range={"column": "col_a", "from": boundary, "to": "z"})
-    assert status == 400  # UnsafeQueryError → 400
-    assert _register(client, range={"column": "col_a", "from": "a", "to": boundary}) == 400
+
+    def register_boundary(from_: str, to: str) -> int:
+        return _register(client, auth_headers, range={"column": "col_a", "from": from_, "to": to})
+
+    assert register_boundary(boundary, "z") == 400  # UnsafeQueryError → 400
+    assert register_boundary("a", boundary) == 400
 
 
-def test_legitimate_source_still_registers(client: TestClient) -> None:
+def test_legitimate_source_still_registers(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
     """정상 스키마는 그대로 등록·조회된다 — 검증이 과하게 막지 않는지 확인."""
     body = _payload(
         id="inj_ok",
@@ -107,12 +121,12 @@ def test_legitimate_source_still_registers(client: TestClient) -> None:
         columns=[{"name": "col_a", "type": "int"}, {"name": "col_b", "type": "VARCHAR(8)"}],
         range={"column": "col_a", "from": "NW-SF-001", "to": "NW-SF-128"},  # 하이픈 값은 허용
     )
-    assert client.post(_CATALOG, json=body).status_code == 201
+    assert client.post(_CATALOG, json=body, headers=auth_headers).status_code == 201
     token = client.post("/api/v3/dataops/token/inj_ok").json()["access_token"]
     got = client.get("/api/v3/dataops/inj_ok", headers={"Authorization": f"Bearer {token}"})
     assert got.status_code == 200
     assert "FROM tb_valid_source" in got.json()["generated_query"]
-    client.request("DELETE", f"{_CATALOG}/inj_ok")
+    client.request("DELETE", f"{_CATALOG}/inj_ok", headers=auth_headers)
 
 
 # ── 실행 경계 (등록 검증 우회분) ──
