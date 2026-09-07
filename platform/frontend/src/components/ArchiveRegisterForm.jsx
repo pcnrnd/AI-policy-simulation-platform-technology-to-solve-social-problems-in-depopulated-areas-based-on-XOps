@@ -41,7 +41,9 @@ const coerce = (v) => {
   return v !== "" && Number.isFinite(n) ? n : v;
 };
 
-export default function ArchiveRegisterForm({ onRegister, onCancel, onSubmittingChange }) {
+// canSubmit: 등록(POST /catalog)에 필요한 data:write 토큰 보유 여부. 값이 없으면 submit을 막는다
+// (실패 안전 기본값). 취소·닫기는 canSubmit과 무관하게 항상 허용해 폼에 갇히지 않도록 한다.
+export default function ArchiveRegisterForm({ onRegister, onCancel, onSubmittingChange, canSubmit }) {
   const [form, setForm] = useState(INITIAL_FORM);
   const [errors, setErrors] = useState({});
   const [submitError, setSubmitError] = useState("");
@@ -157,6 +159,8 @@ export default function ArchiveRegisterForm({ onRegister, onCancel, onSubmitting
   const handleSubmit = async (event) => {
     event.preventDefault();
     if (submitting) return;
+    // 폼 열린 뒤 인증 방식 전환·401로 토큰이 폐기되면 확정 401이므로 전송하지 않는다.
+    if (!canSubmit) return;
     const nextErrors = validate();
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors);
@@ -494,11 +498,29 @@ export default function ArchiveRegisterForm({ onRegister, onCancel, onSubmitting
         </p>
       )}
 
+      {!canSubmit && (
+        <p
+          id={`${formId}-auth-hint`}
+          role="status"
+          aria-live="polite"
+          style={{ margin: "10px 0 0", fontSize: 11, color: "var(--text-muted)" }}
+        >
+          <i className="fa-solid fa-lock" aria-hidden="true"></i>{" "}
+          등록에는 data:write 토큰이 필요합니다. 토큰을 발급하면 등록할 수 있습니다.
+        </p>
+      )}
+
       <div className="archive-reg-actions">
         <button type="button" className="btn btn-secondary" onClick={onCancel} disabled={submitting}>
           취소
         </button>
-        <button type="submit" className="btn btn-primary" disabled={submitting}>
+        <button
+          type="submit"
+          className="btn btn-primary"
+          disabled={submitting || !canSubmit}
+          aria-describedby={canSubmit ? undefined : `${formId}-auth-hint`}
+          title={canSubmit ? undefined : "토큰 발급 후 등록 가능"}
+        >
           <i className={`fa-solid ${submitting ? "fa-spinner fa-spin" : "fa-tags"}`} aria-hidden="true"></i>{" "}
           {submitting ? "등록 중" : "메타데이터 등록 · 적재"}
         </button>
