@@ -123,9 +123,11 @@
 .xops-ribbon-step.is-active .xops-ribbon-badge {
   color: var(--accent-blue);
 }
-/* ready = 다음 단계에서 확인 가능(완료 아님) — done(teal)·active(blue)와 구분되는 색을 쓴다. */
+/* ready = 다음 단계에서 확인 가능(완료 아님) — done(teal)·active(blue)와 구분되는 색을 쓴다.
+   11px 텍스트라 AA 4.5:1이 필요하다. 면적용 --accent-purple(다크 #8b5cf6)은 카드 표면에서 4.17:1로 미달이라
+   텍스트용 --accent-purple-text를 쓴다(카드 기본 표면 대비 다크 6.48:1 · 라이트 7.00:1). 리본 캡 아이콘과 같은 토큰. */
 .xops-ribbon-step.is-ready .xops-ribbon-badge {
-  color: var(--accent-purple);
+  color: var(--accent-purple-text);
 }
 .xops-ribbon-step.is-alert .xops-ribbon-badge {
   color: var(--accent-orange);

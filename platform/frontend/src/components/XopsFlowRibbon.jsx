@@ -93,7 +93,10 @@ function deriveFlowSteps({
       // 승급 버전이 시뮬레이션에 반영됐다는 근거가 없다 — 확인 가능(ready)까지만 표시한다.
       // 설계 §5(모델 버전 전파)가 구현되면 시뮬레이터가 쓰는 버전으로 done 판정을 연결한다.
       tone: promoted ? "ready" : "idle",
-      badge: servingVersion ? `모델 ${servingVersion} ${promoted ? "확인 가능" : "기준"}` : null
+      // 목업 표시 OFF면 버전 배지도 렌더하지 않는다 — ① 카탈로그 건수와 같은 기준(단계 상태·tone·CTA는 유지).
+      // modelStore는 MODEL_STORE 시드로 시작해 /api/v3/orchestration/models 응답으로만 부분 갱신되고,
+      // 행 단위 출처 표기가 없어 렌더 시점에 시드와 백엔드 값을 구분할 수 없다 → 시드를 실측처럼 보이지 않게 감춘다.
+      badge: servingVersion && mockDataVisible ? `모델 ${servingVersion} ${promoted ? "확인 가능" : "기준"}` : null
     }
   ];
 }

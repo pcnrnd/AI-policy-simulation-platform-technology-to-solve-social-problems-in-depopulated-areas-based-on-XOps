@@ -461,6 +461,9 @@ export default function DataOpsPage() {
       const message = `원천 데이터 소스(${api.sourceId})를 찾을 수 없습니다. 이 API를 삭제하거나 소스를 다시 등록하세요.`;
       addConsoleLog(`WARN: 등록 API 호출 실패 — ${message}`);
       setAsyncFeedback({ tone: "error", message });
+      // 조기 반환도 호출 실패다 — 아래 setResponseOk(result.ok)와 같은 규칙으로 STEP ③ 완료 표시를 풀어야
+      // 이전 호출 성공의 표시가 남지 않는다.
+      setResponseOk(false);
       return;
     }
     const storedFilterError = filterValidationMessage(api.filter, source.columns);
@@ -468,6 +471,7 @@ export default function DataOpsPage() {
       const message = `저장된 필터가 유효하지 않습니다. ${storedFilterError} API 구성을 삭제하고 다시 빌드하세요.`;
       setAsyncFeedback({ tone: "error", message });
       addConsoleLog(`WARN: 등록 API 호출 실패 — ${message}`);
+      setResponseOk(false);
       return;
     }
     const cfg = { method: api.method, source, filter: api.filter, sort: api.sort, page: api.page, pageSize: api.pageSize };
