@@ -158,7 +158,7 @@ export default function App() {
     requestAnimationFrame(() => document.getElementById(`${activeTab}-panel`)?.focus());
   }, [activeTab, tabFocusRequest]);
 
-  // 배너의 [목업 데이터 켜기]는 누르는 순간 자기 자신과 배너를 함께 언마운트시켜 초점이 body로 떨어진다.
+  // 배너의 [데모 데이터 켜기]는 누르는 순간 자기 자신과 배너를 함께 언마운트시켜 초점이 body로 떨어진다.
   // 기존 탭 초점 규약(tabFocusRequest → 활성 패널)을 그대로 재사용해 초점을 돌려준다(Enter·Space 공통).
   const handleShowMockData = useCallback(() => {
     toggleMockDataVisible();
@@ -239,18 +239,18 @@ export default function App() {
           ref={contentBodyRef}
           style={{ "--mock-off-banner-height": `${bannerHeight}px` }}
         >
-          {/* 목업 표시 OFF는 무기한 유지되고 새로고침에도 남는다. 아무 단서 없이 값만 사라지면
+          {/* 데모 표시 OFF는 무기한 유지되고 새로고침에도 남는다. 아무 단서 없이 값만 사라지면
               "데이터가 없어진" 것으로 읽히므로, OFF인 동안은 이유와 복구 수단을 상시 노출한다. */}
           {!mockDataVisible && (
             <div className="mock-off-banner" role="status" ref={bannerRef}>
               <i className="fa-solid fa-eye-slash mock-off-banner-icon" aria-hidden="true"></i>
               <p className="mock-off-banner-text">
-                <span className="mock-off-banner-title">목업 데이터 표시 OFF</span> — 설정에서 켤 수
-                있습니다. 실데이터로 채워진 영역은 그대로 표시되고, 목업 값만 가려집니다. 이 설정은
+                <span className="mock-off-banner-title">데모 데이터 표시 OFF</span> — 설정에서 켤 수
+                있습니다. 실데이터로 채워진 영역은 그대로 표시되고, 데모 값만 가려집니다. 이 설정은
                 브라우저(주소)별로 저장되므로 다른 주소·브라우저에서는 따로 켜야 합니다.
               </p>
               <button type="button" className="btn btn-primary" onClick={handleShowMockData}>
-                <i className="fa-solid fa-eye" aria-hidden="true"></i> 목업 데이터 켜기
+                <i className="fa-solid fa-eye" aria-hidden="true"></i> 데모 데이터 켜기
               </button>
             </div>
           )}
