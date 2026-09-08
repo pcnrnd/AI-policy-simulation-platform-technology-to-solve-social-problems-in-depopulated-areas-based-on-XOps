@@ -4,7 +4,15 @@ import { useTheme } from "../context/ThemeContext.jsx";
 // 게이지(반원) — Doughnut 차트를 반원으로 렌더하여 0~1 비율을 표시.
 // lowerIsBetter: 지연시간처럼 낮을수록 좋은 지표(임계 대비 사용률)에 사용.
 // displayText: % 대신 표시할 텍스트(예: "120ms").
-export default function GaugeChart({ value, label, goodThreshold = 0.85, lowerIsBetter = false, displayText }) {
+// rest: 호출부가 게이지 껍데기에 직접 붙이는 DOM 속성(예: data-values-source).
+export default function GaugeChart({
+  value,
+  label,
+  goodThreshold = 0.85,
+  lowerIsBetter = false,
+  displayText,
+  ...rest
+}) {
   const { isDark } = useTheme();
   const ratio = Math.max(0, Math.min(1, value));
   const ok = lowerIsBetter ? ratio <= goodThreshold : ratio >= goodThreshold;
@@ -39,7 +47,10 @@ export default function GaugeChart({ value, label, goodThreshold = 0.85, lowerIs
 
   // 보조 지표용 컴팩트 게이지 — 칸 폭에 끌려 커지지 않도록 폭 상한 + 중앙 정렬
   return (
-    <div style={{ position: "relative", height: 100, maxWidth: 180, width: "100%", margin: "0 auto" }}>
+    <div
+      style={{ position: "relative", height: 100, maxWidth: 180, width: "100%", margin: "0 auto" }}
+      {...rest}
+    >
       <Doughnut data={data} options={options} />
       <div
         style={{

@@ -22,7 +22,7 @@ export default function Header({ title, onToggleSidebar, sidebarOpen, menuButton
   const bellRef = useRef(null);
   const notifRef = useRef(null);
 
-  // 목업 표시를 끄면 벨 드롭다운도 함께 접는다 — 다시 켤 때 열린 채로 되살아나지 않도록.
+  // 데모 표시를 끄면 벨 드롭다운도 함께 접는다 — 다시 켤 때 열린 채로 되살아나지 않도록.
   useEffect(() => {
     if (!mockDataVisible) setNotifOpen(false);
   }, [mockDataVisible]);
@@ -69,8 +69,10 @@ export default function Header({ title, onToggleSidebar, sidebarOpen, menuButton
   }
 
   if (!mockDataVisible) {
+    // 데모 기반 상태 문구(정상·드리프트·재학습)는 감추되 빈칸으로 두지 않는다.
+    // 문구가 사라진 헤더는 모니터링이 멈춘 것처럼 읽힌다 — OFF라는 사실을 남긴다.
     statusClass = "system-status mock-data-visibility-status";
-    statusText = "";
+    statusText = "데모 데이터 OFF";
   }
 
   return (

@@ -70,7 +70,7 @@ export default function SettingsPanel() {
           <div className="settings-row">
             <div className="settings-row-label">
               <i className="fa-solid fa-flask-vial" aria-hidden="true"></i>
-              <span id="mock-data-switch-label">목업 데이터 표시</span>
+              <span id="mock-data-switch-label">데모 데이터 표시</span>
             </div>
             <button
               type="button"
