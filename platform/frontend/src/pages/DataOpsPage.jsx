@@ -13,6 +13,12 @@ import { getScrollBehavior } from "../lib/motion.js";
 
 const READY_RESPONSE = `// [POST·GET·PUT·PATCH·DELETE] 요청을 전송하면 표준 REST 응답이 표시됩니다.`;
 const CATALOG_URL = "/api/v3/dataops/catalog";
+// 소스가 0건인 상태에서도 첫 등록을 위해 data:write 토큰을 받아야 한다. 서버는 발급 시 source_id를
+// 검증하지 않고 카탈로그 쓰기도 scope만 확인하므로(존재하지 않는 시드 id를 추측할 필요 없음),
+// 선택된 소스가 없을 때는 카탈로그 전용 발급 키를 쓴다.
+const CATALOG_TOKEN_SOURCE = "catalog";
+// 401은 화면의 토큰이 이미 무효(만료·서명 불일치)라는 뜻 — 폐기 후 재발급을 안내한다.
+const TOKEN_DISCARDED_MESSAGE = "토큰이 만료·무효화되어 폐기했습니다. 토큰을 다시 발급한 뒤 시도하세요.";
 const FILTER_PATTERN = /^(\w+)\s*(>=|<=|!=|=|>|<)\s*('[^';]*'|"[^";]*"|-?\d+(?:\.\d+)?|\w+)$/;
 
 function filterValidationMessage(value, columns = []) {
@@ -109,6 +115,26 @@ function WorkflowStatus({ workflow }) {
       {batchTasks.map((t) => t.label).join(" → ")} 완료
       {lastDone && ` (최근 ${lastDone})`} · {batchTasks[0]?.schedule ?? ""} 스케줄 · API 상시 제공
     </div>
+  );
+}
+
+// 비동기 작업(토큰 발급·등록·삭제·API 호출) 결과 한 줄 피드백 — 정상 화면과 소스 0건 분기 공용.
+function AsyncFeedback({ feedback }) {
+  if (!feedback) return null;
+  const icon =
+    feedback.tone === "pending"
+      ? "fa-spinner fa-spin"
+      : feedback.tone === "error"
+        ? "fa-circle-exclamation"
+        : "fa-circle-check";
+  return (
+    <p
+      className={`async-feedback is-${feedback.tone}`}
+      role={feedback.tone === "error" ? "alert" : "status"}
+      aria-live={feedback.tone === "error" ? "assertive" : "polite"}
+    >
+      <i className={`fa-solid ${icon}`} aria-hidden="true"></i> {feedback.message}
+    </p>
   );
 }
 
@@ -274,10 +300,21 @@ export default function DataOpsPage() {
     setSentAt(null);
   };
 
+  // 카탈로그 쓰기가 401이면 보관 중인 토큰을 폐기한다 — 만료(exp 1h) 후에도 "인증됨" 표시와
+  // 등록·삭제 버튼이 활성으로 남아 확정 실패를 반복하는 것을 막는다. 401이 아니면 상태 불변.
+  const discardTokenOn401 = (err) => {
+    if (err?.status !== 401) return false;
+    setToken(null);
+    addConsoleLog(`WARN: ${TOKEN_DISCARDED_MESSAGE}`, false, true);
+    setAsyncFeedback({ tone: "error", message: TOKEN_DISCARDED_MESSAGE });
+    return true;
+  };
+
   // 신규 아카이브 등록 — 백엔드 카탈로그 CRUD로 서버 영속화 (localStorage 제거)
+  // 카탈로그 쓰기는 서버가 data:write 스코프를 요구하므로 발급받은 토큰을 함께 보낸다.
   const handleRegisterSource = async (schema) => {
     try {
-      await apiSend("POST", CATALOG_URL, { body: toRegisterBody(schema) });
+      await apiSend("POST", CATALOG_URL, { token, body: toRegisterBody(schema) });
       await refreshCatalog();
       setShowRegForm(false);
       handleSelectSource(schema.id);
@@ -287,20 +324,24 @@ export default function DataOpsPage() {
       setAsyncFeedback({ tone: "success", message: `${schema.label} 아카이브를 등록했습니다.` });
     } catch (err) {
       addConsoleLog(`WARN: 아카이브 등록 실패 — ${err.message}`, false, true);
+      // 폼은 rethrow된 서버 메시지를 오류 요약에 표시하고, 401이면 submit이 비활성으로 전환된다.
+      discardTokenOn401(err);
       throw err;
     }
   };
 
   const handleDeleteSource = async (id) => {
     try {
-      await apiSend("DELETE", `${CATALOG_URL}/${id}`, {});
+      await apiSend("DELETE", `${CATALOG_URL}/${id}`, { token });
       const list = await refreshCatalog();
       if (sourceId === id) handleSelectSource(list[0]?.id ?? null);
       addConsoleLog(`WARN: 사용자 등록 아카이브 삭제 — ${id} (메타데이터·가상화 API 제공 중지)`, false, true);
       setAsyncFeedback({ tone: "success", message: "아카이브 등록을 해제하고 API 제공을 중지했습니다." });
     } catch (err) {
       addConsoleLog(`WARN: 아카이브 삭제 실패 — ${err.message}`, false, true);
-      setAsyncFeedback({ tone: "error", message: `아카이브를 삭제하지 못했습니다. ${err.message}` });
+      if (!discardTokenOn401(err)) {
+        setAsyncFeedback({ tone: "error", message: `아카이브를 삭제하지 못했습니다. ${err.message}` });
+      }
       throw err;
     }
   };
@@ -310,7 +351,8 @@ export default function DataOpsPage() {
     setPendingAction("token");
     setAsyncFeedback({ tone: "pending", message: `${authMethod} 토큰을 발급하는 중입니다.` });
     try {
-      const path = authMethod === "OAuth2" ? `/api/v3/dataops/oauth2/${sourceId}` : `/api/v3/dataops/token/${sourceId}`;
+      const tokenSource = sourceId ?? CATALOG_TOKEN_SOURCE;
+      const path = authMethod === "OAuth2" ? `/api/v3/dataops/oauth2/${tokenSource}` : `/api/v3/dataops/token/${tokenSource}`;
       const res = await apiSend("POST", path, {});
       if (authMethod === "OAuth2") {
         setToken(res.access_token);
@@ -616,10 +658,39 @@ export default function DataOpsPage() {
         <p className="dataops-page-sub">
           <i className="fa-solid fa-box-archive" aria-hidden="true"></i> 데이터 라이프사이클 관리(DataOps)
         </p>
+        <AsyncFeedback feedback={asyncFeedback} />
         <Card title="메타데이터 카탈로그" titleId="dataops-catalog-title" titleTabIndex={-1}>
           <div className="empty-state">
             <i className="fa-solid fa-box-open" aria-hidden="true"></i>
             <p>등록된 데이터 소스가 없습니다. 아카이브 메타데이터를 등록해 시작하세요.</p>
+            {/* 소스가 하나도 없는 퇴화 상태 — ③ 단계(토큰 발급 UI)가 렌더되지 않으므로 발급 버튼을
+                이 분기에 함께 둔다. STEP ③ 카드를 그대로 재사용할 수 없는 이유는 그 카드가 선택된
+                소스(target)의 스키마·빌더에 묶여 있어서다. 폼은 열 수 있게 두고(등록이 유일한 진입
+                경로) 토큰이 없으면 폼의 submit만 비활성화한다. */}
+            <p
+              role="status"
+              aria-live="polite"
+              style={{ fontSize: 11, color: token ? "var(--accent-teal)" : "var(--text-muted)" }}
+            >
+              <i className={`fa-solid ${token ? "fa-key" : "fa-lock"}`} aria-hidden="true"></i>{" "}
+              {token
+                ? `${authMethod} 인증됨 (Bearer) — 아카이브를 등록할 수 있습니다.`
+                : "등록에는 data:write 토큰이 필요합니다. 토큰 발급 후 등록 가능."}
+            </p>
+            {!token && (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={handleIssueToken}
+                disabled={Boolean(pendingAction)}
+              >
+                <i
+                  className={`fa-solid ${pendingAction === "token" ? "fa-spinner fa-spin" : "fa-fingerprint"}`}
+                  aria-hidden="true"
+                ></i>{" "}
+                {pendingAction === "token" ? "발급 중" : `${authMethod} 토큰 발급`}
+              </button>
+            )}
             {!showRegForm && (
               <button type="button" className="btn btn-primary" onClick={() => setShowRegForm(true)}>
                 <i className="fa-solid fa-plus" aria-hidden="true"></i> 신규 아카이브 등록
@@ -631,6 +702,7 @@ export default function DataOpsPage() {
               onRegister={handleRegisterSource}
               onCancel={() => setShowRegForm(false)}
               onSubmittingChange={setRegistrationSubmitting}
+              canSubmit={Boolean(token)}
             />
           )}
         </Card>
@@ -676,25 +748,7 @@ export default function DataOpsPage() {
         기술(DataOps) — 빅데이터 관리 아카이빙 · 메타데이터 기반 다기종 데이터 관리
       </p>
 
-      {asyncFeedback && (
-        <p
-          className={`async-feedback is-${asyncFeedback.tone}`}
-          role={asyncFeedback.tone === "error" ? "alert" : "status"}
-          aria-live={asyncFeedback.tone === "error" ? "assertive" : "polite"}
-        >
-          <i
-            className={`fa-solid ${
-              asyncFeedback.tone === "pending"
-                ? "fa-spinner fa-spin"
-                : asyncFeedback.tone === "error"
-                  ? "fa-circle-exclamation"
-                  : "fa-circle-check"
-            }`}
-            aria-hidden="true"
-          ></i>{" "}
-          {asyncFeedback.message}
-        </p>
-      )}
+      <AsyncFeedback feedback={asyncFeedback} />
 
       <div className="pl-toolbar">
         <PipelineStepper
@@ -759,12 +813,14 @@ export default function DataOpsPage() {
                 <option value="loaded">최근 적재일</option>
               </select>
             </label>
+            {/* 토큰 없이는 등록 폼을 열지 않는다(닫기는 항상 허용해 폼에 갇히지 않도록) */}
             <button
               type="button"
               className={`btn ${showRegForm ? "btn-secondary" : "btn-primary"} catalog-reg-btn`}
               onClick={() => setShowRegForm((v) => !v)}
               aria-expanded={showRegForm}
-              disabled={registrationSubmitting}
+              disabled={registrationSubmitting || (!token && !showRegForm)}
+              aria-describedby={token ? undefined : "catalog-auth-hint"}
             >
               <i className={`fa-solid ${showRegForm ? "fa-xmark" : "fa-plus"}`} aria-hidden="true"></i>{" "}
               {showRegForm ? "등록 닫기" : "신규 아카이브 등록"}
@@ -778,13 +834,21 @@ export default function DataOpsPage() {
                 검색 해제
               </button>
             )}
+            {/* 버튼 비활성은 UX 안내일 뿐이고, 실제 보안 경계는 서버의 401(data:write 스코프)이다. */}
+            {!token && (
+              <span id="catalog-auth-hint" style={{ fontSize: 11, color: "var(--text-muted)" }}>
+                <i className="fa-solid fa-lock" aria-hidden="true"></i> ③ 단계에서 토큰 발급 후 등록·삭제 가능
+              </span>
+            )}
           </div>
 
+          {/* 폼이 열린 뒤 인증 방식 전환·401로 token이 null이 되면 canSubmit이 즉시 false가 된다. */}
           {showRegForm && (
             <ArchiveRegisterForm
               onRegister={handleRegisterSource}
               onCancel={() => setShowRegForm(false)}
               onSubmittingChange={setRegistrationSubmitting}
+              canSubmit={Boolean(token)}
             />
           )}
 
@@ -842,9 +906,10 @@ export default function DataOpsPage() {
                             className="btn btn-secondary catalog-row-del"
                             onClick={() => requestDeleteSource(s)}
                             data-source-delete={s.id}
-                            disabled={Boolean(pendingAction)}
+                            disabled={Boolean(pendingAction) || !token}
                             aria-label={`${s.label} 아카이브 삭제`}
-                            title="등록 해제 (메타데이터·API 제공 중지)"
+                            aria-describedby={token ? undefined : "catalog-auth-hint"}
+                            title={token ? "등록 해제 (메타데이터·API 제공 중지)" : "토큰 발급 후 삭제 가능"}
                           >
                             <i className="fa-solid fa-trash-can" aria-hidden="true"></i>
                           </button>

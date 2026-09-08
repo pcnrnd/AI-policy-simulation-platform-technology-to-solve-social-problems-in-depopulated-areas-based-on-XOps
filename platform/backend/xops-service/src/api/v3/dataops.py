@@ -48,14 +48,22 @@ def get_source(source_id: str) -> dict[str, Any]:
     return get_catalog().get(source_id)
 
 
+# 카탈로그 쓰기는 `data:write` 요구 — 등록된 object·컬럼명·range 가 생성 쿼리에 조립되므로
+# 조회(위 GET 2개)와 달리 공개로 둘 수 없다. payload를 쓰지 않으므로 발급 게이트와 같이 `_`.
 @router.post("/catalog", response_model=SourceSummary, status_code=201)
-def register_source(body: ArchiveRegisterRequest) -> dict[str, Any]:
+def register_source(
+    body: ArchiveRegisterRequest,
+    _: dict[str, Any] = Depends(require_auth("data:write")),
+) -> dict[str, Any]:
     """신규 아카이브(사용자 소스) 등록 → 카탈로그 병합. 등록 즉시 가상화 API 대상이 됨."""
     return get_catalog().add(body.to_schema())
 
 
 @router.delete("/catalog/{source_id}")
-def delete_source(source_id: str) -> dict[str, str]:
+def delete_source(
+    source_id: str,
+    _: dict[str, Any] = Depends(require_auth("data:write")),
+) -> dict[str, str]:
     """사용자 등록 소스 삭제 (기본 시드 소스는 보호)."""
     get_catalog().remove(source_id)
     return {"deleted": source_id}
