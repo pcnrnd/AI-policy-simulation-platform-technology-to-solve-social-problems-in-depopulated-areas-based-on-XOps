@@ -173,6 +173,12 @@ export default function App() {
       setBannerHeight(0);
       return undefined;
     }
+    // ResizeObserver가 없는 실행 환경(구형 브라우저·일부 테스트 런타임)에서는 1회 실측으로 대체한다.
+    // 줄바꿈으로 높이가 바뀌면 여백이 어긋날 수 있지만, 화면이 통째로 죽는 것보다 낫다.
+    if (typeof ResizeObserver === "undefined") {
+      setBannerHeight(banner.offsetHeight);
+      return undefined;
+    }
     const observer = new ResizeObserver(() => setBannerHeight(banner.offsetHeight));
     observer.observe(banner);
     return () => observer.disconnect();

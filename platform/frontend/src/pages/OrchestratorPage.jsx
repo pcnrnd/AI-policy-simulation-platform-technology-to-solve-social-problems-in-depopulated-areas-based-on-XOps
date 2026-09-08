@@ -422,8 +422,9 @@ export default function OrchestratorPage() {
             0.80 미만이면 직전 버전으로 자동 롤백합니다.
           </span>
         </div>
-        {/* 표기는 행 단위다 — 응답 200만으로 표 전체를 실데이터로 넘기면 상수 이력(합성 학습데이터·
-            하이퍼파라미터·등록일)까지 목업 표시 OFF에서 남는다. 백엔드가 알려준 (모델, 버전) 행만 api. */}
+        {/* 표기는 셀 단위다 — 응답 200만으로 표·행 전체를 실데이터로 넘기면 프런트가 합성한 값까지
+            목업 표시 OFF에서 남는다. 백엔드 /orchestration/models가 주는 것은 model_id·version·metrics뿐이라
+            (mlops/orchestration/registry.py) 행은 그 (모델, 버전)만, Accuracy는 지표를 함께 받았을 때만 api다. */}
         <div className="table-container">
           <table>
             <caption className="sr-only">모델과 실험의 버전 이력 및 운영 상태</caption>
@@ -456,9 +457,18 @@ export default function OrchestratorPage() {
                     <td>
                       <code style={{ fontSize: 12, fontWeight: 600 }}>{orDash(m.version)}</code>
                     </td>
-                    <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>{orDash(m.dataVersion)}</td>
-                    <td style={{ fontSize: 11, color: "var(--text-secondary)" }}>{orDash(m.params)}</td>
-                    <td className="cell-num" style={{ fontWeight: 600 }}>
+                    {/* 학습데이터·하이퍼파라미터·등록일은 응답에 없는 프런트 합성값이라 api 행 안에서도 mock */}
+                    <td style={{ fontSize: 12, color: "var(--text-secondary)" }} data-values-source="mock">
+                      {orDash(m.dataVersion)}
+                    </td>
+                    <td style={{ fontSize: 11, color: "var(--text-secondary)" }} data-values-source="mock">
+                      {orDash(m.params)}
+                    </td>
+                    <td
+                      className="cell-num"
+                      style={{ fontWeight: 600 }}
+                      data-values-source={m.accuracySource ?? "mock"}
+                    >
                       {typeof m.accuracy === "number" ? m.accuracy.toFixed(3) : "–"}
                     </td>
                     <td>
@@ -469,7 +479,9 @@ export default function OrchestratorPage() {
                         {orDash(m.status)}
                       </span>
                     </td>
-                    <td style={{ fontSize: 11, color: "var(--text-muted)" }}>{orDash(m.registeredAt)}</td>
+                    <td style={{ fontSize: 11, color: "var(--text-muted)" }} data-values-source="mock">
+                      {orDash(m.registeredAt)}
+                    </td>
                   </tr>
                 );
               })}

@@ -582,11 +582,13 @@ export default function MonitorPage() {
     const values = metricsResp?.history?.[key];
     return Array.isArray(values) && values.some((v) => Number.isFinite(v));
   };
-  const allSeriesUsable = Object.keys(METRIC_SERIES).every(seriesUsable);
+  const emptySeries = Object.keys(METRIC_SERIES).filter((key) => !seriesUsable(key));
+  const allSeriesUsable = emptySeries.length === 0;
   const hasUsableFeatures = (resp) =>
     Array.isArray(resp?.features) && resp.features.some((f) => Number.isFinite(f?.value));
   const emptySources = [
-    lastCollected && !allSeriesUsable ? "성능 지표" : null,
+    // 6계열 중 일부만 비어도 "성능 지표 전체가 데모"로 읽히지 않게 결손 계열을 밝힌다.
+    lastCollected && !allSeriesUsable ? `성능 지표(${emptySeries.join("·")})` : null,
     lastCollected && !hasUsableFeatures(shapResp) ? "특징 기여도" : null,
     driftStatus === "ok" && !psiUsable ? "드리프트 판정(PSI)" : null
   ].filter(Boolean);
@@ -659,12 +661,15 @@ export default function MonitorPage() {
   // 목업 표시 OFF에서도 실데이터가 채운 영역은 남긴다 — 폴백이 실제로 일어난 영역만 mock으로 표기한다.
   // 판정은 위 수집 검증(seriesUsable·hasUsableFeatures·psiUsable)과 같은 함수를 재사용해야
   // "정상 수신" 문구와 화면에 남는 영역이 어긋나지 않는다.
-  // 계열은 소비자별로 나눠 본다 — 6계열 공통 판정을 쓰면 한 계열만 비어도 실응답으로 채워진
-  // KPI 카드·게이지까지 함께 가려진다. 6대 지표 추이 차트만 전 계열을 요구한다.
+  // 판정 단위는 소비자가 실제로 읽는 값이다 — 6계열 공통 판정을 쓰면 한 계열만 비어도 실응답으로
+  // 채워진 KPI 카드·게이지까지 함께 가려진다. metricValue가 조회 계열보다 먼저 쓰는 승급 오버라이드
+  // (백엔드 응답 PipelineRun.candidate_metrics)도 응답 유래이므로 같이 본다.
+  // 6대 지표 추이 차트만 전 계열을 요구한다 — 값 하나가 아니라 계열 전체를 그리기 때문이다.
   const srcOf = (fromApi) => (fromApi ? "api" : "mock");
-  const accF1Src = srcOf(seriesUsable("accuracy") && seriesUsable("f1"));
-  const precisionSrc = srcOf(seriesUsable("precision"));
-  const recallSrc = srcOf(seriesUsable("recall"));
+  const metricFromApi = (key) => seriesUsable(key) || Number.isFinite(selectedMetricOverride[key]);
+  const accF1Src = srcOf(metricFromApi("accuracy") && metricFromApi("f1"));
+  const precisionSrc = srcOf(metricFromApi("precision"));
+  const recallSrc = srcOf(metricFromApi("recall"));
   const metricsChartSrc = srcOf(allSeriesUsable);
   const shapSrc = srcOf(hasUsableFeatures(shapResp));
   // 분포 차트는 buckets·reference·current를 한 응답에서 모두 받아야 실측이다(일부만 오면 mock 폴백이 섞인다).
