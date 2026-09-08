@@ -666,6 +666,11 @@ export default function DataOpsPage() {
   });
   const catalogPg = paginate(catalogSources, catalogPage, 10);
 
+  // 카탈로그·스키마에 표시되는 값은 전부 백엔드 목록(sources)에서 온다 — 목업 폴백 경로가 없다.
+  // 로딩·오류·빈 목록은 위에서 조기 반환했으므로 여기까지 오면 실응답이 화면을 채운 상태다.
+  // 목업 표시 OFF에서도 이 두 표는 남긴다(실데이터가 사라지는 것으로 오인되지 않게).
+  const catalogSrc = sources.length > 0 ? "api" : "mock";
+
   const builtPg = paginate(builtApis, builtPage, BUILT_PAGE_SIZE);
   const doneStages = ["dstep-source", "dstep-schema", ...(responseOk ? ["dstep-builder"] : [])];
 
@@ -788,7 +793,7 @@ export default function DataOpsPage() {
             />
           )}
 
-          <div className="table-container">
+          <div className="table-container" data-values-source={catalogSrc}>
             <table id="dataops-catalog-table" className="catalog-table" tabIndex="-1">
               <caption className="sr-only">메타데이터 카탈로그의 데이터 소스 목록. 선택한 정렬 기준으로 표시합니다.</caption>
               <thead>
@@ -930,7 +935,7 @@ export default function DataOpsPage() {
         open={openStages["dstep-schema"]}
         onToggle={() => toggleStage("dstep-schema")}
       >
-        <Card>
+        <Card data-values-source={catalogSrc}>
           <div className="mock-data-output" style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
             <h4 style={{ color: "var(--accent-blue)", margin: 0 }}>{target.label}</h4>
             <span style={{ fontSize: 12, color: "var(--text-muted)" }}>

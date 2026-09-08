@@ -65,6 +65,7 @@ export default function OrchestratorPage() {
     pipelineResult,
     pipelineHistory,
     modelStore,
+    modelStoreSynced,
     consoleLogs,
     startPipeline,
     resetPipeline,
@@ -422,7 +423,8 @@ export default function OrchestratorPage() {
             0.80 미만이면 직전 버전으로 자동 롤백합니다.
           </span>
         </div>
-        <div className="table-container">
+        {/* 목업 표시 OFF에서도 백엔드 레지스트리와 동기화된 이력은 남긴다(동기화 실패 시엔 상수 이력이므로 가린다). */}
+        <div className="table-container" data-values-source={modelStoreSynced ? "api" : "mock"}>
           <table>
             <caption className="sr-only">모델과 실험의 버전 이력 및 운영 상태</caption>
             <thead>

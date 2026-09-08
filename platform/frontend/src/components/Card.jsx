@@ -1,6 +1,7 @@
-export function Card({ title, titleId, titleTabIndex, icon, headerRight, className = "", children, style }) {
+// rest: 호출부가 카드 껍데기에 직접 붙이는 DOM 속성(예: data-values-source).
+export function Card({ title, titleId, titleTabIndex, icon, headerRight, className = "", children, style, ...rest }) {
   return (
-    <div className={"card " + className} style={style}>
+    <div className={"card " + className} style={style} {...rest}>
       {(title || headerRight) && (
         <div className="card-title-area">
           {title && (
