@@ -50,7 +50,8 @@ function normalizeConsoleMessage(message, isSystem = false, isWarning = false) {
 const formatYmd = (date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 
-// Model Store 승급 규칙 — 신규 버전을 운영으로 맨 앞에 등록하고 직전 운영 버전은 '이전'으로 강등한다.
+// Model Store 승급 규칙 — 신규 버전을 운영으로 맨 앞에 등록하고 직전 운영 버전은 '이전'으로 강등한다
+// (백엔드가 확인한 api 행은 확인된 승급일 때만 강등 — 아래 참조).
 // 원본 배열은 건드리지 않고 새 배열을 반환한다. accuracy를 넘기지 않으면 직전 운영 지표에서 파생한다.
 // source는 백엔드가 이 (모델, 버전)을 실제로 보고했을 때만 호출부가 "api"로 넘긴다(아니면 미표기=mock).
 // accuracySource는 그 응답이 지표까지 함께 준 경우에만 api다 — 학습데이터·하이퍼파라미터·등록일은
@@ -58,8 +59,15 @@ const formatYmd = (date) =>
 function promoteVersion(store, modelId, version, accuracy, registeredAt, source) {
   const prevServing = store.find((m) => m.modelId === modelId && m.status === "운영");
   const acc = accuracy ?? Number(((prevServing?.accuracy ?? 0.88) + 0.033).toFixed(3));
+  // 확인되지 않은(mock) 승급은 api 행을 강등하지 않는다 — 백엔드는 active_version이 없으면 운영
+  // 버전을 바꾸지 않으므로(registry._promote 조기 반환), 추론된 '이전'을 api 행에 쓰면 OFF에서
+  // 백엔드가 확인하지 않은 강등이 실데이터처럼 보이고 운영 행이 사라진다.
   const demoted = store
-    .map((m) => (m.modelId === modelId && m.status === "운영" ? { ...m, status: "이전" } : m))
+    .map((m) =>
+      m.modelId === modelId && m.status === "운영" && (source === "api" || m.source !== "api")
+        ? { ...m, status: "이전" }
+        : m
+    )
     .filter((m) => !(m.modelId === modelId && m.version === version));
   return [
     {
