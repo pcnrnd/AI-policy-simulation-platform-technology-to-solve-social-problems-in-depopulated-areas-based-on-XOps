@@ -140,9 +140,9 @@ python -m pytest tests/ --cov=src --cov-report=term-missing   # 80% 게이트
 | POST | `/dataops/token/{source_id}` | JWT 발급 | prod 게이트 |
 | POST | `/dataops/oauth2/{source_id}` | OAuth2 Authorization Code Grant | prod 게이트 |
 | GET | `/dataops/catalog?q=` | 카탈로그 목록/검색 | — |
-| POST | `/dataops/catalog` | 신규 아카이브(사용자 소스) 등록 | — |
+| POST | `/dataops/catalog` | 신규 아카이브(사용자 소스) 등록 | `data:write` |
 | GET | `/dataops/catalog/{source_id}` | 단일 소스 메타데이터 | — |
-| DELETE | `/dataops/catalog/{source_id}` | 사용자 소스 삭제(시드 보호) | — |
+| DELETE | `/dataops/catalog/{source_id}` | 사용자 소스 삭제(시드 보호) | `data:write` |
 | GET | `/dataops/{source_id}` | 조회(filter·sort·page·page_size) | `data:read` |
 | POST/PUT/PATCH/DELETE | `/dataops/{source_id}` | CRUD | `data:write` |
 
@@ -226,9 +226,11 @@ python -m pytest tests/ --cov=src --cov-report=term-missing   # 80% 게이트
 
 - **unit**: query_builder(쓰기 바인딩 SQL 포함), safety(주입·쓰기 값 검증), adapters(fake 커넥션 실행 경로),
   jwt, client_gate, compose 계약, metrics/drift/outliers/evaluator/deployer/events, training, persistence
-- **integration**: dataops·monitoring·orchestration API, catalog CRUD, 카탈로그 주입 차단,
-  실 저장소 어댑터 주입(읽기·쓰기·degrade), enhancements(드리프트→재학습·filter 검증·prod 시크릿)
-- **총 183건 통과 / 커버리지 96.4%** (게이트 80%)
+- **integration**: dataops·monitoring·orchestration API, catalog CRUD(+쓰기 인증 경계 401),
+  카탈로그 주입 차단, 실 저장소 어댑터 주입(읽기·쓰기·degrade),
+  enhancements(드리프트→재학습·filter 검증·prod 시크릿)
+- **총 187건 통과 / 커버리지 96.5%** (게이트 80%). 스킵 2건은 psycopg·pymongo 가 설치된
+  환경에서는 검증할 수 없는 **드라이버 미설치 degrade 경로**다
 
 ---
 
