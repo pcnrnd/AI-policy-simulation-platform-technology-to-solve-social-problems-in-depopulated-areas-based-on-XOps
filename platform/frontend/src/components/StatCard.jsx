@@ -1,6 +1,7 @@
-export default function StatCard({ label, icon, value, unit, footer, valueStyle }) {
+// dataSource: 표시값의 출처("api" | "mock"). 지정하지 않으면 속성 자체가 붙지 않는다.
+export default function StatCard({ label, icon, value, unit, footer, valueStyle, dataSource }) {
   return (
-    <div className="card stat-card">
+    <div className="card stat-card" data-source={dataSource}>
       <div className="stat-header">
         <span className="stat-label">{label}</span>
         {icon && (

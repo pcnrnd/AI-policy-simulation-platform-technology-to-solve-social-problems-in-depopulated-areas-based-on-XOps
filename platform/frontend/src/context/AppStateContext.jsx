@@ -100,6 +100,9 @@ export function AppStateProvider({ children }) {
   const [modelStore, setModelStore] = useState(MODEL_STORE);
   // 백엔드 오케스트레이션 이벤트 결과(PipelineRun) — 애니메이션 완료 시 실제 승급/롤백 반영
   const [pipelineResult, setPipelineResult] = useState(null);
+  // 카탈로그 롤업(소스 수·아카이브 행수) — Overview 지표 카드·도넛이 쓴다.
+  // null 이면(요청 실패) 화면이 mock_data.json 값으로 폴백한다.
+  const [overviewSummary, setOverviewSummary] = useState(null);
 
   // 승급 지표는 모델별로 보관한다. 다른 모델 실행이 인구예측 대시보드 값을 덮지 않게 한다.
   const [metricOverrides, setMetricOverrides] = useState({});
@@ -163,6 +166,23 @@ export function AppStateProvider({ children }) {
       .catch((err) => {
         if (!alive) return;
         addConsoleLog(`WARN: 모델 레지스트리 동기화 실패 — ${err?.message ?? "알 수 없는 오류"}`);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [addConsoleLog]);
+
+  // 카탈로그 롤업 동기화 — 실패하면 null 로 남긴다(Overview 가 mock_data.json 으로 폴백).
+  useEffect(() => {
+    let alive = true;
+    apiGet("/api/v3/overview/summary")
+      .then((summary) => {
+        if (!alive) return;
+        setOverviewSummary(summary);
+      })
+      .catch((err) => {
+        if (!alive) return;
+        addConsoleLog(`WARN: 카탈로그 롤업 동기화 실패 — ${err?.message ?? "알 수 없는 오류"}`);
       });
     return () => {
       alive = false;
@@ -491,6 +511,7 @@ export function AppStateProvider({ children }) {
     pipelineResult,
     pipelineHistory,
     modelStore,
+    overviewSummary,
     f1Override,
     metricOverrides,
     consoleLogs,
