@@ -22,7 +22,15 @@ const SOURCE_PALETTE = [
 ];
 
 export default function Overview() {
-  const { appData, currentRegion, setCurrentRegion, f1Override, focusRegion, modelStore } = useAppState();
+  const {
+    appData,
+    currentRegion,
+    setCurrentRegion,
+    f1Override,
+    focusRegion,
+    modelStore,
+    overviewSummary
+  } = useAppState();
   const ct = useChartTheme();
   const { isDark } = useTheme();
   const [compactChart, setCompactChart] = useState(() => window.matchMedia("(max-width: 768px)").matches);
@@ -43,24 +51,43 @@ export default function Overview() {
     f1Override !== null && servingVersion ? `최적 (SOTA ${servingVersion})` : "최적 (SOTA)";
   const f1Sub = f1Override !== null ? "연합 재학습 성공" : "데이터 소스 통합 기준";
 
+  // 카탈로그 롤업(GET /api/v3/overview/summary)이 실 저장소를 물고 있을 때만 API 값을 쓴다.
+  // 요청 실패(overviewSummary === null)나 In-Memory degrade면 mock_data.json 으로 폴백하고,
+  // 어느 쪽 값인지는 카드 컨테이너의 data-values-source 로 드러낸다(mock 스위치 계약).
+  const liveSources =
+    overviewSummary?.source_kind === "database" && Array.isArray(overviewSummary.sources)
+      ? overviewSummary.sources
+      : null;
+  const catalogOrigin = liveSources ? "api" : "mock";
+
   // 도넛: 소스별 아카이브 적재 행 수 — "어떤 소스가 얼마나 적재돼 있는가"를 보여준다.
-  const sourceData = useMemo(() => {
-    const schemas = appData.metadata_schemas;
-    return {
-      labels: schemas.map((s) => s.label ?? s.id),
+  const sourceRows = useMemo(
+    () =>
+      liveSources
+        ? liveSources.map((s) => ({ label: s.label ?? s.id, rows: s.archive_rows ?? 0 }))
+        : appData.metadata_schemas.map((s) => ({ label: s.label ?? s.id, rows: s.archive?.rows ?? 0 })),
+    [liveSources, appData]
+  );
+
+  const sourceData = useMemo(
+    () => ({
+      labels: sourceRows.map((s) => s.label),
       datasets: [
         {
-          data: schemas.map((s) => s.archive?.rows ?? 0),
-          backgroundColor: schemas.map((_, i) => SOURCE_PALETTE[i % SOURCE_PALETTE.length]),
+          data: sourceRows.map((s) => s.rows),
+          backgroundColor: sourceRows.map((_, i) => SOURCE_PALETTE[i % SOURCE_PALETTE.length]),
           // 보더는 카드 배경과 동화되도록 테마별 분기 (라이트에서 검은 띠 방지)
           borderColor: isDark ? "rgba(8, 13, 26, 1)" : "#ffffff",
           borderWidth: 2
         }
       ]
-    };
-  }, [appData, isDark]);
+    }),
+    [sourceRows, isDark]
+  );
 
-  const sourceCount = appData.metadata_schemas.length;
+  const sourceCount = liveSources
+    ? overviewSummary.source_count ?? liveSources.length
+    : appData.metadata_schemas.length;
 
   const doughnutOpts = {
     responsive: true,
@@ -76,10 +103,6 @@ export default function Overview() {
     }
   };
 
-  const sourceRows = sourceData.labels.map((label, index) => ({
-    label,
-    rows: sourceData.datasets[0].data[index]
-  }));
   const sourceTotal = sourceRows.reduce((sum, source) => sum + source.rows, 0);
   const largestSource = sourceRows.reduce((largest, source) => source.rows > (largest?.rows ?? -1) ? source : largest, null);
   // 레이더: 선택 지자체 정책 영향 프로파일
@@ -160,6 +183,7 @@ export default function Overview() {
         <StatCard
           label="연동 데이터 소스"
           icon="fa-network-wired"
+          dataSource={catalogOrigin}
           value={sourceCount}
           unit="개 실시간"
           footer={
@@ -180,7 +204,11 @@ export default function Overview() {
       />
 
       <div className="grid-cols-2">
-        <Card title="연동 데이터 소스 아카이브 적재 현황 (행 수)" icon="fa-chart-pie">
+        <Card
+          title="연동 데이터 소스 아카이브 적재 현황 (행 수)"
+          icon="fa-chart-pie"
+          dataSource={catalogOrigin}
+        >
           <div style={{ position: "relative", height: 240, width: "100%" }}>
             <Doughnut data={sourceData} options={doughnutOpts} />
           </div>
