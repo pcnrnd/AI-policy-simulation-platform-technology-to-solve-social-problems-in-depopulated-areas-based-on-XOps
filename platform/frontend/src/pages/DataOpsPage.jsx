@@ -6,6 +6,7 @@ import PipelineStepper from "../components/PipelineStepper.jsx";
 import CollapsibleStage from "../components/CollapsibleStage.jsx";
 import ArchiveRegisterForm from "../components/ArchiveRegisterForm.jsx";
 import ConfirmDialog from "../components/ConfirmDialog.jsx";
+import NextStepBanner from "../components/NextStepBanner.jsx";
 import { useAppState } from "../context/AppStateContext.jsx";
 import { apiGet, apiSend } from "../lib/api.js";
 import { HTTP_METHODS, AUTH_METHODS, adapterOf, buildQuery } from "../lib/dataopsApi.js";
@@ -194,6 +195,9 @@ export default function DataOpsPage() {
   const [responseOk, setResponseOk] = useState(false);
   const [builtApis, setBuiltApis] = useState(loadBuiltApis);
   const [builtStorageAvailable, setBuiltStorageAvailable] = useState(true);
+  // 다음 단계 CTA 신호 — 이번 세션의 API 발급 성공 1건. 발급 시점의 소스를 함께 담아
+  // 이후 빌더에서 다른 소스를 골라도 문구가 따라 바뀌지 않게 한다(발급 목록은 새로고침에도 남으므로 재사용 불가).
+  const [issuedApi, setIssuedApi] = useState(null);
   const [sentAt, setSentAt] = useState(null);
   const [builtResult, setBuiltResult] = useState(null);
   const [catalogQuery, setCatalogQuery] = useState("");
@@ -457,6 +461,8 @@ export default function DataOpsPage() {
 
   // 현재 구성을 API 자산으로 빌드·등록 (localStorage UI 스냅샷) — 동일 구성은 갱신
   const handleBuildApi = () => {
+    // 새 발급을 시작하면 직전 발급의 다음 단계 안내부터 내린다(검증·저장 실패 시 그대로 남지 않게).
+    setIssuedApi(null);
     if (!validateBuilderFilter({ focus: true })) return;
     const sig = [method, target.id, filterText.trim(), sortCol, page, pageSize].join("|");
     const entry = {
@@ -486,6 +492,7 @@ export default function DataOpsPage() {
         ? `${method} ${entry.endpoint} 구성을 발급 목록에 저장했습니다.`
         : `${method} ${entry.endpoint} 구성은 현재 세션에만 유지됩니다. 브라우저 저장공간을 확인하세요.`
     });
+    if (persisted) setIssuedApi({ sourceId: entry.sourceId, sourceLabel: entry.sourceLabel });
   };
 
   // 등록된 API [호출] — 빌더 상태를 건드리지 않고 스냅샷 그대로 실행, 결과는 해당 행 아래 인라인 표시
@@ -496,6 +503,9 @@ export default function DataOpsPage() {
       const message = `원천 데이터 소스(${api.sourceId})를 찾을 수 없습니다. 이 API를 삭제하거나 소스를 다시 등록하세요.`;
       addConsoleLog(`WARN: 등록 API 호출 실패 — ${message}`);
       setAsyncFeedback({ tone: "error", message });
+      // 조기 반환도 호출 실패다 — 아래 setResponseOk(result.ok)와 같은 규칙으로 STEP ③ 완료 표시를 풀어야
+      // 이전 호출 성공의 표시가 남지 않는다.
+      setResponseOk(false);
       return;
     }
     const storedFilterError = filterValidationMessage(api.filter, source.columns);
@@ -503,6 +513,7 @@ export default function DataOpsPage() {
       const message = `저장된 필터가 유효하지 않습니다. ${storedFilterError} API 구성을 삭제하고 다시 빌드하세요.`;
       setAsyncFeedback({ tone: "error", message });
       addConsoleLog(`WARN: 등록 API 호출 실패 — ${message}`);
+      setResponseOk(false);
       return;
     }
     const cfg = { method: api.method, source, filter: api.filter, sort: api.sort, page: api.page, pageSize: api.pageSize };
@@ -520,7 +531,9 @@ export default function DataOpsPage() {
       time: new Date().toLocaleTimeString("ko-KR", { hour12: false }),
       ok: result.ok
     });
-    if (result.ok) setResponseOk(true);
+    // STEP ③ 완료 표시는 빌더 직접 호출(위 handleRunApi)과 같은 규칙으로 마지막 호출 결과를 따른다.
+    // 성공만 반영하면 이후 실패해도 완료 표시가 남는다.
+    setResponseOk(result.ok);
     logRequestResult(cfg, result, elapsed);
     setAsyncFeedback({
       tone: result.ok ? "success" : "error",
@@ -1416,6 +1429,17 @@ export default function DataOpsPage() {
           )}
         </Card>
       </CollapsibleStage>
+
+      {/* API 발급까지 끝나면 다음 단계 — 이 데이터로 학습된 모델의 성능 모니터링.
+          조건은 설계대로 '발급 성공'(handleBuildApi)이다. 호출 성공(responseOk)은 STEP ③ 완료 표시용이라
+          실패가 이전 성공을 지우지 않고, 문구도 발급한 소스가 아니라 현재 빌더 선택을 따라가 버린다. */}
+      {issuedApi && (
+        <NextStepBanner
+          message={`${issuedApi.sourceLabel} 연계 API 발급 완료 — 데이터 준비 단계가 끝났습니다`}
+          actionLabel="이 데이터로 학습된 모델 모니터링"
+          targetTab="tab-mlops-monitor"
+        />
+      )}
 
       <ConfirmDialog
         open={Boolean(confirmAction)}
