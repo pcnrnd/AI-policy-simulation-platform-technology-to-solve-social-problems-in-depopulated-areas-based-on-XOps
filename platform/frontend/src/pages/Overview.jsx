@@ -53,7 +53,7 @@ export default function Overview() {
 
   // 카탈로그 롤업(GET /api/v3/overview/summary)이 실 저장소를 물고 있을 때만 API 값을 쓴다.
   // 요청 실패(overviewSummary === null)나 In-Memory degrade면 mock_data.json 으로 폴백하고,
-  // 어느 쪽 값인지는 카드 컨테이너의 data-source 로 드러낸다.
+  // 어느 쪽 값인지는 카드 컨테이너의 data-values-source 로 드러낸다(mock 스위치 계약).
   const liveSources =
     overviewSummary?.source_kind === "database" && Array.isArray(overviewSummary.sources)
       ? overviewSummary.sources
