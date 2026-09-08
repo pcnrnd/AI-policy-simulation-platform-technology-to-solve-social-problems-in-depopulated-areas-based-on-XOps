@@ -1,7 +1,8 @@
-// dataSource: 표시값의 출처("api" | "mock"). 지정하지 않으면 속성 자체가 붙지 않는다.
+// dataSource: 표시값의 출처("api" | "mock"). mock 스위치 계약의 data-values-source 속성으로
+// 나가며, 지정하지 않으면 속성 자체가 붙지 않는다.
 export default function StatCard({ label, icon, value, unit, footer, valueStyle, dataSource }) {
   return (
-    <div className="card stat-card" data-source={dataSource}>
+    <div className="card stat-card" data-values-source={dataSource}>
       <div className="stat-header">
         <span className="stat-label">{label}</span>
         {icon && (
