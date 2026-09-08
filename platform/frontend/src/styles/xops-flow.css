@@ -1,0 +1,203 @@
+/* ===== XOps 탭 연속성: 흐름 리본 + 다음 단계 배너 ===== */
+/* 표시 값은 전역 상태 파생값(목업 값이 아님)이라 .mock-values-hidden 가림 대상에서 제외한다.
+   전용 xops- 접두사 클래스를 쓰고, 가림 선택자에 등재된 클래스는 안쪽에도 두지 않는다. */
+
+/* 페이지 내부 스텝퍼(.pipeline-stepper)와 구분되도록 한 줄 높이의 얇은 전역 스트립으로 둔다. */
+.xops-ribbon {
+  display: flex;
+  align-items: center;
+  gap: var(--space-m);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  box-shadow: var(--glass-shadow);
+  padding: var(--space-s) var(--space-m);
+  margin-bottom: var(--space-xl);
+}
+
+.xops-ribbon-cap {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+}
+.xops-ribbon-cap > i {
+  color: var(--accent-purple-text);
+}
+
+.xops-ribbon-steps {
+  display: flex;
+  align-items: stretch;
+  flex: 1;
+  min-width: 0;
+  gap: var(--space-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.xops-ribbon-item {
+  display: flex;
+  align-items: center;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.xops-ribbon-step {
+  display: flex;
+  align-items: center;
+  gap: var(--space-s);
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: var(--space-xs) var(--space-s);
+  font-family: inherit;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+.xops-ribbon-step:hover {
+  background: var(--surface-hover);
+  border-color: var(--card-hover-border);
+  color: var(--text-primary);
+}
+.xops-ribbon-step.is-current {
+  background: rgba(var(--accent-blue-rgb), 0.08);
+  border-color: var(--accent-blue);
+  color: var(--text-primary);
+}
+
+.xops-ribbon-no {
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+.xops-ribbon-step.is-current .xops-ribbon-no,
+.xops-ribbon-step.is-done .xops-ribbon-no {
+  color: var(--accent-blue);
+}
+
+.xops-ribbon-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  min-width: 0;
+}
+.xops-ribbon-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.xops-ribbon-label > i {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.xops-ribbon-step.is-current .xops-ribbon-label > i {
+  color: var(--accent-blue);
+}
+
+.xops-ribbon-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.xops-ribbon-step.is-done .xops-ribbon-badge {
+  color: var(--accent-teal);
+}
+.xops-ribbon-step.is-active .xops-ribbon-badge {
+  color: var(--accent-blue);
+}
+/* ready = 다음 단계에서 확인 가능(완료 아님) — done(teal)·active(blue)와 구분되는 색을 쓴다.
+   11px 텍스트라 AA 4.5:1이 필요하다. 면적용 --accent-purple(다크 #8b5cf6)은 카드 표면에서 4.17:1로 미달이라
+   텍스트용 --accent-purple-text를 쓴다(카드 기본 표면 대비 다크 6.48:1 · 라이트 7.00:1). 리본 캡 아이콘과 같은 토큰. */
+.xops-ribbon-step.is-ready .xops-ribbon-badge {
+  color: var(--accent-purple-text);
+}
+.xops-ribbon-step.is-alert .xops-ribbon-badge {
+  color: var(--accent-orange);
+}
+
+.xops-ribbon-arrow {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+/* 다음 단계 배너 — 현재 탭에서 이어질 행동 1개만 제시 */
+.xops-next-step {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-m);
+  border: 1px solid rgba(var(--accent-blue-rgb), 0.35);
+  border-left: 3px solid var(--accent-blue);
+  border-radius: 12px;
+  background: rgba(var(--accent-blue-rgb), 0.06);
+  padding: var(--space-m) var(--space-l);
+  margin-bottom: var(--space-xxl);
+}
+.xops-next-step.is-warn {
+  border-color: rgba(var(--accent-orange-rgb), 0.35);
+  border-left-color: var(--accent-orange);
+  background: rgba(var(--accent-orange-rgb), 0.06);
+}
+.xops-next-step.is-success {
+  border-color: rgba(var(--accent-teal-rgb), 0.35);
+  border-left-color: var(--accent-teal);
+  background: rgba(var(--accent-teal-rgb), 0.06);
+}
+
+.xops-next-step-msg {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-s);
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.xops-next-step-msg > i {
+  color: var(--accent-blue);
+}
+.xops-next-step.is-warn .xops-next-step-msg > i {
+  color: var(--accent-orange);
+}
+.xops-next-step.is-success .xops-next-step-msg > i {
+  color: var(--accent-teal);
+}
+.xops-next-step-btn {
+  flex-shrink: 0;
+}
+
+@media (max-width: 768px) {
+  .xops-ribbon,
+  .xops-ribbon-steps {
+    flex-wrap: wrap;
+  }
+  .xops-ribbon-item {
+    flex-basis: calc(50% - var(--space-xs));
+  }
+  .xops-ribbon-arrow {
+    display: none;
+  }
+  .xops-next-step-btn {
+    width: 100%;
+  }
+}
