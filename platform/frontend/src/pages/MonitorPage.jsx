@@ -577,15 +577,16 @@ export default function MonitorPage() {
   // 빈 본문/`null` 200은 apiGet이 null로 매핑하므로 payload만 보면 '퇴화 아님'으로 새어나간다.
   // 성능 계열은 6대 지표가 모두 있어야 통과시킨다(일부만 온 응답은 나머지가 데모 시드로 채워짐).
   // 실제 백엔드 계약(history 6계열·features 배열·필수 psi float)은 그대로 통과한다.
-  const hasUsableSeries = (resp) =>
-    Object.keys(METRIC_SERIES).every((key) => {
-      const values = resp?.history?.[key];
-      return Array.isArray(values) && values.some((v) => Number.isFinite(v));
-    });
+  // modelSeries가 계열 단위로 폴백하므로(위 source(key)) 판정도 계열 단위로 둔다.
+  const seriesUsable = (key) => {
+    const values = metricsResp?.history?.[key];
+    return Array.isArray(values) && values.some((v) => Number.isFinite(v));
+  };
+  const allSeriesUsable = Object.keys(METRIC_SERIES).every(seriesUsable);
   const hasUsableFeatures = (resp) =>
     Array.isArray(resp?.features) && resp.features.some((f) => Number.isFinite(f?.value));
   const emptySources = [
-    lastCollected && !hasUsableSeries(metricsResp) ? "성능 지표" : null,
+    lastCollected && !allSeriesUsable ? "성능 지표" : null,
     lastCollected && !hasUsableFeatures(shapResp) ? "특징 기여도" : null,
     driftStatus === "ok" && !psiUsable ? "드리프트 판정(PSI)" : null
   ].filter(Boolean);
@@ -656,10 +657,15 @@ export default function MonitorPage() {
           : null;
 
   // 목업 표시 OFF에서도 실데이터가 채운 영역은 남긴다 — 폴백이 실제로 일어난 영역만 mock으로 표기한다.
-  // 판정은 위 수집 검증(hasUsableSeries·hasUsableFeatures·psiUsable)과 같은 함수를 재사용해야
+  // 판정은 위 수집 검증(seriesUsable·hasUsableFeatures·psiUsable)과 같은 함수를 재사용해야
   // "정상 수신" 문구와 화면에 남는 영역이 어긋나지 않는다.
+  // 계열은 소비자별로 나눠 본다 — 6계열 공통 판정을 쓰면 한 계열만 비어도 실응답으로 채워진
+  // KPI 카드·게이지까지 함께 가려진다. 6대 지표 추이 차트만 전 계열을 요구한다.
   const srcOf = (fromApi) => (fromApi ? "api" : "mock");
-  const metricsSrc = srcOf(hasUsableSeries(metricsResp));
+  const accF1Src = srcOf(seriesUsable("accuracy") && seriesUsable("f1"));
+  const precisionSrc = srcOf(seriesUsable("precision"));
+  const recallSrc = srcOf(seriesUsable("recall"));
+  const metricsChartSrc = srcOf(allSeriesUsable);
   const shapSrc = srcOf(hasUsableFeatures(shapResp));
   // 분포 차트는 buckets·reference·current를 한 응답에서 모두 받아야 실측이다(일부만 오면 mock 폴백이 섞인다).
   const driftChartSrc = srcOf(
@@ -759,7 +765,7 @@ export default function MonitorPage() {
       </div>
 
       <div className="grid-cols-3">
-        <div className="card" style={{ padding: "var(--space-xl)" }} data-values-source={metricsSrc}>
+        <div className="card" style={{ padding: "var(--space-xl)" }} data-values-source={accF1Src}>
           <div className="stat-label">
             Model Accuracy / F1-Score
             <InfoTip text="운영 중인 모델의 정확도(Accuracy)와 정밀도·재현율의 조화평균(F1-Score). 재학습 승급 시 두 값이 함께 갱신됩니다." />
@@ -916,7 +922,7 @@ export default function MonitorPage() {
               {modelLabel} · 최근 {windowHours}시간
             </span>
           }
-          data-values-source={metricsSrc}
+          data-values-source={metricsChartSrc}
         >
           <div style={{ position: "relative", height: 280, width: "100%" }}>
             <Line data={metricsData} options={AXIS_OPTS} />
@@ -952,13 +958,13 @@ export default function MonitorPage() {
             value={metricValue("precision") ?? 0}
             displayText={metricValue("precision") === null ? "–" : undefined}
             label="Precision"
-            data-values-source={metricsSrc}
+            data-values-source={precisionSrc}
           />
           <GaugeChart
             value={metricValue("recall") ?? 0}
             displayText={metricValue("recall") === null ? "–" : undefined}
             label="Recall"
-            data-values-source={metricsSrc}
+            data-values-source={recallSrc}
           />
           {/* 예측 지연은 아직 데모 상수(LATENCY_*)다 — 실측 게이지처럼 남기면 안 되므로 표기하지 않는다. */}
           <GaugeChart
