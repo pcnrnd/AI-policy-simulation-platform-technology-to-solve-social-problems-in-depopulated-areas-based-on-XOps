@@ -2,6 +2,7 @@
 @import "./base.css";
 @import "./layout.css";
 @import "./components.css";
+@import "./xops-flow.css";
 @import "./pipeline.css";
 @import "./simulator.css";
 @import "./report.css";
