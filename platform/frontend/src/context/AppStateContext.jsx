@@ -98,6 +98,8 @@ export function AppStateProvider({ children }) {
   const [pipelineHistory, setPipelineHistory] = useState({});
   // Model Store — 모델·실험 버전 이력 (승급 완료 시 신규 운영 버전 추가)
   const [modelStore, setModelStore] = useState(MODEL_STORE);
+  // 백엔드 모델 레지스트리 동기화 성공 여부 — 목업 표시 OFF에서 이 표를 남길지 판정하는 데 쓴다.
+  const [modelStoreSynced, setModelStoreSynced] = useState(false);
   // 백엔드 오케스트레이션 이벤트 결과(PipelineRun) — 애니메이션 완료 시 실제 승급/롤백 반영
   const [pipelineResult, setPipelineResult] = useState(null);
 
@@ -149,6 +151,7 @@ export function AppStateProvider({ children }) {
     apiGet("/api/v3/orchestration/models")
       .then((models) => {
         if (!alive || !Array.isArray(models)) return;
+        setModelStoreSynced(true);
         setModelStore((prev) =>
           models.reduce((store, m) => {
             if (typeof m?.model_id !== "string" || typeof m?.version !== "string") return store;
@@ -162,6 +165,7 @@ export function AppStateProvider({ children }) {
       })
       .catch((err) => {
         if (!alive) return;
+        setModelStoreSynced(false);
         addConsoleLog(`WARN: 모델 레지스트리 동기화 실패 — ${err?.message ?? "알 수 없는 오류"}`);
       });
     return () => {
@@ -491,6 +495,7 @@ export function AppStateProvider({ children }) {
     pipelineResult,
     pipelineHistory,
     modelStore,
+    modelStoreSynced,
     f1Override,
     metricOverrides,
     consoleLogs,

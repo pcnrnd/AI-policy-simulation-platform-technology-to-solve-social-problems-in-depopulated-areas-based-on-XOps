@@ -269,7 +269,9 @@ body.drawer-open {
   margin-bottom: var(--space-xxl);
 }
 
-/* 목업 표시 OFF: 화면 구조와 컨트롤은 유지하고 값이 담긴 출력 영역만 가린다. */
+/* 목업 표시 OFF: 화면 구조와 컨트롤은 유지하고 값이 담긴 출력 영역만 가린다.
+   진단 통로(.console-log · .async-feedback · .monitor-state-slot · .catalog-result-status)는
+   목록에서 뺀다 — 함께 가리면 백엔드 오류·수집 실패 안내까지 사라져 원인을 찾을 수 없다. */
 .mock-values-hidden .content-body :where(
   canvas,
   tbody,
@@ -280,18 +282,14 @@ body.drawer-open {
   .trend-up,
   .trend-down,
   .system-status,
-  .async-feedback,
   .monitor-collected,
-  .monitor-state-slot,
   .outlier-tag,
   .gauge-status,
   .run-meta,
   .node-status,
   .promotion-criteria,
-  .console-log,
   .workflow-statusbar,
   .schema-meta-line,
-  .catalog-result-status,
   .catalog-selected-chip,
   .token-line,
   .sql-preview,
@@ -328,9 +326,60 @@ body.drawer-open {
   visibility: hidden !important;
 }
 
+/* 실데이터 소비자 예외 — API 응답이 채운 영역은 목업 표시 OFF에서도 남긴다.
+   각 화면이 폴백 여부를 런타임 판정해 data-values-source를 부여한다(api=실응답, mock=폴백).
+   위 가림 규칙(클래스 2개)보다 속성 선택자 하나만큼 더 구체적이라 !important끼리도 이 쪽이 이긴다. */
+.mock-values-hidden .content-body [data-values-source="api"],
+.mock-values-hidden .content-body [data-values-source="api"] * {
+  visibility: visible !important;
+}
+
 /* 팝업 껍데기는 마운트 상태로 두되 목업 경보 값은 노출하지 않는다. */
 .mock-values-hidden .alert-popup {
   visibility: hidden !important;
+}
+
+/* 목업 표시 OFF 안내 배너 — OFF 상태를 상시 알리고 바로 켤 수 있게 한다.
+   OFF에서 반드시 보여야 하므로 위 가림 선택자에 없는 클래스만 쓴다. */
+.mock-off-banner {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: var(--space-m);
+  margin-bottom: var(--space-xxl);
+  padding: var(--space-m) var(--space-xl);
+  border: 1px solid var(--accent-orange);
+  border-radius: 8px;
+  background: var(--bg-card-hover);
+  color: var(--text-secondary);
+  font-size: 12px;
+  backdrop-filter: blur(6px);
+}
+
+.mock-off-banner-icon {
+  flex-shrink: 0;
+  color: var(--accent-orange);
+  font-size: 16px;
+}
+
+.mock-off-banner-text {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.mock-off-banner-title {
+  color: var(--accent-orange);
+  font-weight: 700;
+}
+
+.mock-off-banner .btn {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 6px 14px;
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 @media (max-width: 1200px) {
