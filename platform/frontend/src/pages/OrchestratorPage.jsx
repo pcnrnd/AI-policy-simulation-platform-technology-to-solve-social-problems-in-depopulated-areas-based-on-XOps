@@ -65,7 +65,6 @@ export default function OrchestratorPage() {
     pipelineResult,
     pipelineHistory,
     modelStore,
-    modelStoreSynced,
     consoleLogs,
     startPipeline,
     resetPipeline,
@@ -423,8 +422,9 @@ export default function OrchestratorPage() {
             0.80 미만이면 직전 버전으로 자동 롤백합니다.
           </span>
         </div>
-        {/* 목업 표시 OFF에서도 백엔드 레지스트리와 동기화된 이력은 남긴다(동기화 실패 시엔 상수 이력이므로 가린다). */}
-        <div className="table-container" data-values-source={modelStoreSynced ? "api" : "mock"}>
+        {/* 표기는 행 단위다 — 응답 200만으로 표 전체를 실데이터로 넘기면 상수 이력(합성 학습데이터·
+            하이퍼파라미터·등록일)까지 목업 표시 OFF에서 남는다. 백엔드가 알려준 (모델, 버전) 행만 api. */}
+        <div className="table-container">
           <table>
             <caption className="sr-only">모델과 실험의 버전 이력 및 운영 상태</caption>
             <thead>
@@ -444,6 +444,7 @@ export default function OrchestratorPage() {
                 return (
                   <tr
                     key={`${m.modelId}-${m.version}`}
+                    data-values-source={m.source ?? "mock"}
                     style={m.status === "운영" ? { backgroundColor: "rgba(var(--accent-teal-rgb), 0.04)" } : undefined}
                   >
                     <td style={{ fontSize: 13 }}>

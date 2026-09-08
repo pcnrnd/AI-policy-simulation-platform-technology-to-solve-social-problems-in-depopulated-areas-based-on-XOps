@@ -29,9 +29,18 @@ export default function App() {
   const mainRef = useRef(null);
   const alertsRef = useRef(null);
   const contentBodyRef = useRef(null);
+  const bannerRef = useRef(null);
+  const [bannerHeight, setBannerHeight] = useState(0);
   const handledTabFocusRequestRef = useRef(0);
-  const { ready, activeTab, setActiveTab, tabFocusRequest, mockDataVisible, toggleMockDataVisible } =
-    useAppState();
+  const {
+    ready,
+    activeTab,
+    setActiveTab,
+    navigateToTab,
+    tabFocusRequest,
+    mockDataVisible,
+    toggleMockDataVisible
+  } = useAppState();
   const { width, resizing, startResize, resizeBy, resetWidth } = useResizableSidebar();
 
   const handleResizerKeyDown = useCallback(
@@ -149,6 +158,26 @@ export default function App() {
     requestAnimationFrame(() => document.getElementById(`${activeTab}-panel`)?.focus());
   }, [activeTab, tabFocusRequest]);
 
+  // 배너의 [목업 데이터 켜기]는 누르는 순간 자기 자신과 배너를 함께 언마운트시켜 초점이 body로 떨어진다.
+  // 기존 탭 초점 규약(tabFocusRequest → 활성 패널)을 그대로 재사용해 초점을 돌려준다(Enter·Space 공통).
+  const handleShowMockData = useCallback(() => {
+    toggleMockDataVisible();
+    navigateToTab(activeTab);
+  }, [toggleMockDataVisible, navigateToTab, activeTab]);
+
+  // OFF 배너는 sticky(top:0)라 scrollIntoView 대상 위를 덮는다. 문구가 뷰포트 폭에 따라 줄바꿈되어
+  // 높이가 달라지므로 실측값을 CSS 변수로 넘기고, scroll-padding-top은 layout.css가 계산한다.
+  useEffect(() => {
+    const banner = bannerRef.current;
+    if (!banner) {
+      setBannerHeight(0);
+      return undefined;
+    }
+    const observer = new ResizeObserver(() => setBannerHeight(banner.offsetHeight));
+    observer.observe(banner);
+    return () => observer.disconnect();
+  }, [mockDataVisible]);
+
   if (!ready) {
     return (
       <div className="loading-screen">
@@ -199,18 +228,22 @@ export default function App() {
           sidebarOpen={sidebarOpen}
           menuButtonRef={menuButtonRef}
         />
-        <div className="content-body" ref={contentBodyRef}>
+        <div
+          className="content-body"
+          ref={contentBodyRef}
+          style={{ "--mock-off-banner-height": `${bannerHeight}px` }}
+        >
           {/* 목업 표시 OFF는 무기한 유지되고 새로고침에도 남는다. 아무 단서 없이 값만 사라지면
               "데이터가 없어진" 것으로 읽히므로, OFF인 동안은 이유와 복구 수단을 상시 노출한다. */}
           {!mockDataVisible && (
-            <div className="mock-off-banner" role="status">
+            <div className="mock-off-banner" role="status" ref={bannerRef}>
               <i className="fa-solid fa-eye-slash mock-off-banner-icon" aria-hidden="true"></i>
               <p className="mock-off-banner-text">
                 <span className="mock-off-banner-title">목업 데이터 표시 OFF</span> — 설정에서 켤 수
                 있습니다. 실데이터로 채워진 영역은 그대로 표시되고, 목업 값만 가려집니다. 이 설정은
                 브라우저(주소)별로 저장되므로 다른 주소·브라우저에서는 따로 켜야 합니다.
               </p>
-              <button type="button" className="btn btn-primary" onClick={toggleMockDataVisible}>
+              <button type="button" className="btn btn-primary" onClick={handleShowMockData}>
                 <i className="fa-solid fa-eye" aria-hidden="true"></i> 목업 데이터 켜기
               </button>
             </div>

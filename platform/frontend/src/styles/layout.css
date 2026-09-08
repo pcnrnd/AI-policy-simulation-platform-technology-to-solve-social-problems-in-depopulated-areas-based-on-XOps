@@ -228,8 +228,9 @@
 }
 
 .content-body {
+  --content-pad: var(--space-xxxl);
   flex-grow: 1;
-  padding: var(--space-xxxl);
+  padding: var(--content-pad);
   overflow-y: auto;
   position: relative;
 }
@@ -328,6 +329,9 @@ body.drawer-open {
 
 /* 실데이터 소비자 예외 — API 응답이 채운 영역은 목업 표시 OFF에서도 남긴다.
    각 화면이 폴백 여부를 런타임 판정해 data-values-source를 부여한다(api=실응답, mock=폴백).
+   api = 백엔드 응답을 받았다는 뜻이며 실측/합성 데이터 구분이 아니다(백엔드 /monitoring/*는
+   mock_data.json 시드를 반환할 수 있다). 그래서 표기는 표·카드가 아니라 응답이 실제로 채운
+   가장 작은 단위(예: Model Store는 <tr>)에 붙인다 — 넓게 붙이면 합성 값까지 함께 남는다.
    위 가림 규칙(클래스 2개)보다 속성 선택자 하나만큼 더 구체적이라 !important끼리도 이 쪽이 이긴다. */
 .mock-values-hidden .content-body [data-values-source="api"],
 .mock-values-hidden .content-body [data-values-source="api"] * {
@@ -337,6 +341,15 @@ body.drawer-open {
 /* 팝업 껍데기는 마운트 상태로 두되 목업 경보 값은 노출하지 않는다. */
 .mock-values-hidden .alert-popup {
   visibility: hidden !important;
+}
+
+/* 배너가 sticky로 상단을 덮으므로, scrollIntoView({block:"start"})로 이동한 대상(DataOps 단계 점프·
+   오케스트레이터 실행 상태 앵커)이 배너 아래에 가리지 않게 스크롤 컨테이너에 여백을 준다.
+   배너가 붙는 위치는 스크롤포트 상단이 아니라 그보다 --content-pad 아래(콘텐츠 박스 상단)이고,
+   scroll-padding-top은 스크롤포트 상단부터 재므로 컨테이너 패딩까지 함께 더해야 한다.
+   높이는 문구 줄바꿈에 따라 뷰포트마다 다르므로 App이 실측해 --mock-off-banner-height로 넘긴다. */
+.mock-values-hidden .content-body {
+  scroll-padding-top: calc(var(--content-pad) + var(--mock-off-banner-height, 0px) + var(--space-m));
 }
 
 /* 목업 표시 OFF 안내 배너 — OFF 상태를 상시 알리고 바로 켤 수 있게 한다.
@@ -457,7 +470,7 @@ body.drawer-open {
     white-space: normal;
   }
   .content-body {
-    padding: var(--space-l);
+    --content-pad: var(--space-l);
   }
   .monitor-options {
     width: 100%;

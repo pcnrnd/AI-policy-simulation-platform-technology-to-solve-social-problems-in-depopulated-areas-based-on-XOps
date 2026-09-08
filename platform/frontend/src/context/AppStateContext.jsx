@@ -52,6 +52,7 @@ const formatYmd = (date) =>
 
 // Model Store 승급 규칙 — 신규 버전을 운영으로 맨 앞에 등록하고 직전 운영 버전은 '이전'으로 강등한다.
 // 원본 배열은 건드리지 않고 새 배열을 반환한다. accuracy를 넘기지 않으면 직전 운영 지표에서 파생한다.
+// 호출부(레지스트리 동기화·승급 완료)가 모두 백엔드가 알려준 버전을 넘기므로 새 행에 source="api"를 붙인다.
 function promoteVersion(store, modelId, version, accuracy, registeredAt) {
   const prevServing = store.find((m) => m.modelId === modelId && m.status === "운영");
   const acc = accuracy ?? Number(((prevServing?.accuracy ?? 0.88) + 0.033).toFixed(3));
@@ -66,7 +67,8 @@ function promoteVersion(store, modelId, version, accuracy, registeredAt) {
       params: "auto-tuned (재학습 파이프라인)",
       accuracy: acc,
       status: "운영",
-      registeredAt: registeredAt ?? formatYmd(new Date())
+      registeredAt: registeredAt ?? formatYmd(new Date()),
+      source: "api"
     },
     ...demoted
   ];
@@ -98,8 +100,6 @@ export function AppStateProvider({ children }) {
   const [pipelineHistory, setPipelineHistory] = useState({});
   // Model Store — 모델·실험 버전 이력 (승급 완료 시 신규 운영 버전 추가)
   const [modelStore, setModelStore] = useState(MODEL_STORE);
-  // 백엔드 모델 레지스트리 동기화 성공 여부 — 목업 표시 OFF에서 이 표를 남길지 판정하는 데 쓴다.
-  const [modelStoreSynced, setModelStoreSynced] = useState(false);
   // 백엔드 오케스트레이션 이벤트 결과(PipelineRun) — 애니메이션 완료 시 실제 승급/롤백 반영
   const [pipelineResult, setPipelineResult] = useState(null);
 
@@ -146,26 +146,29 @@ export function AppStateProvider({ children }) {
 
   // 새로고침 시 modelStore는 상수(MODEL_STORE)로 리셋되므로, 백엔드가 보관 중인 현재 운영 버전에 맞춘다.
   // 동기화에 실패하면 상수 이력을 그대로 유지한다(화면은 계속 동작).
+  // 표기 규약: source="api"는 "이 (모델, 버전) 행을 백엔드 응답에서 받았다"는 뜻일 뿐 실측/합성 데이터
+  // 구분이 아니다 — 백엔드 /monitoring/*는 mock_data.json 시드를 반환할 수 있고, 이 행의 학습데이터·
+  // 하이퍼파라미터·Accuracy도 파생값이다. 응답에 없는 상수 이력 행은 표기하지 않아 OFF에서 가려진다.
   useEffect(() => {
     let alive = true;
     apiGet("/api/v3/orchestration/models")
       .then((models) => {
         if (!alive || !Array.isArray(models)) return;
-        setModelStoreSynced(true);
         setModelStore((prev) =>
           models.reduce((store, m) => {
             if (typeof m?.model_id !== "string" || typeof m?.version !== "string") return store;
-            const alreadyServing = store.some(
-              (row) => row.modelId === m.model_id && row.status === "운영" && row.version === m.version
-            );
+            const isReported = (row) => row.modelId === m.model_id && row.version === m.version;
             // 지표는 넘기지 않는다 — 백엔드 metrics는 승급 후보가 아닌 현재 모델 지표라 파생 로직에 맡긴다.
-            return alreadyServing ? store : promoteVersion(store, m.model_id, m.version, null);
+            if (!store.some((row) => isReported(row) && row.status === "운영")) {
+              return promoteVersion(store, m.model_id, m.version, null);
+            }
+            // 이미 운영으로 올라 있는 행도 백엔드가 확인해 준 것이므로 응답 유래로 표기한다.
+            return store.map((row) => (isReported(row) ? { ...row, source: "api" } : row));
           }, prev)
         );
       })
       .catch((err) => {
         if (!alive) return;
-        setModelStoreSynced(false);
         addConsoleLog(`WARN: 모델 레지스트리 동기화 실패 — ${err?.message ?? "알 수 없는 오류"}`);
       });
     return () => {
@@ -495,7 +498,6 @@ export function AppStateProvider({ children }) {
     pipelineResult,
     pipelineHistory,
     modelStore,
-    modelStoreSynced,
     f1Override,
     metricOverrides,
     consoleLogs,
