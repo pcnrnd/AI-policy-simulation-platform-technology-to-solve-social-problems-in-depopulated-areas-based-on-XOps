@@ -338,6 +338,15 @@ body.drawer-open {
   visibility: visible !important;
 }
 
+/* 예외의 예외 — api로 표기한 영역 안이라도 응답에 없던 값(Model Store api 행의 학습데이터·
+   하이퍼파라미터·등록일, 지표를 받지 못한 Accuracy)은 다시 가린다. 응답이 채운 최소 단위가
+   행보다 작을 때 필요하다. 위 예외 규칙보다 속성 선택자 하나만큼 더 구체적이라(0,4,0 > 0,3,0)
+   !important끼리도 이 쪽이 이긴다. 자손까지 지정해야 위 `[api] *`의 visible을 덮는다. */
+.mock-values-hidden .content-body [data-values-source="api"] [data-values-source="mock"],
+.mock-values-hidden .content-body [data-values-source="api"] [data-values-source="mock"] * {
+  visibility: hidden !important;
+}
+
 /* 팝업 껍데기는 마운트 상태로 두되 목업 경보 값은 노출하지 않는다. */
 .mock-values-hidden .alert-popup {
   visibility: hidden !important;

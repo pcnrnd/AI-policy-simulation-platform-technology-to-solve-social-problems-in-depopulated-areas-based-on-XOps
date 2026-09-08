@@ -52,8 +52,10 @@ const formatYmd = (date) =>
 
 // Model Store 승급 규칙 — 신규 버전을 운영으로 맨 앞에 등록하고 직전 운영 버전은 '이전'으로 강등한다.
 // 원본 배열은 건드리지 않고 새 배열을 반환한다. accuracy를 넘기지 않으면 직전 운영 지표에서 파생한다.
-// 호출부(레지스트리 동기화·승급 완료)가 모두 백엔드가 알려준 버전을 넘기므로 새 행에 source="api"를 붙인다.
-function promoteVersion(store, modelId, version, accuracy, registeredAt) {
+// source는 백엔드가 이 (모델, 버전)을 실제로 보고했을 때만 호출부가 "api"로 넘긴다(아니면 미표기=mock).
+// accuracySource는 그 응답이 지표까지 함께 준 경우에만 api다 — 학습데이터·하이퍼파라미터·등록일은
+// 응답에 없는 프런트 합성값이라 항상 mock으로 남는다(셀 단위 표기, layout.css 예외의 예외 참조).
+function promoteVersion(store, modelId, version, accuracy, registeredAt, source) {
   const prevServing = store.find((m) => m.modelId === modelId && m.status === "운영");
   const acc = accuracy ?? Number(((prevServing?.accuracy ?? 0.88) + 0.033).toFixed(3));
   const demoted = store
@@ -68,7 +70,9 @@ function promoteVersion(store, modelId, version, accuracy, registeredAt) {
       accuracy: acc,
       status: "운영",
       registeredAt: registeredAt ?? formatYmd(new Date()),
-      source: "api"
+      source,
+      // 행이 mock이면 셀도 api로 올리지 않는다 — 가려진 행 안에 셀 하나만 남는 상태를 막는다.
+      accuracySource: source === "api" && accuracy != null ? "api" : undefined
     },
     ...demoted
   ];
@@ -147,8 +151,10 @@ export function AppStateProvider({ children }) {
   // 새로고침 시 modelStore는 상수(MODEL_STORE)로 리셋되므로, 백엔드가 보관 중인 현재 운영 버전에 맞춘다.
   // 동기화에 실패하면 상수 이력을 그대로 유지한다(화면은 계속 동작).
   // 표기 규약: source="api"는 "이 (모델, 버전) 행을 백엔드 응답에서 받았다"는 뜻일 뿐 실측/합성 데이터
-  // 구분이 아니다 — 백엔드 /monitoring/*는 mock_data.json 시드를 반환할 수 있고, 이 행의 학습데이터·
-  // 하이퍼파라미터·Accuracy도 파생값이다. 응답에 없는 상수 이력 행은 표기하지 않아 OFF에서 가려진다.
+  // 구분이 아니다 — 백엔드 /monitoring/*는 mock_data.json 시드를 반환할 수 있다. 표기는 셀 단위로 좁힌다:
+  // 응답이 주는 것은 model_id·version·metrics뿐이라(mlops/orchestration/registry.py) 학습데이터·
+  // 하이퍼파라미터·등록일은 프런트 합성값으로 남고, Accuracy는 metrics.accuracy를 받았을 때만 api다.
+  // 응답에 없는 상수 이력 행은 표기하지 않아 OFF에서 가려진다.
   useEffect(() => {
     let alive = true;
     apiGet("/api/v3/orchestration/models")
@@ -158,12 +164,18 @@ export function AppStateProvider({ children }) {
           models.reduce((store, m) => {
             if (typeof m?.model_id !== "string" || typeof m?.version !== "string") return store;
             const isReported = (row) => row.modelId === m.model_id && row.version === m.version;
-            // 지표는 넘기지 않는다 — 백엔드 metrics는 승급 후보가 아닌 현재 모델 지표라 파생 로직에 맡긴다.
+            // Accuracy 열이므로 metrics.accuracy만 받는다 — f1 등 다른 지표를 이 칸에 넣으면 열 의미가 어긋난다.
+            const acc = Number.isFinite(m?.metrics?.accuracy) ? m.metrics.accuracy : null;
             if (!store.some((row) => isReported(row) && row.status === "운영")) {
-              return promoteVersion(store, m.model_id, m.version, null);
+              return promoteVersion(store, m.model_id, m.version, acc, null, "api");
             }
-            // 이미 운영으로 올라 있는 행도 백엔드가 확인해 준 것이므로 응답 유래로 표기한다.
-            return store.map((row) => (isReported(row) ? { ...row, source: "api" } : row));
+            // 이미 운영으로 올라 있는 행도 백엔드가 확인해 준 것이므로 응답 유래로 표기하고,
+            // 지표를 함께 받았으면 파생 Accuracy를 응답값으로 덮어 표와 응답이 어긋나지 않게 한다.
+            return store.map((row) =>
+              isReported(row)
+                ? { ...row, source: "api", ...(acc === null ? {} : { accuracy: acc, accuracySource: "api" }) }
+                : row
+            );
           }, prev)
         );
       })
@@ -416,14 +428,21 @@ export function AppStateProvider({ children }) {
           ...prev,
           [pipelineRun.pipelineId]: { runId: pipelineRun.runId, finishedAt, result: "SOTA 승급" }
         }));
-        // Model Store 갱신 — 신규 버전을 운영으로 등록, 직전 운영 버전은 '이전'으로 강등
+        // Model Store 갱신 — 신규 버전을 운영으로 등록, 직전 운영 버전은 '이전'으로 강등.
+        // 백엔드가 승급 버전을 문자열로 확인해 준 경우에만 응답 유래로 표기한다. 누락되면 기존 동작
+        // (프런트 후보 버전으로 모사 승급)은 유지하되 표기하지 않아 OFF에서 가려진다.
+        const activeVersion =
+          typeof result?.active_version === "string" && result.active_version !== ""
+            ? result.active_version
+            : null;
         setModelStore((prev) =>
           promoteVersion(
             prev,
             pipelineRun.model,
-            result?.active_version ?? pipelineRun.candidateVersion,
+            activeVersion ?? pipelineRun.candidateVersion,
             newAcc,
-            formatYmd(now)
+            formatYmd(now),
+            activeVersion === null ? undefined : "api"
           )
         );
       }
