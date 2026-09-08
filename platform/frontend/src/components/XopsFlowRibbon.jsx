@@ -22,6 +22,7 @@ const TERMINAL_BADGE = {
 
 const TONE_ICON = {
   done: "fa-circle-check",
+  ready: "fa-circle-dot",
   active: "fa-spinner fa-spin",
   alert: "fa-triangle-exclamation"
 };
@@ -29,6 +30,7 @@ const TONE_ICON = {
 // 파생 규칙 한 곳 — 상태 조합에서 4단계의 색조(tone)와 배지 문구를 만든다.
 function deriveFlowSteps({
   catalogCount,
+  mockDataVisible,
   driftInjected,
   metricOverrides,
   modelStore,
@@ -56,8 +58,9 @@ function deriveFlowSteps({
       label: "데이터 준비",
       icon: "fa-database",
       tone: catalogCount > 0 ? "done" : "idle",
-      // 카탈로그 조회 실패 시 배지 생략 (에러 아님)
-      badge: catalogCount === null ? null : `카탈로그 ${catalogCount}건`
+      // 카탈로그 조회 실패 시 배지 생략 (에러 아님).
+      // 목업 표시 OFF일 때도 숫자를 감춘다 — 이 건수는 mock_data.json 시드가 섞인 값이다(단계 상태는 유지).
+      badge: catalogCount === null || !mockDataVisible ? null : `카탈로그 ${catalogCount}건`
     },
     {
       id: "tab-mlops-monitor",
@@ -86,8 +89,11 @@ function deriveFlowSteps({
       no: "④",
       label: "시뮬레이션",
       icon: "fa-map-location-dot",
-      tone: promoted ? "done" : "idle",
-      badge: servingVersion ? `모델 ${servingVersion} ${promoted ? "적용" : "기준"}` : null
+      // 승급만으로 done·'적용'이라 부르지 않는다. SimulatorPage는 아직 modelStore/pipelineResult를 읽지 않아
+      // 승급 버전이 시뮬레이션에 반영됐다는 근거가 없다 — 확인 가능(ready)까지만 표시한다.
+      // 설계 §5(모델 버전 전파)가 구현되면 시뮬레이터가 쓰는 버전으로 done 판정을 연결한다.
+      tone: promoted ? "ready" : "idle",
+      badge: servingVersion ? `모델 ${servingVersion} ${promoted ? "확인 가능" : "기준"}` : null
     }
   ];
 }
@@ -97,6 +103,7 @@ export default function XopsFlowRibbon() {
     activeTab,
     navigateToTab,
     addConsoleLog,
+    mockDataVisible,
     driftInjected,
     metricOverrides,
     modelStore,
@@ -129,6 +136,7 @@ export default function XopsFlowRibbon() {
 
   const steps = deriveFlowSteps({
     catalogCount,
+    mockDataVisible,
     driftInjected,
     metricOverrides,
     modelStore,

@@ -123,6 +123,10 @@
 .xops-ribbon-step.is-active .xops-ribbon-badge {
   color: var(--accent-blue);
 }
+/* ready = 다음 단계에서 확인 가능(완료 아님) — done(teal)·active(blue)와 구분되는 색을 쓴다. */
+.xops-ribbon-step.is-ready .xops-ribbon-badge {
+  color: var(--accent-purple);
+}
 .xops-ribbon-step.is-alert .xops-ribbon-badge {
   color: var(--accent-orange);
 }
