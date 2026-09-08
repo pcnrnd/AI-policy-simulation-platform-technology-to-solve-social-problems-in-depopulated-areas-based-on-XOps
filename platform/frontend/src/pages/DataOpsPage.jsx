@@ -6,6 +6,7 @@ import PipelineStepper from "../components/PipelineStepper.jsx";
 import CollapsibleStage from "../components/CollapsibleStage.jsx";
 import ArchiveRegisterForm from "../components/ArchiveRegisterForm.jsx";
 import ConfirmDialog from "../components/ConfirmDialog.jsx";
+import NextStepBanner from "../components/NextStepBanner.jsx";
 import { useAppState } from "../context/AppStateContext.jsx";
 import { apiGet, apiSend } from "../lib/api.js";
 import { HTTP_METHODS, AUTH_METHODS, adapterOf, buildQuery } from "../lib/dataopsApi.js";
@@ -1351,6 +1352,16 @@ export default function DataOpsPage() {
           )}
         </Card>
       </CollapsibleStage>
+
+      {/* API 발급·호출까지 끝나면 다음 단계 — 이 데이터로 학습된 모델의 성능 모니터링.
+          조건은 STEP ③ 완료 신호(responseOk)를 그대로 쓴다. */}
+      {responseOk && (
+        <NextStepBanner
+          message={`${target.label} 연계 API 호출 완료 — 데이터 준비 단계가 끝났습니다`}
+          actionLabel="이 데이터로 학습된 모델 모니터링"
+          targetTab="tab-mlops-monitor"
+        />
+      )}
 
       <ConfirmDialog
         open={Boolean(confirmAction)}

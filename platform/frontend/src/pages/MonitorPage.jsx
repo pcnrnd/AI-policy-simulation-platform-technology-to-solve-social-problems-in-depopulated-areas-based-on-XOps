@@ -13,6 +13,7 @@ import {
   Filler
 } from "chart.js";
 import Card from "../components/Card.jsx";
+import NextStepBanner from "../components/NextStepBanner.jsx";
 import PerfBadge from "../components/PerfBadge.jsx";
 import GaugeChart from "../components/GaugeChart.jsx";
 import { useAppState } from "../context/AppStateContext.jsx";
@@ -742,6 +743,21 @@ export default function MonitorPage() {
           </div>
         )}
       </div>
+
+      {/* 드리프트 이후의 다음 단계 — 재학습 진행/결과는 오케스트레이터 탭에서 확인한다.
+          상태 안내 슬롯(.monitor-state-slot)은 목업 가림 대상이라 그 밖에 둔다. */}
+      {(driftInjected || pipelineScheduled || pipelineRunning) && (
+        <NextStepBanner
+          tone="warn"
+          message={
+            pipelineScheduled || pipelineRunning
+              ? "드리프트 대응 자동 재학습이 진행 중입니다"
+              : "드리프트 감지 상태가 남아 있습니다 — 직전 재학습 결과를 확인하세요"
+          }
+          actionLabel="오케스트레이터에서 보기"
+          targetTab="tab-mlops-orch"
+        />
+      )}
 
       <div className="grid-cols-3">
         <div className="card" style={{ padding: "var(--space-xl)" }}>

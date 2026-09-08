@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import Sidebar from "./components/Sidebar.jsx";
 import Header from "./components/Header.jsx";
 import AlertPopupContainer from "./components/AlertPopup.jsx";
+import XopsFlowRibbon, { FLOW_TAB_IDS } from "./components/XopsFlowRibbon.jsx";
 import Overview from "./pages/Overview.jsx";
 import MonitorPage from "./pages/MonitorPage.jsx";
 import OrchestratorPage from "./pages/OrchestratorPage.jsx";
@@ -199,6 +200,9 @@ export default function App() {
           menuButtonRef={menuButtonRef}
         />
         <div className="content-body" ref={contentBodyRef}>
+          {/* XOps 4단계(DataOps → 모니터 → 오케스트레이터 → 시뮬레이터) 흐름 리본 —
+              해당 탭에서만 본문 상단에 붙는다. 종합 대시보드·리포팅은 흐름 밖이라 제외. */}
+          {FLOW_TAB_IDS.includes(activeTab) && <XopsFlowRibbon />}
           {TABS.map((tab) => {
             const isActive = tab.id === activeTab;
             return (

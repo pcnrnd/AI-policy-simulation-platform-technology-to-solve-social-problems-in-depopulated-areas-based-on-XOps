@@ -2,6 +2,7 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import Card from "../components/Card.jsx";
 import ConsoleLog from "../components/ConsoleLog.jsx";
 import InfoTip from "../components/InfoTip.jsx";
+import NextStepBanner from "../components/NextStepBanner.jsx";
 import TablePager, { paginate } from "../components/TablePager.jsx";
 import { useAppState } from "../context/AppStateContext.jsx";
 import { PIPELINE_NODES } from "../constants/pipeline.js";
@@ -394,6 +395,17 @@ export default function OrchestratorPage() {
           </div>
         </Card>
       </div>
+
+      {/* 승급 완료 후의 다음 단계 — 승급된 모델은 정책 시뮬레이터에서 쓰인다.
+          방금 끝난 실행 카드 바로 아래에 붙여 결과와 같은 맥락에서 읽히게 한다. */}
+      {terminalState === "succeeded" && (
+        <NextStepBanner
+          tone="success"
+          message={`${pipelineResult?.active_version ?? pipelineRun?.candidateVersion ?? "신규 버전"} 승급 완료 — 운영 모델이 교체되었습니다`}
+          actionLabel="정책 시뮬레이터에서 활용"
+          targetTab="tab-simulator"
+        />
+      )}
 
       {/* ③ Model Store — 2차년도 "Feature/Model Store 기반 버전 관리·최고 성능 모델 선택" 산출물 */}
       <Card
