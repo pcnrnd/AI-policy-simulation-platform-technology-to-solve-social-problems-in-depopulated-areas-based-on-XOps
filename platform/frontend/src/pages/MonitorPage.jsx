@@ -21,6 +21,7 @@ import { useChartTheme } from "../hooks/useChartTheme.js";
 import { useRenderTiming } from "../lib/perf.js";
 import { MODEL_REGISTRY, RETRAIN_PIPELINES } from "../constants/models.js";
 import InfoTip from "../components/InfoTip.jsx";
+import RealdataEvaluationPanel from "../components/realdata/RealdataEvaluationPanel.jsx";
 import { apiGet } from "../lib/api.js";
 
 // 드리프트 자동 재학습 대상 — 인구이동 예측 모델(백엔드 오케스트레이션 시드 id).
@@ -1001,6 +1002,9 @@ export default function MonitorPage() {
           />
         </div>
       </Card>
+
+      {/* 실데이터 연계(R4) — 남원 모델 검증/운영 평가·선형 SHAP·드리프트. 위 데모 지표와는 별개 경로. */}
+      <RealdataEvaluationPanel />
     </>
   );
 }

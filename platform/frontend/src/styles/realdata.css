@@ -1,0 +1,59 @@
+/* 실데이터 연계(R3·R4) 신규 패널 전용 스타일 — 기존 mock-data-output/data-values-source
+   규약과 tokens.css 변수만 사용한다. 값 자체의 표시/숨김은 layout.css의 데모 스위치가 담당한다. */
+
+.realdata-panel .realdata-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.realdata-panel .realdata-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.realdata-panel .realdata-field select,
+.realdata-panel .realdata-field input {
+  min-width: 180px;
+  padding: 5px 8px;
+  font-size: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-card);
+  color: inherit;
+}
+
+.realdata-panel .realdata-hint {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: 6px 0;
+}
+
+.realdata-panel .realdata-error {
+  font-size: 12px;
+  color: var(--accent-red);
+  margin: 6px 0;
+}
+
+.realdata-panel .realdata-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 8px;
+  font-size: 10px;
+  border-radius: 999px;
+}
+
+.realdata-panel .realdata-badge-warn {
+  color: var(--accent-orange);
+  background: rgba(var(--accent-orange-rgb), 0.08);
+}
+
+.realdata-panel .realdata-shap {
+  max-width: 520px;
+  margin: 8px 0 16px;
+}

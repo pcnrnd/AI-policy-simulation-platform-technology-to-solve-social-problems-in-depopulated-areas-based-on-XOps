@@ -4,6 +4,7 @@ import ConsoleLog from "../components/ConsoleLog.jsx";
 import InfoTip from "../components/InfoTip.jsx";
 import NextStepBanner from "../components/NextStepBanner.jsx";
 import TablePager, { paginate } from "../components/TablePager.jsx";
+import RealdataTrainingPanel from "../components/realdata/RealdataTrainingPanel.jsx";
 import { useAppState } from "../context/AppStateContext.jsx";
 import { PIPELINE_NODES } from "../constants/pipeline.js";
 import { RETRAIN_PIPELINES, MODEL_REGISTRY } from "../constants/models.js";
@@ -510,6 +511,9 @@ export default function OrchestratorPage() {
       <Card title="오케스트레이터 실시간 실행 로그" icon="fa-terminal">
         <ConsoleLog logs={consoleLogs} />
       </Card>
+
+      {/* 실데이터 연계(R3) — 남원 실데이터 학습·후보·반영. 위 데모 파이프라인과는 별개 경로. */}
+      <RealdataTrainingPanel />
     </>
   );
 }
