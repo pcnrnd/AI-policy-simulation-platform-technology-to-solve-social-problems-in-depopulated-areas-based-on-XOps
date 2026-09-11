@@ -272,6 +272,16 @@ export default function DataOpsPage() {
     }, 60);
   };
 
+  // 등록 버튼 비활성 안내 → STEP ③ 토큰 발급 컨트롤로 이동(같은 페이지 스크롤+포커스, 새 API 호출 없음)
+  const jumpToTokenIssue = () => {
+    setOpenStages((s) => ({ ...s, "dstep-builder": true }));
+    setTimeout(() => {
+      const el = document.getElementById("dataops-token-issue-btn");
+      el?.scrollIntoView({ behavior: getScrollBehavior(), block: "center" });
+      el?.focus();
+    }, 60);
+  };
+
   // 스크롤 스파이 — 카탈로그 로드 후 단계가 렌더되면 재부착 (deps: loading)
   const [activeStageId, setActiveStageId] = useState("dstep-source");
   useEffect(() => {
@@ -855,7 +865,10 @@ export default function DataOpsPage() {
             {/* 버튼 비활성은 UX 안내일 뿐이고, 실제 보안 경계는 서버의 401(data:write 스코프)이다. */}
             {!token && (
               <span id="catalog-auth-hint" style={{ fontSize: 11, color: "var(--text-muted)" }}>
-                <i className="fa-solid fa-lock" aria-hidden="true"></i> ③ 단계에서 토큰 발급 후 등록·삭제 가능
+                <i className="fa-solid fa-lock" aria-hidden="true"></i> ③ 단계에서 토큰 발급 후 등록·삭제 가능{" "}
+                <button type="button" className="btn btn-tertiary" onClick={jumpToTokenIssue}>
+                  토큰 발급으로 이동
+                </button>
               </span>
             )}
           </div>
@@ -1134,6 +1147,7 @@ export default function DataOpsPage() {
                     </label>
                     <button
                       type="button"
+                      id="dataops-token-issue-btn"
                       className="btn btn-secondary"
                       style={{ padding: "6px 12px" }}
                       onClick={handleIssueToken}
