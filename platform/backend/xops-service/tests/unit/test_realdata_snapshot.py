@@ -80,9 +80,7 @@ def test_create_dataset_sales_no_zero_fill_across_gap(
     monkeypatch: pytest.MonkeyPatch, isolated_settings: Settings
 ) -> None:
     bc_fixture = _load_fixture("bc_dong_industry_sales.json")
-    kt_fixture = _load_fixture("kt_monthly_visitors.json")
     monkeypatch.setattr(pg_reader, "fetch_aggregate", lambda *a, **kw: bc_fixture)
-    monkeypatch.setattr(pg_reader, "fetch_all", lambda *a, **kw: kt_fixture)
 
     record = snapshot.create_dataset("observed_sales_krw")
 
@@ -91,9 +89,9 @@ def test_create_dataset_sales_no_zero_fill_across_gap(
     # 202209·202210은 원천에 없다 — 채워 넣지 않는다.
     assert 202209 not in {r["base_ym"] for r in record.rows}
     assert 202210 not in {r["base_ym"] for r in record.rows}
-    # 소비 모델 교차 피처 — 공통 관측월은 KT 방문객이 조인되어 있다.
-    joined = next(r for r in record.rows if r["base_ym"] == 202201 and r["dong_code"] == "45190250")
-    assert joined["nonlocal_visitors"] == 1000
+    # R2-1(v0.2): 소비 스냅샷은 소비 원천만 반영 — 방문객 교차 컬럼이 없다.
+    sample = next(r for r in record.rows if r["base_ym"] == 202201 and r["dong_code"] == "45190250")
+    assert "nonlocal_visitors" not in sample
 
 
 def test_load_dataset_round_trips(monkeypatch: pytest.MonkeyPatch, isolated_settings: Settings) -> None:

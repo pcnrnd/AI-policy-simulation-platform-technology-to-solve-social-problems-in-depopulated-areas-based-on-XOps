@@ -138,11 +138,6 @@ def _build_sales_rows() -> tuple[list[dict[str, Any]], list[str]]:
     if unmapped:
         raise MappingError(f"BC dong_name {len(unmapped)}건이 대응표에 없습니다: {unmapped}", unmapped)
 
-    # 소비 모델의 visitors_lag1 교차 피처용 — 같은 (base_ym, dong_code) 방문객(원천, 조인 시점 값 그대로)
-    visitors_lookup: dict[tuple[int, str], Any] = {
-        (r["base_ym"], r["dong_code"]): r["y"] for r in _build_visitors_rows()
-    }
-
     rows = []
     for r in agg:
         dong_code = dong_name_to_code[r["dong_name"]]
@@ -154,7 +149,6 @@ def _build_sales_rows() -> tuple[list[dict[str, Any]], list[str]]:
                 "dong_code": dong_code,
                 "y": sales,
                 "observed_sales_krw": sales,
-                "nonlocal_visitors": _to_number(visitors_lookup.get((base_ym, dong_code))),
             }
         )
     rows.sort(key=lambda r: (r["base_ym"], r["dong_code"]))
@@ -176,15 +170,14 @@ def _spec(target: str, spec_version: str, dong_map_sha256: str) -> dict[str, Any
     return {
         "target": target,
         "model_id": TARGETS[target],
-        "tables": [_BC_TABLE, _KT_MONTHLY_TABLE],
-        "columns": {"y": "observed_sales_krw", "extra": ["nonlocal_visitors"]},
+        "tables": [_BC_TABLE],
+        "columns": {"y": "observed_sales_krw", "extra": []},
         "aggregation": "sum(sales_est_krw) group by (base_ym, dong_name)",
         "dong_map_sha256": dong_map_sha256,
         "spec_version": spec_version,
         "rules": {
             "fill_missing": False,
             "lag_within_continuous_run_only": True,
-            "cross_join": "nonlocal_visitors same (base_ym, dong_code), common observed months only",
         },
     }
 

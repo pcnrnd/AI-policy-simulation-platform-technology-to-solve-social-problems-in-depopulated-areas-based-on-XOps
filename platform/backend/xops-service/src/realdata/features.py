@@ -2,6 +2,10 @@
 
 랙이 결손이면(연속 관측 구간 밖) 표본을 만들지 않는다(R1-5). 표준화 통계는 models.py가
 학습 구간 행만으로 별도 산출한다 — 여기서는 원 척도 피처만 만든다.
+
+두 모델 모두 각자 타깃의 랙·전년동월·계절·동 one-hot만 쓴다(R2-1, v0.2). 소비 모델의
+`visitors_lag1` 교차 피처는 KT 방문객 관측 상한(202310)이 소비 관측 상한(202312)보다
+앞서 forecast_month의 표본이 전부 결측되는 문제(R2-1a 위반)로 v0.2에서 제외했다.
 """
 
 from __future__ import annotations
@@ -14,8 +18,6 @@ from src.core.settings import get_settings
 
 LAG_FEATURES = ("y_lag1", "y_lag2", "y_lag3")
 BASE_FEATURES = (*LAG_FEATURES, "y_yoy", "has_yoy", "month_sin", "month_cos")
-_CROSS_FEATURE = "visitors_lag1"
-_SALES_TARGET = "observed_sales_krw"
 
 # build_feature_rows 최근 호출의 제외 사유별 카운트 — 인터페이스 시그니처를 바꾸지 않고
 # 품질 보고(R1-5)에 노출하기 위한 보조 상태.
@@ -52,24 +54,12 @@ def _group_by_dong(dataset: Any) -> dict[str, dict[int, dict[str, Any]]]:
     return by_dong
 
 
-def _include_visitors_lag1(dataset: Any, by_dong: dict[str, dict[int, dict[str, Any]]]) -> bool:
-    if dataset.target != _SALES_TARGET:
-        return False
-    return any(
-        series.get(add_month(t, -1), {}).get("nonlocal_visitors") is not None
-        for series in by_dong.values()
-        for t in series
-    )
-
-
 def build_feature_rows(dataset: Any, *, for_month: int | None = None) -> list[dict[str, Any]]:
     """`dataset.rows`에서 표본을 만든다. `for_month`가 주어지면 그 달의 예측용 피처만 만든다."""
     global _last_excluded
-    excluded = {"lag_missing": 0, "visitors_lag1_missing": 0}
+    excluded = {"lag_missing": 0}
 
     by_dong = _group_by_dong(dataset)
-    # 소비 모델의 visitors_lag1: 실제로 단 한 건이라도 가능한지 먼저 확인(전혀 없으면 spec에서 제외)
-    include_visitors_lag1 = _include_visitors_lag1(dataset, by_dong)
 
     targets: list[tuple[str, int]]
     if for_month is None:
@@ -86,14 +76,6 @@ def build_feature_rows(dataset: Any, *, for_month: int | None = None) -> list[di
             continue
         lag1, lag2, lag3 = lags
         assert lag1 is not None and lag2 is not None and lag3 is not None  # 위 any() 가드로 보장됨
-
-        visitors_lag1 = None
-        if include_visitors_lag1:
-            prev = series.get(add_month(t, -1))
-            visitors_lag1 = prev.get("nonlocal_visitors") if prev else None
-            if visitors_lag1 is None:
-                excluded["visitors_lag1_missing"] += 1
-                continue
 
         yoy_row = series.get(add_month(t, -12))
         month_sin, month_cos = _month_cycle(t)
@@ -112,8 +94,6 @@ def build_feature_rows(dataset: Any, *, for_month: int | None = None) -> list[di
         }
         for code in _canonical_dongs():
             feature_row[f"dong_{code}"] = 1 if code == dong_code else 0
-        if include_visitors_lag1:
-            feature_row[_CROSS_FEATURE] = visitors_lag1
         out.append(feature_row)
 
     _last_excluded = excluded
@@ -121,9 +101,7 @@ def build_feature_rows(dataset: Any, *, for_month: int | None = None) -> list[di
 
 
 def feature_names(dataset: Any) -> list[str]:
-    """이 데이터셋의 학습에 쓰일 피처 이름 순서(dong one-hot 23 포함)."""
+    """이 데이터셋의 학습에 쓰일 피처 이름 순서(dong one-hot 23 포함). 두 모델 동일 구성(v0.2)."""
     names = list(BASE_FEATURES)
-    if _include_visitors_lag1(dataset, _group_by_dong(dataset)):
-        names.append(_CROSS_FEATURE)
     names.extend(f"dong_{code}" for code in _canonical_dongs())
     return names
