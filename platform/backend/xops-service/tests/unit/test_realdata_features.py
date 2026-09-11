@@ -1,4 +1,4 @@
-"""피처 엔지니어링 단위 테스트 — 누출 차단·랙 결손 제외·소비 교차 피처(R2-1, R2-2)."""
+"""피처 엔지니어링 단위 테스트 — 누출 차단·랙 결손 제외·forecast 표본 완전성(R2-1, R2-1a, R2-2)."""
 
 from __future__ import annotations
 
@@ -122,12 +122,11 @@ def test_for_month_builds_forecast_rows_without_leakage() -> None:
         assert row["y"] is None
 
 
-def test_visitors_lag1_excluded_from_spec_when_never_available() -> None:
+def test_sales_target_has_no_cross_feature() -> None:
+    """R2-1(v0.2): 소비 모델도 방문 교차 피처(visitors_lag1) 없이 자기 타깃 랙만 쓴다."""
     rows = [
-        {"base_ym": 202201, "dong_code": _DONG_A, "y": 100, "observed_sales_krw": 100, "nonlocal_visitors": None},
-        {"base_ym": 202202, "dong_code": _DONG_A, "y": 110, "observed_sales_krw": 110, "nonlocal_visitors": None},
-        {"base_ym": 202203, "dong_code": _DONG_A, "y": 120, "observed_sales_krw": 120, "nonlocal_visitors": None},
-        {"base_ym": 202204, "dong_code": _DONG_A, "y": 130, "observed_sales_krw": 130, "nonlocal_visitors": None},
+        {"base_ym": m, "dong_code": _DONG_A, "y": 100 + i, "observed_sales_krw": 100 + i}
+        for i, m in enumerate([202201, 202202, 202203, 202204])
     ]
     dataset = _mk_dataset("observed_sales_krw", rows)
 
@@ -135,19 +134,28 @@ def test_visitors_lag1_excluded_from_spec_when_never_available() -> None:
     assert "visitors_lag1" not in names
 
     feature_rows = features.build_feature_rows(dataset)
+    assert feature_rows
     assert all("visitors_lag1" not in r for r in feature_rows)
 
 
-def test_visitors_lag1_included_when_cross_join_available() -> None:
-    rows = [
-        {"base_ym": m, "dong_code": _DONG_A, "y": 100 + i, "observed_sales_krw": 100 + i, "nonlocal_visitors": 1000 + i}
-        for i, m in enumerate([202201, 202202, 202203, 202204])
-    ]
-    dataset = _mk_dataset("observed_sales_krw", rows)
+def test_feature_names_identical_for_both_targets() -> None:
+    """R2-1(v0.2): 두 모델은 랙·전년동월·계절·동 one-hot만 쓰는 동일 피처 구성이다."""
+    rows = [{"base_ym": 202201, "dong_code": _DONG_A, "y": 1, "observed_sales_krw": 1}]
+    visitors_names = features.feature_names(_mk_dataset("nonlocal_visitors", rows))
+    sales_names = features.feature_names(_mk_dataset("observed_sales_krw", rows))
+    assert visitors_names == sales_names
 
-    names = features.feature_names(dataset)
-    assert "visitors_lag1" in names
 
-    feature_rows = features.build_feature_rows(dataset)
-    row_204 = next(r for r in feature_rows if r["base_ym"] == 202204)
-    assert row_204["visitors_lag1"] == 1002  # 202203의 nonlocal_visitors
+def test_for_month_forecast_covers_all_observed_dongs_r2_1a() -> None:
+    """R2-1a: forecast_month에 대해 관측이 있는 동 전부(23)의 피처 행이 나와야 한다."""
+    canonical_dongs = features._canonical_dongs()
+    assert len(canonical_dongs) == 23
+
+    months = [202201, 202202, 202203, 202204]
+    rows = [row for dong in canonical_dongs for row in _visitor_rows(dong, months)]
+
+    for target in ("nonlocal_visitors", "observed_sales_krw"):
+        dataset = _mk_dataset(target, rows)
+        forecast_rows = features.build_feature_rows(dataset, for_month=202205)
+        assert {r["dong_code"] for r in forecast_rows} == set(canonical_dongs)
+        assert len(forecast_rows) == 23
