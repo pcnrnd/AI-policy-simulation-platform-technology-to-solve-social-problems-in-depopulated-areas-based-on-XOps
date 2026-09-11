@@ -35,12 +35,6 @@ def _import_errors() -> ModuleType:
     return errors
 
 
-def _rows_of(dataset: Any) -> list[dict[str, Any]]:
-    if isinstance(dataset, dict):
-        return list(dataset.get("rows", []))
-    return list(getattr(dataset, "rows", []) or [])
-
-
 # ── evaluation ───────────────────────────────────────────────
 def evaluation(model_id: str, version: str) -> dict[str, Any]:
     """`GET /realdata/models/{model_id}/evaluation?version=`(R4).
@@ -63,6 +57,10 @@ def evaluation(model_id: str, version: str) -> dict[str, Any]:
 
 
 def _operational_evaluation(model_id: str, candidate: dict[str, Any]) -> dict[str, Any]:
+    """B-fix: 원본 구현은 `_rows_of(dataset)`(원천 관측 그대로 — y_lag1 등 피처 컬럼이 없다)에서
+    바로 `feature: row.get(feature)`로 피처 행을 만들려 해 전부 None이 됐다. A의
+    `build_feature_rows(dataset, for_month=forecast_month)`로 그 달의 실제 학습용 피처 행을
+    만들고, `predict(artifact, rows)`(배치)로 한 번에 예측한다."""
     models_mod = _import_models()
     snapshot_mod = _import_snapshot()
     errors_mod = _import_errors()
@@ -72,26 +70,22 @@ def _operational_evaluation(model_id: str, candidate: dict[str, Any]) -> dict[st
     except errors_mod.RealdataError as exc:
         return {"kind": "error", "message": str(exc)}
 
-    observed_end = artifact.get("observed_end_month")
     forecast_month = artifact.get("forecast_month")
-    if observed_end is None or forecast_month is None:
-        return {"kind": "error", "message": "아티팩트에 observed_end_month/forecast_month가 없습니다."}
+    if forecast_month is None:
+        return {"kind": "error", "message": "아티팩트에 forecast_month가 없습니다."}
 
     try:
         dataset = snapshot_mod.load_dataset(candidate["dataset_id"])
     except errors_mod.RealdataError as exc:
         return {"kind": "error", "message": str(exc)}
 
-    rows_for_month = [row for row in _rows_of(dataset) if row.get("base_ym") == forecast_month and "y" in row]
-    if not rows_for_month:
+    feature_rows = models_mod.build_feature_rows(dataset, for_month=forecast_month)
+    scored_rows = [row for row in feature_rows if row.get("y") is not None]
+    if not scored_rows:
         return {"kind": "pending", "pending_months": [forecast_month]}
 
-    features = artifact.get("features", [])
-    pairs = []
-    for row in rows_for_month:
-        feature_row = {feature: row.get(feature) for feature in features}
-        predicted = models_mod.predict(artifact, feature_row)
-        pairs.append((row["y"], predicted))
+    predictions = models_mod.predict(artifact, scored_rows)
+    pairs = list(zip((row["y"] for row in scored_rows), predictions))
 
     abs_errors = [abs(actual - predicted) for actual, predicted in pairs]
     mae = sum(abs_errors) / len(abs_errors)
@@ -112,7 +106,12 @@ def explain(model_id: str, version: str, base_ym: int, dong_code: str) -> dict[s
     """`GET /realdata/models/{model_id}/explain?version=&base_ym=&dong_code=`(R4).
 
     phi_j = coef_j × (x_j − mean_j) / std_j (표준화 공간 계수 기준),
-    base_value = intercept, reconstruction_check = |base_value + Σphi − prediction| (허용 1e-6)."""
+    base_value = intercept, reconstruction_check = |base_value + Σphi − prediction| (허용 1e-6).
+
+    B-fix: 원본 구현은 원천 관측 행(`_rows_of(dataset)`)에서 바로 조회해 y_lag1 등 피처
+    컬럼이 없었다 — `build_feature_rows(dataset, for_month=base_ym)`로 그 달의 학습용 피처
+    행을 만들고 dong_code로 찾는다. `train_means`/`train_stds`도 dict가 아니라 `features`와
+    같은 순서의 리스트라 인덱스로 읽는다. `predict()`도 배치 함수라 `[row]`로 감싸 첫 값을 쓴다."""
     models_mod = _import_models()
     snapshot_mod = _import_snapshot()
     errors_mod = _import_errors()
@@ -127,17 +126,15 @@ def explain(model_id: str, version: str, base_ym: int, dong_code: str) -> dict[s
     except errors_mod.RealdataError as exc:
         return {"status": "error", "message": str(exc), "data": None}
 
-    row = next(
-        (r for r in _rows_of(dataset) if r.get("base_ym") == base_ym and r.get("dong_code") == dong_code),
-        None,
-    )
+    feature_rows = models_mod.build_feature_rows(dataset, for_month=base_ym)
+    row = next((r for r in feature_rows if r.get("dong_code") == dong_code), None)
     if row is None:
-        return {"status": "empty", "message": f"{base_ym}/{dong_code} 관측행이 없습니다.", "data": None}
+        return {"status": "empty", "message": f"{base_ym}/{dong_code} 관측행이 없습니다(랙 결손 포함).", "data": None}
 
     features: list[str] = artifact["features"]
     coef: list[float] = artifact["coef"]
-    means: dict[str, float] = artifact["train_means"]
-    stds: dict[str, float] = artifact["train_stds"]
+    means: list[float] = artifact["train_means"]
+    stds: list[float] = artifact["train_stds"]
     intercept: float = artifact["intercept"]
 
     contributions = []
@@ -146,12 +143,12 @@ def explain(model_id: str, version: str, base_ym: int, dong_code: str) -> dict[s
         if feature not in row:
             return {"status": "error", "message": f"학습행에 피처 {feature}가 없습니다.", "data": None}
         x = row[feature]
-        std = stds.get(feature) or 1e-9
-        phi = coef[i] * (x - means.get(feature, 0.0)) / std
+        std = stds[i] or 1e-9
+        phi = coef[i] * (x - means[i]) / std
         contributions.append({"feature": feature, "value": x, "phi": phi})
         total += phi
 
-    prediction = models_mod.predict(artifact, {feature: row.get(feature) for feature in features})
+    prediction = models_mod.predict(artifact, [row])[0]
     base_value = intercept
     reconstruction_check = abs(base_value + total - prediction)
 
@@ -223,7 +220,10 @@ def drift(model_id: str, version: str) -> dict[str, Any]:
     except errors_mod.RealdataError as exc:
         return {"status": "error", "message": str(exc), "data": None}
 
-    rows = _rows_of(dataset)
+    # B-fix: 원본은 원천 관측 행을 그대로 썼다 — artifact["features"](y_lag1 등)가 원천
+    # 행에는 없어 PSI가 항상 빈 결과였다. build_feature_rows(dataset)로 학습용 피처 행을
+    # 만들어야 features 리스트의 각 컬럼이 실제로 존재한다.
+    rows = models_mod.build_feature_rows(dataset)
     observed_end = artifact.get("observed_end_month")
     eval_period = candidate["metrics"].get("eval_period") or {}
 

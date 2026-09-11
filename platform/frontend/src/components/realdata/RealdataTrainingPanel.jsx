@@ -72,12 +72,12 @@ export default function RealdataTrainingPanel() {
     loadModels();
   }, [loadModels]);
 
-  // ── 데이터셋 목록(A 라우트 — 없으면 상태만 표시) ─────────
+  // ── 데이터셋 목록(A 라우트 GET /realdata/datasets → data:{datasets:[...]}) ─────────
   useEffect(() => {
     if (!token) return;
     getDatasets(token)
       .then((res) => {
-        const list = res.data ?? [];
+        const list = res.data?.datasets ?? [];
         setDatasets(list);
         setDatasetsError(res.status !== "ok" ? res.message ?? "등록된 데이터셋이 없습니다." : null);
       })
