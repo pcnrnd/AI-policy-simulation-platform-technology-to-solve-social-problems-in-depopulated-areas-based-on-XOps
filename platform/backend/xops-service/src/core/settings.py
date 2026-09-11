@@ -79,6 +79,12 @@ class Settings(BaseSettings):
     # 동일 model_id 재학습 최소 간격(분) — manual 이벤트는 무시
     retrain_min_interval_minutes: float = 30.0
 
+    # 실데이터 연계 — 데이터셋 스냅샷 파일 경로
+    realdata_dataset_dir: Path = SERVICE_ROOT / "data" / "datasets"
+    # 행정동 대응표는 코드와 함께 배포되는 정적 자산이라 data/(gitignore·볼륨 마운트 대상)가
+    # 아니라 패키지 경로(src/realdata/)에 둔다. settings.py는 src/core/에 있으므로 parents[1] = src.
+    realdata_dong_map_path: Path = Path(__file__).resolve().parents[1] / "realdata" / "namwon_dong_map.json"
+
     def validate_runtime(self) -> None:
         """기동 시 정합성 검증 — prod에서 기본 JWT 시크릿이면 거부."""
         if self.environment == "prod" and self.jwt_secret == _DEFAULT_JWT_SECRET:
