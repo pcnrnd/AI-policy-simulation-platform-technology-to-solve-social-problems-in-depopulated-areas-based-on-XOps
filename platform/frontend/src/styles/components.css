@@ -180,6 +180,17 @@
   animation: pulse-orange 2s infinite;
 }
 
+/* 데모 표시 OFF — 활성 신호색(teal)과 구분되는 비활성 회색. 점 맥동은 쓰지 않는다. */
+.system-status.mock-data-visibility-status {
+  color: var(--text-muted);
+  background-color: rgba(128, 138, 154, 0.12);
+  border-color: currentColor;
+}
+.system-status.mock-data-visibility-status .status-indicator {
+  background-color: var(--text-muted);
+  animation: none;
+}
+
 /* Buttons */
 .btn {
   padding: 12px 24px;
@@ -534,6 +545,10 @@ td.cell-actions {
 }
 [data-theme="light"] .system-status.retraining {
   background-color: rgba(var(--accent-orange-rgb), 0.02);
+  border-color: currentColor;
+}
+[data-theme="light"] .system-status.mock-data-visibility-status {
+  background-color: rgba(93, 107, 128, 0.12);
   border-color: currentColor;
 }
 

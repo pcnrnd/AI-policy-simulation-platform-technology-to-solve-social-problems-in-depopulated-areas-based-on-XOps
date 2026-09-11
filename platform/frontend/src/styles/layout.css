@@ -104,6 +104,66 @@
   flex-grow: 1;
 }
 
+.nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* 그룹 제목 — 하위 탭(14px)보다 한 단계 크게. 강조색·배경 채움은 쓰지 않는다. */
+.nav-group-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin: 4px 0 0;
+  padding: 10px 16px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.3;
+  text-align: left;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.nav-group-toggle:hover {
+  background-color: var(--surface-hover);
+}
+
+.nav-group-chevron {
+  width: 14px;
+  font-size: 11px;
+  color: var(--text-muted);
+  transition: transform var(--transition-fast);
+}
+
+.nav-group.is-collapsed .nav-group-chevron {
+  transform: rotate(-90deg);
+}
+
+.nav-group-items {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  /* 하위 메뉴의 활성 배경과 아이콘·문구를 함께 들여써 그룹 계층을 드러낸다. */
+  margin-left: 20px;
+}
+
+.nav-group-items[hidden] {
+  display: none;
+}
+
+.nav-menu > [role="tablist"] {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .nav-item {
   display: flex;
   align-items: center;
@@ -270,9 +330,9 @@ body.drawer-open {
   margin-bottom: var(--space-xxl);
 }
 
-/* 목업 표시 OFF: 화면 구조와 컨트롤은 유지하고 값이 담긴 출력 영역만 가린다.
-   진단 통로(.console-log · .async-feedback · .monitor-state-slot · .catalog-result-status)는
-   목록에서 뺀다 — 함께 가리면 백엔드 오류·수집 실패 안내까지 사라져 원인을 찾을 수 없다. */
+/* 데모 표시 OFF: API 응답·로컬 시드 구분 없이 모든 데이터 출력을 가린다.
+   화면 구조는 유지하고 원본·입력 상태는 보존해 ON으로 돌아오면 그대로 복원한다.
+   data-values-source는 전달 경로일 뿐 실제/데모 데이터 구분이나 표시 예외가 아니다. */
 .mock-values-hidden .content-body :where(
   canvas,
   tbody,
@@ -297,6 +357,17 @@ body.drawer-open {
   .api-response,
   .built-resp-head,
   .mock-data-output,
+  .gauge-value,
+  .table-pager,
+  .catalog-result-status,
+  .console-log,
+  .async-feedback,
+  .monitor-state-slot,
+  .xops-next-step,
+  .routing-flow,
+  .query-lang-chip,
+  .resp-origin-chip,
+  .card-title-area > :not(.card-title),
   .pl-factor-list,
   .pl-stat-baseline,
   .pl-corr-grid,
@@ -315,6 +386,8 @@ body.drawer-open {
   .report-preview-panel
 ) {
   visibility: hidden !important;
+  /* 입력·버튼의 transition: all 때문에 OFF 직후 값이 잠시 남지 않도록 한다. */
+  transition: none !important;
 }
 
 /* 베이스 지도와 조작 패널은 남기고, 목업 위치·격자·시설 레이어만 숨긴다. */
@@ -327,81 +400,9 @@ body.drawer-open {
   visibility: hidden !important;
 }
 
-/* 실데이터 소비자 예외 — API 응답이 채운 영역은 목업 표시 OFF에서도 남긴다.
-   각 화면이 폴백 여부를 런타임 판정해 data-values-source를 부여한다(api=실응답, mock=폴백).
-   api = 백엔드 응답을 받았다는 뜻이며 실측/합성 데이터 구분이 아니다(백엔드 /monitoring/*는
-   mock_data.json 시드를 반환할 수 있다). 그래서 표기는 표·카드가 아니라 응답이 실제로 채운
-   가장 작은 단위(예: Model Store는 <tr>)에 붙인다 — 넓게 붙이면 합성 값까지 함께 남는다.
-   위 가림 규칙(클래스 2개)보다 속성 선택자 하나만큼 더 구체적이라 !important끼리도 이 쪽이 이긴다. */
-.mock-values-hidden .content-body [data-values-source="api"],
-.mock-values-hidden .content-body [data-values-source="api"] * {
-  visibility: visible !important;
-}
-
-/* 예외의 예외 — api로 표기한 영역 안이라도 응답에 없던 값(Model Store api 행의 학습데이터·
-   하이퍼파라미터·등록일, 지표를 받지 못한 Accuracy)은 다시 가린다. 응답이 채운 최소 단위가
-   행보다 작을 때 필요하다. 위 예외 규칙보다 속성 선택자 하나만큼 더 구체적이라(0,4,0 > 0,3,0)
-   !important끼리도 이 쪽이 이긴다. 자손까지 지정해야 위 `[api] *`의 visible을 덮는다. */
-.mock-values-hidden .content-body [data-values-source="api"] [data-values-source="mock"],
-.mock-values-hidden .content-body [data-values-source="api"] [data-values-source="mock"] * {
-  visibility: hidden !important;
-}
-
 /* 팝업 껍데기는 마운트 상태로 두되 목업 경보 값은 노출하지 않는다. */
 .mock-values-hidden .alert-popup {
   visibility: hidden !important;
-}
-
-/* 배너가 sticky로 상단을 덮으므로, scrollIntoView({block:"start"})로 이동한 대상(DataOps 단계 점프·
-   오케스트레이터 실행 상태 앵커)이 배너 아래에 가리지 않게 스크롤 컨테이너에 여백을 준다.
-   배너가 붙는 위치는 스크롤포트 상단이 아니라 그보다 --content-pad 아래(콘텐츠 박스 상단)이고,
-   scroll-padding-top은 스크롤포트 상단부터 재므로 컨테이너 패딩까지 함께 더해야 한다.
-   높이는 문구 줄바꿈에 따라 뷰포트마다 다르므로 App이 실측해 --mock-off-banner-height로 넘긴다. */
-.mock-values-hidden .content-body {
-  scroll-padding-top: calc(var(--content-pad) + var(--mock-off-banner-height, 0px) + var(--space-m));
-}
-
-/* 목업 표시 OFF 안내 배너 — OFF 상태를 상시 알리고 바로 켤 수 있게 한다.
-   OFF에서 반드시 보여야 하므로 위 가림 선택자에 없는 클래스만 쓴다. */
-.mock-off-banner {
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  display: flex;
-  align-items: center;
-  gap: var(--space-m);
-  margin-bottom: var(--space-xxl);
-  padding: var(--space-m) var(--space-xl);
-  border: 1px solid var(--accent-orange);
-  border-radius: 8px;
-  background: var(--bg-card-hover);
-  color: var(--text-secondary);
-  font-size: 12px;
-  backdrop-filter: blur(6px);
-}
-
-.mock-off-banner-icon {
-  flex-shrink: 0;
-  color: var(--accent-orange);
-  font-size: 16px;
-}
-
-.mock-off-banner-text {
-  margin: 0;
-  line-height: 1.6;
-}
-
-.mock-off-banner-title {
-  color: var(--accent-orange);
-  font-weight: 700;
-}
-
-.mock-off-banner .btn {
-  flex-shrink: 0;
-  margin-left: auto;
-  padding: 6px 14px;
-  font-size: 12px;
-  white-space: nowrap;
 }
 
 @media (max-width: 1200px) {
