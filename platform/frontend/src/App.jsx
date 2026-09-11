@@ -1,8 +1,8 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import Sidebar from "./components/Sidebar.jsx";
+import { flattenNavTabs } from "./lib/nav.js";
 import Header from "./components/Header.jsx";
 import AlertPopupContainer from "./components/AlertPopup.jsx";
-import XopsFlowRibbon, { FLOW_TAB_IDS } from "./components/XopsFlowRibbon.jsx";
 import Overview from "./pages/Overview.jsx";
 import MonitorPage from "./pages/MonitorPage.jsx";
 import OrchestratorPage from "./pages/OrchestratorPage.jsx";
@@ -12,14 +12,29 @@ import ReporterPage from "./pages/ReporterPage.jsx";
 import { useAppState } from "./context/AppStateContext.jsx";
 import { useResizableSidebar } from "./hooks/useResizableSidebar.js";
 
-const TABS = [
-  { id: "tab-overview", label: "종합 대시보드", icon: "fa-chart-line", Component: Overview },
-  { id: "tab-mlops-monitor", label: "MLOps 성능 모니터", icon: "fa-gauge-high", Component: MonitorPage },
-  { id: "tab-mlops-orch", label: "오케스트레이터", icon: "fa-diagram-project", Component: OrchestratorPage },
-  { id: "tab-dataops", label: "DataOps", icon: "fa-database", Component: DataOpsPage },
-  { id: "tab-simulator", label: "정책 시뮬레이터 & 추천", icon: "fa-map-location-dot", Component: SimulatorPage },
-  { id: "tab-reporter", label: "자동화 리포팅", icon: "fa-file-invoice", Component: ReporterPage }
+// 사이드바 정보구조 — 그룹은 헤더만, 실제 화면은 tabs. 데이터→모니터→재학습 순서로 배치한다.
+const NAV_SECTIONS = [
+  {
+    tabs: [{ id: "tab-overview", label: "종합 대시보드", icon: "fa-chart-line", Component: Overview }]
+  },
+  {
+    id: "nav-group-ops",
+    label: "데이터·모델 운영",
+    tabs: [
+      { id: "tab-dataops", label: "DataOps", icon: "fa-database", Component: DataOpsPage },
+      { id: "tab-mlops-monitor", label: "MLOps 성능 모니터링", icon: "fa-gauge-high", Component: MonitorPage },
+      { id: "tab-mlops-orch", label: "오케스트레이터", icon: "fa-diagram-project", Component: OrchestratorPage }
+    ]
+  },
+  {
+    tabs: [
+      { id: "tab-simulator", label: "정책 시뮬레이터 & 추천", icon: "fa-map-location-dot", Component: SimulatorPage },
+      { id: "tab-reporter", label: "자동화 리포팅", icon: "fa-file-invoice", Component: ReporterPage }
+    ]
+  }
 ];
+
+const TABS = flattenNavTabs(NAV_SECTIONS);
 
 export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -30,17 +45,13 @@ export default function App() {
   const mainRef = useRef(null);
   const alertsRef = useRef(null);
   const contentBodyRef = useRef(null);
-  const bannerRef = useRef(null);
-  const [bannerHeight, setBannerHeight] = useState(0);
   const handledTabFocusRequestRef = useRef(0);
   const {
     ready,
     activeTab,
     setActiveTab,
-    navigateToTab,
     tabFocusRequest,
-    mockDataVisible,
-    toggleMockDataVisible
+    mockDataVisible
   } = useAppState();
   const { width, resizing, startResize, resizeBy, resetWidth } = useResizableSidebar();
 
@@ -159,32 +170,6 @@ export default function App() {
     requestAnimationFrame(() => document.getElementById(`${activeTab}-panel`)?.focus());
   }, [activeTab, tabFocusRequest]);
 
-  // 배너의 [데모 데이터 켜기]는 누르는 순간 자기 자신과 배너를 함께 언마운트시켜 초점이 body로 떨어진다.
-  // 기존 탭 초점 규약(tabFocusRequest → 활성 패널)을 그대로 재사용해 초점을 돌려준다(Enter·Space 공통).
-  const handleShowMockData = useCallback(() => {
-    toggleMockDataVisible();
-    navigateToTab(activeTab);
-  }, [toggleMockDataVisible, navigateToTab, activeTab]);
-
-  // OFF 배너는 sticky(top:0)라 scrollIntoView 대상 위를 덮는다. 문구가 뷰포트 폭에 따라 줄바꿈되어
-  // 높이가 달라지므로 실측값을 CSS 변수로 넘기고, scroll-padding-top은 layout.css가 계산한다.
-  useEffect(() => {
-    const banner = bannerRef.current;
-    if (!banner) {
-      setBannerHeight(0);
-      return undefined;
-    }
-    // ResizeObserver가 없는 실행 환경(구형 브라우저·일부 테스트 런타임)에서는 1회 실측으로 대체한다.
-    // 줄바꿈으로 높이가 바뀌면 여백이 어긋날 수 있지만, 화면이 통째로 죽는 것보다 낫다.
-    if (typeof ResizeObserver === "undefined") {
-      setBannerHeight(banner.offsetHeight);
-      return undefined;
-    }
-    const observer = new ResizeObserver(() => setBannerHeight(banner.offsetHeight));
-    observer.observe(banner);
-    return () => observer.disconnect();
-  }, [mockDataVisible]);
-
   if (!ready) {
     return (
       <div className="loading-screen">
@@ -200,7 +185,7 @@ export default function App() {
     >
       <Sidebar
         sidebarRef={sidebarRef}
-        tabs={TABS}
+        sections={NAV_SECTIONS}
         activeTab={activeTab}
         onSelect={handleSelect}
         open={sidebarOpen}
@@ -235,30 +220,7 @@ export default function App() {
           sidebarOpen={sidebarOpen}
           menuButtonRef={menuButtonRef}
         />
-        <div
-          className="content-body"
-          ref={contentBodyRef}
-          style={{ "--mock-off-banner-height": `${bannerHeight}px` }}
-        >
-          {/* 데모 표시 OFF는 무기한 유지되고 새로고침에도 남는다. 아무 단서 없이 값만 사라지면
-              "데이터가 없어진" 것으로 읽히므로, OFF인 동안은 이유와 복구 수단을 상시 노출한다.
-              배너는 sticky(top:0)라 본문 첫 자식으로 두고, 흐름 리본은 그 아래에 붙인다. */}
-          {!mockDataVisible && (
-            <div className="mock-off-banner" role="status" ref={bannerRef}>
-              <i className="fa-solid fa-eye-slash mock-off-banner-icon" aria-hidden="true"></i>
-              <p className="mock-off-banner-text">
-                <span className="mock-off-banner-title">데모 데이터 표시 OFF</span> — 설정에서 켤 수
-                있습니다. 실데이터로 채워진 영역은 그대로 표시되고, 데모 값만 가려집니다. 이 설정은
-                브라우저(주소)별로 저장되므로 다른 주소·브라우저에서는 따로 켜야 합니다.
-              </p>
-              <button type="button" className="btn btn-primary" onClick={handleShowMockData}>
-                <i className="fa-solid fa-eye" aria-hidden="true"></i> 데모 데이터 켜기
-              </button>
-            </div>
-          )}
-          {/* XOps 4단계(DataOps → 모니터 → 오케스트레이터 → 시뮬레이터) 흐름 리본 —
-              해당 탭에서만 본문 상단에 붙는다. 종합 대시보드·리포팅은 흐름 밖이라 제외. */}
-          {FLOW_TAB_IDS.includes(activeTab) && <XopsFlowRibbon />}
+        <div className="content-body" ref={contentBodyRef}>
           {TABS.map((tab) => {
             const isActive = tab.id === activeTab;
             return (

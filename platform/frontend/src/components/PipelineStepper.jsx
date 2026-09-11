@@ -7,7 +7,7 @@ const DEFAULT_STAGES = [
   { id: "stage-factor", no: "①", label: "사회문제 요인분석", icon: "fa-magnifying-glass-chart" },
   { id: "stage-result", no: "②", label: "요인분석 결과", icon: "fa-diagram-next" },
   { id: "stage-sim", no: "③", label: "시뮬레이션", icon: "fa-wand-magic-sparkles" },
-  { id: "stage-report", no: "④", label: "리포팅", icon: "fa-file-invoice" }
+  { id: "stage-report", no: "④", label: "추천", icon: "fa-file-invoice" }
 ];
 
 export default function PipelineStepper({

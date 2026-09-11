@@ -41,7 +41,8 @@ select:focus-visible,
 }
 
 /* 4. nav-item을 button으로 쓸 때 기본 버튼 스타일 초기화 */
-button.nav-item {
+button.nav-item,
+button.nav-group-toggle {
   width: 100%;
   background: transparent;
   font-family: inherit;

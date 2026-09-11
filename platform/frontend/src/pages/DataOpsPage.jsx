@@ -753,7 +753,7 @@ export default function DataOpsPage() {
 
   // 카탈로그·스키마에 표시되는 값은 전부 백엔드 목록(sources)에서 온다 — 목업 폴백 경로가 없다.
   // 로딩·오류·빈 목록은 위에서 조기 반환했으므로 여기까지 오면 실응답이 화면을 채운 상태다.
-  // 목업 표시 OFF에서도 이 두 표는 남긴다(실데이터가 사라지는 것으로 오인되지 않게).
+  // 전달 경로를 기록한다. 데모 표시 OFF에서는 API에서 받은 값도 함께 숨긴다.
   const catalogSrc = sources.length > 0 ? "api" : "mock";
 
   const builtPg = paginate(builtApis, builtPage, BUILT_PAGE_SIZE);
@@ -998,7 +998,7 @@ export default function DataOpsPage() {
 
           <div className="stage-next-row">
             <button type="button" className="btn btn-secondary" onClick={() => jumpToStage("dstep-schema")}>
-              다음 — {target.label} 스키마 확인 <i className="fa-solid fa-arrow-down" aria-hidden="true"></i>
+              다음 — <span className="mock-data-output">{target.label} </span>스키마 확인 <i className="fa-solid fa-arrow-down" aria-hidden="true"></i>
             </button>
           </div>
         </Card>
@@ -1168,7 +1168,7 @@ export default function DataOpsPage() {
                 </label>
                 <label className="control-field">
                   <span>대상 데이터 소스</span>
-                  <select className="select-control" value={sourceId} onChange={(e) => handleSelectSource(e.target.value)}>
+                  <select className="select-control mock-data-output" value={sourceId} onChange={(e) => handleSelectSource(e.target.value)}>
                     {sources.map((s) => (
                       <option key={s.id} value={s.id}>
                         {s.label} — /api/v3/dataops/{s.id}
@@ -1182,7 +1182,7 @@ export default function DataOpsPage() {
                   <span>필터 조건 (선택)</span>
                   <input
                     ref={filterRef}
-                    className="input-control"
+                    className="input-control mock-data-output"
                     placeholder="예: in_flow_count > 100"
                     value={filterText}
                     onChange={(e) => {
@@ -1202,7 +1202,7 @@ export default function DataOpsPage() {
                 </label>
                 <label className="control-field">
                   <span>정렬 컬럼 (선택)</span>
-                  <select className="select-control" value={sortCol} onChange={(e) => setSortCol(e.target.value)}>
+                  <select className="select-control mock-data-output" value={sortCol} onChange={(e) => setSortCol(e.target.value)}>
                     <option value="">정렬 없음</option>
                     {target.columns.map((c) => (
                       <option key={c.name} value={c.name}>sort: {c.name}</option>
@@ -1251,7 +1251,7 @@ export default function DataOpsPage() {
               <button className="btn btn-secondary" onClick={handleBuildApi}>
                 <i className="fa-solid fa-hammer"></i> API 빌드·등록
               </button>
-              <button type="button" className="btn btn-primary" onClick={handleRunApi} disabled={Boolean(pendingAction)}>
+              <button type="button" className="btn btn-primary mock-data-output" onClick={handleRunApi} disabled={Boolean(pendingAction)}>
                 <i className={`fa-solid ${pendingAction === "builder-request" ? "fa-spinner fa-spin" : "fa-paper-plane"}`} aria-hidden="true"></i>{" "}
                 {pendingAction === "builder-request" ? "요청 중" : `${method} /api/v3/dataops/${target.id} 전송`}
               </button>
