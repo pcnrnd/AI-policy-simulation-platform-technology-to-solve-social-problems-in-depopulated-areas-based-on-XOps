@@ -57,3 +57,97 @@
   max-width: 520px;
   margin: 8px 0 16px;
 }
+
+/* ── 실데이터 분석(R5) 4구획: 현황/진단/예측/대응 후보 ── */
+.realdata-panel .realdata-analysis-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 8px;
+}
+
+@media (max-width: 720px) {
+  .realdata-panel .realdata-analysis-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.realdata-panel .realdata-quadrant {
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--bg-card);
+}
+
+.realdata-panel .realdata-quadrant h4 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.realdata-panel .realdata-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.realdata-panel .realdata-metric:last-child {
+  border-bottom: none;
+}
+
+.realdata-panel .realdata-metric-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.realdata-panel .realdata-metric-value {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.realdata-panel .realdata-metric-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.realdata-panel .realdata-findings,
+.realdata-panel .realdata-candidates {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.realdata-panel .realdata-finding,
+.realdata-panel .realdata-candidate {
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+
+.realdata-panel .realdata-limitations {
+  margin: 4px 0 0;
+  padding-left: 16px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.realdata-panel .realdata-forecast-model {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.realdata-panel .realdata-forecast-model:last-child {
+  border-bottom: none;
+}
+
+.realdata-panel .realdata-candidate .realdata-badge {
+  color: var(--accent-teal);
+  background: rgba(var(--accent-teal-rgb), 0.1);
+}
