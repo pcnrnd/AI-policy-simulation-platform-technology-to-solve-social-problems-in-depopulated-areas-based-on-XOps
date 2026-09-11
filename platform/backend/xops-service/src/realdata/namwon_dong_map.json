@@ -1,0 +1,99 @@
+{
+  "version": "v1",
+  "source": "ext_kt_namwon_monthly_dong_visitors",
+  "generated_at": "2026-09-11T06:22:11.948301+00:00",
+  "entries": [
+    {
+      "dong_name": "운봉읍",
+      "dong_code": "45190250"
+    },
+    {
+      "dong_name": "주천면",
+      "dong_code": "45190310"
+    },
+    {
+      "dong_name": "수지면",
+      "dong_code": "45190320"
+    },
+    {
+      "dong_name": "송동면",
+      "dong_code": "45190330"
+    },
+    {
+      "dong_name": "주생면",
+      "dong_code": "45190340"
+    },
+    {
+      "dong_name": "금지면",
+      "dong_code": "45190350"
+    },
+    {
+      "dong_name": "대강면",
+      "dong_code": "45190360"
+    },
+    {
+      "dong_name": "대산면",
+      "dong_code": "45190370"
+    },
+    {
+      "dong_name": "사매면",
+      "dong_code": "45190380"
+    },
+    {
+      "dong_name": "덕과면",
+      "dong_code": "45190390"
+    },
+    {
+      "dong_name": "보절면",
+      "dong_code": "45190400"
+    },
+    {
+      "dong_name": "산동면",
+      "dong_code": "45190410"
+    },
+    {
+      "dong_name": "이백면",
+      "dong_code": "45190420"
+    },
+    {
+      "dong_name": "아영면",
+      "dong_code": "45190450"
+    },
+    {
+      "dong_name": "산내면",
+      "dong_code": "45190460"
+    },
+    {
+      "dong_name": "인월면",
+      "dong_code": "45190470"
+    },
+    {
+      "dong_name": "동충동",
+      "dong_code": "45190510"
+    },
+    {
+      "dong_name": "죽항동",
+      "dong_code": "45190520"
+    },
+    {
+      "dong_name": "노암동",
+      "dong_code": "45190540"
+    },
+    {
+      "dong_name": "금동",
+      "dong_code": "45190550"
+    },
+    {
+      "dong_name": "왕정동",
+      "dong_code": "45190560"
+    },
+    {
+      "dong_name": "향교동",
+      "dong_code": "45190570"
+    },
+    {
+      "dong_name": "도통동",
+      "dong_code": "45190590"
+    }
+  ]
+}
