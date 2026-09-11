@@ -1,0 +1,338 @@
+[
+  {
+    "base_ym": 202201,
+    "dong_code": "45190250",
+    "local_visitors": 211,
+    "nonlocal_visitors": 97,
+    "foreign_visitors": 3
+  },
+  {
+    "base_ym": 202201,
+    "dong_code": "45190310",
+    "local_visitors": 245,
+    "nonlocal_visitors": 122,
+    "foreign_visitors": 5
+  },
+  {
+    "base_ym": 202201,
+    "dong_code": "45190320",
+    "local_visitors": 279,
+    "nonlocal_visitors": 147,
+    "foreign_visitors": 7
+  },
+  {
+    "base_ym": 202202,
+    "dong_code": "45190250",
+    "local_visitors": 223,
+    "nonlocal_visitors": 120,
+    "foreign_visitors": 4
+  },
+  {
+    "base_ym": 202202,
+    "dong_code": "45190310",
+    "local_visitors": 257,
+    "nonlocal_visitors": 145,
+    "foreign_visitors": 6
+  },
+  {
+    "base_ym": 202202,
+    "dong_code": "45190320",
+    "local_visitors": 280,
+    "nonlocal_visitors": 148,
+    "foreign_visitors": 8
+  },
+  {
+    "base_ym": 202203,
+    "dong_code": "45190250",
+    "local_visitors": 224,
+    "nonlocal_visitors": 121,
+    "foreign_visitors": 5
+  },
+  {
+    "base_ym": 202203,
+    "dong_code": "45190310",
+    "local_visitors": 258,
+    "nonlocal_visitors": 146,
+    "foreign_visitors": 7
+  },
+  {
+    "base_ym": 202203,
+    "dong_code": "45190320",
+    "local_visitors": 292,
+    "nonlocal_visitors": 171,
+    "foreign_visitors": 9
+  },
+  {
+    "base_ym": 202204,
+    "dong_code": "45190250",
+    "local_visitors": 236,
+    "nonlocal_visitors": 144,
+    "foreign_visitors": 6
+  },
+  {
+    "base_ym": 202204,
+    "dong_code": "45190310",
+    "local_visitors": 259,
+    "nonlocal_visitors": 147,
+    "foreign_visitors": 8
+  },
+  {
+    "base_ym": 202204,
+    "dong_code": "45190320",
+    "local_visitors": 293,
+    "nonlocal_visitors": 172,
+    "foreign_visitors": 10
+  },
+  {
+    "base_ym": 202205,
+    "dong_code": "45190250",
+    "local_visitors": 237,
+    "nonlocal_visitors": 145,
+    "foreign_visitors": 7
+  },
+  {
+    "base_ym": 202205,
+    "dong_code": "45190310",
+    "local_visitors": 271,
+    "nonlocal_visitors": 170,
+    "foreign_visitors": 9
+  },
+  {
+    "base_ym": 202205,
+    "dong_code": "45190320",
+    "local_visitors": 294,
+    "nonlocal_visitors": 173,
+    "foreign_visitors": 11
+  },
+  {
+    "base_ym": 202206,
+    "dong_code": "45190250",
+    "local_visitors": 238,
+    "nonlocal_visitors": 146,
+    "foreign_visitors": 3
+  },
+  {
+    "base_ym": 202206,
+    "dong_code": "45190310",
+    "local_visitors": 272,
+    "nonlocal_visitors": 171,
+    "foreign_visitors": 5
+  },
+  {
+    "base_ym": 202206,
+    "dong_code": "45190320",
+    "local_visitors": 306,
+    "nonlocal_visitors": 196,
+    "foreign_visitors": 7
+  },
+  {
+    "base_ym": 202207,
+    "dong_code": "45190250",
+    "local_visitors": 250,
+    "nonlocal_visitors": 169,
+    "foreign_visitors": 4
+  },
+  {
+    "base_ym": 202207,
+    "dong_code": "45190310",
+    "local_visitors": 273,
+    "nonlocal_visitors": 172,
+    "foreign_visitors": 6
+  },
+  {
+    "base_ym": 202207,
+    "dong_code": "45190320",
+    "local_visitors": 307,
+    "nonlocal_visitors": 197,
+    "foreign_visitors": 8
+  },
+  {
+    "base_ym": 202208,
+    "dong_code": "45190250",
+    "local_visitors": 251,
+    "nonlocal_visitors": 170,
+    "foreign_visitors": 5
+  },
+  {
+    "base_ym": 202208,
+    "dong_code": "45190310",
+    "local_visitors": 285,
+    "nonlocal_visitors": 195,
+    "foreign_visitors": 7
+  },
+  {
+    "base_ym": 202208,
+    "dong_code": "45190320",
+    "local_visitors": 308,
+    "nonlocal_visitors": 198,
+    "foreign_visitors": 9
+  },
+  {
+    "base_ym": 202209,
+    "dong_code": "45190250",
+    "local_visitors": 252,
+    "nonlocal_visitors": 171,
+    "foreign_visitors": 6
+  },
+  {
+    "base_ym": 202209,
+    "dong_code": "45190310",
+    "local_visitors": 286,
+    "nonlocal_visitors": 196,
+    "foreign_visitors": 8
+  },
+  {
+    "base_ym": 202209,
+    "dong_code": "45190320",
+    "local_visitors": 320,
+    "nonlocal_visitors": 221,
+    "foreign_visitors": 10
+  },
+  {
+    "base_ym": 202210,
+    "dong_code": "45190250",
+    "local_visitors": 264,
+    "nonlocal_visitors": 194,
+    "foreign_visitors": 7
+  },
+  {
+    "base_ym": 202210,
+    "dong_code": "45190310",
+    "local_visitors": 287,
+    "nonlocal_visitors": 197,
+    "foreign_visitors": 9
+  },
+  {
+    "base_ym": 202210,
+    "dong_code": "45190320",
+    "local_visitors": 321,
+    "nonlocal_visitors": 222,
+    "foreign_visitors": 11
+  },
+  {
+    "base_ym": 202211,
+    "dong_code": "45190250",
+    "local_visitors": 265,
+    "nonlocal_visitors": 195,
+    "foreign_visitors": 3
+  },
+  {
+    "base_ym": 202211,
+    "dong_code": "45190310",
+    "local_visitors": 299,
+    "nonlocal_visitors": 220,
+    "foreign_visitors": 5
+  },
+  {
+    "base_ym": 202211,
+    "dong_code": "45190320",
+    "local_visitors": 333,
+    "nonlocal_visitors": 245,
+    "foreign_visitors": 7
+  },
+  {
+    "base_ym": 202212,
+    "dong_code": "45190250",
+    "local_visitors": 266,
+    "nonlocal_visitors": 196,
+    "foreign_visitors": 4
+  },
+  {
+    "base_ym": 202212,
+    "dong_code": "45190310",
+    "local_visitors": 300,
+    "nonlocal_visitors": 221,
+    "foreign_visitors": 6
+  },
+  {
+    "base_ym": 202212,
+    "dong_code": "45190320",
+    "local_visitors": 334,
+    "nonlocal_visitors": 246,
+    "foreign_visitors": 8
+  },
+  {
+    "base_ym": 202301,
+    "dong_code": "45190250",
+    "local_visitors": 278,
+    "nonlocal_visitors": 219,
+    "foreign_visitors": 5
+  },
+  {
+    "base_ym": 202301,
+    "dong_code": "45190310",
+    "local_visitors": 312,
+    "nonlocal_visitors": 244,
+    "foreign_visitors": 7
+  },
+  {
+    "base_ym": 202301,
+    "dong_code": "45190320",
+    "local_visitors": 335,
+    "nonlocal_visitors": 247,
+    "foreign_visitors": 9
+  },
+  {
+    "base_ym": 202302,
+    "dong_code": "45190250",
+    "local_visitors": 279,
+    "nonlocal_visitors": 220,
+    "foreign_visitors": 6
+  },
+  {
+    "base_ym": 202302,
+    "dong_code": "45190310",
+    "local_visitors": 313,
+    "nonlocal_visitors": 245,
+    "foreign_visitors": 8
+  },
+  {
+    "base_ym": 202302,
+    "dong_code": "45190320",
+    "local_visitors": 347,
+    "nonlocal_visitors": 270,
+    "foreign_visitors": 10
+  },
+  {
+    "base_ym": 202303,
+    "dong_code": "45190250",
+    "local_visitors": 291,
+    "nonlocal_visitors": 243,
+    "foreign_visitors": 7
+  },
+  {
+    "base_ym": 202303,
+    "dong_code": "45190310",
+    "local_visitors": 314,
+    "nonlocal_visitors": 246,
+    "foreign_visitors": 9
+  },
+  {
+    "base_ym": 202303,
+    "dong_code": "45190320",
+    "local_visitors": 348,
+    "nonlocal_visitors": 271,
+    "foreign_visitors": 11
+  },
+  {
+    "base_ym": 202304,
+    "dong_code": "45190250",
+    "local_visitors": 292,
+    "nonlocal_visitors": 244,
+    "foreign_visitors": 3
+  },
+  {
+    "base_ym": 202304,
+    "dong_code": "45190310",
+    "local_visitors": 326,
+    "nonlocal_visitors": 269,
+    "foreign_visitors": 5
+  },
+  {
+    "base_ym": 202304,
+    "dong_code": "45190320",
+    "local_visitors": 349,
+    "nonlocal_visitors": 272,
+    "foreign_visitors": 7
+  }
+]
