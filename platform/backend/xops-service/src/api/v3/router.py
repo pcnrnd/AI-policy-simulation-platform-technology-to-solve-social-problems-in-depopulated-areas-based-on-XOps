@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from src.api.v3 import dataops, monitoring, orchestration, overview, realdata
+from src.api.v3 import dataops, monitoring, orchestration, overview, realdata, realdata_datasets
 
 api_router = APIRouter()
 api_router.include_router(dataops.router)
@@ -12,3 +12,4 @@ api_router.include_router(monitoring.router)
 api_router.include_router(orchestration.router)
 api_router.include_router(overview.router)
 api_router.include_router(realdata.router)
+api_router.include_router(realdata_datasets.router)
