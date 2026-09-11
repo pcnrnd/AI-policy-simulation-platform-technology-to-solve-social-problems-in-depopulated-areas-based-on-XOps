@@ -11,9 +11,11 @@ from src.core.db import _conn
 from src.realdata import candidates
 
 _MODEL_ID = "namwon-nonlocal-visitors-next-month"
+# A 실제 아티팩트 형태: features/coef/train_means/train_stds는 모두 같은 순서의 병렬 리스트다
+# (dict가 아니다) — B-fix로 스텁도 실제 시그니처에 맞췄다.
 _FEATURES = ["y_lag1", "y_lag2"]
-_MEANS = {"y_lag1": 100.0, "y_lag2": 90.0}
-_STDS = {"y_lag1": 10.0, "y_lag2": 9.0}
+_MEANS = [100.0, 90.0]
+_STDS = [10.0, 9.0]
 _COEF = [1.0, 2.0]
 _INTERCEPT = 5.0
 
@@ -30,7 +32,7 @@ class FakeSnapshot:
     def load_dataset(self, dataset_id: str) -> dict[str, Any]:
         return {"rows": []}
 
-    def create_dataset(self, spec: dict[str, Any]) -> Any:
+    def create_dataset(self, target: str, *, spec_version: str = "v1") -> Any:
         return self._fresh
 
     def __init__(self, fresh: Any = None) -> None:
@@ -38,7 +40,7 @@ class FakeSnapshot:
 
 
 def _manual_predict(row: dict[str, float]) -> float:
-    return _INTERCEPT + sum(_COEF[i] * (row[f] - _MEANS[f]) / _STDS[f] for i, f in enumerate(_FEATURES))
+    return _INTERCEPT + sum(_COEF[i] * (row[f] - _MEANS[i]) / _STDS[i] for i, f in enumerate(_FEATURES))
 
 
 class FakeModels:
@@ -56,11 +58,11 @@ class FakeModels:
             "train_stds": _STDS,
         }
 
-    def build_feature_rows(self, dataset: Any, features: list[str]) -> list[dict[str, float]]:
+    def build_feature_rows(self, dataset: Any, *, for_month: int | None = None) -> list[dict[str, float]]:
         return [{"y_lag1": 110.0, "y_lag2": 95.0}, {"y_lag1": 105.0, "y_lag2": 92.0}]
 
-    def predict(self, artifact: dict[str, Any], row: dict[str, float]) -> float:
-        return _manual_predict(row) + self._predict_offset
+    def predict(self, artifact: dict[str, Any], rows: list[dict[str, float]]) -> list[float]:
+        return [_manual_predict(row) + self._predict_offset for row in rows]
 
 
 def _patch_stubs(monkeypatch: pytest.MonkeyPatch, *, models: FakeModels | None = None, snapshot: FakeSnapshot | None = None) -> None:
@@ -84,11 +86,12 @@ def _clean_tables():
 
 
 def _insert_dataset(dataset_id: str, quality: dict[str, Any], *, content_hash: str = "hash-1") -> None:
+    spec = {"target": "nonlocal_visitors", "spec_version": "v1"}
     _conn().execute(
         "INSERT INTO rd_datasets "
         "(dataset_id, spec_json, quality_json, observed_from, observed_to, row_count, content_hash, file_path, created_at) "
-        "VALUES (?, '{}', ?, 202301, 202310, 10, ?, '/tmp/x.json', '2026-01-01T00:00:00+00:00')",
-        (dataset_id, json.dumps(quality), content_hash),
+        "VALUES (?, ?, ?, 202301, 202310, 10, ?, '/tmp/x.json', '2026-01-01T00:00:00+00:00')",
+        (dataset_id, json.dumps(spec), json.dumps(quality), content_hash),
     )
     _conn().commit()
 
@@ -113,12 +116,12 @@ def _insert_candidate(
     _conn().commit()
 
 
-_GOOD_QUALITY = {"mapping_matched": 23, "mapping_total": 23, "duplicate_keys": 0}
+_GOOD_QUALITY = {"mapping_matched": 23, "mapping_total": 23, "duplicate_key_count": 0}
 
 
 def test_apply_rejects_incomplete_mapping(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_stubs(monkeypatch)
-    _insert_dataset("ds-1", {"mapping_matched": 20, "mapping_total": 23, "duplicate_keys": 0})
+    _insert_dataset("ds-1", {"mapping_matched": 20, "mapping_total": 23, "duplicate_key_count": 0})
     _insert_candidate(_MODEL_ID, "v1", "ds-1", mae=5.0, baseline_mae=10.0)
 
     with pytest.raises(candidates.ApplyRejected) as exc:
@@ -128,7 +131,7 @@ def test_apply_rejects_incomplete_mapping(monkeypatch: pytest.MonkeyPatch) -> No
 
 def test_apply_rejects_duplicate_keys(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_stubs(monkeypatch)
-    _insert_dataset("ds-1", {"mapping_matched": 23, "mapping_total": 23, "duplicate_keys": 2})
+    _insert_dataset("ds-1", {"mapping_matched": 23, "mapping_total": 23, "duplicate_key_count": 2})
     _insert_candidate(_MODEL_ID, "v1", "ds-1", mae=5.0, baseline_mae=10.0)
 
     with pytest.raises(candidates.ApplyRejected) as exc:

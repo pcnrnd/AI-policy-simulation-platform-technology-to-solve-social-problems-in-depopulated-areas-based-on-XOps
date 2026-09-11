@@ -10,9 +10,11 @@ from src.realdata import monitoring
 
 _MODEL_ID = "namwon-nonlocal-visitors-next-month"
 _VERSION = "v1"
+# A 실제 아티팩트 형태: features/coef/train_means/train_stds는 같은 순서의 병렬 리스트
+# (dict가 아니다) — B-fix로 스텁을 실제 시그니처에 맞췄다.
 _FEATURES = ["y_lag1", "y_lag2"]
-_MEANS = {"y_lag1": 100.0, "y_lag2": 90.0}
-_STDS = {"y_lag1": 10.0, "y_lag2": 9.0}
+_MEANS = [100.0, 90.0]
+_STDS = [10.0, 9.0]
 _COEF = [1.0, 2.0]
 _INTERCEPT = 5.0
 _OBSERVED_END = 202310
@@ -28,7 +30,7 @@ class FakeErrors:
 
 
 def _manual_predict(row: dict[str, float]) -> float:
-    return _INTERCEPT + sum(_COEF[i] * (row[f] - _MEANS[f]) / _STDS[f] for i, f in enumerate(_FEATURES))
+    return _INTERCEPT + sum(_COEF[i] * (row[f] - _MEANS[i]) / _STDS[i] for i, f in enumerate(_FEATURES))
 
 
 class FakeModels:
@@ -46,8 +48,16 @@ class FakeModels:
             "forecast_month": _FORECAST_MONTH,
         }
 
-    def predict(self, artifact: dict[str, Any], row: dict[str, float]) -> float:
-        return _manual_predict(row)
+    def build_feature_rows(self, dataset: dict[str, Any], *, for_month: int | None = None) -> list[dict[str, Any]]:
+        # 이 테스트의 dataset["rows"]는 이미 피처가 계산된 행이라(A features.py 재현이 목적이
+        # 아니므로) for_month 필터만 흉내 낸다.
+        rows = dataset["rows"]
+        if for_month is None:
+            return list(rows)
+        return [row for row in rows if row.get("base_ym") == for_month]
+
+    def predict(self, artifact: dict[str, Any], rows: list[dict[str, float]]) -> list[float]:
+        return [_manual_predict(row) for row in rows]
 
 
 class FakeSnapshot:

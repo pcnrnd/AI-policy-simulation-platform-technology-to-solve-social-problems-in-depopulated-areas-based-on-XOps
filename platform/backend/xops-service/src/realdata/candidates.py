@@ -14,6 +14,7 @@ from typing import Any
 
 from src.core.db import _conn
 from src.core.settings import get_settings
+from src.realdata.pg_reader import RealdataUnavailable
 
 _RELOAD_TOLERANCE = 1e-6
 
@@ -149,24 +150,32 @@ def _upsert_active(model_id: str, version: str, previous_version: str | None) ->
 
 
 # ── apply 조건 ①~④ ──────────────────────────────────────────
+# A(snapshot.py `_quality`)의 실제 quality_json 키 — B-fix에서 실 구현과 대조해 확정.
+_REQUIRED_QUALITY_KEYS = ("mapping_matched", "mapping_total", "duplicate_key_count")
+
+
 def _quality_reasons(dataset_id: str) -> list[str]:
-    """조건①: R1-7 품질(매핑 23/23·중복 0). rd_datasets.quality_json은 작성자 A가 채운다 —
-    이 worktree엔 A의 실제 구현이 없어, 계약 문면 그대로 `mapping_matched`/`mapping_total`/
-    `duplicate_keys` 키를 가정했다(실제 키명은 통합 시 루트가 A 구현과 대조해 조정 필요할 수 있음,
-    완료 보고에 명시)."""
+    """조건①: R1-7 품질(매핑 23/23·중복 0). rd_datasets.quality_json은 작성자 A
+    `snapshot._quality()`가 채운다 — 실제 키는 `mapping_matched`/`mapping_total`/
+    `duplicate_key_count`(B-fix로 `duplicate_keys` 가정을 실제 키명으로 교정). 키가
+    아예 없으면(스키마 불일치·구버전 스냅샷) 조건을 무조건 통과시키지 않고 명시적으로
+    거부한다."""
     row = _conn().execute("SELECT quality_json FROM rd_datasets WHERE dataset_id = ?", (dataset_id,)).fetchone()
     if row is None:
         return [f"데이터셋 품질 정보를 찾을 수 없습니다: {dataset_id}"]
     quality = json.loads(row["quality_json"])
-    reasons: list[str] = []
 
-    matched = quality.get("mapping_matched")
-    total = quality.get("mapping_total")
-    if matched is None or total is None or matched != total:
+    missing = [key for key in _REQUIRED_QUALITY_KEYS if key not in quality]
+    if missing:
+        return [f"quality 필드 없음: {', '.join(missing)}"]
+
+    reasons: list[str] = []
+    matched, total = quality["mapping_matched"], quality["mapping_total"]
+    if matched != total:
         reasons.append(f"행정동 매핑이 완전하지 않습니다: {matched}/{total}")
 
-    duplicates = quality.get("duplicate_keys")
-    if duplicates is None or duplicates != 0:
+    duplicates = quality["duplicate_key_count"]
+    if duplicates != 0:
         reasons.append(f"중복 키가 있습니다: {duplicates}")
 
     return reasons
@@ -179,11 +188,17 @@ def _reload_consistency_reasons(candidate: dict[str, Any]) -> list[str]:
     일관성만 확인"으로 대비책을 명시). 그래서 이 구현은 조건②를 다음으로 정의한다:
 
       "load_artifact()로 다시 읽은 아티팩트에 대해, 그 데이터셋에서 build_feature_rows()로
-      만든 학습행 중 최대 3개를 뽑아 (a) predict(artifact, row) 값과 (b) 같은 아티팩트의
-      coef/intercept/train_means/train_stds로 이 함수가 직접 계산한 선형식 예측값이
-      1e-6 이내로 일치하는가."
+      만든 학습행 중 최대 3개를 뽑아 (a) predict(artifact, rows) 배치 결과와 (b) 같은
+      아티팩트의 coef/intercept/train_means/train_stds로 이 함수가 직접 계산한 선형식
+      예측값이 1e-6 이내로 일치하는가."
 
-    즉 "아티팩트가 재로딩 후에도 자기 자신의 계수로 정확히 재현되는가"를 검증한다."""
+    즉 "아티팩트가 재로딩 후에도 자기 자신의 계수로 정확히 재현되는가"를 검증한다.
+
+    B-fix: A `models.predict(artifact, feature_rows)`는 단일 행이 아니라 행 리스트를 받아
+    리스트를 반환하는 배치 함수이고, `build_feature_rows(dataset, *, for_month=None)`는
+    B가 가정했던 `features` 인자를 받지 않는다(항상 전체 피처 컬럼을 만든다). 또한
+    `train_means`/`train_stds`는 dict가 아니라 `features`와 같은 순서의 리스트다 — 전부
+    실제 시그니처에 맞춰 고쳤다."""
     models_mod = _import_models()
     snapshot_mod = _import_snapshot()
     errors_mod = _import_errors()
@@ -195,7 +210,7 @@ def _reload_consistency_reasons(candidate: dict[str, Any]) -> list[str]:
 
     try:
         dataset = snapshot_mod.load_dataset(candidate["dataset_id"])
-        rows = models_mod.build_feature_rows(dataset, artifact["features"])[:3]
+        rows = models_mod.build_feature_rows(dataset)[:3]
     except errors_mod.RealdataError as exc:
         return [f"재계산용 학습행을 만들 수 없습니다: {exc}"]
 
@@ -208,10 +223,10 @@ def _reload_consistency_reasons(candidate: dict[str, Any]) -> list[str]:
     means = artifact["train_means"]
     stds = artifact["train_stds"]
 
-    for row in rows:
-        predicted = models_mod.predict(artifact, row)
+    predicted_batch = models_mod.predict(artifact, rows)
+    for row, predicted in zip(rows, predicted_batch):
         manual = intercept + sum(
-            coef[i] * (row[feature] - means[feature]) / (stds[feature] or 1e-9)
+            coef[i] * (row[feature] - means[i]) / (stds[i] or 1e-9)
             for i, feature in enumerate(features)
         )
         if abs(predicted - manual) > _RELOAD_TOLERANCE:
@@ -302,17 +317,28 @@ def restore(model_id: str, version: str, decided_by: str, note: str | None = Non
 
 
 def _content_hash_changed(dataset_id: str) -> bool:
+    """B-fix: A `snapshot.create_dataset(target, *, spec_version="v1")`는 spec dict 전체가
+    아니라 `target` 문자열을 받는다 — 원래 코드는 `create_dataset(spec)`을 그대로 넘겨
+    실제 A 모듈에서 TypeError가 났다(`target not in TARGETS`류 검증 이전에 인자 개수부터
+    불일치). 저장된 spec_json에서 target/spec_version만 뽑아 실제 시그니처로 재호출한다."""
     row = _conn().execute(
         "SELECT spec_json, content_hash FROM rd_datasets WHERE dataset_id = ?", (dataset_id,)
     ).fetchone()
     if row is None:
         return False
     spec = json.loads(row["spec_json"])
+    target = spec.get("target")
+    spec_version = spec.get("spec_version", "v1")
+    if not target:
+        return False
     snapshot_mod = _import_snapshot()
     errors_mod = _import_errors()
     try:
-        fresh = snapshot_mod.create_dataset(spec)
-    except errors_mod.RealdataError:
+        fresh = snapshot_mod.create_dataset(target, spec_version=spec_version)
+    except (errors_mod.RealdataError, ValueError, RealdataUnavailable):
+        # RealdataUnavailable(pg_reader, RuntimeError 계열)은 errors.RealdataError와 별개
+        # 계층이다 — PG 장애로 재학습 필요 여부를 못 구했다고 GET /models 전체가 500이
+        # 되면 안 되므로(다른 필드는 정상 응답 가능) false로 완화한다.
         return False
     fresh_hash = _field(fresh, "content_hash")
     return bool(fresh_hash) and fresh_hash != row["content_hash"]

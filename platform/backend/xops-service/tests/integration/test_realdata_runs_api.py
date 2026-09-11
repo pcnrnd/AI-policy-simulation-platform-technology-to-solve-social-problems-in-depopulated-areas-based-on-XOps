@@ -60,15 +60,17 @@ class FakeOutcome:
         self.eval_period = {"from": 202307, "to": 202309, "n": 6}
 
 
+# A 실제 아티팩트 형태: features/coef/train_means/train_stds는 같은 순서의 병렬 리스트
+# (dict가 아니다) — B-fix로 스텁을 실제 시그니처에 맞췄다.
 _FEATURES = ["y_lag1", "y_lag2"]
-_MEANS = {"y_lag1": 100.0, "y_lag2": 90.0}
-_STDS = {"y_lag1": 10.0, "y_lag2": 9.0}
+_MEANS = [100.0, 90.0]
+_STDS = [10.0, 9.0]
 _COEF = [1.0, 2.0]
 _INTERCEPT = 5.0
 
 
 def _manual_predict(row: dict[str, float]) -> float:
-    return _INTERCEPT + sum(_COEF[i] * (row[f] - _MEANS[f]) / _STDS[f] for i, f in enumerate(_FEATURES))
+    return _INTERCEPT + sum(_COEF[i] * (row[f] - _MEANS[i]) / _STDS[i] for i, f in enumerate(_FEATURES))
 
 
 class FakeModels:
@@ -86,11 +88,11 @@ class FakeModels:
             "train_stds": _STDS,
         }
 
-    def build_feature_rows(self, dataset: Any, features: list[str]) -> list[dict[str, float]]:
+    def build_feature_rows(self, dataset: Any, *, for_month: int | None = None) -> list[dict[str, float]]:
         return [{"y_lag1": 110.0, "y_lag2": 95.0}]
 
-    def predict(self, artifact: dict[str, Any], row: dict[str, float]) -> float:
-        return _manual_predict(row)
+    def predict(self, artifact: dict[str, Any], rows: list[dict[str, float]]) -> list[float]:
+        return [_manual_predict(row) for row in rows]
 
 
 @pytest.fixture(autouse=True)
@@ -185,7 +187,7 @@ def _seed_candidate(*, mae: float = 5.0, baseline_mae: float = 10.0, quality: di
     conn.execute(
         "INSERT INTO rd_datasets (dataset_id, spec_json, quality_json, observed_from, observed_to, row_count, content_hash, file_path, created_at) "
         "VALUES ('ds-abc123def456', '{}', ?, 202301, 202310, 10, 'hash-1', '/tmp/x.json', '2026-01-01T00:00:00+00:00')",
-        (json.dumps(quality or {"mapping_matched": 23, "mapping_total": 23, "duplicate_keys": 0}),),
+        (json.dumps(quality or {"mapping_matched": 23, "mapping_total": 23, "duplicate_key_count": 0}),),
     )
     metrics = {"mae": mae, "rmse": mae * 1.2, "wape": 0.1, "eval_period": {"from": 202307, "to": 202309, "n": 6}}
     baseline = {"name": "yoy", "mae": baseline_mae, "rmse": baseline_mae * 1.2, "wape": 0.2}
