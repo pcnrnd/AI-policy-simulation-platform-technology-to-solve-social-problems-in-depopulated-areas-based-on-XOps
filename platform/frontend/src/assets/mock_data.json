@@ -358,6 +358,74 @@
         { "name": "longitude", "type": "DOUBLE PRECISION", "description": "경도 (남원 파일 미제공 — NULL)" },
         { "name": "data_base_date", "type": "VARCHAR(10)", "description": "데이터 기준일자" }
       ]
+    },
+    {
+      "id": "ds_10_bccard_dong_industry_sales",
+      "label": "BC카드 남원시 지역소비(행정동×업종×성별)",
+      "source": "RDB · PostgreSQL",
+      "object": "ext_bccard_dong_industry_sales",
+      "description": "남원시 BC카드 행정동×업종×성별×연령 개인·오프라인 소비 매출추정 데이터. 2019·2022·2023년 36개월(2020·2021 미제공), k>=3 비식별 처리로 일부 셀 값 누락 존재 — 합계는 하한값. 송부 2024년 1월 / 원본 platform/data/real/namwon_bccard_consumption_240130.xlsx",
+      "archive": { "tier": "Cold", "retention": "영구 보존", "loaded_at": "2026-09-11", "rows": 212342 },
+      "lineage": { "origin": "BC카드 남원시 지역소비데이터(협약 제공, platform/data/real 원본 sha256 89a950)", "version": "v1", "commit": "89a950" },
+      "range": { "column": "base_ym", "from": 201901, "to": 202312 },
+      "tags": ["소비", "외부데이터"],
+      "columns": [
+        { "name": "base_ym", "type": "INTEGER", "description": "기준년월(YYYYMM) (원본: 기준년월)" },
+        { "name": "customer_type", "type": "TEXT", "description": "외지인/현지인 (원본: 고객구분)" },
+        { "name": "dong_name", "type": "TEXT", "description": "행정동명(총 23개) (원본: 행정동명)" },
+        { "name": "industry_6", "type": "TEXT", "description": "식음료/쇼핑소매/문화레져/숙박/유흥/교통 (원본: 6대 업종명)" },
+        { "name": "sex", "type": "TEXT", "description": "남/여 (원본: 성별)" },
+        { "name": "age_group", "type": "TEXT", "description": "20대~60대이상 (원본: 연령)" },
+        { "name": "weekday", "type": "TEXT", "description": "월~일 (원본: 요일)" },
+        { "name": "sales_est_krw", "type": "BIGINT", "description": "매출추정액(원), 반올림 없음, k>=3 비식별로 셀 누락 존재 (원본: 매출추정액(원))" }
+      ]
+    },
+    {
+      "id": "ds_11_kt_namwon_monthly_dong_visitors",
+      "label": "KT 남원시 행정동 월별 방문객",
+      "source": "RDB · PostgreSQL",
+      "object": "ext_kt_namwon_monthly_dong_visitors",
+      "description": "KT 통신데이터 기반 남원시 행정동별 월별 방문객(현지인·외지인·외국인) 집계. 원본 platform/data/real/namwon_kt_visitors_20231130.xlsx",
+      "archive": { "tier": "Hot", "retention": "5년 보존", "loaded_at": "2026-09-11", "rows": 1334 },
+      "lineage": { "origin": "KT 남원시 행정동 방문객 데이터(협약 제공, platform/data/real 원본 sha256 bd6d3a)", "version": "v1", "commit": "bd6d3a" },
+      "range": { "column": "base_ym", "from": 201901, "to": 202310 },
+      "tags": ["방문객", "외부데이터"],
+      "columns": [
+        { "name": "base_ym", "type": "INTEGER", "description": "기준년월(YYYYMM) (원본: 월별)" },
+        { "name": "sido_name", "type": "TEXT", "description": "시도명" },
+        { "name": "sido_code", "type": "TEXT", "description": "시도코드(선행 0 보존을 위해 문자열)" },
+        { "name": "sigungu_name", "type": "TEXT", "description": "시군구명" },
+        { "name": "sigungu_code", "type": "TEXT", "description": "시군구코드(선행 0 보존을 위해 문자열)" },
+        { "name": "dong_name", "type": "TEXT", "description": "행정동명" },
+        { "name": "dong_code", "type": "TEXT", "description": "행정동코드(선행 0 보존을 위해 문자열)" },
+        { "name": "local_visitors", "type": "NUMERIC", "description": "현지인 방문객, 반올림 없음" },
+        { "name": "nonlocal_visitors", "type": "NUMERIC", "description": "외지인 방문객, 반올림 없음" },
+        { "name": "foreign_visitors", "type": "NUMERIC", "description": "외국인 방문객, 반올림 없음" }
+      ]
+    },
+    {
+      "id": "ds_12_kt_namwon_visitors_by_sex_age",
+      "label": "KT 남원시 행정동 성·연령별 방문객",
+      "source": "RDB · PostgreSQL",
+      "object": "ext_kt_namwon_visitors_by_sex_age",
+      "description": "KT 통신데이터 기반 남원시 행정동×성별×연령별 월별 방문객 집계. 격자 결손 2행(기대 58개월×23행정동×2성별×8연령=21344행 대비 실제 21342행, 채우지 않음). 원본 platform/data/real/namwon_kt_visitors_20231130.xlsx",
+      "archive": { "tier": "Hot", "retention": "5년 보존", "loaded_at": "2026-09-11", "rows": 21342 },
+      "lineage": { "origin": "KT 남원시 행정동 방문객 데이터(협약 제공, platform/data/real 원본 sha256 bd6d3a)", "version": "v1", "commit": "bd6d3a" },
+      "range": { "column": "base_ym", "from": 201901, "to": 202310 },
+      "tags": ["방문객", "외부데이터"],
+      "columns": [
+        { "name": "base_ym", "type": "INTEGER", "description": "기준년월(YYYYMM) (원본: 월별)" },
+        { "name": "sido_name", "type": "TEXT", "description": "시도명" },
+        { "name": "sido_code", "type": "TEXT", "description": "시도코드(선행 0 보존을 위해 문자열)" },
+        { "name": "sigungu_name", "type": "TEXT", "description": "시군구명" },
+        { "name": "sigungu_code", "type": "TEXT", "description": "시군구코드(선행 0 보존을 위해 문자열)" },
+        { "name": "dong_name", "type": "TEXT", "description": "행정동명" },
+        { "name": "dong_code", "type": "TEXT", "description": "행정동코드(선행 0 보존을 위해 문자열)" },
+        { "name": "sex_code", "type": "TEXT", "description": "성별코드(F/M)" },
+        { "name": "age_code", "type": "TEXT", "description": "연령코드(예: A2029)" },
+        { "name": "local_visitors", "type": "NUMERIC", "description": "현지인 방문객, 반올림 없음" },
+        { "name": "nonlocal_visitors", "type": "NUMERIC", "description": "외지인 방문객, 반올림 없음" }
+      ]
     }
   ],
   "benchmark_regions": [
