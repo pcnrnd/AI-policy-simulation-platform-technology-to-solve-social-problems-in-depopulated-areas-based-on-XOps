@@ -911,11 +911,11 @@ export default function SimulatorPage() {
       />
       </CollapsibleStage>
 
-      {/* ── STAGE ④ 리포팅: 정책 추천 + AI 보고서 연계 ── */}
+      {/* ── STAGE ④ 추천: 정책 추천 + AI 보고서 연계 (리포팅은 자동화 리포팅 탭 담당) ── */}
       <CollapsibleStage
         id="stage-report"
         no="STAGE ④"
-        title="리포팅"
+        title="추천"
         sub={currentRegion.case.reportFocus}
         open={openStages["stage-report"]}
         onToggle={() => toggleStage("stage-report")}
