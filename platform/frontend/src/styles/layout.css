@@ -179,6 +179,10 @@
   border: 1px solid transparent;
 }
 
+.nav-item:not(.nav-item-nested) {
+  color: var(--text-primary);
+}
+
 .nav-item:hover {
   color: var(--text-primary);
   background-color: var(--surface-hover);
