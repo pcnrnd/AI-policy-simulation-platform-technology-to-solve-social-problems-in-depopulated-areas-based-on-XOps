@@ -5,6 +5,8 @@ data
 platform/data/*
 !platform/data/real/
 !platform/data/real/**
+# 외부데이터 xlsx 원본(약 12MB)은 OneDrive가 정본 — 추적하지 않는다 (2026-09-11)
+platform/data/real/*.xlsx
 data_2025
 data_2026
 data_raw
