@@ -1,0 +1,33 @@
+{
+  "model_id": "namwon-nonlocal-visitors-next-month",
+  "version": "v20260901-aaaaaa",
+  "dataset_id": "ds-aaaaaaaaaaaa",
+  "content_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "features": ["y_lag1", "y_lag2", "y_lag3", "month_sin", "month_cos"],
+  "coef": [0.5, 0.2, 0.1, 300.0, -150.0],
+  "intercept": 100.0,
+  "train_means": {
+    "y_lag1": 1000.0,
+    "y_lag2": 980.0,
+    "y_lag3": 960.0,
+    "month_sin": 0.0,
+    "month_cos": 0.0
+  },
+  "train_stds": {
+    "y_lag1": 120.0,
+    "y_lag2": 118.0,
+    "y_lag3": 115.0,
+    "month_sin": 0.7,
+    "month_cos": 0.7
+  },
+  "lambda": 1.0,
+  "eval": {
+    "period": {"from": 202307, "to": 202309, "n": 6},
+    "metrics": {"mae": 12.3, "rmse": 15.1, "wape": 0.08},
+    "baseline": {"name": "yoy", "mae": 20.0, "rmse": 25.0, "wape": 0.15}
+  },
+  "observed_end_month": 202310,
+  "forecast_month": 202311,
+  "train_rows": 50,
+  "trained_at": "2026-09-01T00:00:00+00:00"
+}

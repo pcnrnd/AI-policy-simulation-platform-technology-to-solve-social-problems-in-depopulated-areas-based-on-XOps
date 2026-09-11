@@ -47,3 +47,9 @@ class TrainingRunRequest(BaseModel):
 
     model_id: str = Field(min_length=1, max_length=128, pattern=_APP_ID_PATTERN)
     dataset_id: str = Field(min_length=1, max_length=64, pattern=r"^ds-[0-9a-f]{12}$")
+
+
+class RestoreRequest(BaseModel):
+    """POST /realdata/models/{model_id}/restore/{version} 요청 본문(R3-4) — 사유는 선택."""
+
+    note: str | None = Field(default=None, max_length=500)
