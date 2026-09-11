@@ -266,13 +266,13 @@ export default function OrchestratorPage() {
           title={
             pipelineRun ? (
               <>
-                파이프라인 실행 상태 — {pipelineRun.pipelineName}{" "}
-                <code style={{ fontSize: 12, color: "var(--accent-purple-text)", fontWeight: 500 }}>
+                파이프라인 실행 상태 <span className="mock-data-output">— {pipelineRun.pipelineName} </span>
+                <code className="mock-data-output" style={{ fontSize: 12, color: "var(--accent-purple-text)", fontWeight: 500 }}>
                   {pipelineRun.pipelineId}
                 </code>
               </>
             ) : (
-              "파이프라인 실행 상태 — 대기 중"
+              <>파이프라인 실행 상태 <span className="mock-data-output">— 대기 중</span></>
             )
           }
           icon="fa-diagram-project"
@@ -356,11 +356,11 @@ export default function OrchestratorPage() {
             </p>
           )}
 
-          <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+          <span className="sr-only mock-data-output" role="status" aria-live="polite" aria-atomic="true">
             {pipelineAnnouncement}
           </span>
           <div
-            className={"pipeline-visualizer" + (pipelineRun ? "" : " is-idle")}
+            className={"pipeline-visualizer mock-data-output" + (pipelineRun ? "" : " is-idle")}
             role="list"
             aria-label="재학습 파이프라인 단계별 상태"
           >
@@ -434,9 +434,7 @@ export default function OrchestratorPage() {
             0.80 미만이면 직전 버전으로 자동 롤백합니다.
           </span>
         </div>
-        {/* 표기는 셀 단위다 — 응답 200만으로 표·행 전체를 실데이터로 넘기면 프런트가 합성한 값까지
-            목업 표시 OFF에서 남는다. 백엔드 /orchestration/models가 주는 것은 model_id·version·metrics뿐이라
-            (mlops/orchestration/registry.py) 행은 그 (모델, 버전)만, Accuracy는 지표를 함께 받았을 때만 api다. */}
+        {/* 전달 경로를 셀 단위로 기록한다. 데모 표시 OFF에서는 표 전체의 데이터를 함께 숨긴다. */}
         <div className="table-container">
           <table>
             <caption className="sr-only">모델과 실험의 버전 이력 및 운영 상태</caption>
