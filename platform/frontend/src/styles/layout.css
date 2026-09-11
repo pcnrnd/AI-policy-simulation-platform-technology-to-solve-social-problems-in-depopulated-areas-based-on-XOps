@@ -394,6 +394,12 @@ body.drawer-open {
   transition: none !important;
 }
 
+/* 인증 상태 안내(#catalog-auth-hint)는 데이터 출력이 아니라 조작 안내이므로
+   .catalog-result-status가 숨겨져도 예외로 노출한다(visibility는 자식에서 재정의 가능). */
+.mock-values-hidden .content-body #catalog-auth-hint {
+  visibility: visible !important;
+}
+
 /* 베이스 지도와 조작 패널은 남기고, 목업 위치·격자·시설 레이어만 숨긴다. */
 .mock-values-hidden .content-body :where(
   .leaflet-overlay-pane,
