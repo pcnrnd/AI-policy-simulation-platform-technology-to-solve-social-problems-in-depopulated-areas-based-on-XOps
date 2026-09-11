@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from datetime import datetime, timezone
 from functools import lru_cache
 from typing import Any
 
@@ -42,6 +43,88 @@ def init_db() -> None:
         """
     )
     conn.commit()
+    apply_rd_migrations(conn)
+
+
+# ── 실데이터 연계(rd_*) 마이그레이션 규약 ────────────────────
+# 추가 전용: 새 마이그레이션은 RD_MIGRATIONS에 (id, SQL문 목록)을 덧붙인다.
+# 기존 rd_* 테이블에 컬럼을 추가할 때는 `PRAGMA table_info(table)`로 존재 여부를
+# 확인한 뒤 `ALTER TABLE ... ADD COLUMN`만 실행한다. DROP·데이터 재작성은 금지.
+RD_MIGRATIONS: list[tuple[str, list[str]]] = [
+    (
+        "rd_0001_init",
+        [
+            """
+            CREATE TABLE IF NOT EXISTS rd_datasets (
+                dataset_id TEXT PRIMARY KEY,
+                spec_json TEXT NOT NULL,
+                quality_json TEXT NOT NULL,
+                observed_from INTEGER,
+                observed_to INTEGER,
+                row_count INTEGER NOT NULL,
+                content_hash TEXT NOT NULL,
+                file_path TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS rd_training_jobs (
+                job_id TEXT PRIMARY KEY,
+                model_id TEXT NOT NULL,
+                dataset_id TEXT NOT NULL,
+                state TEXT NOT NULL,
+                requested_at TEXT NOT NULL,
+                started_at TEXT,
+                finished_at TEXT,
+                error TEXT,
+                candidate_version TEXT
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS rd_model_candidates (
+                model_id TEXT NOT NULL,
+                version TEXT NOT NULL,
+                dataset_id TEXT NOT NULL,
+                artifact_path TEXT NOT NULL,
+                metrics_json TEXT NOT NULL,
+                baseline_json TEXT NOT NULL,
+                status TEXT NOT NULL,
+                decided_at TEXT,
+                decided_by TEXT,
+                note TEXT,
+                PRIMARY KEY (model_id, version)
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS rd_active_models (
+                model_id TEXT PRIMARY KEY,
+                version TEXT NOT NULL,
+                applied_at TEXT NOT NULL,
+                previous_version TEXT
+            )
+            """,
+        ],
+    ),
+]
+
+
+def apply_rd_migrations(conn: sqlite3.Connection) -> None:
+    """rd_* 마이그레이션 적용 — 적용 이력은 rd_schema_migrations에 기록, 기존 4테이블은 무변경."""
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS rd_schema_migrations (id TEXT PRIMARY KEY, applied_at TEXT NOT NULL)"
+    )
+    conn.commit()
+    applied = {row["id"] for row in conn.execute("SELECT id FROM rd_schema_migrations").fetchall()}
+    for migration_id, statements in RD_MIGRATIONS:
+        if migration_id in applied:
+            continue
+        for statement in statements:
+            conn.execute(statement)
+        conn.execute(
+            "INSERT INTO rd_schema_migrations (id, applied_at) VALUES (?, ?)",
+            (migration_id, datetime.now(timezone.utc).isoformat()),
+        )
+        conn.commit()
 
 
 # ── 사용자 등록 소스 ────────────────────────────────────────
