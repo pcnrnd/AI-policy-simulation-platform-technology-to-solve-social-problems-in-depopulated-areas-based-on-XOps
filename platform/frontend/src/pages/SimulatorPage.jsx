@@ -9,6 +9,7 @@ import FactorAnalysisStage from "../components/FactorAnalysisStage.jsx";
 import FactorResultStage from "../components/FactorResultStage.jsx";
 import PendingData from "../components/PendingData.jsx";
 import ScenarioCompare from "../components/ScenarioCompare.jsx";
+import RealdataAnalysisPanel from "../components/realdata/RealdataAnalysisPanel.jsx";
 import { useAppState } from "../context/AppStateContext.jsx";
 import { useChartTheme } from "../hooks/useChartTheme.js";
 import { buildRegionGrid, densityColor, DENSITY_LEGEND } from "../lib/geo.js";
@@ -948,6 +949,9 @@ export default function SimulatorPage() {
           </button>
         </div>
       </CollapsibleStage>
+
+      {/* ── 실데이터 진단(남원) — 신규 패널(R5), 기존 데모 스테이지와 무관 ── */}
+      <RealdataAnalysisPanel />
     </>
   );
 }
