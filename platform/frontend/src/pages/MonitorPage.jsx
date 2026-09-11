@@ -659,7 +659,7 @@ export default function MonitorPage() {
             }
           : null;
 
-  // 목업 표시 OFF에서도 실데이터가 채운 영역은 남긴다 — 폴백이 실제로 일어난 영역만 mock으로 표기한다.
+  // API 수신과 폴백 경로를 기록한다. 표시 OFF는 전달 경로와 무관하게 모든 데이터에 적용한다.
   // 판정은 위 수집 검증(seriesUsable·hasUsableFeatures·psiUsable)과 같은 함수를 재사용해야
   // "정상 수신" 문구와 화면에 남는 영역이 어긋나지 않는다.
   // 판정 단위는 소비자가 실제로 읽는 값이다 — 6계열 공통 판정을 쓰면 한 계열만 비어도 실응답으로
@@ -697,7 +697,7 @@ export default function MonitorPage() {
         <div className="monitor-options">
           <label className="compact-select-field">
             <span>대상 모델</span>
-            <select className="select-control" value={modelTarget} onChange={(e) => setModelTarget(e.target.value)}>
+            <select className="select-control mock-data-output" value={modelTarget} onChange={(e) => setModelTarget(e.target.value)}>
               {MODEL_REGISTRY.map((m) => (
                 <option key={m.id} value={m.id}>{m.name} {servingVersionOf(m.id, m.version)}</option>
               ))}
@@ -714,7 +714,7 @@ export default function MonitorPage() {
         </div>
         <button
           type="button"
-          className="btn btn-secondary"
+          className="btn btn-secondary mock-data-output"
           style={{ padding: "6px 14px", fontSize: 12 }}
           onClick={handleDriftAction}
           aria-disabled={driftAction.locked}
@@ -809,7 +809,7 @@ export default function MonitorPage() {
             <span className="trend-up">F1: {f1Val}</span>
           </div>
           <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8 }}>
-            {modelLabel} 기준 · 분산 지표 통합 관리로 사일로(Silo) 제거 — 6대 평가지표 실시간 자동 집계
+            <span className="mock-data-output">{modelLabel} 기준 · </span>분산 지표 통합 관리로 사일로(Silo) 제거 — 6대 평가지표 실시간 자동 집계
           </p>
         </div>
 
@@ -841,7 +841,7 @@ export default function MonitorPage() {
             </span>
           </div>
           <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8 }}>
-            {DRIFT_MODEL_NAME} 모델 유입 분포 기준 · 임계치 PSI {">"} 0.2 초과 시 자동 Alert 트리거
+            <span className="mock-data-output">{DRIFT_MODEL_NAME} 모델 유입 분포 기준 · </span>임계치 PSI {">"} 0.2 초과 시 자동 Alert 트리거
           </p>
         </div>
 
@@ -876,7 +876,7 @@ export default function MonitorPage() {
             </span>
           </div>
           <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8 }}>
-            {DRIFT_MODEL_NAME} 모델 유입 데이터 기준 · IQR 및 Z-score 기반 다차원 이상치 필터링
+            <span className="mock-data-output">{DRIFT_MODEL_NAME} 모델 유입 데이터 기준 · </span>IQR 및 Z-score 기반 다차원 이상치 필터링
           </p>
         </div>
       </div>
