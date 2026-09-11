@@ -5,8 +5,7 @@ import { apiGet } from "../lib/api.js";
 
 // XOps 4단계 연속성 리본 — 데이터 준비 → 모니터링 → 재학습·배포 → 시뮬레이션.
 // 단계 배지는 전역 상태(AppStateContext)에서 파생만 한다. 새 상태를 저장하지 않으므로
-// 어느 탭에서 보든 같은 값이 나오고, 목업 표시 스위치(.mock-values-hidden)의
-// 가림 대상도 아니다(전용 xops- 접두사 클래스 사용).
+// 어느 탭에서 보든 같은 값이 나온다. 데모 표시 OFF에서는 배지와 상태 색을 숨긴다.
 export const FLOW_TAB_IDS = ["tab-dataops", "tab-mlops-monitor", "tab-mlops-orch", "tab-simulator"];
 
 const CATALOG_URL = "/api/v3/dataops/catalog";
@@ -158,14 +157,16 @@ export default function XopsFlowRibbon() {
       <ol className="xops-ribbon-steps">
         {steps.map((step, idx) => {
           const isCurrent = step.id === activeTab;
+          const badge = mockDataVisible ? step.badge : null;
+          const tone = mockDataVisible ? step.tone : "idle";
           return (
             <li className="xops-ribbon-item" key={step.id}>
               <button
                 type="button"
-                className={`xops-ribbon-step is-${step.tone}${isCurrent ? " is-current" : ""}`}
+                className={`xops-ribbon-step is-${tone}${isCurrent ? " is-current" : ""}`}
                 onClick={() => navigateToTab(step.id)}
                 aria-current={isCurrent ? "true" : undefined}
-                aria-label={`${step.no} ${step.label}${step.badge ? `, ${step.badge}` : ""}${isCurrent ? ", 현재 탭" : ""}`}
+                aria-label={`${step.no} ${step.label}${badge ? `, ${badge}` : ""}${isCurrent ? ", 현재 탭" : ""}`}
               >
                 <span className="xops-ribbon-no" aria-hidden="true">
                   {step.no}
@@ -174,12 +175,12 @@ export default function XopsFlowRibbon() {
                   <span className="xops-ribbon-label">
                     <i className={`fa-solid ${step.icon}`} aria-hidden="true"></i> {step.label}
                   </span>
-                  {step.badge && (
+                  {badge && (
                     <span className="xops-ribbon-badge">
-                      {TONE_ICON[step.tone] && (
-                        <i className={`fa-solid ${TONE_ICON[step.tone]}`} aria-hidden="true"></i>
+                      {TONE_ICON[tone] && (
+                        <i className={`fa-solid ${TONE_ICON[tone]}`} aria-hidden="true"></i>
                       )}
-                      {step.badge}
+                      {badge}
                     </span>
                   )}
                 </span>

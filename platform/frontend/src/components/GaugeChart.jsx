@@ -61,7 +61,7 @@ export default function GaugeChart({
           textAlign: "center"
         }}
       >
-        <div style={{ fontSize: 20, fontWeight: 700, fontFamily: "'Outfit', sans-serif", color: "var(--text-primary)" }}>
+        <div className="gauge-value" style={{ fontSize: 20, fontWeight: 700, fontFamily: "'Outfit', sans-serif", color: "var(--text-primary)" }}>
           {displayText ?? `${(ratio * 100).toFixed(1)}%`}
         </div>
         <div style={{ fontSize: 10, color: "var(--text-secondary)" }}>{label}</div>
