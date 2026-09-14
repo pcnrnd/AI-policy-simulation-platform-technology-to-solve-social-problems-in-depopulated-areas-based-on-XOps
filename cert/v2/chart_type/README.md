@@ -15,8 +15,8 @@ uv run streamlit run chart_type.py --server.port 8506
 ### Docker
 
 ```
-docker build -t cert-chart-type .
-docker run -p 8506:8506 cert-chart-type
+docker build -t cert-chart-type:2026.0.0 .
+docker run -p 8506:8506 cert-chart-type:2026.0.0
 ```
 
 또는 상위 `cert/v2/cert-compose.yml`로 `chart_speed`와 함께:
