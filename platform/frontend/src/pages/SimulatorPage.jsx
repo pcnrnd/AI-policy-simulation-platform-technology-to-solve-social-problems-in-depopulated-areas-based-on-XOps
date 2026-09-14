@@ -750,7 +750,7 @@ export default function SimulatorPage() {
               <i className="fa-solid fa-sliders"></i> {currentRegion.name} 시뮬레이션 변수
             </div>
             <p className="sim-dock-hint">
-              예산·배분·시설 변수를 조정하면 10년 인구 예측이 실시간 갱신됩니다.
+              예산·정책 강조·시설 변수를 조정하면 10년 인구 예측이 실시간 갱신됩니다.
             </p>
 
             <div className="sim-var-group-label">
@@ -766,7 +766,7 @@ export default function SimulatorPage() {
               unit="억"
             />
 
-            <div className="sim-var-group-label">예산 배분 (정책 변수)</div>
+            <div className="sim-var-group-label">정책 강조 가중치</div>
             <Slider label="복지 예산 (Welfare)" value={welfareWeight} onChange={setWelfareWeight} />
             <Slider label="산업 일자리 (Industry)" value={industryWeight} onChange={setIndustryWeight} />
             <Slider label="주거·주택 (Housing)" value={housingWeight} onChange={setHousingWeight} />
