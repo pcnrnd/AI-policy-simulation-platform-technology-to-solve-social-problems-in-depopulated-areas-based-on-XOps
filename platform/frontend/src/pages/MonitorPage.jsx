@@ -25,9 +25,8 @@ import RealdataEvaluationPanel from "../components/realdata/RealdataEvaluationPa
 import { apiGet } from "../lib/api.js";
 
 // 드리프트 자동 재학습 대상 — 인구이동 예측 모델(백엔드 오케스트레이션 시드 id).
-// PSI·이상값·예측 지연 카드는 이 모델 하나만 관측하므로, 대상 모델 선택과 무관하게 범위를 밝혀야 한다.
+// PSI·이상값·예측 지연 값 자체는 이 모델 하나만 관측한다(대상 모델 선택과 무관, 값 확장은 별도 결정 사항).
 const DRIFT_MODEL_ID = "population-forecast";
-const DRIFT_MODEL_NAME = MODEL_REGISTRY.find((m) => m.id === DRIFT_MODEL_ID)?.name ?? "인구이동 예측";
 
 // 예측 지연 게이지 — 자동 롤백 임계(200ms) 대비 비율로 표시한다.
 const LATENCY_ROLLBACK_MS = 200;
@@ -842,7 +841,7 @@ export default function MonitorPage() {
             </span>
           </div>
           <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8 }}>
-            <span className="mock-data-output">{DRIFT_MODEL_NAME} 모델 유입 분포 기준 · </span>임계치 PSI {">"} 0.2 초과 시 자동 Alert 트리거
+            <span className="mock-data-output">{targetModel.name} 모델 유입 분포 기준 · </span>임계치 PSI {">"} 0.2 초과 시 자동 Alert 트리거
           </p>
         </div>
 
@@ -877,7 +876,7 @@ export default function MonitorPage() {
             </span>
           </div>
           <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8 }}>
-            <span className="mock-data-output">{DRIFT_MODEL_NAME} 모델 유입 데이터 기준 · </span>IQR 및 Z-score 기반 다차원 이상치 필터링
+            <span className="mock-data-output">{targetModel.name} 모델 유입 데이터 기준 · </span>IQR 및 Z-score 기반 다차원 이상치 필터링
           </p>
         </div>
       </div>
