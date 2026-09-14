@@ -104,6 +104,9 @@ export function AppStateProvider({ children }) {
 
   const [driftInjected, setDriftInjected] = useState(false);
   const [pipelineRunning, setPipelineRunning] = useState(false);
+  // 모니터 화면의 실제 최근 지표 수집 판정("ok" | "fail" | "unknown") — 헤더 상태 칩이
+  // 모니터 화면과 같은 API 응답 기준으로 성공/실패/미수집을 표시하도록 전역에 공유한다.
+  const [monitorCollectStatus, setMonitorCollectStatus] = useState("unknown");
   const [pipelineScheduled, setPipelineScheduled] = useState(false);
   const [pipelineStep, setPipelineStep] = useState(0);
   // 현재(또는 마지막) 파이프라인 실행 식별 정보 — 실행 ID·파이프라인·대상 모델·실험·트리거
@@ -539,6 +542,8 @@ export function AppStateProvider({ children }) {
     setBudgetTotal,
     driftInjected,
     pipelineRunning,
+    monitorCollectStatus,
+    setMonitorCollectStatus,
     pipelineScheduled,
     pipelineStep,
     pipelineRun,

@@ -7,10 +7,24 @@ const SEVERITY_ICONS = {
   info: { icon: "fa-circle-info", color: "var(--accent-blue)" }
 };
 
+// 모니터 화면의 실제 수집 판정(monitorCollectStatus)을 그대로 옮긴 색이다 — 기존 .system-status
+// 팔레트 재사용(성공=teal 기본값, 실패=orange 경고색, 미수집=회색)이며 새 색을 만들지 않는다.
+const COLLECT_CHIP = {
+  ok: { icon: "fa-satellite-dish", label: "수집 성공", color: "var(--accent-teal)", bg: "rgba(var(--accent-teal-rgb), 0.02)" },
+  fail: {
+    icon: "fa-triangle-exclamation",
+    label: "수집 실패",
+    color: "var(--accent-orange)",
+    bg: "rgba(var(--accent-orange-rgb), 0.02)"
+  },
+  unknown: { icon: "fa-satellite-dish", label: "미수집", color: "var(--text-muted)", bg: "rgba(128, 138, 154, 0.12)" }
+};
+
 export default function Header({ title, onToggleSidebar, sidebarOpen, menuButtonRef }) {
   const {
     driftInjected,
     pipelineRunning,
+    monitorCollectStatus,
     notifications,
     unreadCount,
     markNotificationsRead,
@@ -57,7 +71,9 @@ export default function Header({ title, onToggleSidebar, sidebarOpen, menuButton
   };
 
   let statusClass = "system-status";
-  let statusText = "모델 모니터링 활성 (정상)";
+  // '(정상)' 판정은 실제 수집 결과와 무관하게 항상 붙어 있어 수집 실패 안내와 동시에 표시되면
+  // '정상'이 실수집 성공처럼 읽혔다(QA-2026-09-11 #5). 활성 여부만 남기고, 실제 판정은 옆 칩으로 분리한다.
+  let statusText = "모델 모니터링 활성";
   if (pipelineRunning) {
     statusClass = "system-status retraining";
     statusText = "자동 재학습 및 배포 파이프라인 수행 중...";
@@ -74,6 +90,10 @@ export default function Header({ title, onToggleSidebar, sidebarOpen, menuButton
     statusClass = "system-status mock-data-visibility-status";
     statusText = "OFF";
   }
+
+  // 활성 문구와 분리된 별도 칩 — 모니터 화면과 같은 API 응답 기준으로 성공/실패/미수집만 알린다.
+  // OFF에서는 위 활성 문구도 "OFF" 하나로 접히므로 칩도 함께 감춘다(데모 표시 계약과 일관).
+  const collectChip = mockDataVisible ? COLLECT_CHIP[monitorCollectStatus] ?? COLLECT_CHIP.unknown : null;
 
   return (
     <header className="main-header">
@@ -103,6 +123,23 @@ export default function Header({ title, onToggleSidebar, sidebarOpen, menuButton
           <span className="status-indicator" aria-hidden="true"></span>
           <span>{statusText}</span>
         </div>
+        {collectChip && (
+          <span
+            className="system-status"
+            role="status"
+            aria-live="polite"
+            style={{
+              padding: "2px 10px",
+              fontSize: 11,
+              color: collectChip.color,
+              backgroundColor: collectChip.bg,
+              borderColor: "currentColor"
+            }}
+          >
+            <i className={`fa-solid ${collectChip.icon}`} aria-hidden="true"></i>
+            <span>{collectChip.label}</span>
+          </span>
+        )}
         <div className="alert-badge-container" ref={bellRef}>
           <button
             className="alert-icon-btn"
