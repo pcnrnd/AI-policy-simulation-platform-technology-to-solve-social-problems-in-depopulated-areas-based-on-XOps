@@ -188,7 +188,7 @@ wheels = [
 ]
 
 [[package]]
-name = "cert-v2"
+name = "cert-chart-type"
 version = "2026.0.0"
 source = { virtual = "." }
 dependencies = [
