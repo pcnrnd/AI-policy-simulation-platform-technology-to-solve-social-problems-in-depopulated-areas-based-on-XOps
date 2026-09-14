@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Bar } from "react-chartjs-2";
 import Card from "./Card.jsx";
+import InfoTip from "./InfoTip.jsx";
 import PerfBadge from "./PerfBadge.jsx";
 import { useChartTheme } from "../hooks/useChartTheme.js";
 import { useRenderTiming } from "../lib/perf.js";
@@ -60,6 +61,7 @@ export default function PolicyRecommendation({ region, ranked }) {
       <p style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 16 }}>
         시뮬레이터의 정책 변수(복지·산업·주거 가중치)와 지자체 인구감소 특성을 반영해{" "}
         <strong>RICE = (Reach × Impact × Confidence) ÷ Effort</strong> 점수로 맞춤 정책을 추천합니다.
+        <InfoTip text="표시 점수 = 안내식 × 예산 보정계수 √(총예산/600억). 남원 2,000억 예시: 3,061 × 1.83 ≈ 5,589" />
       </p>
 
       {/* Top 3 추천 요약 */}
