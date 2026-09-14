@@ -18,12 +18,6 @@ RUN uv sync --frozen --no-dev --no-cache
 
 COPY . .
 
-# 한 이미지로 두 앱을 기동한다. APP / PORT 로 선택:
-#   chart_speed (응답속도): docker run -p 8505:8505 <image>                                  (기본값)
-#   chart_type  (유형)    : docker run -e APP=chart_type -e PORT=8506 -p 8506:8506 <image>
-ENV APP=chart_speed \
-    PORT=8505
+EXPOSE 8506
 
-EXPOSE 8505 8506
-
-CMD ["sh", "-c", "exec streamlit run ${APP}.py --server.port ${PORT} --server.address 0.0.0.0"]
+CMD ["sh", "-c", "exec streamlit run chart_type.py --server.port 8506 --server.address 0.0.0.0"]

@@ -5,20 +5,19 @@ v1(`cert/v1/chart_speed/prepro/prepro_data.ipynb`)과 동일한 방식으로 처
   - `개방서비스명` 컬럼 없음      → 상수 '일반음식점' 추가
   - `도로명전체주소` → `도로명주소`  → 이름 매핑
 
-실행 (cwd 무관): python prepro_2026.py
-출력: data_2026/restaurant_{2021..2026}.csv + data_2026/database.db (테이블 restaurant_YYYY)
+실행 (cwd 무관, --input·--output-dir 필수):
+  python prepro_2026.py --input <리포 root>/data/식품_일반음식점.csv --output-dir <앱>/data_2026
+출력: <output-dir>/restaurant_{2021..2026}.csv + <output-dir>/database.db (테이블 restaurant_YYYY)
 """
 from __future__ import annotations
 
+import argparse
 import random
 from pathlib import Path
 
 import duckdb
 import pandas as pd
 
-HERE = Path(__file__).resolve().parent  # cert/v2
-RAW = HERE.parents[1] / "data" / "식품_일반음식점.csv"  # 리포 root data/
-OUT = HERE / "data_2026"
 YEARS = range(2021, 2027)
 SAMPLE_RANGE = (10120, 10200)  # v1과 동일: 연도별 최신 N행 랜덤 슬라이스
 RAW_USECOLS = [
@@ -44,9 +43,9 @@ def split_address(address: str) -> tuple[str | None, ...]:
     return parts[0], parts[1], parts[2], " ".join(parts[3:-1]), parts[-1]
 
 
-def load_raw() -> pd.DataFrame:
+def load_raw(raw_path: Path) -> pd.DataFrame:
     """원본 로드 후 v1 입력 스키마로 맞추고 인허가일자 내림차순 정렬."""
-    df = pd.read_csv(RAW, encoding="cp949", usecols=RAW_USECOLS)
+    df = pd.read_csv(raw_path, encoding="cp949", usecols=RAW_USECOLS)
     df = (
         df.rename(columns={"도로명주소": "도로명전체주소"})
         .assign(개방서비스명="일반음식점")[V1_INPUT_COLS]
@@ -80,14 +79,19 @@ def check(frames: dict[int, pd.DataFrame]) -> None:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--input", required=True, type=Path, help="원본 CSV 경로 (식품_일반음식점.csv)")
+    parser.add_argument("--output-dir", required=True, type=Path, help="출력 폴더 (예: chart_speed/data_2026)")
+    args = parser.parse_args()
+
     random.seed(2026)  # v1은 비고정 랜덤 — 재실행 재현성을 위해 고정
-    raw = load_raw()
+    raw = load_raw(args.input)
     frames = {y: prepro_year(raw[raw["인허가일자"].dt.year == y]) for y in YEARS}
 
-    OUT.mkdir(exist_ok=True)
-    conn = duckdb.connect(str(OUT / "database.db"))
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+    conn = duckdb.connect(str(args.output_dir / "database.db"))
     for year, df in frames.items():
-        df.to_csv(OUT / f"restaurant_{year}.csv", index=False)
+        df.to_csv(args.output_dir / f"restaurant_{year}.csv", index=False)
         conn.execute(f"CREATE OR REPLACE TABLE restaurant_{year} AS SELECT * FROM df")
         print(f"restaurant_{year}: {len(df)} rows")
     conn.close()
