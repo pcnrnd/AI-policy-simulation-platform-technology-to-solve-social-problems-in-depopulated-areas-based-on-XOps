@@ -77,7 +77,8 @@ export default function MonitorPage() {
     injectDrift,
     startPipeline,
     navigateToTab,
-    addConsoleLog
+    addConsoleLog,
+    setMonitorCollectStatus
   } = useAppState();
   const ct = useChartTheme();
 
@@ -611,6 +612,14 @@ export default function MonitorPage() {
           ? "empty"
           : "healthy";
 
+  // 헤더의 활성 문구("모델 모니터링 활성")는 이 판정을 모른다 — 같은 collectPhase를 전역에 공유해
+  // 헤더 칩이 이 화면의 배너·툴바 문구와 어긋나지 않게 한다(§QA-2026-09-11 #5).
+  useEffect(() => {
+    setMonitorCollectStatus(
+      collectPhase === "healthy" ? "ok" : collectPhase === "pending" ? "unknown" : "fail"
+    );
+  }, [collectPhase, setMonitorCollectStatus]);
+
   const collectedAt = lastCollected ? fmtTime(lastCollected) : "–";
   const collectStatus =
     collectPhase === "failed"
@@ -843,6 +852,9 @@ export default function MonitorPage() {
           <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8 }}>
             <span className="mock-data-output">{targetModel.name} 모델 유입 분포 기준 · </span>임계치 PSI {">"} 0.2 초과 시 자동 Alert 트리거
           </p>
+          <p className="mock-data-output" style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>
+            표시 값: 인구이동 예측 모델 기준
+          </p>
         </div>
 
         <div className="card" style={{ padding: "var(--space-xl)" }}>
@@ -877,6 +889,9 @@ export default function MonitorPage() {
           </div>
           <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8 }}>
             <span className="mock-data-output">{targetModel.name} 모델 유입 데이터 기준 · </span>IQR 및 Z-score 기반 다차원 이상치 필터링
+          </p>
+          <p className="mock-data-output" style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>
+            표시 값: 인구이동 예측 모델 기준
           </p>
         </div>
       </div>
@@ -1000,6 +1015,9 @@ export default function MonitorPage() {
             lowerIsBetter
           />
         </div>
+        <p className="mock-data-output" style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 8 }}>
+          표시 값: 인구이동 예측 모델 기준(예측 지연)
+        </p>
       </Card>
 
       {/* 실데이터 연계(R4) — 남원 모델 검증/운영 평가·선형 SHAP·드리프트. 위 데모 지표와는 별개 경로. */}

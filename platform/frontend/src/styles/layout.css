@@ -480,6 +480,8 @@ body.drawer-open {
   .header-controls {
     justify-content: space-between;
     gap: var(--space-s);
+    /* 헤더 활성 문구 옆 수집 상태 칩까지 더해져 폭이 3분할되므로 좁은 화면에서 줄바꿈을 허용한다. */
+    flex-wrap: wrap;
   }
   .header-controls .system-status {
     max-width: calc(100% - 48px);
