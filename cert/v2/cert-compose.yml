@@ -2,6 +2,7 @@
 # 두 서비스는 각자 독립 이미지(chart_speed/Dockerfile, chart_type/Dockerfile)를 쓴다.
 services:
   speed:
+    image: cert-chart-speed:2026.0.0
     build: ./chart_speed
     environment:
       CHART_SLEEP_MS: "390"   # 응답속도 데모용 차트당 지연 — Firefox 기준 총 ~2.1초. 조절 가능
@@ -10,6 +11,7 @@ services:
     volumes:
       - ./chart_speed:/app
   types:
+    image: cert-chart-type:2026.0.0
     build: ./chart_type
     ports:
       - "8506:8506"
