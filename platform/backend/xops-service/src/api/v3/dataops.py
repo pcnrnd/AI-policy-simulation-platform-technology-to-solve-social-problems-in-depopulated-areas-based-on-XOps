@@ -26,6 +26,7 @@ def issue_token(source_id: str, _: None = Depends(require_client)) -> TokenRespo
     """소스 접근용 JWT 발급 (HS256, scope data:read data:write)."""
     from src.core.settings import get_settings
 
+    get_catalog().get(source_id)  # 카탈로그에 없으면 SourceNotFoundError(404) — 미존재 소스에 유효 토큰 발급 방지
     return TokenResponse(access_token=issue_jwt(source_id), scope=get_settings().jwt_scope)
 
 

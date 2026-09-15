@@ -69,6 +69,15 @@ def test_delete_and_injection_guard(client: TestClient, auth_headers: dict[str, 
     assert bad.status_code == 400
 
 
+def test_token_issue_validates_catalog(client: TestClient) -> None:
+    ok = client.post("/api/v3/dataops/token/ds_01_resident_registry")
+    assert ok.status_code == 200
+    assert "access_token" in ok.json()
+
+    missing = client.post("/api/v3/dataops/token/nope")
+    assert missing.status_code == 404
+
+
 def test_oauth2_token_usable(client: TestClient) -> None:
     grant = client.post("/api/v3/dataops/oauth2/ds_01_resident_registry").json()
     r = client.get(
