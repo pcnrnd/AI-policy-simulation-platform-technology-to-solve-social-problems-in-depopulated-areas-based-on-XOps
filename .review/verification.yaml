@@ -1,0 +1,17 @@
+schema_version: 1
+checks:
+  - id: backend-tests
+    cwd: platform/backend/xops-service
+    command: ['{python}', -m, pytest, tests/, '--cov=src', '--cov-fail-under=80', -q]
+    requires_modules: [pytest, pytest_cov, fastapi]
+    timeout_seconds: 600
+  - id: frontend-build
+    cwd: platform/frontend
+    command: [npm, run, build]
+    requires_files: [platform/frontend/node_modules/.package-lock.json]
+  - id: model-apply-restore
+    cwd: platform/backend/xops-service
+    command: ['{python}', -c, 'raise SystemExit("Use the isolated PostgreSQL model apply/restore protocol")']
+    configured: false
+    kind: quality
+    reason: 'Existing P-R1 performance gate remains unmet. Run the isolated data/training/apply/restore protocol; unit tests do not satisfy it.'
