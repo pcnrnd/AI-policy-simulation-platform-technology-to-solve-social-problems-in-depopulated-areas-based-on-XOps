@@ -284,7 +284,7 @@ def apply(model_id: str, version: str, decided_by: str) -> dict[str, Any]:
     if previous is not None and previous["version"] != version:
         _conn().execute(
             "UPDATE rd_model_candidates SET status = 'superseded', decided_at = ?, decided_by = ? "
-            "WHERE model_id = ? AND version = ? AND status = 'applied'",
+            "WHERE model_id = ? AND version = ? AND status IN ('applied', 'restored')",
             (_now_iso(), decided_by, model_id, previous["version"]),
         )
 
@@ -295,18 +295,18 @@ def apply(model_id: str, version: str, decided_by: str) -> dict[str, Any]:
 
 
 def restore(model_id: str, version: str, decided_by: str, note: str | None = None) -> dict[str, Any]:
-    """`POST /realdata/models/{model_id}/restore/{version}`(R3-4) — 과거 applied|superseded만 대상."""
+    """R3-4 — 한 번 이상 반영된 버전은 이전 복원 이력이 있어도 다시 복원할 수 있다."""
     candidate = get_candidate(model_id, version)
     if candidate is None:
         raise CandidateNotFound(f"후보를 찾을 수 없습니다: {model_id}/{version}")
-    if candidate["status"] not in ("applied", "superseded"):
+    if candidate["status"] not in ("applied", "superseded", "restored"):
         raise ApplyRejected([f"복원 가능한 상태가 아닙니다(status={candidate['status']})"])
 
     previous = get_active(model_id)
     if previous is not None and previous["version"] != version:
         _conn().execute(
             "UPDATE rd_model_candidates SET status = 'superseded', decided_at = ?, decided_by = ? "
-            "WHERE model_id = ? AND version = ? AND status = 'applied'",
+            "WHERE model_id = ? AND version = ? AND status IN ('applied', 'restored')",
             (_now_iso(), decided_by, model_id, previous["version"]),
         )
 
