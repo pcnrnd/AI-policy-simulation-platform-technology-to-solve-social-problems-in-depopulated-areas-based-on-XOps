@@ -229,6 +229,35 @@ def test_restore_rejects_when_status_is_candidate(monkeypatch: pytest.MonkeyPatc
         candidates.restore(_MODEL_ID, "v1", "tester")
 
 
+@pytest.mark.parametrize("switch_back", ["apply", "restore"])
+def test_previously_restored_version_can_be_replaced_and_restored_again(
+    monkeypatch: pytest.MonkeyPatch, switch_back: str
+) -> None:
+    _patch_stubs(monkeypatch)
+    _insert_dataset("ds-1", _GOOD_QUALITY)
+    _insert_candidate(_MODEL_ID, "v-old", "ds-1", mae=8.0, baseline_mae=10.0)
+    _insert_candidate(_MODEL_ID, "v-new", "ds-1", mae=4.0, baseline_mae=10.0)
+    candidates.apply(_MODEL_ID, "v-old", "tester")
+    candidates.apply(_MODEL_ID, "v-new", "tester")
+    candidates.restore(_MODEL_ID, "v-old", "tester")
+    getattr(candidates, switch_back)(_MODEL_ID, "v-new", "tester")
+
+    assert candidates.get_candidate(_MODEL_ID, "v-old")["status"] == "superseded"
+    active = candidates.restore(_MODEL_ID, "v-old", "tester")
+    assert active["version"] == "v-old"
+    assert candidates.get_candidate(_MODEL_ID, "v-new")["status"] == "superseded"
+
+
+def test_restore_accepts_a_previously_restored_historical_version(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_stubs(monkeypatch)
+    _insert_dataset("ds-1", _GOOD_QUALITY)
+    _insert_candidate(_MODEL_ID, "v-old", "ds-1", mae=8.0, baseline_mae=10.0, status="restored")
+    _insert_candidate(_MODEL_ID, "v-new", "ds-1", mae=4.0, baseline_mae=10.0)
+    candidates.apply(_MODEL_ID, "v-new", "tester")
+
+    assert candidates.restore(_MODEL_ID, "v-old", "tester")["version"] == "v-old"
+
+
 def test_retrain_needed_false_without_active_model(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_stubs(monkeypatch)
     assert candidates.retrain_needed(_MODEL_ID) is False
