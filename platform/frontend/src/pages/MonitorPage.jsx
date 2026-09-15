@@ -626,7 +626,7 @@ export default function MonitorPage() {
       ? {
           icon: "fa-triangle-exclamation",
           color: "var(--accent-red)",
-          text: `수집 검증 실패 — 데모 데이터 표시 중 · 마지막 수집 성공: ${collectedAt}`
+          text: `수집 검증 실패 — 대체 값 표시 중 · 마지막 수집 성공: ${collectedAt}`
         }
       : collectPhase === "pending"
         ? {
@@ -640,7 +640,7 @@ export default function MonitorPage() {
               // 한 줄을 유지한다(길어지면 툴바가 줄바꿈되며 아래 콘텐츠가 밀린다).
               icon: "fa-circle-exclamation",
               color: "var(--accent-orange)",
-              text: `수집 응답에 값 없음 — 데모 데이터 표시 중 · 마지막 응답: ${collectedAt}`
+              text: `수집 응답에 값 없음 — 대체 값 표시 중 · 마지막 응답: ${collectedAt}`
             }
           : {
               icon: "fa-satellite-dish",
@@ -654,17 +654,17 @@ export default function MonitorPage() {
     collectPhase === "failed"
       ? {
           tone: "error",
-          message: `${failedSources.join("·")} 수집에 실패해 데모 데이터를 표시합니다.${monitoringError ? ` ${monitoringError}` : ""}`
+          message: `${failedSources.join("·")} 수집에 실패해 대체 값을 표시합니다.${monitoringError ? ` ${monitoringError}` : ""}`
         }
       : collectPhase === "pending"
         ? {
             tone: "pending",
-            message: "실시간 성능·설명 API와 드리프트 판정을 확인하는 동안 데모 데이터를 표시합니다."
+            message: "실시간 성능·설명 API와 드리프트 판정을 확인하는 동안 대체 값을 표시합니다."
           }
         : collectPhase === "empty"
           ? {
               tone: "warn",
-              message: `${emptySources.join("·")} 응답에 사용할 값이 없어 데모 데이터를 표시합니다. 수집 상태를 확인하세요.`
+              message: `${emptySources.join("·")} 응답에 사용할 값이 없어 대체 값을 표시합니다. 수집 상태를 확인하세요.`
             }
           : null;
 

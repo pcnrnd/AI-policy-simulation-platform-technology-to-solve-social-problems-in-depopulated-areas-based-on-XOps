@@ -85,8 +85,8 @@ export default function Header({ title, onToggleSidebar, sidebarOpen, menuButton
   }
 
   if (!mockDataVisible) {
-    // 데모 기반 상태 문구(정상·드리프트·재학습)는 감추되 빈칸으로 두지 않는다.
-    // 보이는 라벨은 OFF만, 보조기술에는 데모 데이터임을 남긴다.
+    // 상태 문구(정상·드리프트·재학습)는 감추되 빈칸으로 두지 않는다.
+    // 보이는 라벨은 OFF만, 보조기술에는 데이터 표시가 꺼져 있음을 남긴다.
     statusClass = "system-status mock-data-visibility-status";
     statusText = "OFF";
   }
@@ -118,7 +118,7 @@ export default function Header({ title, onToggleSidebar, sidebarOpen, menuButton
           className={statusClass}
           role="status"
           aria-live="polite"
-          aria-label={mockDataVisible ? undefined : "데모 데이터 OFF"}
+          aria-label={mockDataVisible ? undefined : "데이터 표시 OFF"}
         >
           <span className="status-indicator" aria-hidden="true"></span>
           <span>{statusText}</span>
