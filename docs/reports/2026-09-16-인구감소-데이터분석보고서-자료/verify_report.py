@@ -91,6 +91,26 @@ res['figures'] = {'manifest_count': len(man['figures']), 'md_image_refs': len(md
                   'all_hashes_match': all(c['png_hash_matches_manifest'] for c in fig_checks),
                   'all_captions_in_docx': all(c['caption_in_docx'] for c in fig_checks)}
 
+# ---- ordered-list numbering (independent review 2026-09-16 found Word continuing numbers across sections) ----
+def body_items(text, hdr, stop):
+    i = text.rindex(hdr)                       # rindex: skip the table-of-contents entry
+    j = text.index(stop, i) if stop in text[i:] else len(text)
+    return re.findall(r'(?m)^\s*(\d+)\.\s+\S', text[i:j])
+
+
+numbering = []
+for hdr, stop_pdf, stop_md in (('1.1 한 눈에', '1.2 분석 범위', '### 1.2'),
+                               ('6.3 남은 한계', '7. 통합 활용', '## 7.'),
+                               ('7.3 개선안', '8. 부록', '## 8.')):
+    try:
+        got, want = body_items(pdf_text, hdr, stop_pdf), body_items(md, hdr, stop_md)
+    except ValueError:
+        numbering.append({'section': hdr, 'error': 'heading not found'})
+        continue
+    numbering.append({'section': hdr, 'md': want, 'pdf': got, 'match': got == want})
+res['ordered_lists'] = {'per_section': numbering,
+                        'all_restart_correctly': all(n.get('match') for n in numbering)}
+
 # ---- render every page ----
 page_notes = []
 for n, page in enumerate(pdf, 1):

@@ -274,8 +274,13 @@ while i < len(lines):
         add_runs(doc.add_paragraph(style='List Bullet'), re.sub(r'^[-*]\s+', '', s))
         i += 1
         continue
-    if re.match(r'^\d+\.\s+', s):
-        add_runs(doc.add_paragraph(style='List Number'), re.sub(r'^\d+\.\s+', '', s))
+    m = re.match(r'^(\d+)\.\s+(.*)$', s)
+    if m:
+        # Word의 List Number 스타일은 문서 전체에서 번호를 이어 매긴다 — 절마다 1부터 다시
+        # 시작해야 MD와 대응이 유지되므로 번호를 본문 텍스트로 직접 쓴다(독립 검토 지적 반영).
+        par = doc.add_paragraph(style='List Paragraph')
+        par.add_run(m.group(1) + '. ')
+        add_runs(par, m.group(2))
         i += 1
         continue
     if s.startswith('**그림'):

@@ -1,6 +1,6 @@
 {
-  "built_at_kst": "2026-09-16T17:25:21+09:00",
-  "commit": "2127b1971c2511261ce23dc981b8b2d640a059dd",
+  "built_at_kst": "2026-09-16T17:48:53+09:00",
+  "commit": "c39803fad8a8966273f8e00e30ba6ed3a1b842a8",
   "rule": "If the editable source or the underlying data changes, regenerate PNG -> Word -> PDF together and refresh these hashes.",
   "figures": [
     {
