@@ -73,7 +73,9 @@ def train(model_id: str, dataset_id: str, version: str) -> TrainOutcome:
 
     x_train = [[r[name] for name in names] for r in train_rows]
     y_train = [r["y"] for r in train_rows]
-    model = RidgeRegressor.fit(x_train, y_train, ridge_lambda=1.0, feature_names=names)
+    # 승급 판정이 원척도 MAE이므로 학습도 MAE에 맞춘다(v0.3) — 최소제곱은 조건부 평균을 겨냥해
+    # 규모가 큰 소수 행정동이 공유 기울기를 지배했다. 산출물 형식은 이전과 같다.
+    model = RidgeRegressor.fit_absolute_error(x_train, y_train, ridge_lambda=1.0, feature_names=names)
 
     x_eval = [[r[name] for name in names] for r in eval_rows]
     y_eval = [r["y"] for r in eval_rows]

@@ -244,3 +244,43 @@ def test_artifact_path_is_scoped_by_model_and_version() -> None:
     path = artifact_path("population-forecast", "v9.9")
     assert path.name == "v9.9.json"
     assert path.parent.name == "population-forecast"
+
+
+def test_fit_with_uniform_sample_weights_matches_unweighted() -> None:
+    rows = [[1.0, 2.0], [2.0, 1.0], [3.0, 4.0], [4.0, 3.0]]
+    targets = [3.0, 4.0, 10.0, 11.0]
+    plain = RidgeRegressor.fit(rows, targets, ridge_lambda=1.0, feature_names=["x1", "x2"])
+    weighted = RidgeRegressor.fit(
+        rows, targets, ridge_lambda=1.0, feature_names=["x1", "x2"], sample_weights=[2.0] * 4
+    )
+
+    assert weighted.intercept == pytest.approx(plain.intercept)
+    for a, b in zip(weighted.coefficients, plain.coefficients):
+        assert a == pytest.approx(b)
+
+
+def test_fit_absolute_error_is_more_robust_to_one_outlier() -> None:
+    rows = [[float(i)] for i in range(12)]
+    targets = [2.0 * i for i in range(12)]
+    targets[-1] = 500.0  # 단일 이상치
+
+    squared = RidgeRegressor.fit(rows, targets, ridge_lambda=0.1, feature_names=["x"])
+    absolute = RidgeRegressor.fit_absolute_error(rows, targets, ridge_lambda=0.1, feature_names=["x"])
+
+    clean_rows, clean_targets = rows[:-1], targets[:-1]
+    squared_error = sum(
+        abs(p - t) for p, t in zip(squared.predict(clean_rows), clean_targets)
+    ) / len(clean_targets)
+    absolute_error = sum(
+        abs(p - t) for p, t in zip(absolute.predict(clean_rows), clean_targets)
+    ) / len(clean_targets)
+
+    assert absolute_error < squared_error
+
+
+def test_fit_rejects_mismatched_sample_weights() -> None:
+    rows = [[1.0], [2.0], [3.0]]
+    with pytest.raises(ValueError):
+        RidgeRegressor.fit(
+            rows, [1.0, 2.0, 3.0], ridge_lambda=0.1, feature_names=["x"], sample_weights=[1.0, 1.0]
+        )

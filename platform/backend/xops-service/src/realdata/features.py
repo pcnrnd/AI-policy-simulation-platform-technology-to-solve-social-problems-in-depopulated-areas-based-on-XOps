@@ -6,6 +6,12 @@
 두 모델 모두 각자 타깃의 랙·전년동월·계절·동 one-hot만 쓴다(R2-1, v0.2). 소비 모델의
 `visitors_lag1` 교차 피처는 KT 방문객 관측 상한(202310)이 소비 관측 상한(202312)보다
 앞서 forecast_month의 표본이 전부 결측되는 문제(R2-1a 위반)로 v0.2에서 제외했다.
+
+v0.3 — 전년동월 결측 시 `y_yoy`를 리터럴 0이 아니라 같은 행의 `y_lag1`로 채운다. 결측 자체는
+`has_yoy=0`으로 계속 구분한다. 0 센티널은 원척도(소비 ~1e9) 열에 0 스파이크를 넣어, 소비
+학습행의 66.7%(BC카드 원천에 2020~2021이 없어 생기는 구간)에서 공유 기울기를 왜곡했다.
+대체값은 같은 표본의 t-1 값이라 미래 정보가 들어가지 않고, 게이트의 기준선이 같은 상황에서
+쓰는 대체값과 같다. 원천 공백 자체를 보간하거나 행을 만들어 채우지는 않는다(R1-5 유지).
 """
 
 from __future__ import annotations
@@ -87,7 +93,8 @@ def build_feature_rows(dataset: Any, *, for_month: int | None = None) -> list[di
             "y_lag1": lag1["y"],
             "y_lag2": lag2["y"],
             "y_lag3": lag3["y"],
-            "y_yoy": yoy_row["y"] if yoy_row is not None else 0,
+            # 전년동월이 없으면 같은 행의 y_lag1로 대체한다(v0.3) — 아래 모듈 docstring 참고.
+            "y_yoy": yoy_row["y"] if yoy_row is not None else lag1["y"],
             "has_yoy": 1 if yoy_row is not None else 0,
             "month_sin": month_sin,
             "month_cos": month_cos,
