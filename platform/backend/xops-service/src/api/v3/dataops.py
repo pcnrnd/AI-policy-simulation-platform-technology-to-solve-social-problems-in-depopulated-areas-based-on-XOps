@@ -33,6 +33,9 @@ def issue_token(source_id: str, _: None = Depends(require_client)) -> TokenRespo
 @router.post("/oauth2/{source_id}")
 def issue_oauth2_token(source_id: str, _: None = Depends(require_client)) -> dict[str, Any]:
     """OAuth2 Authorization Code Grant 흐름 발급."""
+    # 위 /token 경로와 같은 검증 — 두 경로가 같은 access_token을 내주므로 카탈로그 존재 검사도
+    # 같아야 한다. 이 가드가 없으면 미존재 source_id로도 유효 토큰이 발급됐다(P-D2).
+    get_catalog().get(source_id)  # 카탈로그에 없으면 SourceNotFoundError(404)
     return issue_oauth2(source_id)
 
 
