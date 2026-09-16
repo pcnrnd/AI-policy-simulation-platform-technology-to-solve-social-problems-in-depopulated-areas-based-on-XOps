@@ -1,0 +1,113 @@
+{
+  "built_at_kst": "2026-09-16T17:25:21+09:00",
+  "commit": "2127b1971c2511261ce23dc981b8b2d640a059dd",
+  "rule": "If the editable source or the underlying data changes, regenerate PNG -> Word -> PDF together and refresh these hashes.",
+  "figures": [
+    {
+      "id": "그림-01",
+      "title": "원천에서 모델까지의 데이터 계보와 도달 범위",
+      "kind": "diagram",
+      "source_design": "그림-01.mmd",
+      "editable_source": "그림-01.pptx",
+      "editable_slide": 1,
+      "evidence": "stage6-full-data/inventory.json (패밀리·표 수), pg_reader.ALLOWED_TABLES",
+      "png": "그림-01.png",
+      "caption": "그림 1. 원천에서 모델까지의 데이터 계보와 도달 범위",
+      "png_sha256": "2ae0365a151c9df1e1fab907c221c8415bbfacf8c7bbf6bdcdbe142c1a640b79",
+      "editable_source_sha256": "1e162ee2e779ad17273e376f9a9ab239c1f8b3b683ce344ce6b8d37c6887eb30",
+      "design_sha256": "027a276aac3a97633f9c6f64f9b571e772cec0f33ea0f32ef50ef366379d9279",
+      "referenced_in_md": true
+    },
+    {
+      "id": "차트-01",
+      "title": "데이터셋별 관측 기간과 관측 단위",
+      "kind": "chart",
+      "script": "make_charts.py",
+      "data": "차트-01.csv",
+      "png": "차트-01.png",
+      "evidence": "stage6-full-data/quality.json",
+      "caption": "그림 2. 데이터셋별 관측 기간과 관측 단위 (빗금 = 원천 공백 2020–2021)",
+      "png_sha256": "9e4ef62321b78670829884e155f8a9bf4ccc689471de9ad774f693e0fda7f283",
+      "data_sha256": "1247583c1ad308b960409c6e965f0954d6224a38bbd62225b6e3b4f1d3fba64d",
+      "referenced_in_md": true
+    },
+    {
+      "id": "차트-05",
+      "title": "강원 GWTO 지표 테이블별 유효 구간",
+      "kind": "chart",
+      "script": "make_charts.py",
+      "data": "차트-05.csv",
+      "png": "차트-05.png",
+      "evidence": "stage6-full-data/quality.json (per_table.period)",
+      "caption": "그림 3. 강원 GWTO 지표 테이블별 유효 구간 — 시작월이 제각각이라 분모가 다르다",
+      "png_sha256": "6d6dae57346af928711c0b45d41577b91917914447c8f2e9bbcddfc21b2d66e1",
+      "data_sha256": "b0650dd68ad54bb3461f24fec92729389fae1152d20365a64c2f6e9b93a6b095",
+      "referenced_in_md": true
+    },
+    {
+      "id": "차트-04",
+      "title": "남원 23개 행정동의 점유율 편중",
+      "kind": "chart",
+      "script": "make_charts.py",
+      "data": "차트-04.csv",
+      "png": "차트-04.png",
+      "evidence": "prepared CSV 직접 집계",
+      "caption": "그림 4. 남원 23개 행정동의 점유율 편중 — 각 지표를 자기 합계로 정규화한 값 (단위가 달라 절대량 비교 아님)",
+      "png_sha256": "a365fcd2c505318f0b733a5efb4e130f8770a381a8e6a79471477dc9f9c12eaa",
+      "data_sha256": "cb5dfc2591b939413089784a2f664fdcb5d568517e871fcaaebe65cdeb405c84",
+      "referenced_in_md": true
+    },
+    {
+      "id": "차트-02",
+      "title": "남원시 월별 외지인 방문객 합계",
+      "kind": "chart",
+      "script": "make_charts.py",
+      "data": "차트-02.csv",
+      "png": "차트-02.png",
+      "evidence": "namwon_kt_visitors/01_monthly_dong_visitors.csv",
+      "caption": "그림 5. 남원시 월별 외지인 방문객 합계 (23개 행정동 합, 2019-01~2023-10)",
+      "png_sha256": "478d523049ac92d98069bb2a671abd904eacbea94dcf9b208fb85d05c2de83dd",
+      "data_sha256": "d829df9b13beb6dcd19cfd11537885ad63eb7d4fe15b8f26068a6a5dacf22ae9",
+      "referenced_in_md": true
+    },
+    {
+      "id": "차트-03",
+      "title": "남원시 월별 BC카드 추정 매출 합계",
+      "kind": "chart",
+      "script": "make_charts.py",
+      "data": "차트-03.csv",
+      "png": "차트-03.png",
+      "evidence": "namwon_bccard_consumption/02_dong_industry_sales.csv",
+      "caption": "그림 6. 남원시 월별 BC카드 추정 매출 합계 (2019-01~2023-12, 2020–2021 원천 부재)",
+      "png_sha256": "ea23e63fff5e0861dfff2734f7dabe4400521c83a5f2c0e4a2e1cc4e8a867cc9",
+      "data_sha256": "93aa791b0c3803119683077052d0a7042307e6ee97f3ff208ac3ef0fec1186f9",
+      "referenced_in_md": true
+    },
+    {
+      "id": "차트-06",
+      "title": "서울 노원 축제 일별 방문객",
+      "kind": "chart",
+      "script": "make_charts.py",
+      "data": "차트-06.csv",
+      "png": "차트-06.png",
+      "evidence": "nowon_kt_festival/02_daily_visitors.csv",
+      "caption": "그림 7. 서울 노원 축제 일별 방문객 (단일 지점)",
+      "png_sha256": "92583a7b2c21dfe35ab431c37e6e774953d68f565be31fe24248cd8639201be5",
+      "data_sha256": "079544338fedae9e3df4ad64c8b3f5e577261f06404f523c6be06b43538c1401",
+      "referenced_in_md": true
+    },
+    {
+      "id": "차트-07",
+      "title": "구간별 MAE 비",
+      "kind": "chart",
+      "script": "make_charts.py",
+      "data": "차트-07.csv",
+      "png": "차트-07.png",
+      "evidence": "stage4-model/grid.json — 확정된 기존 증거, 재학습 없음",
+      "caption": "그림 8. 구간별 MAE 비 — 확정된 기존 증거 재사용 (재학습 없음)",
+      "png_sha256": "40b7b028ba1584897848f6cf6ccae21d770e513161f9211d944848586428e707",
+      "data_sha256": "fa6878edca09d48c7c790bfa3c5aeb71649ed0d0d0a64d7f6aee036bf8cce9b8",
+      "referenced_in_md": true
+    }
+  ]
+}
