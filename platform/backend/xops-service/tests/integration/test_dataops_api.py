@@ -85,3 +85,17 @@ def test_oauth2_token_usable(client: TestClient) -> None:
         headers={"Authorization": f"Bearer {grant['access_token']}"},
     )
     assert r.status_code == 200
+
+
+def test_oauth2_issue_validates_catalog_like_token(client: TestClient) -> None:
+    """P-D2: 두 발급 경로가 같은 access_token을 내주므로 존재 검증도 같아야 한다."""
+    missing_oauth2 = client.post("/api/v3/dataops/oauth2/nope")
+    missing_token = client.post("/api/v3/dataops/token/nope")
+
+    assert missing_oauth2.status_code == 404
+    assert missing_oauth2.status_code == missing_token.status_code
+    assert "access_token" not in missing_oauth2.json()
+
+    ok = client.post("/api/v3/dataops/oauth2/ds_01_resident_registry")
+    assert ok.status_code == 200
+    assert "access_token" in ok.json()
