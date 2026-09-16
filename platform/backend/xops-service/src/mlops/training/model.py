@@ -14,16 +14,29 @@ from typing import Any, Sequence
 _ZERO_STD_REPLACEMENT = 1.0
 # 특이행렬 판정 임계 — 피벗 절대값이 이보다 작으면 해가 유일하지 않다고 본다.
 _SINGULAR_EPS = 1e-12
+# IRLS 기본 반복 수. 5회에서 지표가 안정되고 그 이상은 가중치가 소수 표본에 쏠려 다시 나빠졌다.
+_IRLS_ITERATIONS = 5
+# 잔차가 0에 가까운 표본의 가중치 폭주를 막는 하한 — 잔차 중앙값에 대한 비율로 둔다.
+_IRLS_RESIDUAL_FLOOR = 1e-3
 
 
-def _column_stats(rows: Sequence[Sequence[float]]) -> tuple[list[float], list[float]]:
-    """열별 평균과 표준편차(모표준편차). 상수 열의 표준편차는 1로 대체."""
-    n_rows = len(rows)
+def _column_stats(
+    rows: Sequence[Sequence[float]], weights: Sequence[float] | None = None
+) -> tuple[list[float], list[float]]:
+    """열별 평균과 표준편차(모표준편차). 상수 열의 표준편차는 1로 대체.
+
+    `weights`가 주어지면 가중 평균·가중 표준편차를 쓴다. 가중 적합에서 절편은 가중 타깃 평균인데
+    피처를 비가중 평균으로 중심화하면 두 중심이 어긋나 해가 편향된다 — 같은 척도로 맞춘다.
+    `weights=None`이면 기존(비가중) 결과와 완전히 동일하다.
+    """
     n_cols = len(rows[0])
-    means = [sum(row[j] for row in rows) / n_rows for j in range(n_cols)]
+    if weights is None:
+        weights = [1.0] * len(rows)
+    total = sum(weights)
+    means = [sum(w * row[j] for w, row in zip(weights, rows)) / total for j in range(n_cols)]
     stds: list[float] = []
     for j in range(n_cols):
-        variance = sum((row[j] - means[j]) ** 2 for row in rows) / n_rows
+        variance = sum(w * (row[j] - means[j]) ** 2 for w, row in zip(weights, rows)) / total
         deviation = variance**0.5
         stds.append(deviation if deviation > _SINGULAR_EPS else _ZERO_STD_REPLACEMENT)
     return means, stds
@@ -79,33 +92,86 @@ class RidgeRegressor:
         *,
         ridge_lambda: float,
         feature_names: Sequence[str],
+        sample_weights: Sequence[float] | None = None,
     ) -> RidgeRegressor:
-        """(XᵀX + λI)w = Xᵗy 를 풀어 학습. 피처는 표준화, 절편은 타깃 평균."""
+        """(XᵀWX + λI)w = XᵗWy 를 풀어 학습. 피처는 표준화, 절편은 (가중) 타깃 평균.
+
+        `sample_weights`를 생략하면 기존 최소제곱 결과와 완전히 동일하다. 가중치는 합이 표본 수가
+        되도록 정규화해 λ의 의미가 반복 재가중(IRLS) 사이에 바뀌지 않게 한다.
+        """
         if len(rows) != len(targets) or not rows:
             raise ValueError("rows와 targets는 길이가 같고 비어 있지 않아야 합니다.")
-        means, stds = _column_stats(rows)
+        n_rows = len(rows)
+        if sample_weights is None:
+            weights_n = [1.0] * n_rows
+        else:
+            if len(sample_weights) != n_rows:
+                raise ValueError("sample_weights는 rows와 길이가 같아야 합니다.")
+            total = sum(sample_weights)
+            if total <= 0:
+                raise ValueError("sample_weights의 합은 0보다 커야 합니다.")
+            weights_n = [w * n_rows / total for w in sample_weights]
+
+        means, stds = _column_stats(rows, weights_n)
         scaled = [_scale(row, means, stds) for row in rows]
-        target_mean = sum(targets) / len(targets)
+        weight_total = sum(weights_n)
+        target_mean = sum(w * value for w, value in zip(weights_n, targets)) / weight_total
         centered = [value - target_mean for value in targets]
 
         n_cols = len(scaled[0])
         gram = [
             [
-                sum(r[i] * r[j] for r in scaled) + (ridge_lambda if i == j else 0.0)
+                sum(w * r[i] * r[j] for w, r in zip(weights_n, scaled))
+                + (ridge_lambda if i == j else 0.0)
                 for j in range(n_cols)
             ]
             for i in range(n_cols)
         ]
-        moment = [sum(r[i] * y for r, y in zip(scaled, centered)) for i in range(n_cols)]
-        weights = solve_linear_system(gram, moment)
+        moment = [
+            sum(w * r[i] * y for w, r, y in zip(weights_n, scaled, centered)) for i in range(n_cols)
+        ]
+        coefficients = solve_linear_system(gram, moment)
         return cls(
-            coefficients=weights,
+            coefficients=coefficients,
             intercept=target_mean,
             means=means,
             stds=stds,
             feature_names=list(feature_names),
             ridge_lambda=ridge_lambda,
         )
+
+    @classmethod
+    def fit_absolute_error(
+        cls,
+        rows: Sequence[Sequence[float]],
+        targets: Sequence[float],
+        *,
+        ridge_lambda: float,
+        feature_names: Sequence[str],
+        iterations: int = _IRLS_ITERATIONS,
+    ) -> RidgeRegressor:
+        """평균절대오차에 맞춘 적합 — 반복 재가중 최소제곱(IRLS)으로 LAD를 근사한다.
+
+        승급 판정 지표가 원척도 MAE(조건부 중앙값)인데 최소제곱은 조건부 평균을 겨냥해 목적이
+        어긋난다. 잔차 역수 가중을 반복하면 중앙값 쪽으로 이동해 소수의 대규모 표본이 기울기를
+        지배하는 것을 줄인다. scipy/sklearn의 선형계획 분위수회귀와 같은 해는 아니며(런타임
+        의존성을 늘리지 않기 위한 순수 파이썬 근사), 산출물 형식은 `fit`과 동일하다.
+        """
+        model = cls.fit(rows, targets, ridge_lambda=ridge_lambda, feature_names=feature_names)
+        for _ in range(max(iterations, 0)):
+            residuals = [abs(p - t) for p, t in zip(model.predict(rows), targets)]
+            ordered = sorted(residuals)
+            median = ordered[len(ordered) // 2] or 1.0
+            floor = _IRLS_RESIDUAL_FLOOR * median
+            weights = [1.0 / max(r, floor) for r in residuals]
+            model = cls.fit(
+                rows,
+                targets,
+                ridge_lambda=ridge_lambda,
+                feature_names=feature_names,
+                sample_weights=weights,
+            )
+        return model
 
     def predict_one(self, row: Sequence[float]) -> float:
         """단일 표본 예측."""

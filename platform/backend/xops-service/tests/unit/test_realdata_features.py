@@ -92,7 +92,22 @@ def test_yoy_missing_sets_has_yoy_zero_not_excluded() -> None:
     row_204 = next(r for r in feature_rows if r["base_ym"] == 202204)
 
     assert row_204["has_yoy"] == 0
-    assert row_204["y_yoy"] == 0
+    # v0.3: 0 센티널 대신 같은 행의 y_lag1로 채운다. 결측 사실은 has_yoy가 계속 구분한다.
+    assert row_204["y_yoy"] == row_204["y_lag1"]
+    assert row_204["y_yoy"] != 0
+
+
+def test_yoy_present_is_not_replaced_by_lag1() -> None:
+    months = [202201, 202202, 202203, 202204, 202301, 202302, 202303, 202304]
+    rows = _visitor_rows(_DONG_A, months)
+    dataset = _mk_dataset("nonlocal_visitors", rows)
+
+    feature_rows = features.build_feature_rows(dataset)
+    row_304 = next(r for r in feature_rows if r["base_ym"] == 202304)
+    expected_yoy = next(r["y"] for r in rows if r["base_ym"] == 202204)
+
+    assert row_304["has_yoy"] == 1
+    assert row_304["y_yoy"] == expected_yoy
 
 
 def test_dong_one_hot_covers_all_23_canonical_codes() -> None:
