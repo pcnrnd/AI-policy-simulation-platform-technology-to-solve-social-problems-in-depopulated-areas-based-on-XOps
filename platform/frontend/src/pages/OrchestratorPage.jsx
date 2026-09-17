@@ -72,6 +72,34 @@ function nodeStatus(index, currentStep, terminalState = null) {
   return { className: "running", label: "진행 중", icon: "fa-spinner fa-spin" };
 }
 
+// PIPELINE_NODES(6칸) ↔ 백엔드 상태머신 stage(5단계) 대응. 마지막 칸은 승급 확정 여부다.
+const NODE_STAGE = ["queued", "preparing", "training", "evaluating", "deploying", null];
+
+/**
+ * 저장된 실행 레코드의 단계 상태를 노드 상태로. 애니메이션(setTimeout) 대신 실제 실행 결과를 그린다.
+ * stage 가 기록되지 않았으면 그 단계까지 못 갔다는 뜻이라 실패/대기로 남긴다.
+ */
+function storedNodeStatus(index, run) {
+  const stageName = NODE_STAGE[index];
+  if (stageName === null) {
+    if (run.state === "succeeded") return { className: "completed", label: "승급", icon: "fa-check" };
+    if (run.state === "rolled_back") return { className: "failed", label: "롤백", icon: "fa-rotate-left" };
+    return { className: "idle", label: "대기", icon: "fa-clock" };
+  }
+  const stage = (run.stages ?? []).find((s) => s.stage === stageName);
+  if (!stage) {
+    const reached = (run.stages ?? []).length;
+    if (index === reached) {
+      return run.state === "debounced"
+        ? { className: "failed", label: "실행 조정", icon: "fa-pause" }
+        : { className: "failed", label: run.state === "rejected" ? "승급 반려" : "미실행", icon: "fa-ban" };
+    }
+    return { className: "idle", label: "대기", icon: "fa-clock" };
+  }
+  if (stage.status === "skipped") return { className: "completed", label: "건너뜀", icon: "fa-forward" };
+  return { className: "completed", label: "완료", icon: "fa-check" };
+}
+
 function connectorStatus(index, currentStep, terminalState = null) {
   const terminalIndex = { failed: 0, debounced: 0, rejected: 3, rolled_back: 4 }[terminalState];
   if (terminalIndex !== undefined) return index < terminalIndex ? "success" : "";
@@ -530,7 +558,11 @@ export default function OrchestratorPage() {
             aria-label="재학습 파이프라인 단계별 상태"
           >
             {PIPELINE_NODES.map((node, idx) => {
-              const status = nodeStatus(idx, visibleStep, terminalState);
+              // 실행이 끝났으면 저장된 단계 상태로 그린다. 진행 중에는 애니메이션이 진척을 보여준다.
+              const status =
+                !pipelineBusy && activeRun
+                  ? storedNodeStatus(idx, activeRun)
+                  : nodeStatus(idx, visibleStep, terminalState);
               return (
                 <Fragment key={node.id}>
                   <div
@@ -762,15 +794,6 @@ export default function OrchestratorPage() {
         icon="fa-terminal"
         className="page-section orchestrator-live"
       >
-        {activeRun?.stages?.length ? (
-          <div className="run-stage-strip" aria-label="저장된 단계 상태">
-            {activeRun.stages.map((stage) => (
-              <span key={stage.stage} className={`run-stage-chip is-${stage.status}`}>
-                {stage.stage} · {stage.status}
-              </span>
-            ))}
-          </div>
-        ) : null}
         {runLogs?.logs?.length ? (
           <ConsoleLog
             logs={runLogs.logs.map((entry) => ({

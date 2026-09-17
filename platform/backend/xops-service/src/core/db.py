@@ -26,9 +26,40 @@ def _conn() -> sqlite3.Connection:
     return conn
 
 
+# 최초 1회 적재하는 기본 파이프라인 카탈로그 — 모델 레지스트리 3종과 1:1.
+# 사용자가 지운 뒤 다시 살아나면 안 되므로 pipelines 테이블이 **없던** 최초 생성 시에만 넣는다.
+# 후보 버전은 저장하지 않는다(현행 버전에서 매번 파생 — registry.pipelines 참조).
+_SEED_PIPELINES: list[dict[str, Any]] = [
+    {
+        "id": "PL-POP-RETRAIN-01",
+        "name": "인구이동 예측 재학습",
+        "model_id": "population-forecast",
+        "trigger_policy": "드리프트(PSI > 0.2)·성능 저하(Acc < 0.85) 자동 · 수동",
+        "experiment": "EXP-POP-DECLINE-031",
+    },
+    {
+        "id": "PL-VITAL-RETRAIN-02",
+        "name": "생활인구 추정 재학습",
+        "model_id": "vital-population",
+        "trigger_policy": "주간 배치 (매주 월 02:00)",
+        "experiment": "EXP-VITAL-POP-012",
+    },
+    {
+        "id": "PL-SETTLE-RETRAIN-03",
+        "name": "정주여건 수요예측 재학습",
+        "model_id": "settlement-demand",
+        "trigger_policy": "수동",
+        "experiment": "EXP-SETTLE-DMD-007",
+    },
+]
+
+
 def init_db() -> None:
-    """테이블 생성 (idempotent)."""
+    """테이블 생성 (idempotent) + 파이프라인 카탈로그 최초 1회 시드."""
     conn = _conn()
+    fresh_pipelines = (
+        conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='pipelines'").fetchone() is None
+    )
     conn.executescript(
         """
         CREATE TABLE IF NOT EXISTS user_sources (id TEXT PRIMARY KEY, schema_json TEXT NOT NULL);
@@ -48,6 +79,9 @@ def init_db() -> None:
         """
     )
     conn.commit()
+    if fresh_pipelines:
+        for pipeline in _SEED_PIPELINES:
+            add_pipeline(pipeline)
     apply_rd_migrations(conn)
 
 
