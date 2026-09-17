@@ -200,7 +200,6 @@ export default function MonitorPage() {
   // 표시 버전은 Model Store의 현재 운영 버전을 따른다(승급 후 레지스트리 상수와 어긋나지 않게).
   const servingVersionOf = (modelId, fallback) =>
     modelStore?.find((m) => m.modelId === modelId && m.status === "운영")?.version ?? fallback;
-  const modelLabel = `${targetModel.name} ${servingVersionOf(targetModel.id, targetModel.version)}`;
 
   const AXIS_OPTS = {
     responsive: true,
@@ -375,33 +374,7 @@ export default function MonitorPage() {
 
   // 차트 대체 텍스트(§9 A11Y-07)의 수치는 상단 KPI·게이지와 같은 소수 3자리로 표기한다.
   const fmt3 = (value) => Number(value).toFixed(3);
-  // 라벨·참조·최근이 같은 지점에서 모두 유효한 수치일 때만 비교 대상으로 삼는다. 참조와 최근을
-  // 따로 거르면 라벨과 값의 짝이 어긋나고, Number(null)로 강제 변환하면 값이 없는 구간이
-  // 0.000%짜리 실측치로 둔갑한다(비중 0은 실측치이므로 그대로 남긴다).
-  const driftPoints = driftData.labels
-    .map((label, index) => ({
-      label,
-      reference: driftData.datasets[0].data[index],
-      recent: driftData.datasets[1].data[index]
-    }))
-    .filter((point) => Number.isFinite(point.reference) && Number.isFinite(point.recent));
-  const largestDriftPoint = driftPoints.reduce(
-    (best, point) =>
-      Math.abs(point.recent - point.reference) > Math.abs(best.recent - best.reference) ? point : best,
-    driftPoints[0]
-  );
-  // 유효한 구간이 하나도 없으면 아래 요약문 자체를 쓰지 않으므로 이 서술어는 읽히지 않는다.
-  const largestDriftVerb =
-    !largestDriftPoint || largestDriftPoint.recent === largestDriftPoint.reference
-      ? "변화가 없어"
-      : largestDriftPoint.recent > largestDriftPoint.reference
-        ? "증가해"
-        : "감소해";
-  // 분포 값은 구간별 비중(%)이므로 단위를 함께 적고, 두 비중의 차이는 %p로 표기한다.
-  // 백엔드가 빈 분포(buckets: [])를 돌려주면 요약할 값이 없다 — undefined·NaN을 문장에 노출하지 않는다.
-  const driftSummary = largestDriftPoint
-    ? `참조 분포와 최근 유입의 차이가 가장 큰 구간은 ${largestDriftPoint.label}이며, 참조 ${fmt3(largestDriftPoint.reference)}%에서 최근 ${fmt3(largestDriftPoint.recent)}%로 ${largestDriftVerb} 차이는 ${fmt3(Math.abs(largestDriftPoint.recent - largestDriftPoint.reference))}%p입니다.`
-    : "표시할 분포 데이터가 없어 구간별 변화를 요약할 수 없습니다.";
+  // 분포 변화 요약문(driftSummary)과 그 파생 계산은 UI 피드백 #7로 화면에서 제거했다.
   const latestMetrics = metricsData.datasets
     .map((dataset) => {
       const first = dataset.data[0];
@@ -748,13 +721,8 @@ export default function MonitorPage() {
               : `드리프트가 감지되지 않은 실행이므로 상단 [${retryLabel}] 버튼은 수동 실행으로 기록됩니다.`}
           </p>
         )}
-        {!candidateAvailable && (
-          <p className="async-feedback is-pending" role="status" aria-live="polite">
-            {driftPipeline.name}은 현재 운영 버전({driftServingVersion})이 등록된 후보({driftPipeline.candidateVersion})와
-            같아 재학습을 실행할 수 없습니다. 다음 후보 버전은 백엔드 모델 레지스트리에 등록되어야 하며 이 화면에서는
-            등록할 수 없습니다. 상단 [오케스트레이터에서 후보 확인] 버튼으로 파이프라인·Model Store 상태를 확인할 수 있습니다.
-          </p>
-        )}
+        {/* 후보 부재 안내문은 화면에서 제거했다(UI 피드백 #1). 같은 내용은 상단 실행 버튼의 title에
+            남아 있고, 이 슬롯의 종료 안내·liveStatus가 role=status/alert 알림 자리를 계속 맡는다. */}
         {liveStatus && (
           <div
             className={`async-feedback is-${liveStatus.tone}`}
@@ -817,9 +785,6 @@ export default function MonitorPage() {
             </span>
             <span className="trend-up">F1: {f1Val}</span>
           </div>
-          <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8 }}>
-            <span className="mock-data-output">{modelLabel} 기준 · </span>분산 지표 통합 관리로 사일로(Silo) 제거 — 6대 평가지표 실시간 자동 집계
-          </p>
         </div>
 
         <div
@@ -849,12 +814,6 @@ export default function MonitorPage() {
               {driftLabel}
             </span>
           </div>
-          <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8 }}>
-            <span className="mock-data-output">{targetModel.name} 모델 유입 분포 기준 · </span>임계치 PSI {">"} 0.2 초과 시 자동 Alert 트리거
-          </p>
-          <p className="mock-data-output" style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>
-            표시 값: 인구이동 예측 모델 기준
-          </p>
         </div>
 
         <div className="card" style={{ padding: "var(--space-xl)" }}>
@@ -887,12 +846,6 @@ export default function MonitorPage() {
               {driftInjected ? "경고" : "정상"}
             </span>
           </div>
-          <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8 }}>
-            <span className="mock-data-output">{targetModel.name} 모델 유입 데이터 기준 · </span>IQR 및 Z-score 기반 다차원 이상치 필터링
-          </p>
-          <p className="mock-data-output" style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>
-            표시 값: 인구이동 예측 모델 기준
-          </p>
         </div>
       </div>
 
@@ -906,7 +859,6 @@ export default function MonitorPage() {
           <div style={{ position: "relative", height: 320, width: "100%" }}>
             <Bar data={driftData} options={AXIS_OPTS} />
           </div>
-          <p className="chart-summary">{driftSummary}</p>
         </Card>
 
         <Card title="이상값 검출 로그" icon="fa-filter">
@@ -954,31 +906,44 @@ export default function MonitorPage() {
       </div>
 
       <div className="grid-cols-2">
+        {/* 차트 요약문은 카드 제목의 InfoTip으로 옮겼다(UI 피드백 #9·#10). 값은 현재 로드된
+            데이터(실데이터 또는 데모 시드)에서 읽고, 값이 없으면 '요약할 수 없습니다'로 표기한다.
+            데모 토글은 데이터 유무만 바꾸므로 트리거 자체는 토글과 무관하게 항상 렌더한다. */}
         <Card
-          title="MLOps 6대 핵심 평가지표 실시간 모니터링"
-          icon="fa-chart-column"
-          headerRight={
-            <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
-              {modelLabel} · 최근 {windowHours}시간
-            </span>
+          title={
+            <>
+              MLOps 6대 핵심 평가지표 실시간 모니터링
+              <InfoTip
+                text={
+                  latestMetrics
+                    ? `조회 구간 첫 값에서 최근 값까지의 변화: ${latestMetrics}.`
+                    : "표시할 지표 데이터가 없어 구간 변화를 요약할 수 없습니다."
+                }
+                label="지표 변화 요약 보기"
+              />
+            </>
           }
+          icon="fa-chart-column"
           data-values-source={metricsChartSrc}
         >
           <div style={{ position: "relative", height: 280, width: "100%" }}>
             <Line data={metricsData} options={AXIS_OPTS} />
           </div>
-          <p className="chart-summary">조회 구간 첫 값에서 최근 값까지의 변화: {latestMetrics}.</p>
         </Card>
 
         <Card
-          title="SHAP 기반 인구 유출 기여 특징 중요도 분석"
+          title={
+            <>
+              SHAP 기반 인구 유출 기여 특징 중요도 분석
+              <InfoTip text={shapSummary} label="특징 기여도 요약 보기" />
+            </>
+          }
           icon="fa-brain"
           data-values-source={shapSrc}
         >
           <div style={{ position: "relative", height: 280, width: "100%" }}>
             <Bar data={shapData} options={shapOpts} />
           </div>
-          <p className="chart-summary">{shapSummary}</p>
         </Card>
       </div>
 
@@ -987,11 +952,12 @@ export default function MonitorPage() {
         title={
           <>
             모델 신뢰도 게이지 (실시간)
-            <InfoTip text="운영 모델의 Precision·Recall과 예측 지연(latency)을 표시합니다. 예측 지연이 자동 롤백 임계 200ms를 초과하면 직전 버전으로 자동 롤백됩니다." />
+            {/* 카드마다 제목 옆 트리거 1개만 둔다 — 기존 설명 툴팁에 표시 값 기준(피드백 #11)을 덧붙인다.
+                데모 토글은 값의 유무만 바꾸므로 툴팁 자체는 토글과 무관하게 항상 같은 내용을 낸다. */}
+            <InfoTip text="운영 모델의 Precision·Recall과 예측 지연(latency)을 표시합니다. 예측 지연이 자동 롤백 임계 200ms를 초과하면 직전 버전으로 자동 롤백됩니다. 표시 값: 인구이동 예측 모델 기준(예측 지연)." />
           </>
         }
         icon="fa-gauge-high"
-        headerRight={<span style={{ fontSize: 11, color: "var(--text-muted)" }}>{modelLabel}</span>}
       >
         <div className="grid-cols-3" style={{ marginBottom: 0 }}>
           <GaugeChart
@@ -1015,9 +981,6 @@ export default function MonitorPage() {
             lowerIsBetter
           />
         </div>
-        <p className="mock-data-output" style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 8 }}>
-          표시 값: 인구이동 예측 모델 기준(예측 지연)
-        </p>
       </Card>
 
       {/* 실데이터 연계(R4) — 남원 모델 검증/운영 평가·선형 SHAP·드리프트. 위 데모 지표와는 별개 경로. */}
