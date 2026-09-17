@@ -5,10 +5,21 @@ import PendingData from "./PendingData.jsx";
 // STAGE ② 요인분석 결과
 // 데이터 기반 사회문제: +/- 상관 → 문제 유형 진단 → 파라미터 도출.
 // UI(카드 구조)는 항상 노출하고, 데이터는 STAGE ① 요인분석 완료(locked=false) 후 공개한다.
-export default function FactorResultStage({ region, open, onToggle, locked = false, running = false }) {
+//
+// unavailableText: 표시할 데이터 자체가 없을 때의 사유(데모 표시 OFF 등). 주어지면 잠금 여부와
+// 무관하게 결과 카드를 그 문구로 채운다.
+export default function FactorResultStage({
+  region,
+  open,
+  onToggle,
+  locked = false,
+  running = false,
+  unavailableText = null
+}) {
   const c = region.case;
   const pos = c.correlations?.positive ?? [];
   const neg = c.correlations?.negative ?? [];
+  const blocked = locked || Boolean(unavailableText);
 
   return (
     <CollapsibleStage
@@ -21,7 +32,7 @@ export default function FactorResultStage({ region, open, onToggle, locked = fal
     >
       <div className="pl-flow-grid pl-flow-2">
         <Card title="상관관계 분석" icon="fa-scale-balanced">
-          {!locked ? (
+          {!blocked ? (
             <div className="pl-corr-grid">
               <div className="pl-corr pl-corr-pos">
                 <div className="pl-corr-head">
@@ -45,12 +56,15 @@ export default function FactorResultStage({ region, open, onToggle, locked = fal
               </div>
             </div>
           ) : (
-            <PendingData running={running} text="[요인분석 실행] 후 상관관계 분석 결과가 표시됩니다." />
+            <PendingData
+              running={running && !unavailableText}
+              text={unavailableText ?? "[요인분석 실행] 후 상관관계 분석 결과가 표시됩니다."}
+            />
           )}
         </Card>
 
         <Card title="문제 유형 진단 결과" icon="fa-stethoscope">
-          {!locked ? (
+          {!blocked ? (
             <>
               <ul className="pl-diag-list">
                 {c.problemDiagnosis.map((d) => (
@@ -65,7 +79,10 @@ export default function FactorResultStage({ region, open, onToggle, locked = fal
               </div>
             </>
           ) : (
-            <PendingData running={running} text="[요인분석 실행] 후 문제 유형 진단 결과가 표시됩니다." />
+            <PendingData
+              running={running && !unavailableText}
+              text={unavailableText ?? "[요인분석 실행] 후 문제 유형 진단 결과가 표시됩니다."}
+            />
           )}
         </Card>
       </div>
