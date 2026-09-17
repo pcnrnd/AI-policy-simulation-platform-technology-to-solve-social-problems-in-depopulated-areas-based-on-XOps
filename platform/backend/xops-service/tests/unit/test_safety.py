@@ -61,3 +61,33 @@ def test_write_values_reject_unknown_column_and_non_scalars() -> None:
         assert_safe_write_values({"a": "x" * (MAX_WRITE_VALUE_LENGTH + 1)}, cols)
     with pytest.raises(UnsafeQueryError, match="NUL"):
         assert_safe_write_values({"a": "x\x00y"}, cols)
+
+
+def test_and_combined_filters_pass() -> None:
+    """AND 결합 — 2개·상한 5개, 대소문자 무시, 컬럼 allowlist 동시 적용."""
+    assert_safe_filter("age > 30 AND region_code = '11'", {"age", "region_code"})
+    assert_safe_filter("a = 1 and b = 2 AnD c = 3 AND d = 4 AND e = 5", {"a", "b", "c", "d", "e"})
+
+
+def test_and_filters_reject_over_limit_and_unknown_column() -> None:
+    from src.dataops.safety import MAX_FILTER_CONDITIONS
+
+    over = " AND ".join(f"c{i} = {i}" for i in range(MAX_FILTER_CONDITIONS + 1))
+    with pytest.raises(UnsafeQueryError, match="최대"):
+        assert_safe_filter(over)
+    with pytest.raises(UnsafeQueryError, match="스키마에 없는"):
+        assert_safe_filter("age > 30 AND ghost = 1", {"age"})
+
+
+@pytest.mark.parametrize(
+    "expr",
+    [
+        "age > 30 OR region_code = '11'",       # OR 결합 미지원
+        "age > 30 AND (b = 1 OR c = 2)",        # 괄호
+        "age > 30 AND 1=1; DROP TABLE x",       # 스택 쿼리
+        "age > 30 AND b = 1 -- comment",        # 주석
+    ],
+)
+def test_and_filters_reject_non_and_combinations(expr: str) -> None:
+    with pytest.raises(UnsafeQueryError):
+        assert_safe_filter(expr)

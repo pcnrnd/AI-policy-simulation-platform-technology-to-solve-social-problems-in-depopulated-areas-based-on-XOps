@@ -21,6 +21,12 @@ from src.core.exceptions import UnsafeQueryError
 
 _FILTER_RE = re.compile(r"^(\w+)\s*(>=|<=|!=|=|>|<)\s*('[^';]*'|\"[^\";]*\"|-?\d+(?:\.\d+)?|\w+)$")
 _IDENT_RE = re.compile(r"^\w+$")
+# 조건 결합은 AND 만 — 공백으로 둘러싸인 `AND`(대소문자 무시)에서만 나눈다.
+# ponytail: 따옴표 안의 ` AND ` 도 분리 대상이 되어 `name = 'a AND b'` 는 400으로 거부된다.
+#           값에 AND 가 필요해지면 그때 따옴표 인식 토크나이저로 올린다.
+_AND_SPLIT_RE = re.compile(r"\s+AND\s+", re.IGNORECASE)
+# 한 요청이 조립할 수 있는 조건 수 상한.
+MAX_FILTER_CONDITIONS = 5
 _SQL_BLOCKLIST = ("--", "/*", "*/", "xp_", "\x00")
 
 # SQL 식별자(테이블·컬럼) — 숫자로 시작하지 않는 영문/숫자/밑줄만. 인용 식별자는 허용하지 않는다.
@@ -35,19 +41,37 @@ MAX_VALUE_LENGTH = 128
 MAX_WRITE_VALUE_LENGTH = 2000
 
 
-def assert_safe_filter(filter_expr: str | None, allowed_columns: set[str] | None = None) -> None:
-    """사용자 filter는 `col op value` 단일 조건만 허용. 스택 쿼리/주석/함수 호출 차단.
+def split_filter_conditions(filter_expr: str | None) -> list[str]:
+    """filter 식을 ` AND ` 기준으로 나눈 단일 조건 목록. 빈 입력은 빈 목록.
 
-    allowed_columns가 주어지면 filter의 대상 컬럼이 스키마에 존재하는지도 검증한다
+    검증(`assert_safe_filter`)과 생성(`query_builder`)이 같은 분리 규칙을 쓰도록
+    여기 한 곳에만 둔다. 각 조각의 문법 검사는 호출자가 아니라 검증기가 한다.
+    """
+    if not filter_expr or not filter_expr.strip():
+        return []
+    return [part.strip() for part in _AND_SPLIT_RE.split(filter_expr.strip())]
+
+
+def assert_safe_filter(filter_expr: str | None, allowed_columns: set[str] | None = None) -> None:
+    """사용자 filter는 `col op value` 조건을 ` AND ` 로 결합한 형태만 허용(최대 5개).
+
+    OR·괄호·주석·스택 쿼리는 조건 하나가 `col op value` 문법을 벗어나므로 그대로 걸린다.
+    allowed_columns가 주어지면 각 조건의 대상 컬럼이 스키마에 존재하는지도 검증한다
     (소스 전환 시 이전 컬럼명 잔존으로 무효 쿼리가 생성되는 문제 예방).
     """
-    if not filter_expr:
+    conditions = split_filter_conditions(filter_expr)
+    if not conditions:
         return
-    match = _FILTER_RE.match(filter_expr.strip())
-    if not match:
-        raise UnsafeQueryError(f"허용되지 않는 filter 식입니다: {filter_expr!r}")
-    if allowed_columns is not None and match.group(1) not in allowed_columns:
-        raise UnsafeQueryError(f"스키마에 없는 filter 컬럼입니다: {match.group(1)!r}")
+    if len(conditions) > MAX_FILTER_CONDITIONS:
+        raise UnsafeQueryError(
+            f"filter 조건은 최대 {MAX_FILTER_CONDITIONS}개까지 허용합니다({len(conditions)}개)."
+        )
+    for condition in conditions:
+        match = _FILTER_RE.match(condition)
+        if not match:
+            raise UnsafeQueryError(f"허용되지 않는 filter 식입니다: {condition!r}")
+        if allowed_columns is not None and match.group(1) not in allowed_columns:
+            raise UnsafeQueryError(f"스키마에 없는 filter 컬럼입니다: {match.group(1)!r}")
 
 
 def assert_safe_sort(sort: str | None, allowed_columns: set[str]) -> None:
