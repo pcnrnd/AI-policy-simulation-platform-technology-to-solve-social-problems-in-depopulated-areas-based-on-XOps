@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, Query
 from src.api.dependencies import require_auth, require_client
 from src.auth.jwt import issue_jwt, issue_oauth2
 from src.dataops.catalog import get_catalog
+from src.dataops.liveness import annotate
 from src.dataops.service import DataService
 from src.schemas.dataops import ArchiveRegisterRequest, SourceSummary, TokenResponse, WriteBody
 
@@ -41,9 +42,18 @@ def issue_oauth2_token(source_id: str, _: None = Depends(require_client)) -> dic
 
 # ── 카탈로그 ───────────────────────────────────────────────
 @router.get("/catalog", response_model=list[SourceSummary])
-def list_catalog(q: str = Query("", description="소스명·태그·설명·객체명 부분 일치 검색")) -> list[dict[str, Any]]:
-    """메타데이터 카탈로그 목록/검색."""
-    return get_catalog().search(q)
+def list_catalog(
+    q: str = Query("", description="소스명·태그·설명·객체명 부분 일치 검색"),
+    live: bool = Query(False, description="각 소스의 실적재 행수(live_rows)를 함께 조회"),
+) -> list[dict[str, Any]]:
+    """메타데이터 카탈로그 목록/검색.
+
+    `live=true` 면 소스별로 저장소를 읽어 `live_rows` 를 덧붙인다. 등록만 되어 있고 실제로는
+    적재되지 않은 소스를 가려내기 위한 것이다. 기본값이 false 이므로 기존 응답은 그대로다.
+    확인하지 못한 소스(DSN 부재·드라이버 미설치·연결 실패)는 0이 아니라 null 이 된다.
+    """
+    sources = get_catalog().search(q)
+    return annotate(sources) if live else sources
 
 
 @router.get("/catalog/{source_id}", response_model=SourceSummary)

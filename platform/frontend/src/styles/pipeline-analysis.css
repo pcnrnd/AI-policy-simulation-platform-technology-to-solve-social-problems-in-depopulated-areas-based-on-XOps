@@ -162,6 +162,13 @@
   color: var(--text-muted);
   margin: 0;
 }
+/* 제목 옆 설명 툴팁 — 머리글 flex의 gap 대신 제목에 바짝 붙인다. */
+.pl-stage-tip {
+  display: inline-flex;
+  align-self: center;
+  margin-left: -10px;
+  cursor: default;
+}
 
 /* 흐름 그리드 */
 .pl-flow-grid {

@@ -354,7 +354,6 @@ body.drawer-open {
   .node-status,
   .promotion-criteria,
   .workflow-statusbar,
-  .schema-meta-line,
   .catalog-selected-chip,
   .token-line,
   .sql-preview,
@@ -397,6 +396,20 @@ body.drawer-open {
 /* 인증 상태 안내(#catalog-auth-hint)는 데이터 출력이 아니라 조작 안내이므로
    .catalog-result-status가 숨겨져도 예외로 노출한다(visibility는 자식에서 재정의 가능). */
 .mock-values-hidden .content-body #catalog-auth-hint {
+  visibility: visible !important;
+}
+
+/* DataOps STEP ① 메타데이터 카탈로그는 데모 토글과 무관하게 같은 UI로 남는다.
+   토글은 "데이터 유무"를 바꾸는 것이지 조작 UI를 없애는 것이 아니며, OFF에서는 서버가
+   실적재(live_rows)로 걸러 준 실데이터 소스만 목록에 오므로 가릴 목업 값이 아니다.
+   표를 가리면 행 안의 선택 버튼까지 클릭·포커스가 막혀 실소스를 고를 수 없다. */
+.mock-values-hidden .content-body .catalog-live-region :where(
+  tbody,
+  .table-pager,
+  .catalog-selected-chip,
+  .system-status
+),
+.mock-values-hidden .content-body .catalog-result-status {
   visibility: visible !important;
 }
 

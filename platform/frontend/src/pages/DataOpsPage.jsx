@@ -7,6 +7,7 @@ import CollapsibleStage from "../components/CollapsibleStage.jsx";
 import ArchiveRegisterForm from "../components/ArchiveRegisterForm.jsx";
 import ConfirmDialog from "../components/ConfirmDialog.jsx";
 import NextStepBanner from "../components/NextStepBanner.jsx";
+import InfoTip from "../components/InfoTip.jsx";
 import { useAppState } from "../context/AppStateContext.jsx";
 import { apiGet, apiSend } from "../lib/api.js";
 import { HTTP_METHODS, AUTH_METHODS, adapterOf, buildQuery } from "../lib/dataopsApi.js";
@@ -14,6 +15,9 @@ import { getScrollBehavior } from "../lib/motion.js";
 
 const READY_RESPONSE = `// [POST·GET·PUT·PATCH·DELETE] 요청을 전송하면 표준 REST 응답이 표시됩니다.`;
 const CATALOG_URL = "/api/v3/dataops/catalog";
+// 목록 조회는 항상 실적재 행수(live_rows)를 함께 받는다. 데모 토글로 요청을 바꾸면 화면이 토글에
+// 따라 달라지므로, 표시는 늘 같게 두고 토글은 "어떤 소스를 셀 것인가"에만 쓴다(서버가 60초 캐시).
+const CATALOG_LIST_URL = `${CATALOG_URL}?live=true`;
 // 소스가 0건인 상태에서도 첫 등록을 위해 data:write 토큰을 받아야 한다. 서버는 발급 시 source_id를
 // 검증하지 않고 카탈로그 쓰기도 scope만 확인하므로(존재하지 않는 시드 id를 추측할 필요 없음),
 // 선택된 소스가 없을 때는 카탈로그 전용 발급 키를 쓴다.
@@ -172,7 +176,7 @@ function RoutingFlow({ method, source, adapter, queryLang }) {
 }
 
 export default function DataOpsPage() {
-  const { appData, addConsoleLog } = useAppState();
+  const { appData, addConsoleLog, mockDataVisible } = useAppState();
   // 메타데이터 카탈로그 — 백엔드(/api/v3/dataops/catalog)에서 로드. 사용자 등록 소스 병합은 서버가 담당.
   const [sources, setSources] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -215,7 +219,7 @@ export default function DataOpsPage() {
   useEffect(() => {
     let alive = true;
     setCatalogError(null);
-    apiGet(CATALOG_URL)
+    apiGet(CATALOG_LIST_URL)
       .then((list) => {
         if (!alive) return;
         setSources(list);
@@ -236,7 +240,7 @@ export default function DataOpsPage() {
   }, []);
 
   const refreshCatalog = async () => {
-    const list = await apiGet(CATALOG_URL);
+    const list = await apiGet(CATALOG_LIST_URL);
     setSources(list);
     return list;
   };
@@ -743,13 +747,18 @@ export default function DataOpsPage() {
     pageSize
   });
 
+  // 데모 표시 OFF = "실제로 적재된 데이터만". UI는 그대로 두고 목록에 담기는 소스만 달라진다.
+  // 저장소에서 0건으로 확인된 소스만 빠지고, live_rows 가 null(확인 불가)인 소스는 남긴다
+  // — 미적재(0)와 확인 실패(null)를 섞으면 DB 장애가 '데이터 없음'처럼 보인다.
+  const visibleSources = mockDataVisible ? sources : sources.filter((s) => s.live_rows !== 0);
+
   // 카탈로그 검색 — 소스명·태그·설명·객체명 부분 일치
   const q = catalogQuery.trim().toLowerCase();
   const filteredSources = q
-    ? sources.filter((s) =>
+    ? visibleSources.filter((s) =>
         [s.label, s.description, s.object, ...(s.tags ?? [])].join(" ").toLowerCase().includes(q)
       )
-    : sources;
+    : visibleSources;
   const catalogSources = [...filteredSources].sort((a, b) => {
     if (catalogSort === "loaded") {
       return String(b.archive?.loaded_at ?? "").localeCompare(String(a.archive?.loaded_at ?? ""), "ko");
@@ -797,22 +806,23 @@ export default function DataOpsPage() {
         id="dstep-source"
         no="STEP ①"
         title="데이터 소스 선택 - 빅데이터 아카이브"
-        sub="아카이빙된 다기종 데이터 소스를 메타데이터 카탈로그에서 선택"
+        subTip="아카이빙된 다기종 데이터 소스를 메타데이터 카탈로그에서 선택합니다."
         open={openStages["dstep-source"]}
         onToggle={() => toggleStage("dstep-source")}
       >
         <Card
-          title="메타데이터 카탈로그"
+          title={
+            <>
+              메타데이터 카탈로그
+              {/* 본문 안내문을 제목 옆 툴팁으로 옮겼다(UI 피드백 #13). */}
+              <InfoTip text="수집·가공 데이터를 메타데이터 기반으로 아카이빙하고, 물리 저장소를 직접 노출하지 않고 단일 API로 연계 제공합니다. 소스를 선택하면 STEP ② 스키마와 STEP ③ API 빌더 대상이 함께 전환됩니다." />
+            </>
+          }
           titleId="dataops-catalog-title"
           titleTabIndex={-1}
           icon="fa-database"
         >
           <WorkflowStatus workflow={appData.dataops_workflow} />
-          <p style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 12 }}>
-            수집·가공 데이터를 메타데이터 기반으로 아카이빙하고, 물리 저장소를 직접 노출하지 않고
-            단일 API로 연계 제공합니다. 소스를 선택하면 STEP ② 스키마와 STEP ③ API 빌더 대상이 함께
-            전환됩니다.
-          </p>
 
           <div className="catalog-search-row">
             <i className="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
@@ -856,7 +866,11 @@ export default function DataOpsPage() {
           </div>
 
           <div className="catalog-result-status" role="status" aria-live="polite">
-            <span>{q ? `전체 ${sources.length}건 중 검색 결과 ${filteredSources.length}건` : `전체 ${sources.length}건`}</span>
+            <span>
+              {q
+                ? `전체 ${visibleSources.length}건 중 검색 결과 ${filteredSources.length}건`
+                : `전체 ${visibleSources.length}건`}
+            </span>
             {q && (
               <button type="button" className="btn btn-tertiary" onClick={() => { setCatalogQuery(""); setCatalogPage(1); }}>
                 검색 해제
@@ -883,6 +897,8 @@ export default function DataOpsPage() {
             />
           )}
 
+          {/* 카탈로그 선택 UI는 데모 토글과 무관하게 같은 모습으로 남는다(가림 예외는 layout.css). */}
+          <div className="catalog-live-region">
           <div className="table-container" data-values-source={catalogSrc}>
             <table id="dataops-catalog-table" className="catalog-table" tabIndex="-1">
               <caption className="sr-only">메타데이터 카탈로그의 데이터 소스 목록. 선택한 정렬 기준으로 표시합니다.</caption>
@@ -895,6 +911,8 @@ export default function DataOpsPage() {
                   <th scope="col">아카이브 티어</th>
                   <th scope="col">보존 정책</th>
                   <th scope="col">적재일</th>
+                  {/* 토글과 무관하게 항상 같은 열 구성을 쓴다 — 값만 달라진다(데모 ON은 미조회라 '–'). */}
+                  <th scope="col" className="cell-num">적재 행수</th>
                   <th scope="col" className="cell-num">컬럼</th>
                 </tr>
               </thead>
@@ -982,6 +1000,13 @@ export default function DataOpsPage() {
                         {s.archive?.loaded_at ?? "–"}
                       </td>
                       <td className="cell-num" style={{ color: "var(--text-muted)" }}>
+                        {s.live_rows === undefined || s.live_rows === null ? (
+                          <span title="저장소에 연결하지 못해 적재 여부를 확인할 수 없습니다.">확인 불가</span>
+                        ) : (
+                          s.live_rows.toLocaleString("ko-KR")
+                        )}
+                      </td>
+                      <td className="cell-num" style={{ color: "var(--text-muted)" }}>
                         {(s.columns ?? []).length}
                       </td>
                     </tr>
@@ -989,11 +1014,18 @@ export default function DataOpsPage() {
                 })}
                 {filteredSources.length === 0 && (
                   <tr>
-                      <td colSpan={8} className="empty-table-cell">
-                        <span>“{catalogQuery}” 검색 결과가 없습니다.</span>{" "}
-                        <button type="button" className="btn btn-tertiary" onClick={() => { setCatalogQuery(""); setCatalogPage(1); }}>
-                          검색 해제
-                        </button>
+                    <td colSpan={9} className="empty-table-cell">
+                      {q ? (
+                        <>
+                          <span>“{catalogQuery}” 검색 결과가 없습니다.</span>{" "}
+                          <button type="button" className="btn btn-tertiary" onClick={() => { setCatalogQuery(""); setCatalogPage(1); }}>
+                            검색 해제
+                          </button>
+                        </>
+                      ) : (
+                        // 요소를 숨기지 않고 빈 상태를 문구로 알린다(표가 통째로 사라지지 않게).
+                        <span>표시할 데이터 소스가 없습니다.</span>
+                      )}
                     </td>
                   </tr>
                 )}
@@ -1008,6 +1040,7 @@ export default function DataOpsPage() {
             pageSize={10}
             onChange={setCatalogPage}
           />
+          </div>
 
           <div className="stage-next-row">
             <button type="button" className="btn btn-secondary" onClick={() => jumpToStage("dstep-schema")}>
@@ -1029,30 +1062,12 @@ export default function DataOpsPage() {
         <Card data-values-source={catalogSrc}>
           <div className="mock-data-output" style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
             <h4 style={{ color: "var(--accent-blue)", margin: 0 }}>{target.label}</h4>
-            <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
-              {target.source} · {target.object}
-            </span>
           </div>
           <p className="mock-data-output" style={{ fontSize: 12, color: "var(--text-secondary)", margin: "6px 0 10px", fontStyle: "italic" }}>
             {target.description}
           </p>
 
-          {target.lineage && (
-            <p className="schema-meta-line">
-              <i className="fa-solid fa-database" aria-hidden="true"></i> 원천 {target.lineage.origin}{" "}
-              · 아카이브 {target.archive?.tier ?? "-"} ·{" "}
-              <span title="Git/DVC 기반 데이터 버전 관리">
-                <i className="fa-solid fa-code-branch" aria-hidden="true"></i> 데이터 버전{" "}
-                {target.lineage.version} <code>({target.lineage.commit})</code>
-              </span>
-              {target.range && (
-                <span title="Adapter가 쿼리에 자동 주입하는 적재 범위">
-                  {" "}· <i className="fa-solid fa-arrows-left-right" aria-hidden="true"></i> 수집 범위{" "}
-                  <code>{target.range.column}</code> {target.range.from}~{target.range.to}
-                </span>
-              )}
-            </p>
-          )}
+          {/* 원천·아카이브·데이터 버전·수집 범위 메타 줄은 화면에서 제거했다(UI 피드백 #16). */}
 
           <div className="table-container">
             <table>

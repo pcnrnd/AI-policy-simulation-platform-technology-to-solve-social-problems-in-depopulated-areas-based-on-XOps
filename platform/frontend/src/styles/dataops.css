@@ -252,22 +252,6 @@
   vertical-align: middle;
 }
 
-/* 스키마 리니지 + 데이터 버전 — 한 줄 메타 */
-.schema-meta-line {
-  margin: 0 0 12px;
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-.schema-meta-line i {
-  color: var(--accent-blue);
-  font-size: 11px;
-  margin-right: 2px;
-}
-.schema-meta-line code {
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
 /* 데이터 라이프사이클 칩 라인 — 수집→적재(아카이빙)→메타데이터 등록→API 제공 */
 .lifecycle-line {
   display: flex;
