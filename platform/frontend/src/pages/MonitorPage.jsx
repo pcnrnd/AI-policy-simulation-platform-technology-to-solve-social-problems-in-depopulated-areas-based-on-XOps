@@ -828,9 +828,10 @@ export default function MonitorPage() {
             </select>
           </label>
         </div>
+        {/* 조작 버튼이라 데모 OFF에서도 눌러야 한다 — mock-data-output(가림 대상)에서 제외한다. */}
         <button
           type="button"
-          className="btn btn-secondary mock-data-output"
+          className="btn btn-secondary"
           style={{ padding: "6px 14px", fontSize: 12 }}
           onClick={handleDriftAction}
           aria-disabled={driftAction.locked}
