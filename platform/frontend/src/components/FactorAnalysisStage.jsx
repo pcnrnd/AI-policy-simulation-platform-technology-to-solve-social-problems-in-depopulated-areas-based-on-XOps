@@ -5,6 +5,9 @@ import PendingData from "./PendingData.jsx";
 // STAGE ① 사회문제 요인분석
 // region.case 기반: AI+인구학적 요인 → XAI(SHAP)+딥러닝 모델 → 통계 분석 융합.
 // UI(카드 구조)는 항상 노출하고, 데이터는 [요인분석 실행] 완료 후에만 공개한다.
+//
+// unavailableText: 표시할 데이터 자체가 없을 때의 사유(데모 표시 OFF 등). 주어지면 실행 상태와
+// 무관하게 결과 카드를 그 문구로 채운다 — 실행 바(버튼·단계)는 그대로 조작 가능하다.
 export default function FactorAnalysisStage({
   region,
   open,
@@ -12,13 +15,16 @@ export default function FactorAnalysisStage({
   status = "idle",
   stepIndex = 0,
   steps = [],
-  onRun
+  onRun,
+  unavailableText = null
 }) {
   const c = region.case;
   const factors = c.factorAnalysis ?? [];
   const ai = c.aiModel ?? {};
   const running = status === "running";
   const done = status === "done";
+  // 실행 바(단계 표시·버튼)는 status를 그대로 따르고, 결과 카드만 데이터 유무를 따른다.
+  const dataReady = done && !unavailableText;
 
   return (
     <CollapsibleStage
@@ -94,7 +100,7 @@ export default function FactorAnalysisStage({
       <div className="pl-flow-grid pl-flow-3">
         {/* AI + 인구학적 요인 분석 결과 */}
         <Card title="AI + 인구학적 요인 분석 결과" icon="fa-list-check">
-          {done ? (
+          {dataReady ? (
             <>
               <ul className="pl-factor-list">
                 {factors.map((f) => (
@@ -110,13 +116,13 @@ export default function FactorAnalysisStage({
               </div>
             </>
           ) : (
-            <PendingData running={running} />
+            <PendingData running={running && !unavailableText} text={unavailableText ?? undefined} />
           )}
         </Card>
 
         {/* XAI + 딥러닝 예측 모델 */}
         <Card title="XAI · 딥러닝 예측 모델" icon="fa-microchip">
-          {done ? (
+          {dataReady ? (
             <>
               <div className="pl-model-box pl-model-xai">
                 <span className="pl-model-tag">XAI 모듈</span>
@@ -133,13 +139,13 @@ export default function FactorAnalysisStage({
               </div>
             </>
           ) : (
-            <PendingData running={running} />
+            <PendingData running={running && !unavailableText} text={unavailableText ?? undefined} />
           )}
         </Card>
 
         {/* 통계적 모델 분석 결과 (결과 융합) */}
         <Card title="통계적 모델 분석 결과" icon="fa-chart-column">
-          {done ? (
+          {dataReady ? (
             <>
               <div className="pl-fusion-mark">
                 <i className="fa-solid fa-plus" aria-hidden="true"></i> 결과 융합
@@ -153,7 +159,7 @@ export default function FactorAnalysisStage({
               </ul>
             </>
           ) : (
-            <PendingData running={running} />
+            <PendingData running={running && !unavailableText} text={unavailableText ?? undefined} />
           )}
         </Card>
       </div>
