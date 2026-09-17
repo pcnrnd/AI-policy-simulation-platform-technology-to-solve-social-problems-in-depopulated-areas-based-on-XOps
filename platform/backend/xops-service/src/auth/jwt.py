@@ -34,8 +34,13 @@ def _sign(signing_input: bytes) -> str:
     return _b64url_encode(sig)
 
 
-def issue_jwt(source_id: str) -> str:
-    """소스 접근용 HS256 토큰 발급."""
+def issue_jwt(source_id: str | None = None) -> str:
+    """소스 접근용 HS256 토큰 발급.
+
+    `source_id=None` 은 특정 소스에 매이지 않은 토큰이다 — 카탈로그 등록처럼
+    "아직 존재하지 않는 소스"를 만드는 요청에 쓴다. 권한 판정은 어차피 scope 로만
+    하므로(require_scope) payload 의 source 는 감사용 표기다.
+    """
     settings = get_settings()
     header = {"alg": settings.jwt_algorithm, "typ": "JWT"}
     now = int(time.time())
@@ -55,7 +60,7 @@ def issue_jwt(source_id: str) -> str:
     return ".".join(segments)
 
 
-def issue_oauth2(source_id: str) -> dict[str, Any]:
+def issue_oauth2(source_id: str | None = None) -> dict[str, Any]:
     """OAuth2 Authorization Code Grant 흐름(access_token은 JWT 형식)."""
     settings = get_settings()
     now = int(time.time())

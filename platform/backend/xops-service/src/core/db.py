@@ -70,6 +70,11 @@ def init_db() -> None:
             definition_json TEXT NOT NULL,
             created_at TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS built_apis (
+            id TEXT PRIMARY KEY,
+            definition_json TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS model_artifacts (
             model_id TEXT NOT NULL,
             version TEXT NOT NULL,
@@ -187,6 +192,32 @@ def list_user_sources() -> list[dict[str, Any]]:
 
 def delete_user_source(source_id: str) -> bool:
     cur = _conn().execute("DELETE FROM user_sources WHERE id = ?", (source_id,))
+    _conn().commit()
+    return cur.rowcount > 0
+
+
+# ── 발급 API(Data API 빌드 결과) ────────────────────────────
+def upsert_built_api(api: dict[str, Any]) -> dict[str, Any]:
+    """빌드된 API 구성 저장 — 같은 id면 덮어쓴다(재빌드가 중복 행을 만들지 않게)."""
+    created_at = api.get("created_at") or datetime.now(timezone.utc).isoformat()
+    stored = {**api, "created_at": created_at}
+    _conn().execute(
+        "INSERT INTO built_apis (id, definition_json, created_at) VALUES (?, ?, ?) "
+        "ON CONFLICT(id) DO UPDATE SET definition_json = excluded.definition_json",
+        (stored["id"], json.dumps(stored, ensure_ascii=False), created_at),
+    )
+    _conn().commit()
+    return stored
+
+
+def list_built_apis() -> list[dict[str, Any]]:
+    """최근 빌드 순."""
+    rows = _conn().execute("SELECT definition_json FROM built_apis ORDER BY created_at DESC, id DESC").fetchall()
+    return [json.loads(r["definition_json"]) for r in rows]
+
+
+def delete_built_api(api_id: str) -> bool:
+    cur = _conn().execute("DELETE FROM built_apis WHERE id = ?", (api_id,))
     _conn().commit()
     return cur.rowcount > 0
 

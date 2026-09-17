@@ -613,3 +613,25 @@
 .mock-values-hidden .content-body #dstep-builder-body * {
   visibility: visible !important;
 }
+
+/* 카탈로그 행 전체가 소스 선택 영역 — 이름 텍스트만 눌리면 행을 눌러도 반응이 없어
+   "선택이 안 된다"로 읽힌다. 행 안의 삭제 버튼은 onClick 에서 전파를 막는다. */
+.catalog-row-select {
+  cursor: pointer;
+}
+
+.catalog-row-select:hover td {
+  background-color: rgba(var(--accent-blue-rgb), 0.05);
+}
+
+/* 저장소 왕복이 실패해 스텁으로 내려간 응답의 사유 — 값이 실조회처럼 보이지 않게 명시한다. */
+.dataops-degrade-note {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border: 1px solid var(--accent-orange);
+  border-radius: 6px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--accent-orange);
+  background-color: rgba(var(--accent-orange-rgb), 0.06);
+}

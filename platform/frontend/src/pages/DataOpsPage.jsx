@@ -18,10 +18,10 @@ const CATALOG_URL = "/api/v3/dataops/catalog";
 // 목록 조회는 항상 실적재 행수(live_rows)를 함께 받는다. 데모 토글로 요청을 바꾸면 화면이 토글에
 // 따라 달라지므로, 표시는 늘 같게 두고 토글은 "어떤 소스를 셀 것인가"에만 쓴다(서버가 60초 캐시).
 const CATALOG_LIST_URL = `${CATALOG_URL}?live=true`;
-// 소스가 0건인 상태에서도 첫 등록을 위해 data:write 토큰을 받아야 한다. 서버는 발급 시 source_id를
-// 검증하지 않고 카탈로그 쓰기도 scope만 확인하므로(존재하지 않는 시드 id를 추측할 필요 없음),
-// 선택된 소스가 없을 때는 카탈로그 전용 발급 키를 쓴다.
-const CATALOG_TOKEN_SOURCE = "catalog";
+const BUILT_APIS_URL = "/api/v3/dataops/apis";
+// `/token/{source_id}` 는 미존재 소스에 토큰을 내주지 않으려고 카탈로그 존재를 검사한다.
+// 등록은 "아직 없는 소스"를 만드는 요청이라 그 검사와 충돌하므로, 소스에 매이지 않은 발급 경로를 쓴다.
+const TOKEN_URLS = { JWT: "/api/v3/dataops/token", OAuth2: "/api/v3/dataops/oauth2" };
 // 401은 화면의 토큰이 이미 무효(만료·서명 불일치)라는 뜻 — 폐기 후 재발급을 안내한다.
 const TOKEN_DISCARDED_MESSAGE = "토큰이 만료·무효화되어 폐기했습니다. 토큰을 다시 발급한 뒤 시도하세요.";
 const FILTER_PATTERN = /^(\w+)\s*(>=|<=|!=|=|>|<)\s*('[^';]*'|"[^";]*"|-?\d+(?:\.\d+)?|\w+)$/;
@@ -35,6 +35,12 @@ function filterValidationMessage(value, columns = []) {
     return `현재 스키마에 ‘${match[1]}’ 컬럼이 없습니다. 목록에 있는 컬럼명을 사용하세요.`;
   }
   return null;
+}
+
+// 응답이 실 저장소가 아니라 스텁으로 내려왔으면 그 사유를 뽑는다(없으면 null).
+function degradeReasonOf(body) {
+  if (!body || body.source_kind !== "in-memory") return null;
+  return body.source_kind_reason || "저장소에 연결하지 못해 표준 응답 형태만 반환했습니다.";
 }
 
 // 카탈로그 선택 → 스키마 검토 → API 호출의 순차 흐름 (시뮬레이터 탭과 동일 패턴)
@@ -53,31 +59,33 @@ const METHOD_STYLES = {
   DELETE: { color: "var(--accent-red)", bg: "rgba(var(--accent-red-rgb), 0.02)" }
 };
 
-// 빌드·등록된 API 목록 — "API생성기 + 요청 관리·기록" 명세 반영. 브라우저(localStorage) UI 편의 스냅샷.
-const BUILT_APIS_KEY = "decline_poc_built_apis";
-const MAX_BUILT_APIS = 12;
+// 빌드·등록된 API 목록 — "API생성기 + 요청 관리·기록" 명세 반영.
+// 브라우저 localStorage 스냅샷이던 것을 서버(SQLite) 영속으로 옮겼다 — 다른 브라우저·PC에서도
+// 같은 목록이 보이고, 제거가 실제로 반영된다.
 
-function loadStoredList(key) {
-  try {
-    const arr = JSON.parse(localStorage.getItem(key) ?? "[]");
-    return Array.isArray(arr) ? arr : [];
-  } catch {
-    return [];
-  }
+// 같은 구성을 다시 빌드하면 행이 늘지 않도록 구성 시그니처에서 결정적 id를 만든다(서버는 id upsert).
+function builtApiId(sig) {
+  let h = 0;
+  for (let i = 0; i < sig.length; i += 1) h = (Math.imul(31, h) + sig.charCodeAt(i)) | 0;
+  return `api_${(h >>> 0).toString(36)}`;
 }
 
-function persistStoredList(key, list) {
-  try {
-    localStorage.setItem(key, JSON.stringify(list));
-    return true;
-  } catch {
-    // 저장 불가 환경(시크릿 모드 등)에서는 목록을 세션 한정으로만 유지
-    return false;
-  }
+// 서버 DTO(snake_case) → 화면 표시용 형태. 표시 코드는 그대로 두고 여기서만 맞춘다.
+function fromServerApi(api) {
+  return {
+    id: api.id,
+    method: api.method,
+    sourceId: api.source_id,
+    sourceLabel: api.source_label,
+    endpoint: api.endpoint,
+    filter: api.filter ?? "",
+    sort: api.sort ?? "",
+    page: api.page,
+    pageSize: api.page_size,
+    authMethod: api.auth_method,
+    createdAt: new Date(api.created_at).toLocaleString("ko-KR", { hour12: false })
+  };
 }
-
-const loadBuiltApis = () => loadStoredList(BUILT_APIS_KEY);
-const persistBuiltApis = (list) => persistStoredList(BUILT_APIS_KEY, list);
 
 // ArchiveRegisterForm이 만든 schema를 백엔드 등록 DTO(ArchiveRegisterRequest)로 매핑.
 function toRegisterBody(schema) {
@@ -197,8 +205,11 @@ export default function DataOpsPage() {
   const [responseText, setResponseText] = useState(READY_RESPONSE);
   const [apiMs, setApiMs] = useState(null);
   const [responseOk, setResponseOk] = useState(false);
-  const [builtApis, setBuiltApis] = useState(loadBuiltApis);
-  const [builtStorageAvailable, setBuiltStorageAvailable] = useState(true);
+  // 저장소 왕복 실패로 스텁이 내려온 경우의 사유 — 예전에는 서버 로그에만 남아 화면에서는
+  // 스텁 값이 실조회처럼 보였다(조용한 degrade).
+  const [degradeNote, setDegradeNote] = useState(null);
+  const [builtApis, setBuiltApis] = useState([]);
+  const [builtApisError, setBuiltApisError] = useState(null);
   // 다음 단계 CTA 신호 — 이번 세션의 API 발급 성공 1건. 발급 시점의 소스를 함께 담아
   // 이후 빌더에서 다른 소스를 골라도 문구가 따라 바뀌지 않게 한다(발급 목록은 새로고침에도 남으므로 재사용 불가).
   const [issuedApi, setIssuedApi] = useState(null);
@@ -245,6 +256,31 @@ export default function DataOpsPage() {
     return list;
   };
 
+  // 발급 API 목록 — 서버 영속. 실패해도 카탈로그 화면은 살려 두고 목록 자리에만 사유를 남긴다.
+  const refreshBuiltApis = async () => {
+    const list = await apiGet(BUILT_APIS_URL);
+    setBuiltApis(list.map(fromServerApi));
+    setBuiltApisError(null);
+    return list;
+  };
+
+  useEffect(() => {
+    let alive = true;
+    apiGet(BUILT_APIS_URL)
+      .then((list) => {
+        if (!alive) return;
+        setBuiltApis(list.map(fromServerApi));
+        setBuiltApisError(null);
+      })
+      .catch((err) => {
+        if (!alive) return;
+        setBuiltApisError(err?.message ?? "발급 API 목록을 불러오지 못했습니다.");
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   const retryCatalog = async () => {
     setLoading(true);
     setCatalogError(null);
@@ -273,16 +309,6 @@ export default function DataOpsPage() {
     setOpenStages((s) => ({ ...s, [id]: true }));
     setTimeout(() => {
       document.getElementById(id)?.scrollIntoView({ behavior: getScrollBehavior(), block: "start" });
-    }, 60);
-  };
-
-  // 등록 버튼 비활성 안내 → STEP ③ 토큰 발급 컨트롤로 이동(같은 페이지 스크롤+포커스, 새 API 호출 없음)
-  const jumpToTokenIssue = () => {
-    setOpenStages((s) => ({ ...s, "dstep-builder": true }));
-    setTimeout(() => {
-      const el = document.getElementById("dataops-token-issue-btn");
-      el?.scrollIntoView({ behavior: getScrollBehavior(), block: "center" });
-      el?.focus();
     }, 60);
   };
 
@@ -316,6 +342,7 @@ export default function DataOpsPage() {
     setResponseText(READY_RESPONSE);
     setApiMs(null);
     setSentAt(null);
+    setDegradeNote(null);
   };
 
   // 카탈로그 쓰기가 401이면 보관 중인 토큰을 폐기한다 — 만료(exp 1h) 후에도 "인증됨" 표시와
@@ -328,11 +355,27 @@ export default function DataOpsPage() {
     return true;
   };
 
+  // 쓰기(등록·삭제·API 빌드) 직전에 토큰을 확보한다. 예전에는 사용자가 STEP ③까지 내려가
+  // [토큰 발급]을 먼저 눌러야 등록 버튼이 살아났고, 그 사실을 모르면 "등록이 안 된다"로 보였다.
+  // 보안 경계는 그대로 서버의 data:write scope 검사다 — 화면에서 미리 막는 대신 필요할 때 받는다.
+  const issueToken = async (mode = authMethod) => {
+    const res = await apiSend("POST", TOKEN_URLS[mode] ?? TOKEN_URLS.JWT, {});
+    setToken(res.access_token);
+    addConsoleLog(
+      mode === "OAuth2"
+        ? `INFO: OAuth2 토큰 발급 완료 (grant_type=${res.grant_type}, code=${res.authorization_code}, token_type=Bearer, expires_in=${res.expires_in}).`
+        : `INFO: JWT 토큰 발급 완료 (scope: ${res.scope}, exp: 1h).`
+    );
+    return res.access_token;
+  };
+
+  const ensureToken = async () => token ?? (await issueToken());
+
   // 신규 아카이브 등록 — 백엔드 카탈로그 CRUD로 서버 영속화 (localStorage 제거)
   // 카탈로그 쓰기는 서버가 data:write 스코프를 요구하므로 발급받은 토큰을 함께 보낸다.
   const handleRegisterSource = async (schema) => {
     try {
-      await apiSend("POST", CATALOG_URL, { token, body: toRegisterBody(schema) });
+      await apiSend("POST", CATALOG_URL, { token: await ensureToken(), body: toRegisterBody(schema) });
       await refreshCatalog();
       setShowRegForm(false);
       handleSelectSource(schema.id);
@@ -350,7 +393,7 @@ export default function DataOpsPage() {
 
   const handleDeleteSource = async (id) => {
     try {
-      await apiSend("DELETE", `${CATALOG_URL}/${id}`, { token });
+      await apiSend("DELETE", `${CATALOG_URL}/${id}`, { token: await ensureToken() });
       const list = await refreshCatalog();
       if (sourceId === id) handleSelectSource(list[0]?.id ?? null);
       addConsoleLog(`WARN: 사용자 등록 아카이브 삭제 — ${id} (메타데이터·가상화 API 제공 중지)`, false, true);
@@ -369,18 +412,7 @@ export default function DataOpsPage() {
     setPendingAction("token");
     setAsyncFeedback({ tone: "pending", message: `${authMethod} 토큰을 발급하는 중입니다.` });
     try {
-      const tokenSource = sourceId ?? CATALOG_TOKEN_SOURCE;
-      const path = authMethod === "OAuth2" ? `/api/v3/dataops/oauth2/${tokenSource}` : `/api/v3/dataops/token/${tokenSource}`;
-      const res = await apiSend("POST", path, {});
-      if (authMethod === "OAuth2") {
-        setToken(res.access_token);
-        addConsoleLog(
-          `INFO: OAuth2 토큰 발급 완료 (grant_type=${res.grant_type}, code=${res.authorization_code}, token_type=Bearer, expires_in=${res.expires_in}).`
-        );
-      } else {
-        setToken(res.access_token);
-        addConsoleLog(`INFO: JWT 토큰 발급 완료 (scope: ${res.scope}, exp: 1h).`);
-      }
+      await issueToken();
       setAsyncFeedback({ tone: "success", message: `${authMethod} 토큰을 발급했습니다.` });
     } catch (err) {
       addConsoleLog(`WARN: 토큰 발급 실패 — ${err.message}`, false, true);
@@ -447,6 +479,7 @@ export default function DataOpsPage() {
     setApiMs(elapsed);
     setResponseText(JSON.stringify(result.body, null, 2));
     setResponseOk(result.ok);
+    setDegradeNote(degradeReasonOf(result.body));
     logRequestResult(cfg, result, elapsed);
     setAsyncFeedback({
       tone: result.ok ? "success" : "error",
@@ -473,40 +506,43 @@ export default function DataOpsPage() {
     });
   };
 
-  // 현재 구성을 API 자산으로 빌드·등록 (localStorage UI 스냅샷) — 동일 구성은 갱신
-  const handleBuildApi = () => {
+  // 현재 구성을 API 자산으로 빌드·등록 — 서버(SQLite)에 영속. 동일 구성(같은 시그니처)은 갱신.
+  const handleBuildApi = async () => {
+    if (pendingAction) return;
     // 새 발급을 시작하면 직전 발급의 다음 단계 안내부터 내린다(검증·저장 실패 시 그대로 남지 않게).
     setIssuedApi(null);
     if (!validateBuilderFilter({ focus: true })) return;
-    const sig = [method, target.id, filterText.trim(), sortCol, page, pageSize].join("|");
-    const entry = {
-      id: `api_${Date.now().toString(36)}`,
-      sig,
+    const body = {
+      id: builtApiId([method, target.id, filterText.trim(), sortCol, page, pageSize].join("|")),
       method,
-      sourceId: target.id,
-      sourceLabel: target.label,
-      endpoint: `/api/v3/dataops/${target.id}`,
+      source_id: target.id,
+      source_label: target.label,
       filter: filterText.trim(),
       sort: sortCol,
       page,
-      pageSize,
-      authMethod,
-      createdAt: new Date().toLocaleString("ko-KR", { hour12: false })
+      page_size: pageSize,
+      auth_method: authMethod
     };
-    const next = [entry, ...builtApis.filter((a) => a.sig !== sig)].slice(0, MAX_BUILT_APIS);
-    const persisted = persistBuiltApis(next);
-    setBuiltApis(next);
-    setBuiltStorageAvailable(persisted);
-    addConsoleLog(
-      `INFO: Data API 빌드·등록 — ${method} ${entry.endpoint}${entry.filter ? ` (filter: ${entry.filter})` : ""}`
-    );
-    setAsyncFeedback({
-      tone: persisted ? "success" : "error",
-      message: persisted
-        ? `${method} ${entry.endpoint} 구성을 발급 목록에 저장했습니다.`
-        : `${method} ${entry.endpoint} 구성은 현재 세션에만 유지됩니다. 브라우저 저장공간을 확인하세요.`
-    });
-    if (persisted) setIssuedApi({ sourceId: entry.sourceId, sourceLabel: entry.sourceLabel });
+    const endpoint = `/api/v3/dataops/${target.id}`;
+    setPendingAction("build");
+    setAsyncFeedback({ tone: "pending", message: `${method} ${endpoint} 구성을 등록하는 중입니다.` });
+    try {
+      await apiSend("POST", BUILT_APIS_URL, { token: await ensureToken(), body });
+      await refreshBuiltApis();
+      setBuiltPage(1);
+      addConsoleLog(
+        `INFO: Data API 빌드·등록 — ${method} ${endpoint}${body.filter ? ` (filter: ${body.filter})` : ""}`
+      );
+      setAsyncFeedback({ tone: "success", message: `${method} ${endpoint} 구성을 발급 목록에 저장했습니다.` });
+      setIssuedApi({ sourceId: target.id, sourceLabel: target.label });
+    } catch (err) {
+      addConsoleLog(`WARN: Data API 빌드·등록 실패 — ${err.message}`, false, true);
+      if (!discardTokenOn401(err)) {
+        setAsyncFeedback({ tone: "error", message: `API 구성을 등록하지 못했습니다. ${err.message}` });
+      }
+    } finally {
+      setPendingAction(null);
+    }
   };
 
   // 등록된 API [호출] — 빌더 상태를 건드리지 않고 스냅샷 그대로 실행, 결과는 해당 행 아래 인라인 표시
@@ -543,7 +579,8 @@ export default function DataOpsPage() {
       text: JSON.stringify(result.body, null, 2),
       ms: elapsed,
       time: new Date().toLocaleTimeString("ko-KR", { hour12: false }),
-      ok: result.ok
+      ok: result.ok,
+      degrade: degradeReasonOf(result.body)
     });
     // STEP ③ 완료 표시는 빌더 직접 호출(위 handleRunApi)과 같은 규칙으로 마지막 호출 결과를 따른다.
     // 성공만 반영하면 이후 실패해도 완료 표시가 남는다.
@@ -573,18 +610,20 @@ export default function DataOpsPage() {
     });
   };
 
-  const handleDeleteBuilt = (id) => {
-    const next = builtApis.filter((a) => a.id !== id);
-    const persisted = persistBuiltApis(next);
-    setBuiltApis(next);
-    setBuiltStorageAvailable(persisted);
-    setBuiltResult((r) => (r?.apiId === id ? null : r));
-    setAsyncFeedback({
-      tone: persisted ? "success" : "error",
-      message: persisted
-        ? "발급 API를 목록에서 삭제했습니다."
-        : "현재 화면에서는 API를 삭제했지만 브라우저 저장소를 갱신하지 못했습니다. 새로고침하면 다시 나타날 수 있습니다."
-    });
+  const handleDeleteBuilt = async (id) => {
+    try {
+      await apiSend("DELETE", `${BUILT_APIS_URL}/${id}`, { token: await ensureToken() });
+      await refreshBuiltApis();
+      setBuiltResult((r) => (r?.apiId === id ? null : r));
+      addConsoleLog(`WARN: 발급 API 제거 — ${id}`, false, true);
+      setAsyncFeedback({ tone: "success", message: "발급 API를 목록에서 삭제했습니다." });
+    } catch (err) {
+      addConsoleLog(`WARN: 발급 API 삭제 실패 — ${err.message}`, false, true);
+      if (!discardTokenOn401(err)) {
+        setAsyncFeedback({ tone: "error", message: `발급 API를 삭제하지 못했습니다. ${err.message}` });
+      }
+      throw err;
+    }
   };
 
   const requestDeleteSource = (source) => {
@@ -623,7 +662,7 @@ export default function DataOpsPage() {
       kind: "built-api",
       api,
       title: "발급 API를 삭제할까요?",
-      description: `${api.method} ${api.endpoint} 구성을 브라우저의 발급 목록에서 삭제합니다. 원본 데이터는 변경하지 않습니다.`,
+      description: `${api.method} ${api.endpoint} 구성을 발급 목록에서 삭제합니다. 원본 데이터는 변경하지 않습니다.`,
       confirmLabel: "API 삭제",
       nextFocusSelector: next ? `[data-built-delete="${next.id}"]` : "#dataops-built-title",
       fallbackFocusSelector: "#dataops-built-title",
@@ -641,7 +680,7 @@ export default function DataOpsPage() {
         setCatalogPage(action.nextPage);
       }
       if (action.kind === "built-api") {
-        handleDeleteBuilt(action.api.id);
+        await handleDeleteBuilt(action.api.id);
         setBuiltPage(action.nextPage);
       }
       if (action.kind === "builder-request") await runApi();
@@ -690,34 +729,12 @@ export default function DataOpsPage() {
           <div className="empty-state">
             <i className="fa-solid fa-box-open" aria-hidden="true"></i>
             <p>등록된 데이터 소스가 없습니다. 아카이브 메타데이터를 등록해 시작하세요.</p>
-            {/* 소스가 하나도 없는 퇴화 상태 — ③ 단계(토큰 발급 UI)가 렌더되지 않으므로 발급 버튼을
-                이 분기에 함께 둔다. STEP ③ 카드를 그대로 재사용할 수 없는 이유는 그 카드가 선택된
-                소스(target)의 스키마·빌더에 묶여 있어서다. 폼은 열 수 있게 두고(등록이 유일한 진입
-                경로) 토큰이 없으면 폼의 submit만 비활성화한다. */}
-            <p
-              role="status"
-              aria-live="polite"
-              style={{ fontSize: 11, color: token ? "var(--accent-teal)" : "var(--text-muted)" }}
-            >
-              <i className={`fa-solid ${token ? "fa-key" : "fa-lock"}`} aria-hidden="true"></i>{" "}
-              {token
-                ? `${authMethod} 인증됨 (Bearer) — 아카이브를 등록할 수 있습니다.`
-                : "등록에는 data:write 토큰이 필요합니다. 토큰 발급 후 등록 가능."}
+            {/* 소스가 하나도 없는 퇴화 상태 — ③ 단계(토큰 발급 UI)가 렌더되지 않는다.
+                등록 시 data:write 토큰은 ensureToken 이 자동으로 받아오므로 별도 발급 단계가 없다. */}
+            <p role="status" aria-live="polite" style={{ fontSize: 11, color: "var(--text-muted)" }}>
+              <i className="fa-solid fa-key" aria-hidden="true"></i>{" "}
+              등록 요청 시 data:write 토큰을 자동으로 발급합니다.
             </p>
-            {!token && (
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={handleIssueToken}
-                disabled={Boolean(pendingAction)}
-              >
-                <i
-                  className={`fa-solid ${pendingAction === "token" ? "fa-spinner fa-spin" : "fa-fingerprint"}`}
-                  aria-hidden="true"
-                ></i>{" "}
-                {pendingAction === "token" ? "발급 중" : `${authMethod} 토큰 발급`}
-              </button>
-            )}
             {!showRegForm && (
               <button type="button" className="btn btn-primary" onClick={() => setShowRegForm(true)}>
                 <i className="fa-solid fa-plus" aria-hidden="true"></i> 신규 아카이브 등록
@@ -729,7 +746,7 @@ export default function DataOpsPage() {
               onRegister={handleRegisterSource}
               onCancel={() => setShowRegForm(false)}
               onSubmittingChange={setRegistrationSubmitting}
-              canSubmit={Boolean(token)}
+              canSubmit
             />
           )}
         </Card>
@@ -750,7 +767,11 @@ export default function DataOpsPage() {
   // 데모 표시 OFF = "실제로 적재된 데이터만". UI는 그대로 두고 목록에 담기는 소스만 달라진다.
   // 저장소에서 0건으로 확인된 소스만 빠지고, live_rows 가 null(확인 불가)인 소스는 남긴다
   // — 미적재(0)와 확인 실패(null)를 섞으면 DB 장애가 '데이터 없음'처럼 보인다.
-  const visibleSources = mockDataVisible ? sources : sources.filter((s) => s.live_rows !== 0);
+  // 사용자가 직접 등록한 소스는 적재 전(0건)이라도 남긴다 — 방금 등록한 소스가 목록에서 사라지면
+  // 등록 자체가 실패한 것처럼 보이고, 다시 선택할 수도 없다. 행의 '적재 행수 0'이 미적재를 말해 준다.
+  const visibleSources = mockDataVisible
+    ? sources
+    : sources.filter((s) => s.live_rows !== 0 || s.user_registered);
 
   // 카탈로그 검색 — 소스명·태그·설명·객체명 부분 일치
   const q = catalogQuery.trim().toLowerCase();
@@ -851,14 +872,14 @@ export default function DataOpsPage() {
                 <option value="loaded">최근 적재일</option>
               </select>
             </label>
-            {/* 토큰 없이는 등록 폼을 열지 않는다(닫기는 항상 허용해 폼에 갇히지 않도록) */}
+            {/* 토큰 유무로 막지 않는다 — 등록·삭제 시 ensureToken 이 발급한다.
+                실제 보안 경계는 서버의 data:write scope 검사다. */}
             <button
               type="button"
               className={`btn ${showRegForm ? "btn-secondary" : "btn-primary"} catalog-reg-btn`}
               onClick={() => setShowRegForm((v) => !v)}
               aria-expanded={showRegForm}
-              disabled={registrationSubmitting || (!token && !showRegForm)}
-              aria-describedby={token ? undefined : "catalog-auth-hint"}
+              disabled={registrationSubmitting}
             >
               <i className={`fa-solid ${showRegForm ? "fa-xmark" : "fa-plus"}`} aria-hidden="true"></i>{" "}
               {showRegForm ? "등록 닫기" : "신규 아카이브 등록"}
@@ -876,15 +897,13 @@ export default function DataOpsPage() {
                 검색 해제
               </button>
             )}
-            {/* 버튼 비활성은 UX 안내일 뿐이고, 실제 보안 경계는 서버의 401(data:write 스코프)이다. */}
-            {!token && (
-              <span id="catalog-auth-hint" style={{ fontSize: 11, color: "var(--text-muted)" }}>
-                <i className="fa-solid fa-lock" aria-hidden="true"></i> ③ 단계에서 토큰 발급 후 등록·삭제 가능{" "}
-                <button type="button" className="btn btn-tertiary" onClick={jumpToTokenIssue}>
-                  토큰 발급으로 이동
-                </button>
-              </span>
-            )}
+            {/* 실제 보안 경계는 서버의 401(data:write 스코프)이다. 화면에서는 현재 인증 상태만 알린다. */}
+            <span id="catalog-auth-hint" style={{ fontSize: 11, color: "var(--text-muted)" }}>
+              <i className={`fa-solid ${token ? "fa-key" : "fa-lock"}`} aria-hidden="true"></i>{" "}
+              {token
+                ? `${authMethod} 인증됨 (Bearer) — 등록·삭제 가능`
+                : "등록·삭제 시 data:write 토큰을 자동 발급합니다"}
+            </span>
           </div>
 
           {/* 폼이 열린 뒤 인증 방식 전환·401로 token이 null이 되면 canSubmit이 즉시 false가 된다. */}
@@ -893,7 +912,7 @@ export default function DataOpsPage() {
               onRegister={handleRegisterSource}
               onCancel={() => setShowRegForm(false)}
               onSubmittingChange={setRegistrationSubmitting}
-              canSubmit={Boolean(token)}
+              canSubmit
             />
           )}
 
@@ -920,9 +939,12 @@ export default function DataOpsPage() {
                 {catalogPg.pageRows.map((s) => {
                   const isActive = s.id === sourceId;
                   return (
+                    // 행 전체가 선택 영역이다 — 소스명 텍스트 버튼(약 48px)만 눌리던 탓에 행을 눌러도
+                    // 아무 일이 없어 "소스 선택이 안 된다"로 보였다. 버튼은 키보드·스크린리더용으로 남긴다.
                     <tr
                       key={s.id}
-                      className={isActive ? "catalog-row-active" : ""}
+                      className={`catalog-row-select${isActive ? " catalog-row-active" : ""}`}
+                      onClick={() => handleSelectSource(s.id)}
                     >
                       <td>
                         <button
@@ -953,12 +975,14 @@ export default function DataOpsPage() {
                           <button
                             type="button"
                             className="btn btn-secondary catalog-row-del"
-                            onClick={() => requestDeleteSource(s)}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              requestDeleteSource(s);
+                            }}
                             data-source-delete={s.id}
-                            disabled={Boolean(pendingAction) || !token}
+                            disabled={Boolean(pendingAction)}
                             aria-label={`${s.label} 아카이브 삭제`}
-                            aria-describedby={token ? undefined : "catalog-auth-hint"}
-                            title={token ? "등록 해제 (메타데이터·API 제공 중지)" : "토큰 발급 후 삭제 가능"}
+                            title="등록 해제 (메타데이터·API 제공 중지)"
                           >
                             <i className="fa-solid fa-trash-can" aria-hidden="true"></i>
                           </button>
@@ -1277,8 +1301,17 @@ export default function DataOpsPage() {
             </div>
 
             <div className="builder-action-row">
-              <button className="btn btn-secondary" onClick={handleBuildApi}>
-                <i className="fa-solid fa-hammer"></i> API 빌드·등록
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={handleBuildApi}
+                disabled={Boolean(pendingAction)}
+              >
+                <i
+                  className={`fa-solid ${pendingAction === "build" ? "fa-spinner fa-spin" : "fa-hammer"}`}
+                  aria-hidden="true"
+                ></i>{" "}
+                {pendingAction === "build" ? "등록 중" : "API 빌드·등록"}
               </button>
               <button type="button" className="btn btn-primary mock-data-output" onClick={handleRunApi} disabled={Boolean(pendingAction)}>
                 <i className={`fa-solid ${pendingAction === "builder-request" ? "fa-spinner fa-spin" : "fa-paper-plane"}`} aria-hidden="true"></i>{" "}
@@ -1303,6 +1336,13 @@ export default function DataOpsPage() {
             }
           >
             <pre className="api-response" aria-live="polite" aria-busy={pendingAction === "builder-request"}>{responseText}</pre>
+            {degradeNote && (
+              <p className="dataops-degrade-note mock-data-output" role="status">
+                <i className="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>{" "}
+                실 저장소 조회에 실패해 표준 응답 형태(source_kind=in-memory)만 반환했습니다. 표시된 행수·샘플은
+                실측값이 아닙니다. 사유: {degradeNote}
+              </p>
+            )}
           </Card>
         </div>
 
@@ -1315,14 +1355,19 @@ export default function DataOpsPage() {
           className="dataops-built-card"
           headerRight={
             <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
-              {builtApis.length}건 · {builtStorageAvailable ? "브라우저에 보존" : "현재 세션에만 유지"}
+              {builtApis.length}건 · 서버 보존
             </span>
           }
         >
-          {builtApis.length === 0 ? (
+          {builtApisError ? (
+            <p className="dataops-degrade-note" role="alert">
+              <i className="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>{" "}
+              발급 API 목록을 불러오지 못했습니다. {builtApisError}
+            </p>
+          ) : builtApis.length === 0 ? (
             <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>
               아직 빌드된 API가 없습니다. 요청을 구성한 뒤 <strong>[API 빌드·등록]</strong>을 누르면
-              발급된 API가 이 목록에 보존되고, [호출]로 언제든 재실행할 수 있습니다.
+              발급된 API가 서버에 보존되고, [호출]로 언제든 재실행 · [삭제]로 제거할 수 있습니다.
             </p>
           ) : (
             <div className="table-container">
@@ -1444,6 +1489,13 @@ export default function DataOpsPage() {
                                 </span>
                               </div>
                               <pre className="api-response built-resp-pre">{builtResult.text}</pre>
+                              {builtResult.degrade && (
+                                <p className="dataops-degrade-note mock-data-output" role="status">
+                                  <i className="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>{" "}
+                                  실 저장소 조회에 실패해 표준 응답 형태(source_kind=in-memory)만 반환했습니다.
+                                  사유: {builtResult.degrade}
+                                </p>
+                              )}
                             </td>
                           </tr>
                         )}

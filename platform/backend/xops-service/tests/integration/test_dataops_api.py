@@ -99,3 +99,19 @@ def test_oauth2_issue_validates_catalog_like_token(client: TestClient) -> None:
     ok = client.post("/api/v3/dataops/oauth2/ds_01_resident_registry")
     assert ok.status_code == 200
     assert "access_token" in ok.json()
+
+
+def test_degrade_surfaces_reason_in_response(client, auth_headers, monkeypatch) -> None:
+    """저장소 왕복이 실패하면 사유를 응답에 싣는다 — 로그에만 남기면 스텁이 실조회로 보인다."""
+    from src.dataops import service as service_module
+
+    def _boom(_schema):
+        raise RuntimeError("connection refused")
+
+    monkeypatch.setattr(service_module, "get_adapter", _boom)
+    body = client.get("/api/v3/dataops/ds_01_resident_registry", headers=auth_headers).json()
+    assert body["source_kind"] == "in-memory"
+    assert "connection refused" in body["source_kind_reason"]
+
+    written = client.post("/api/v3/dataops/ds_01_resident_registry", json={"data": {}}, headers=auth_headers).json()
+    assert written["source_kind_reason"]
