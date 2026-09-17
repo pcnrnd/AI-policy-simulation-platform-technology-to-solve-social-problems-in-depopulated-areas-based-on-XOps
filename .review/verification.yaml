@@ -9,6 +9,41 @@ checks:
     cwd: platform/frontend
     command: [npm, run, build]
     requires_files: [platform/frontend/node_modules/.package-lock.json]
+  - id: dataops-demo-off-e2e
+    cwd: platform/backend/xops-service
+    command: ['{python}', -B, -m, pytest, -p, 'no:cacheprovider', -o, 'addopts=', -q,
+              tests/integration/test_dataops_demo_off_e2e.py,
+              tests/integration/test_catalog_live.py,
+              tests/integration/test_overview_api.py,
+              tests/unit/test_liveness.py]
+    requires_modules: [pytest, fastapi, httpx]
+    timeout_seconds: 180
+    configured: false
+    kind: functional
+    reason: >-
+      데모 OFF(실데이터) 기준 DataOps 한 바퀴를 고정한다: STEP ① 카탈로그가 live_rows 로
+      실적재/미적재/확인불가를 구분 → STEP ② 선택 소스의 컬럼이 실 테이블과 같은 이름·순서 →
+      STEP ③ 토큰 발급 → API 호출이 source_kind="database" 와 실 행을 반환.
+      판정: 위 4개 모듈 전건 통과(실패 0). 어댑터를 주입하므로 DB 없이도 돌지만,
+      그래서 **실 컨테이너 왕복은 증명하지 않는다** — 아래 수동 항목과 짝으로만 완결된다.
+      configured:false 인 이유는 실 왕복 스모크(dataops-demo-off-live-smoke)가 아직
+      자동화되지 않아 이 항목만으로는 "데모 OFF에서 실데이터가 보인다"를 단정할 수 없기 때문이다.
+
+  - id: dataops-demo-off-live-smoke
+    cwd: .
+    command: ['{python}', -c, 'raise SystemExit("수동: compose 기동 후 아래 reason 의 4단계를 실행")']
+    configured: false
+    kind: manual
+    reason: >-
+      실 컨테이너 왕복 스모크(자동화 전). 전제: compose 기동, pg 5433 에 실데이터 적재.
+      1) GET /api/v3/dataops/catalog?live=true → 적재 소스의 live_rows 가 실제 count(*) 와 일치.
+      2) GET /api/v3/overview/summary → archive_rows_total 이 실측 합계(현재 약 235,596)이고
+         시드 합계 2,555,386 이 아니며, archive_rows_unknown 이 함께 보고된다.
+      3) POST /api/v3/dataops/token/{실적재 소스} → 200, scope 에 data:read.
+      4) GET /api/v3/dataops/{그 소스} → source_kind="database" 이고 rows 가 비어 있지 않다.
+      화면 판정: 설정에서 데모 데이터 표시 OFF 로 두고 DataOps 탭에서 STEP ② 스키마 표와
+      STEP ③ 토큰·생성 SQL·응답이 **보이는지**(가려지지 않는지) 확인한다.
+
   - id: model-apply-restore
     cwd: platform/backend/xops-service
     command: ['{python}', -c, 'raise SystemExit("Use the isolated PostgreSQL model apply/restore protocol")']

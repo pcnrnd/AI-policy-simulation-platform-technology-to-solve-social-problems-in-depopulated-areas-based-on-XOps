@@ -61,13 +61,18 @@ export default function Overview() {
   const catalogOrigin = liveSources ? "api" : "mock";
 
   // 도넛: 소스별 아카이브 적재 행 수 — "어떤 소스가 얼마나 적재돼 있는가"를 보여준다.
+  // 실측 롤업에서 archive_rows 가 null 인 소스는 '확인 불가'다 — 0으로 그리면 적재량이 없는
+  // 것처럼 보이므로 도넛에서 아예 뺀다. 몇 건을 못 셌는지는 아래 unknownSources 로 알린다.
   const sourceRows = useMemo(
     () =>
       liveSources
-        ? liveSources.map((s) => ({ label: s.label ?? s.id, rows: s.archive_rows ?? 0 }))
+        ? liveSources
+            .filter((s) => typeof s.archive_rows === "number")
+            .map((s) => ({ label: s.label ?? s.id, rows: s.archive_rows }))
         : appData.metadata_schemas.map((s) => ({ label: s.label ?? s.id, rows: s.archive?.rows ?? 0 })),
     [liveSources, appData]
   );
+  const unknownSources = liveSources ? overviewSummary.archive_rows_unknown ?? 0 : 0;
 
   const sourceData = useMemo(
     () => ({
@@ -215,6 +220,8 @@ export default function Overview() {
           <p className="chart-summary">
             총 {sourceTotal.toLocaleString()}행 중 가장 큰 소스는 {largestSource?.label ?? "–"} {largestSource?.rows.toLocaleString() ?? 0}행입니다.
             소스별 적재량: {sourceRows.map((source) => `${source.label} ${source.rows.toLocaleString()}행`).join(", ")}.
+            {/* 저장소에 닿지 못한 소스는 0으로 단정하지 않고 건수만 알린다(L0 감사 G3). */}
+            {unknownSources > 0 && ` 적재 여부를 확인하지 못한 소스 ${unknownSources}건은 합계에서 제외했습니다.`}
           </p>
         </Card>
 
