@@ -74,3 +74,58 @@ def test_runs_recorded(client: TestClient) -> None:
     runs = client.get("/api/v3/orchestration/runs").json()
     assert len(runs) >= 1
     assert "run_id" in runs[0]
+
+
+# ── ML 파이프라인 등록 → 실행 → 실행 로그 (데모 OFF 경로) ──
+
+
+def test_pipeline_register_run_logs_roundtrip(client: TestClient, reset_model: Callable[[str], None]) -> None:
+    """등록한 파이프라인으로 실행하면 실행 레코드·단계·로그가 저장소에 남고 조회된다."""
+    reset_model("settlement-demand")
+    definition = {
+        "id": "PL-TEST-RT-01",
+        "name": "왕복 테스트 파이프라인",
+        "model_id": "settlement-demand",
+        "trigger_policy": "수동",
+        "experiment": "EXP-RT-001",
+    }
+    client.delete(f"/api/v3/orchestration/pipelines/{definition['id']}")
+
+    created = client.post("/api/v3/orchestration/pipelines", json=definition)
+    assert created.status_code == 201
+    assert created.json()["model_id"] == "settlement-demand"
+
+    # 등록 목록에 현행/다음 후보 버전이 함께 실린다 (후보가 현행과 같아 실행이 잠기지 않도록).
+    listed = {p["id"]: p for p in client.get("/api/v3/orchestration/pipelines").json()}
+    assert definition["id"] in listed
+    assert listed[definition["id"]]["candidate_version"] != listed[definition["id"]]["base_version"]
+
+    # id 중복 등록 거부 · 없는 모델 거부
+    assert client.post("/api/v3/orchestration/pipelines", json=definition).status_code == 409
+    assert client.post(
+        "/api/v3/orchestration/pipelines", json={**definition, "id": "PL-TEST-GHOST", "model_id": "ghost"}
+    ).status_code == 404
+
+    run = client.post(f"/api/v3/orchestration/pipelines/{definition['id']}/run", json={"trigger": "manual"}).json()
+    assert run["pipeline_id"] == definition["id"]
+    assert run["state"] == "succeeded"
+    assert [s["stage"] for s in run["stages"]] == ["queued", "preparing", "training", "evaluating", "deploying"]
+    assert run["started_at"] and run["finished_at"]
+
+    # 실행 이력이 파이프라인별로 조회된다 (프로세스 메모리가 아니라 SQLite에서).
+    history = client.get("/api/v3/orchestration/runs", params={"pipeline_id": definition["id"]}).json()
+    assert [r["run_id"] for r in history] == [run["run_id"]]
+
+    logs = client.get(f"/api/v3/orchestration/runs/{run['run_id']}/logs").json()
+    assert logs["state"] == "succeeded"
+    messages = [entry["message"] for entry in logs["logs"]]
+    assert any("재학습 이벤트 접수" in m for m in messages)
+    assert any("[training]" in m for m in messages)
+    assert any("[evaluating]" in m for m in messages)
+    assert any("[deploying]" in m for m in messages)
+
+    assert client.get("/api/v3/orchestration/runs/RUN-NONE/logs").status_code == 404
+    assert client.delete(f"/api/v3/orchestration/pipelines/{definition['id']}").status_code == 200
+    assert client.post(f"/api/v3/orchestration/pipelines/{definition['id']}/run").status_code == 404
+    # 파이프라인을 지워도 실행 이력은 남는다.
+    assert client.get("/api/v3/orchestration/runs", params={"pipeline_id": definition["id"]}).json()
