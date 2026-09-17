@@ -368,7 +368,8 @@ body.drawer-open {
   .async-feedback,
   .xops-next-step,
   .routing-flow,
-  .query-lang-chip,
+  /* .query-lang-chip 은 생성 질의의 언어(SQL/MQL) 셀렉터 — 실데이터에서 파생한 조작 표시이므로
+     가림 대상이 아니다(G11 정정). */
   .resp-origin-chip,
   .card-title-area > :not(.card-title),
   .pl-factor-list,

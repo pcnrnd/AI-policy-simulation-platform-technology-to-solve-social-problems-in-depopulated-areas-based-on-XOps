@@ -118,14 +118,23 @@
   cursor: pointer;
   user-select: none;
 }
-.pl-stage-head:focus-visible {
+/* 접기 토글 — 머리글 오른쪽 끝. 머리글 전체 클릭도 계속 되지만 초점은 이 버튼만 받는다. */
+.pl-stage-toggle {
+  margin-left: auto;
+  align-self: center;
+  background: none;
+  border: 0;
+  padding: 2px 4px;
+  line-height: 1;
+  cursor: pointer;
+  color: inherit;
+}
+.pl-stage-toggle:focus-visible {
   outline: 2px solid var(--accent-blue);
   outline-offset: 4px;
   border-radius: 6px;
 }
 .pl-stage-chevron {
-  margin-left: auto;
-  align-self: center;
   color: var(--text-muted);
   transition: transform var(--transition-fast), color var(--transition-fast);
 }
