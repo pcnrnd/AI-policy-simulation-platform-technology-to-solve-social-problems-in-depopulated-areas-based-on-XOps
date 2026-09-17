@@ -18,7 +18,7 @@ from functools import lru_cache
 from typing import Any
 
 from src.core import db
-from src.core.exceptions import SourceNotFoundError
+from src.core.exceptions import SourceNotFoundError, XopsError
 from src.core.logger import get_logger
 from src.core.settings import get_settings
 from src.mlops.orchestration.events import RetrainEvent
@@ -26,6 +26,12 @@ from src.mlops.orchestration.orchestrator import Orchestrator, PipelineRun
 
 _logger = get_logger("xops.orchestration")
 _VERSION_PATTERN = re.compile(r"^v(\d+)\.(\d+)")
+
+
+class DuplicatePipelineError(XopsError):
+    """이미 존재하는 파이프라인 id로 등록 시도."""
+
+    status_code = 409
 
 # 프론트 레지스트리 3종 대응 시드.
 # horizon(예측 지평, 기간)은 학습 문제의 난이도를 정한다 — 지평이 길수록 어려워 지표가 낮다.
@@ -115,8 +121,50 @@ class ModelRegistry:
             )
         return out
 
-    def runs(self) -> list[dict[str, Any]]:
-        return db.list_runs()
+    def runs(self, pipeline_id: str | None = None) -> list[dict[str, Any]]:
+        runs = db.list_runs()
+        return [r for r in runs if r.get("pipeline_id") == pipeline_id] if pipeline_id else runs
+
+    # ── 파이프라인 등록 ─────────────────────────────────────
+    def pipelines(self) -> list[dict[str, Any]]:
+        """등록된 파이프라인 + 대상 모델의 현행/다음 후보 버전.
+
+        후보 버전은 저장하지 않고 매번 현행 버전에서 파생한다 — 고정 상수로 두면 한 번
+        승급한 뒤 현행과 같아져 실행이 영구히 잠긴다.
+        """
+        models = {m["model_id"]: m for m in self.models()}
+        out: list[dict[str, Any]] = []
+        for pipeline in db.list_pipelines():
+            model = models.get(pipeline["model_id"])
+            out.append(
+                {
+                    **pipeline,
+                    "base_version": model["version"] if model else None,
+                    "candidate_version": model["next_version"] if model else None,
+                }
+            )
+        return out
+
+    def register_pipeline(self, definition: dict[str, Any]) -> dict[str, Any]:
+        """파이프라인 등록 — 대상 모델 존재 검증 + id 중복 거부 (SQLite 영속화)."""
+        pipeline_id = definition["id"]
+        if definition["model_id"] not in self._store:
+            raise SourceNotFoundError(f"등록된 모델이 아닙니다: {definition['model_id']}")
+        if db.get_pipeline(pipeline_id) is not None:
+            raise DuplicatePipelineError(f"이미 존재하는 파이프라인 id입니다: {pipeline_id}")
+        db.add_pipeline(definition)
+        _logger.info(f"pipeline registered id={pipeline_id} model={definition['model_id']}")
+        return definition
+
+    def delete_pipeline(self, pipeline_id: str) -> None:
+        if not db.delete_pipeline(pipeline_id):
+            raise SourceNotFoundError(f"파이프라인을 찾을 수 없습니다: {pipeline_id}")
+
+    def get_pipeline(self, pipeline_id: str) -> dict[str, Any]:
+        pipeline = db.get_pipeline(pipeline_id)
+        if pipeline is None:
+            raise SourceNotFoundError(f"파이프라인을 찾을 수 없습니다: {pipeline_id}")
+        return pipeline
 
     def trigger(
         self,
@@ -125,6 +173,7 @@ class ModelRegistry:
         trigger: str = "manual",
         candidate_metrics: dict[str, float] | None = None,
         candidate_latency_ms: float | None = None,
+        pipeline_id: str | None = None,
     ) -> PipelineRun:
         """재학습 이벤트를 상태머신에 태우고 승급 성공 시 버전·아티팩트를 갱신(SQLite 영속화)."""
         model = self._store.get(model_id)
@@ -145,6 +194,7 @@ class ModelRegistry:
             current_version=current_version,
             candidate_version=next_version(current_version),
             horizon=model.get("horizon", get_settings().train_default_horizon),
+            pipeline_id=pipeline_id,
         )
         db.append_run(asdict(run))
         if run.state == "succeeded":
