@@ -1,15 +1,45 @@
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import Card from "../components/Card.jsx";
 import ConsoleLog from "../components/ConsoleLog.jsx";
 import InfoTip from "../components/InfoTip.jsx";
 import NextStepBanner from "../components/NextStepBanner.jsx";
+import PipelineRegisterForm from "../components/PipelineRegisterForm.jsx";
 import TablePager, { paginate } from "../components/TablePager.jsx";
 import RealdataTrainingPanel from "../components/realdata/RealdataTrainingPanel.jsx";
 import { useAppState } from "../context/AppStateContext.jsx";
 import { PIPELINE_NODES } from "../constants/pipeline.js";
-import { RETRAIN_PIPELINES, MODEL_REGISTRY } from "../constants/models.js";
+import { MODEL_REGISTRY } from "../constants/models.js";
+import { apiGet, apiSend } from "../lib/api.js";
 
 const PAGE_SIZE = 5;
+
+const RUN_STATE_LABEL = {
+  succeeded: "승급 완료",
+  rejected: "승급 반려",
+  rolled_back: "자동 롤백",
+  debounced: "실행 조정",
+  failed: "실패"
+};
+
+// 저장된 실행 로그의 ISO 타임스탬프를 콘솔 표기(hh:mm:ss)로. 파싱 실패 시 원문을 남긴다.
+function logTime(ts) {
+  const parsed = new Date(ts);
+  return Number.isNaN(parsed.getTime()) ? String(ts ?? "") : parsed.toTimeString().slice(0, 8);
+}
+
+// 백엔드 파이프라인 정의(snake_case) → AppStateContext.startPipeline 이 기대하는 실행 정의.
+function toRunDef(pipeline) {
+  return {
+    id: pipeline.id,
+    name: pipeline.name,
+    model: pipeline.model_id,
+    modelId: pipeline.model_id,
+    baseVersion: pipeline.base_version,
+    candidateVersion: pipeline.candidate_version,
+    experiment: pipeline.experiment,
+    triggerPolicy: pipeline.trigger_policy
+  };
+}
 
 const STORE_STATUS_STYLE = {
   운영: { color: "var(--accent-teal)", bg: "rgba(var(--accent-teal-rgb), 0.02)" },
@@ -65,7 +95,6 @@ export default function OrchestratorPage() {
     pipelineStep,
     pipelineRun,
     pipelineResult,
-    pipelineHistory,
     modelStore,
     consoleLogs,
     startPipeline,
@@ -102,15 +131,95 @@ export default function OrchestratorPage() {
             ? `파이프라인 실행 완료, 후보 모델 승급 없음 (${terminalState})`
             : `파이프라인 실행 완료, 전체 ${PIPELINE_NODES.length}단계 완료`;
 
-  // 테이블 페이징 (파이프라인 카탈로그 / Model Store)
+  // 파이프라인 정의·실행 이력·실행 로그는 모두 백엔드 저장소(SQLite)에서 읽는다.
+  // pipelines=null 은 "아직 안 불러옴", [] 는 "등록 없음"(빈 상태 문구)으로 구분한다.
+  const [pipelines, setPipelines] = useState(null);
+  const [runs, setRuns] = useState([]);
+  const [models, setModels] = useState([]);
+  const [catalogError, setCatalogError] = useState(null);
+  const [registerOpen, setRegisterOpen] = useState(false);
+  const [selectedRunId, setSelectedRunId] = useState(null);
+  const [runLogs, setRunLogs] = useState(null);
+
+  const reloadCatalog = useCallback(async () => {
+    try {
+      const [pipelineRows, runRows, modelRows] = await Promise.all([
+        apiGet("/api/v3/orchestration/pipelines"),
+        apiGet("/api/v3/orchestration/runs"),
+        apiGet("/api/v3/orchestration/models")
+      ]);
+      setPipelines(Array.isArray(pipelineRows) ? pipelineRows : []);
+      setRuns(Array.isArray(runRows) ? runRows : []);
+      setModels(Array.isArray(modelRows) ? modelRows : []);
+      setCatalogError(null);
+    } catch (err) {
+      const message = err?.message ?? "알 수 없는 오류";
+      setPipelines((prev) => prev ?? []);
+      setCatalogError(message);
+      addConsoleLog(`ERROR: 파이프라인 카탈로그 로드 실패 — ${message}`);
+    }
+  }, [addConsoleLog]);
+
+  useEffect(() => {
+    reloadCatalog();
+  }, [reloadCatalog]);
+
+  // 실행이 끝나면(백엔드 PipelineRun 수신) 이력을 다시 읽고 그 실행의 로그를 펼친다.
+  useEffect(() => {
+    if (!pipelineResult?.run_id) return;
+    setSelectedRunId(pipelineResult.run_id);
+    reloadCatalog();
+  }, [pipelineResult, reloadCatalog]);
+
+  useEffect(() => {
+    if (!selectedRunId) {
+      setRunLogs(null);
+      return undefined;
+    }
+    let alive = true;
+    apiGet(`/api/v3/orchestration/runs/${encodeURIComponent(selectedRunId)}/logs`)
+      .then((data) => alive && setRunLogs(data))
+      .catch((err) => {
+        if (!alive) return;
+        setRunLogs(null);
+        addConsoleLog(`WARN: 실행 로그 조회 실패 (${selectedRunId}) — ${err?.message ?? "알 수 없는 오류"}`);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [selectedRunId, addConsoleLog]);
+
+  // aria-disabled 는 클릭을 막지 않으므로(§9 A11Y-01 규약) 실행 차단은 여기서 한다.
+  const handleDeletePipeline = async (pipelineId) => {
+    if (pipelineRunning || pipelineScheduled) return;
+    try {
+      await apiSend("DELETE", `/api/v3/orchestration/pipelines/${encodeURIComponent(pipelineId)}`);
+      addConsoleLog(`INFO: 재학습 파이프라인 등록 해제 — ${pipelineId} (실행 이력은 보존됩니다)`);
+      await reloadCatalog();
+    } catch (err) {
+      addConsoleLog(`WARN: 파이프라인 삭제 실패 — ${err?.message ?? "알 수 없는 오류"}`, false, true);
+    }
+  };
+
+  // 테이블 페이징 (파이프라인 카탈로그 / Model Store / 실행 이력)
   const [plPage, setPlPage] = useState(1);
   const [storePage, setStorePage] = useState(1);
+  const [runPage, setRunPage] = useState(1);
   const statusAnchorRef = useRef(null);
   const runBusyRef = useRef(false);
   const resetBusyRef = useRef(false);
   const [statusFocusRequest, setStatusFocusRequest] = useState(0);
-  const pl = paginate(RETRAIN_PIPELINES, plPage, PAGE_SIZE);
+  const pipelineRows = pipelines ?? [];
+  const pl = paginate(pipelineRows, plPage, PAGE_SIZE);
   const store = paginate(modelStore, storePage, PAGE_SIZE);
+  const runList = paginate(runs, runPage, PAGE_SIZE);
+
+  // 현재(또는 선택한) 실행의 저장 레코드 — 실행 ID·시각·단계는 프런트 생성값이 아니라 이 값을 쓴다.
+  const activeRun = runs.find((r) => r.run_id === (pipelineResult?.run_id ?? selectedRunId)) ?? null;
+  // ponytail: pipeline_id 가 없는 실행(공용 /orchestration/events 경로)은 모델로 짝짓는다.
+  // AppStateContext 가 pipeline_id 를 함께 보내면 이 fallback 은 지워도 된다(보고서 변경 요청 참조).
+  const lastRunOf = (pipeline) =>
+    runs.find((r) => r.pipeline_id === pipeline.id || (!r.pipeline_id && r.model_id === pipeline.model_id)) ?? null;
 
   // 잠금은 native disabled 대신 aria-disabled로 건다. disabled를 걸면 자기 활성화로 잠기는 순간
   // 브라우저가 초점을 body로 떨어뜨린다(§9 A11Y-01). 실행 차단은 핸들러 가드가 담당한다.
@@ -158,13 +267,46 @@ export default function OrchestratorPage() {
       <Card
         title="등록된 재학습 파이프라인"
         icon="fa-list-check"
-        className="page-section"
+        className="page-section orchestrator-live"
         headerRight={
-          <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
-            {RETRAIN_PIPELINES.length}건 등록 · 모델 레지스트리 연동 · 드리프트 감지 시 자동 실행
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
+              {pipelines === null ? "불러오는 중" : `${pipelineRows.length}건 등록`} · 모델 레지스트리 연동 · 드리프트 감지 시 자동 실행
+            </span>
+            <button
+              className="btn btn-primary"
+              style={{ padding: "5px 14px", fontSize: 12 }}
+              onClick={() => setRegisterOpen((open) => !open)}
+              aria-expanded={registerOpen}
+            >
+              <i className="fa-solid fa-plus" aria-hidden="true"></i> 파이프라인 등록
+            </button>
           </span>
         }
       >
+        {registerOpen && (
+          <PipelineRegisterForm
+            models={models}
+            onCancel={() => setRegisterOpen(false)}
+            onRegistered={(created) => {
+              setRegisterOpen(false);
+              addConsoleLog(`INFO: 재학습 파이프라인 등록 완료 — ${created.id} (${created.name}) · 대상 모델 ${created.model_id}`);
+              reloadCatalog();
+            }}
+          />
+        )}
+        {catalogError && (
+          <p className="pipeline-empty" role="alert">
+            <i className="fa-solid fa-circle-exclamation" aria-hidden="true"></i> 파이프라인 카탈로그를 불러오지
+            못했습니다 — {catalogError}
+          </p>
+        )}
+        {pipelines !== null && pipelineRows.length === 0 && !catalogError && (
+          <p className="pipeline-empty">
+            <i className="fa-solid fa-circle-info" aria-hidden="true"></i> 등록된 재학습 파이프라인이 없습니다.
+            [파이프라인 등록]으로 대상 모델과 트리거 조건을 지정해 추가하세요.
+          </p>
+        )}
         <div className="table-container">
           <table>
             <caption className="sr-only">등록된 재학습 파이프라인과 실행 상태</caption>
@@ -181,9 +323,9 @@ export default function OrchestratorPage() {
             <tbody>
               {pl.pageRows.map((p) => {
                 const isRunning = pipelineRunning && pipelineRun?.pipelineId === p.id;
-                const last = pipelineHistory[p.id];
-                const currentServing = modelStore.find((model) => model.modelId === p.model && model.status === "운영");
-                const candidateAvailable = currentServing?.version !== p.candidateVersion;
+                const last = lastRunOf(p);
+                // 후보 버전은 백엔드가 현행에서 파생해 내려준다 — 상수 후보와 달리 승급 후에도 잠기지 않는다.
+                const candidateAvailable = Boolean(p.candidate_version) && p.candidate_version !== p.base_version;
                 const runLocked = pipelineBusy || !candidateAvailable;
                 return (
                   <tr key={p.id}>
@@ -194,21 +336,27 @@ export default function OrchestratorPage() {
                       </div>
                     </td>
                     <td style={{ fontSize: 12 }}>
-                      {orDash(p.model)} {orDash(currentServing?.version ?? p.baseVersion)}
-                      {candidateAvailable ? ` → ${orDash(p.candidateVersion)}` : " · 다음 후보 미등록"}
+                      {orDash(p.model_id)} {orDash(p.base_version)}
+                      {candidateAvailable ? ` → ${orDash(p.candidate_version)}` : " · 다음 후보 미등록"}
                       <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{orDash(p.experiment)}</div>
                     </td>
-                    <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>{orDash(p.triggerPolicy)}</td>
+                    <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>{orDash(p.trigger_policy)}</td>
                     <td style={{ fontSize: 11, color: "var(--text-secondary)" }}>
                       {last ? (
                         <>
-                          <code style={{ color: "var(--accent-purple-text)" }}>{orDash(last.runId)}</code>
+                          <button
+                            className="pipeline-run-link"
+                            onClick={() => setSelectedRunId(last.run_id)}
+                            title="이 실행의 저장된 로그를 아래에서 봅니다"
+                          >
+                            {orDash(last.run_id)}
+                          </button>
                           <div style={{ color: "var(--text-muted)" }}>
-                            {orDash(last.finishedAt)} · {orDash(last.result)}
+                            {orDash(logTime(last.finished_at))} · {orDash(RUN_STATE_LABEL[last.state] ?? last.state)}
                           </div>
                         </>
                       ) : (
-                        "–"
+                        "실행 이력 없음"
                       )}
                     </td>
                     <td>
@@ -231,11 +379,11 @@ export default function OrchestratorPage() {
                       <button
                         className="btn btn-primary"
                         style={{ padding: "5px 14px", fontSize: 12 }}
-                        onClick={(event) => handleRun(event, p, runLocked)}
+                        onClick={(event) => handleRun(event, toRunDef(p), runLocked)}
                         aria-disabled={runLocked}
                         title={
                           !candidateAvailable
-                            ? "현재 운영 버전보다 새로운 후보 모델이 백엔드 모델 레지스트리에 등록되어야 실행할 수 있습니다. 이 화면에서는 후보를 등록할 수 없습니다."
+                            ? "대상 모델의 다음 후보 버전을 확인할 수 없습니다. 모델 레지스트리 응답을 확인하세요."
                             : pipelineBusy
                               ? "다른 재학습 파이프라인이 실행 중입니다. 완료 후 실행할 수 있습니다."
                               : `${p.name} 파이프라인을 즉시 실행합니다`
@@ -243,6 +391,16 @@ export default function OrchestratorPage() {
                         aria-label={`${orDash(p.name)} 파이프라인 실행`}
                       >
                         <i className="fa-solid fa-play"></i> 실행
+                      </button>
+                      <button
+                        className="btn btn-secondary"
+                        style={{ padding: "5px 12px", fontSize: 12, marginLeft: 6 }}
+                        onClick={() => handleDeletePipeline(p.id)}
+                        aria-disabled={pipelineBusy}
+                        title="등록을 해제합니다. 실행 이력은 남습니다."
+                        aria-label={`${orDash(p.name)} 파이프라인 등록 해제`}
+                      >
+                        <i className="fa-solid fa-trash" aria-hidden="true"></i>
                       </button>
                     </td>
                   </tr>
@@ -254,7 +412,7 @@ export default function OrchestratorPage() {
         <TablePager
           page={pl.safePage}
           totalPages={pl.totalPages}
-          totalCount={RETRAIN_PIPELINES.length}
+          totalCount={pipelineRows.length}
           pageSize={PAGE_SIZE}
           onChange={setPlPage}
         />
@@ -267,17 +425,17 @@ export default function OrchestratorPage() {
           title={
             pipelineRun ? (
               <>
-                파이프라인 실행 상태 <span className="mock-data-output">— {pipelineRun.pipelineName} </span>
-                <code className="mock-data-output" style={{ fontSize: 12, color: "var(--accent-purple-text)", fontWeight: 500 }}>
+                파이프라인 실행 상태 — {pipelineRun.pipelineName}{" "}
+                <code style={{ fontSize: 12, color: "var(--accent-purple-text)", fontWeight: 500 }}>
                   {pipelineRun.pipelineId}
                 </code>
               </>
             ) : (
-              <>파이프라인 실행 상태 <span className="mock-data-output">— 대기 중</span></>
+              <>파이프라인 실행 상태 — 대기 중</>
             )
           }
           icon="fa-diagram-project"
-          className="page-section"
+          className="page-section orchestrator-live"
           headerRight={
             <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
               {/* 단계 전환 알림은 아래 sr-only 라이브 리전 한 곳만 담당한다(같은 전환을 두 번 읽지 않게).
@@ -327,26 +485,32 @@ export default function OrchestratorPage() {
           }
         >
           {pipelineRun ? (
-            <div className="run-meta">
+            // 실행 ID·시각·버전은 저장된 실행 레코드(activeRun)를 우선한다 — 프런트 생성값이 아니다.
+            <div className="run-meta" data-values-source={activeRun ? "api" : "mock"}>
               <span className="run-meta-item">
                 <span className="run-meta-label">대상 모델</span>
-                {pipelineRun.model} {pipelineRun.baseVersion} → 후보 {pipelineRun.candidateVersion}
+                {orDash(activeRun?.model_id ?? pipelineRun.model)} {orDash(pipelineRun.baseVersion)} → 후보{" "}
+                {orDash(activeRun?.active_version ?? pipelineRun.candidateVersion)}
               </span>
               <span className="run-meta-item">
                 <span className="run-meta-label">실행 ID</span>
-                <code>{pipelineRun.runId}</code>
+                <code>{orDash(activeRun?.run_id ?? pipelineRun.runId)}</code>
               </span>
               <span className="run-meta-item">
                 <span className="run-meta-label">실험</span>
-                <code>{pipelineRun.experiment}</code>
+                <code>{orDash(pipelineRun.experiment)}</code>
               </span>
               <span className="run-meta-item">
                 <span className="run-meta-label">트리거</span>
-                {pipelineRun.trigger}
+                {orDash(activeRun?.trigger ?? pipelineRun.trigger)}
               </span>
               <span className="run-meta-item">
                 <span className="run-meta-label">시작</span>
-                {pipelineRun.startedAt}
+                {orDash(activeRun ? logTime(activeRun.started_at) : pipelineRun.startedAt)}
+              </span>
+              <span className="run-meta-item">
+                <span className="run-meta-label">종료</span>
+                {orDash(activeRun?.finished_at ? logTime(activeRun.finished_at) : null)}
               </span>
             </div>
           ) : (
@@ -357,11 +521,11 @@ export default function OrchestratorPage() {
             </p>
           )}
 
-          <span className="sr-only mock-data-output" role="status" aria-live="polite" aria-atomic="true">
+          <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
             {pipelineAnnouncement}
           </span>
           <div
-            className={"pipeline-visualizer mock-data-output" + (pipelineRun ? "" : " is-idle")}
+            className={"pipeline-visualizer" + (pipelineRun ? "" : " is-idle")}
             role="list"
             aria-label="재학습 파이프라인 단계별 상태"
           >
@@ -508,7 +672,125 @@ export default function OrchestratorPage() {
         />
       </Card>
 
-      <Card title="오케스트레이터 실시간 실행 로그" icon="fa-terminal">
+      {/* ④ 실행 이력 — 백엔드 SQLite `runs` 테이블. 행을 고르면 그 실행의 저장 로그를 아래에 편다. */}
+      <Card
+        title="파이프라인 실행 이력"
+        icon="fa-clock-rotate-left"
+        className="page-section orchestrator-live"
+        headerRight={
+          <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
+            {runs.length}건 · 재학습 실행 레코드 저장소(SQLite)
+          </span>
+        }
+      >
+        {runs.length === 0 ? (
+          <p className="pipeline-empty">
+            <i className="fa-solid fa-circle-info" aria-hidden="true"></i> 저장된 실행 기록이 없습니다. 위
+            카탈로그에서 [실행]을 누르면 실행 레코드·단계 상태·로그가 여기에 남습니다.
+          </p>
+        ) : (
+          <>
+            <div className="table-container">
+              <table>
+                <caption className="sr-only">저장된 재학습 실행 이력</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">실행 ID</th>
+                    <th scope="col">파이프라인 / 모델</th>
+                    <th scope="col">트리거</th>
+                    <th scope="col">결과</th>
+                    <th scope="col">시작 → 종료</th>
+                    <th scope="col" className="cell-actions">동작</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {runList.pageRows.map((r) => (
+                    <tr key={r.run_id} className={r.run_id === selectedRunId ? "is-selected-run" : undefined}>
+                      <td>
+                        <code style={{ fontSize: 11, color: "var(--accent-purple-text)" }}>{orDash(r.run_id)}</code>
+                      </td>
+                      <td style={{ fontSize: 12 }}>
+                        {orDash(r.pipeline_id)}
+                        <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{orDash(r.model_id)}</div>
+                      </td>
+                      <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>{orDash(r.trigger)}</td>
+                      <td style={{ fontSize: 12 }}>
+                        {orDash(RUN_STATE_LABEL[r.state] ?? r.state)}
+                        <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{orDash(r.active_version)}</div>
+                      </td>
+                      <td style={{ fontSize: 11, color: "var(--text-secondary)" }}>
+                        {orDash(logTime(r.started_at))} → {orDash(r.finished_at ? logTime(r.finished_at) : null)}
+                      </td>
+                      <td className="cell-actions">
+                        <button
+                          className="btn btn-secondary"
+                          style={{ padding: "4px 12px", fontSize: 12 }}
+                          onClick={() => setSelectedRunId(r.run_id)}
+                          aria-label={`${r.run_id} 실행 로그 보기`}
+                        >
+                          로그
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <TablePager
+              page={runList.safePage}
+              totalPages={runList.totalPages}
+              totalCount={runs.length}
+              pageSize={PAGE_SIZE}
+              onChange={setRunPage}
+            />
+          </>
+        )}
+      </Card>
+
+      {/* ⑤ 선택한 실행의 저장 로그·단계 상태 — 프런트 배열이 아니라 실행 레코드에 함께 적재된 라인 */}
+      <Card
+        title={
+          <>
+            실행 로그
+            {selectedRunId ? (
+              <code style={{ marginLeft: 8, fontSize: 12, color: "var(--accent-purple-text)", fontWeight: 500 }}>
+                {selectedRunId}
+              </code>
+            ) : null}
+          </>
+        }
+        icon="fa-terminal"
+        className="page-section orchestrator-live"
+      >
+        {activeRun?.stages?.length ? (
+          <div className="run-stage-strip" aria-label="저장된 단계 상태">
+            {activeRun.stages.map((stage) => (
+              <span key={stage.stage} className={`run-stage-chip is-${stage.status}`}>
+                {stage.stage} · {stage.status}
+              </span>
+            ))}
+          </div>
+        ) : null}
+        {runLogs?.logs?.length ? (
+          <ConsoleLog
+            logs={runLogs.logs.map((entry) => ({
+              time: logTime(entry.ts),
+              level: entry.level,
+              message: entry.message
+            }))}
+            height={220}
+          />
+        ) : (
+          <p className="pipeline-empty">
+            <i className="fa-solid fa-circle-info" aria-hidden="true"></i>{" "}
+            {selectedRunId
+              ? "이 실행에 저장된 로그 라인이 없습니다."
+              : "실행 이력에서 [로그]를 누르거나 파이프라인을 실행하면 저장된 로그가 여기에 표시됩니다."}
+          </p>
+        )}
+      </Card>
+
+      <Card title="UI 활동 로그" icon="fa-list">
         <ConsoleLog logs={consoleLogs} />
       </Card>
 

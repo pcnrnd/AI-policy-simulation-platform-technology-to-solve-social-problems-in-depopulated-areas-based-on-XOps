@@ -208,3 +208,125 @@
 [data-theme="light"] .pipeline-node.failed .node-icon {
   background-color: rgba(239, 68, 68, 0.08);
 }
+
+/* ── 파이프라인 등록·실행 이력·실행 로그 (백엔드 저장소 유래) ────────────────── */
+
+/* 빈 상태 문구 — 요소를 감추는 대신 왜 비었는지와 다음 동작을 적는다. */
+.pipeline-empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 12px 16px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  background-color: var(--surface-hover);
+  border: 1px dashed var(--border-color);
+  border-radius: 8px;
+}
+
+.pipeline-register {
+  margin-bottom: 16px;
+  padding: 16px;
+  background-color: var(--surface-hover);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+}
+
+.pipeline-register-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.pipeline-register-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.pipeline-register-grid input,
+.pipeline-register-grid select {
+  padding: 7px 10px;
+  font-size: 12px;
+  color: var(--text-primary);
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+}
+
+.pipeline-register-grid input:focus-visible,
+.pipeline-register-grid select:focus-visible {
+  outline: 2px solid var(--accent-purple);
+  outline-offset: 1px;
+}
+
+.pipeline-register-error {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--accent-red);
+}
+
+.pipeline-register-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* 실행 ID를 눌러 그 실행의 저장 로그로 이동 — 표 안이라 링크 모양만 빌린다. */
+.pipeline-run-link {
+  padding: 0;
+  font: inherit;
+  color: var(--accent-purple-text);
+  text-decoration: underline;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.is-selected-run {
+  background-color: rgba(var(--accent-purple-rgb), 0.06);
+}
+
+.run-stage-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.run-stage-chip {
+  padding: 2px 10px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  background-color: var(--surface-hover);
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+}
+
+.run-stage-chip.is-done {
+  color: var(--accent-teal);
+  border-color: currentColor;
+}
+
+.run-stage-chip.is-skipped {
+  color: var(--accent-orange);
+  border-color: currentColor;
+}
+
+/* 데모 표시 OFF에서도 실저장소(SQLite) 유래 출력은 계속 보인다 — 토글은 데이터 유무만 바꾸고
+   UI를 바꾸지 않는다는 규약. layout.css의 전역 가림은 요소 종류로 걸리므로 여기서 이 카드들만
+   되돌린다(layout.css는 공통 소유라 수정하지 않는다). */
+.mock-values-hidden .content-body .orchestrator-live :where(
+  tbody,
+  .run-meta,
+  .node-status,
+  .system-status,
+  .console-log,
+  .table-pager,
+  .card-title-area > :not(.card-title)
+) {
+  visibility: visible !important;
+}

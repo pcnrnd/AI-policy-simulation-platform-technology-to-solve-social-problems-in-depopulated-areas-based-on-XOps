@@ -34,6 +34,11 @@ def init_db() -> None:
         CREATE TABLE IF NOT EXISTS user_sources (id TEXT PRIMARY KEY, schema_json TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS model_versions (model_id TEXT PRIMARY KEY, version TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS runs (seq INTEGER PRIMARY KEY AUTOINCREMENT, run_json TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS pipelines (
+            id TEXT PRIMARY KEY,
+            definition_json TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS model_artifacts (
             model_id TEXT NOT NULL,
             version TEXT NOT NULL,
@@ -196,3 +201,43 @@ def append_run(run: dict[str, Any]) -> None:
 def list_runs() -> list[dict[str, Any]]:
     rows = _conn().execute("SELECT run_json FROM runs ORDER BY seq").fetchall()
     return [json.loads(r["run_json"]) for r in rows]
+
+
+def get_run(run_id: str) -> dict[str, Any] | None:
+    """실행 하나를 run_id로. 이력이 작아 파이썬에서 훑는다 — 인덱스가 필요해지면 컬럼으로 승격."""
+    for run in reversed(list_runs()):
+        if run.get("run_id") == run_id:
+            return run
+    return None
+
+
+# ── ML 파이프라인 정의 ──────────────────────────────────────
+def add_pipeline(pipeline: dict[str, Any]) -> None:
+    """등록 — 같은 id가 이미 있으면 sqlite3.IntegrityError."""
+    _conn().execute(
+        "INSERT INTO pipelines (id, definition_json, created_at) VALUES (?, ?, ?)",
+        (
+            pipeline["id"],
+            json.dumps(pipeline, ensure_ascii=False),
+            pipeline.get("created_at") or datetime.now(timezone.utc).isoformat(),
+        ),
+    )
+    _conn().commit()
+
+
+def get_pipeline(pipeline_id: str) -> dict[str, Any] | None:
+    row = _conn().execute(
+        "SELECT definition_json FROM pipelines WHERE id = ?", (pipeline_id,)
+    ).fetchone()
+    return json.loads(row["definition_json"]) if row else None
+
+
+def list_pipelines() -> list[dict[str, Any]]:
+    rows = _conn().execute("SELECT definition_json FROM pipelines ORDER BY created_at, id").fetchall()
+    return [json.loads(r["definition_json"]) for r in rows]
+
+
+def delete_pipeline(pipeline_id: str) -> bool:
+    cur = _conn().execute("DELETE FROM pipelines WHERE id = ?", (pipeline_id,))
+    _conn().commit()
+    return cur.rowcount > 0
