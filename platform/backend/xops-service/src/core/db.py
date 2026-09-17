@@ -26,14 +26,50 @@ def _conn() -> sqlite3.Connection:
     return conn
 
 
+# 최초 1회 적재하는 기본 파이프라인 카탈로그 — 모델 레지스트리 3종과 1:1.
+# 사용자가 지운 뒤 다시 살아나면 안 되므로 pipelines 테이블이 **없던** 최초 생성 시에만 넣는다.
+# 후보 버전은 저장하지 않는다(현행 버전에서 매번 파생 — registry.pipelines 참조).
+_SEED_PIPELINES: list[dict[str, Any]] = [
+    {
+        "id": "PL-POP-RETRAIN-01",
+        "name": "인구이동 예측 재학습",
+        "model_id": "population-forecast",
+        "trigger_policy": "드리프트(PSI > 0.2)·성능 저하(Acc < 0.85) 자동 · 수동",
+        "experiment": "EXP-POP-DECLINE-031",
+    },
+    {
+        "id": "PL-VITAL-RETRAIN-02",
+        "name": "생활인구 추정 재학습",
+        "model_id": "vital-population",
+        "trigger_policy": "주간 배치 (매주 월 02:00)",
+        "experiment": "EXP-VITAL-POP-012",
+    },
+    {
+        "id": "PL-SETTLE-RETRAIN-03",
+        "name": "정주여건 수요예측 재학습",
+        "model_id": "settlement-demand",
+        "trigger_policy": "수동",
+        "experiment": "EXP-SETTLE-DMD-007",
+    },
+]
+
+
 def init_db() -> None:
-    """테이블 생성 (idempotent)."""
+    """테이블 생성 (idempotent) + 파이프라인 카탈로그 최초 1회 시드."""
     conn = _conn()
+    fresh_pipelines = (
+        conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='pipelines'").fetchone() is None
+    )
     conn.executescript(
         """
         CREATE TABLE IF NOT EXISTS user_sources (id TEXT PRIMARY KEY, schema_json TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS model_versions (model_id TEXT PRIMARY KEY, version TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS runs (seq INTEGER PRIMARY KEY AUTOINCREMENT, run_json TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS pipelines (
+            id TEXT PRIMARY KEY,
+            definition_json TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS model_artifacts (
             model_id TEXT NOT NULL,
             version TEXT NOT NULL,
@@ -43,6 +79,9 @@ def init_db() -> None:
         """
     )
     conn.commit()
+    if fresh_pipelines:
+        for pipeline in _SEED_PIPELINES:
+            add_pipeline(pipeline)
     apply_rd_migrations(conn)
 
 
@@ -196,3 +235,43 @@ def append_run(run: dict[str, Any]) -> None:
 def list_runs() -> list[dict[str, Any]]:
     rows = _conn().execute("SELECT run_json FROM runs ORDER BY seq").fetchall()
     return [json.loads(r["run_json"]) for r in rows]
+
+
+def get_run(run_id: str) -> dict[str, Any] | None:
+    """실행 하나를 run_id로. 이력이 작아 파이썬에서 훑는다 — 인덱스가 필요해지면 컬럼으로 승격."""
+    for run in reversed(list_runs()):
+        if run.get("run_id") == run_id:
+            return run
+    return None
+
+
+# ── ML 파이프라인 정의 ──────────────────────────────────────
+def add_pipeline(pipeline: dict[str, Any]) -> None:
+    """등록 — 같은 id가 이미 있으면 sqlite3.IntegrityError."""
+    _conn().execute(
+        "INSERT INTO pipelines (id, definition_json, created_at) VALUES (?, ?, ?)",
+        (
+            pipeline["id"],
+            json.dumps(pipeline, ensure_ascii=False),
+            pipeline.get("created_at") or datetime.now(timezone.utc).isoformat(),
+        ),
+    )
+    _conn().commit()
+
+
+def get_pipeline(pipeline_id: str) -> dict[str, Any] | None:
+    row = _conn().execute(
+        "SELECT definition_json FROM pipelines WHERE id = ?", (pipeline_id,)
+    ).fetchone()
+    return json.loads(row["definition_json"]) if row else None
+
+
+def list_pipelines() -> list[dict[str, Any]]:
+    rows = _conn().execute("SELECT definition_json FROM pipelines ORDER BY created_at, id").fetchall()
+    return [json.loads(r["definition_json"]) for r in rows]
+
+
+def delete_pipeline(pipeline_id: str) -> bool:
+    cur = _conn().execute("DELETE FROM pipelines WHERE id = ?", (pipeline_id,))
+    _conn().commit()
+    return cur.rowcount > 0
