@@ -334,8 +334,13 @@ body.drawer-open {
   margin-bottom: var(--space-xxl);
 }
 
-/* 데모 표시 OFF: API 응답·로컬 시드 구분 없이 모든 데이터 출력을 가린다.
-   화면 구조는 유지하고 원본·입력 상태는 보존해 ON으로 돌아오면 그대로 복원한다.
+/* 데모 표시 OFF의 **과도기** 가림 규칙.
+   원칙은 "토글은 UI를 바꾸지 않고 데이터 유무만 바꾼다"이므로, 최종형은 이 CSS가 아니라
+   각 화면의 데이터 계층이 시드를 실값 자리에 넣지 않는 것이다(빈 자리는 "–"·빈 상태 문구).
+   전환이 끝난 화면의 셀렉터부터 여기서 지우거나 아래 예외로 뺀다. 현재 전환 완료:
+   - MLOps 성능 모니터링(#tab-mlops-monitor-panel) — MonitorPage가 응답 `source`로 시드를 차단
+   - DataOps STEP ① 카탈로그(.catalog-live-region) — 서버가 live_rows로 실적재만 내려줌
+   아직 전환 전(가림 유지): 종합 대시보드·오케스트레이터·시뮬레이터·리포터.
    data-values-source는 전달 경로일 뿐 실제/데모 데이터 구분이나 표시 예외가 아니다. */
 .mock-values-hidden .content-body :where(
   canvas,
@@ -347,9 +352,6 @@ body.drawer-open {
   .trend-up,
   .trend-down,
   .system-status,
-  .monitor-collected,
-  .outlier-tag,
-  .gauge-status,
   .run-meta,
   .node-status,
   .promotion-criteria,
@@ -360,12 +362,10 @@ body.drawer-open {
   .api-response,
   .built-resp-head,
   .mock-data-output,
-  .gauge-value,
   .table-pager,
   .catalog-result-status,
   .console-log,
   .async-feedback,
-  .monitor-state-slot,
   .xops-next-step,
   .routing-flow,
   .query-lang-chip,
@@ -410,6 +410,25 @@ body.drawer-open {
   .system-status
 ),
 .mock-values-hidden .content-body .catalog-result-status {
+  visibility: visible !important;
+}
+
+/* MLOps 성능 모니터링 탭은 데이터 계층에서 시드를 차단하므로 가리지 않는다.
+   가리면 실측 지표·빈 상태 문구까지 함께 사라져 "왜 비었는지"를 읽을 수 없다.
+   공용 셀렉터(canvas·tbody·.stat-value 등)는 다른 탭에서 계속 가려야 해서 목록에서 지우지 않고
+   이 패널 범위에서만 되살린다. 전환이 끝난 탭이 늘어나면 이 목록이 아니라 위 목록이 줄어든다. */
+.mock-values-hidden .content-body #tab-mlops-monitor-panel :where(
+  canvas,
+  tbody,
+  .stat-value,
+  .trend-up,
+  .system-status,
+  .mock-data-output,
+  .async-feedback,
+  .xops-next-step,
+  .table-pager,
+  .card-title-area > :not(.card-title)
+) {
   visibility: visible !important;
 }
 
