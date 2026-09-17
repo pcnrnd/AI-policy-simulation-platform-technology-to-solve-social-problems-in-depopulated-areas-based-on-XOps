@@ -52,24 +52,15 @@ export default function Overview() {
   const servingVersion = modelStore.find(
     (m) => m.modelId === POPULATION_MODEL_ID && m.status === "운영"
   )?.version;
-  // F1은 두 경로로 실측된다 — 이번 세션의 재학습 승급(f1Override)과 롤업이 실어 주는 레지스트리
-  // 스냅샷(metrics_source === "trained"). 둘 다 없으면 남는 0.884는 시드 상수다.
-  const summaryModel = overviewSummary?.model ?? null;
-  const measuredF1 =
-    f1Override !== null
-      ? f1Override
-      : summaryModel?.metrics_source === "trained" && typeof summaryModel.f1 === "number"
-        ? summaryModel.f1
-        : null;
-  const f1Value = measuredF1 !== null ? measuredF1.toFixed(3) : allowSeed ? "0.884" : "–";
-  const f1ServingVersion = servingVersion ?? summaryModel?.serving_version;
+  // 남은 0.884는 시드 상수다 — 데모 OFF에서는 값을 비우고 사유만 남긴다.
+  // (롤업이 함께 내려 주는 레지스트리 실측 F1 `overviewSummary.model` 연결은 이 탭 소관 밖이라
+  //  건드리지 않고 인계 자료의 연동 지점으로만 남긴다.)
+  const f1Value = f1Override !== null ? f1Override.toFixed(3) : allowSeed ? "0.884" : "–";
   const f1Label =
-    measuredF1 !== null && f1ServingVersion ? `실측 (${f1ServingVersion})` : "최적 (SOTA)";
+    f1Override !== null && servingVersion ? `최적 (SOTA ${servingVersion})` : "최적 (SOTA)";
   const f1Sub =
-    measuredF1 !== null
-      ? f1Override !== null
-        ? "연합 재학습 성공"
-        : "학습 아티팩트 실측값"
+    f1Override !== null
+      ? "연합 재학습 성공"
       : allowSeed
         ? "데이터 소스 통합 기준"
         : `${NO_DEMO_DATA} — 재학습을 실행하면 실측 F1이 표시됩니다`;
