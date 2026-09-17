@@ -115,6 +115,11 @@ export function AppStateProvider({ children }) {
   const [pipelineHistory, setPipelineHistory] = useState({});
   // Model Store — 모델·실험 버전 이력 (승급 완료 시 신규 운영 버전 추가)
   const [modelStore, setModelStore] = useState(MODEL_STORE);
+  // 백엔드 모델 레지스트리 요약 — { [model_id]: { version, nextVersion, metricsSource } }.
+  // 다음 후보 버전은 백엔드가 현행 운영 버전에서 파생한다(registry.next_version). 프런트 상수
+  // (RETRAIN_PIPELINES[].candidateVersion)는 승급 한 번이면 운영 버전과 같아져 재학습 실행 조건이
+  // 영구히 거짓이 된다 — 조건은 백엔드가 아는 후보를 본다.
+  const [modelCandidates, setModelCandidates] = useState({});
   // 백엔드 오케스트레이션 이벤트 결과(PipelineRun) — 애니메이션 완료 시 실제 승급/롤백 반영
   const [pipelineResult, setPipelineResult] = useState(null);
   // 카탈로그 롤업(소스 수·아카이브 행수) — Overview 지표 카드·도넛이 쓴다.
@@ -174,6 +179,20 @@ export function AppStateProvider({ children }) {
     apiGet("/api/v3/orchestration/models")
       .then((models) => {
         if (!alive || !Array.isArray(models)) return;
+        setModelCandidates(
+          Object.fromEntries(
+            models
+              .filter((m) => typeof m?.model_id === "string" && typeof m?.version === "string")
+              .map((m) => [
+                m.model_id,
+                {
+                  version: m.version,
+                  nextVersion: typeof m.next_version === "string" ? m.next_version : null,
+                  metricsSource: m.metrics_source ?? null
+                }
+              ])
+          )
+        );
         setModelStore((prev) =>
           models.reduce((store, m) => {
             if (typeof m?.model_id !== "string" || typeof m?.version !== "string") return store;
@@ -281,7 +300,9 @@ export function AppStateProvider({ children }) {
       }
       const backendTrigger = triggerLabel.includes("드리프트") ? "drift" : "manual";
       const currentServing = modelStore.find((model) => model.modelId === pl.model && model.status === "운영");
-      if (currentServing?.version === pl.candidateVersion) {
+      // 후보 버전은 백엔드 레지스트리가 아는 값을 쓴다. 응답 전(초기 렌더)에만 상수로 폴백한다.
+      const candidateVersion = modelCandidates[pl.model]?.nextVersion ?? pl.candidateVersion;
+      if (currentServing?.version === candidateVersion) {
         const message = `${pl.name}은 현재 운영 버전(${currentServing.version})보다 새로운 후보가 등록되지 않아 실행할 수 없습니다.`;
         addConsoleLog(`WARN: ${message}`);
         pushNotification({ severity: "warn", title: "재학습 후보 없음", message });
@@ -296,7 +317,7 @@ export function AppStateProvider({ children }) {
         pipelineName: pl.name,
         model: pl.model,
         baseVersion: currentServing?.version ?? pl.baseVersion,
-        candidateVersion: pl.candidateVersion,
+        candidateVersion,
         experiment: pl.experiment,
         trigger: triggerLabel,
         startedAt: `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`
@@ -373,7 +394,7 @@ export function AppStateProvider({ children }) {
       if (requestId !== pipelineRequestRef.current) return;
       setPipelineStep(1);
     },
-    [pipelineRunning, modelStore, resetPipeline, addConsoleLog, pushNotification]
+    [pipelineRunning, modelStore, modelCandidates, resetPipeline, addConsoleLog, pushNotification]
   );
 
   useEffect(() => {
@@ -550,6 +571,7 @@ export function AppStateProvider({ children }) {
     pipelineResult,
     pipelineHistory,
     modelStore,
+    modelCandidates,
     overviewSummary,
     f1Override,
     metricOverrides,
