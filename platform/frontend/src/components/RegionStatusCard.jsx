@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import Card from "./Card.jsx";
+import { NO_DEMO_DATA } from "./PendingData.jsx";
 
 // 소멸위험지수(낮을수록 위험) → 등급/색상 매핑.
 function riskGrade(riskIndex) {
@@ -20,12 +21,15 @@ function declineRate(history) {
 /**
  * 지자체별 인구감소 현황 요약 — 종합 대시보드의 핵심 도메인 패널.
  * 위험지수 오름차순(고위험 우선) 정렬, 행 클릭 시 해당 지자체로 시뮬레이터 이동.
- * @param {{ regions: object[], currentRegionId?: string, onSelectRegion: (region: object) => void }} props
+ *
+ * allowSeed=false(데모 표시 OFF)이면 표 구조는 그대로 두고 행만 비운다 — 지자체 인구·고령화지수·
+ * 출산율·위험등급은 mock_data.json 전용 항목이라 실저장소에 대응 값이 없다.
+ * @param {{ regions: object[], currentRegionId?: string, onSelectRegion: (region: object) => void, allowSeed?: boolean }} props
  */
-export default function RegionStatusCard({ regions, currentRegionId, onSelectRegion }) {
+export default function RegionStatusCard({ regions, currentRegionId, onSelectRegion, allowSeed = true }) {
   const sorted = useMemo(
-    () => [...regions].sort((a, b) => a.riskIndex - b.riskIndex),
-    [regions]
+    () => (allowSeed ? [...regions].sort((a, b) => a.riskIndex - b.riskIndex) : []),
+    [regions, allowSeed]
   );
 
   return (
@@ -53,6 +57,14 @@ export default function RegionStatusCard({ regions, currentRegionId, onSelectReg
             </tr>
           </thead>
           <tbody>
+            {sorted.length === 0 && (
+              <tr>
+                <td className="empty-table-cell" colSpan={6}>
+                  {NO_DEMO_DATA} — 지자체 인구·고령화지수·출산율·위험등급은 시드 전용 항목이라
+                  실저장소에 대응 값이 없습니다.
+                </td>
+              </tr>
+            )}
             {sorted.map((region) => {
               const grade = riskGrade(region.riskIndex);
               const decline = declineRate(region.history);

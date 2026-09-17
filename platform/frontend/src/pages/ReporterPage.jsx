@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import Card from "../components/Card.jsx";
 import PerfBadge from "../components/PerfBadge.jsx";
+import { NO_DEMO_DATA } from "../components/PendingData.jsx";
 import { useAppState } from "../context/AppStateContext.jsx";
 import {
   buildReportBlocks,
@@ -95,9 +96,15 @@ function buildPreview(region, template, driftInjected, live) {
 }
 
 export default function ReporterPage() {
-  const { appData, currentRegion, setCurrentRegion, driftInjected, addConsoleLog } = useAppState();
+  const { appData, currentRegion, setCurrentRegion, driftInjected, addConsoleLog, mockDataVisible } =
+    useAppState();
   const templates = appData.report_templates;
   const regions = appData.regions;
+
+  // 데모 표시 토글은 화면 구조가 아니라 **데이터 유무**만 바꾼다. 보고서 본문은 시드 지자체 지표와
+  // 로컬 생성 바인딩 값으로 채워지므로, OFF에서는 미리보기·바인딩 값 자리에 사유만 남기고
+  // 템플릿·지자체·형식 선택과 갱신 버튼은 그대로 조작 가능하게 둔다.
+  const allowSeed = mockDataVisible;
 
   const [templateId, setTemplateId] = useState(templates[0].id);
   const [regionId, setRegionId] = useState(currentRegion?.id ?? regions[0].id);
@@ -188,6 +195,16 @@ export default function ReporterPage() {
   };
 
   const handleGenerate = () => {
+    // 생성 로직은 그대로 두고, 데모 OFF에서는 시드 본문을 미리보기 자리에 넣지 않는다.
+    if (!allowSeed) {
+      setPreview(null);
+      setReportFeedback({
+        tone: "error",
+        message: `${NO_DEMO_DATA} — 보고서 본문에 쓸 실데이터가 없어 미리보기를 채우지 못했습니다.`
+      });
+      addConsoleLog(`WARN: 보고서 미리보기 생성 중단 - ${region.name} 실데이터 없음`);
+      return;
+    }
     setPreview(buildPreview(region, template, driftInjected, binding));
     setReportFeedback({ tone: "success", message: `${region.name} 보고서 미리보기를 생성했습니다.` });
     addConsoleLog(`INFO: 보고서 미리보기 생성 성공 - ${region.name}`);
@@ -280,12 +297,14 @@ export default function ReporterPage() {
           <div className="mock-data-output" style={{ fontSize: 11, color: "var(--text-secondary)", lineHeight: 1.6 }}>
             <div>
               엔드포인트:{" "}
-              <code style={{ color: "var(--accent-blue)" }}>{binding?.source ?? "연결 중…"}</code>
+              <code style={{ color: "var(--accent-blue)" }}>
+                {allowSeed ? binding?.source ?? "연결 중…" : NO_DEMO_DATA}
+              </code>
             </div>
-            <div>Adapter: {binding?.adapter ?? "—"}</div>
+            <div>Adapter: {allowSeed ? binding?.adapter ?? "—" : "—"}</div>
             <div>
-              수집 행 수: {binding ? binding.collected_rows.toLocaleString() : "—"} · 마지막 갱신:{" "}
-              {lastUpdated ?? "—"}
+              수집 행 수: {allowSeed && binding ? binding.collected_rows.toLocaleString() : "—"} · 마지막 갱신:{" "}
+              {allowSeed ? lastUpdated ?? "—" : "—"}
             </div>
           </div>
           <button
@@ -400,22 +419,34 @@ export default function ReporterPage() {
       </Card>
 
       <Card title="보고서 미리보기 (A4 레이아웃)" icon="fa-eye">
+        {/* 미리보기 패널은 데모 토글과 무관하게 같은 자리에 남긴다 — 예전엔 CSS로 패널을 통째로
+            가려서 "왜 비었는지"를 읽을 수 없었다. OFF에서는 본문 대신 사유만 채운다. */}
         <div className="report-preview-panel">
-          {preview ?? (
+          {!allowSeed ? (
             <>
               <h2>인구감소 대응 R&D 분석 리포트 요약서</h2>
-              <p
-                style={{
-                  textAlign: "center",
-                  color: "#4b5563",
-                  fontSize: 12,
-                  marginBottom: 30
-                }}
-              >
-                지자체를 선택하시고 [보고서 실시간 본문 생성] 버튼을 누르시면 실시간 메타데이터가
-                적용되어 채워집니다.
+              <p style={{ textAlign: "center", color: "#4b5563", fontSize: 12, marginBottom: 30 }}>
+                {NO_DEMO_DATA} — 보고서 본문은 지자체 인구·위험지수·모니터링 지표(시드 전용)에서
+                채워지므로 표시할 내용이 없습니다. 템플릿·지자체·형식 선택은 그대로 조작할 수 있습니다.
               </p>
             </>
+          ) : (
+            preview ?? (
+              <>
+                <h2>인구감소 대응 R&D 분석 리포트 요약서</h2>
+                <p
+                  style={{
+                    textAlign: "center",
+                    color: "#4b5563",
+                    fontSize: 12,
+                    marginBottom: 30
+                  }}
+                >
+                  지자체를 선택하시고 [보고서 실시간 본문 생성] 버튼을 누르시면 실시간 메타데이터가
+                  적용되어 채워집니다.
+                </p>
+              </>
+            )
           )}
         </div>
       </Card>
