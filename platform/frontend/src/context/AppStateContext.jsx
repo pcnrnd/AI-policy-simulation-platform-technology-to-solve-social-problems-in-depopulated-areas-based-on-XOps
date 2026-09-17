@@ -174,11 +174,12 @@ export function AppStateProvider({ children }) {
   // 응답이 주는 것은 model_id·version·metrics뿐이라(mlops/orchestration/registry.py) 학습데이터·
   // 하이퍼파라미터·등록일은 프런트 합성값으로 남고, Accuracy는 metrics.accuracy를 받았을 때만 api다.
   // 응답에 없는 상수 이력 행은 표기하지 않아 OFF에서 가려진다.
-  useEffect(() => {
-    let alive = true;
-    apiGet("/api/v3/orchestration/models")
+  // 승급 직후에도 다시 부른다 — 한 번만 읽으면 modelCandidates.nextVersion 이 승급 전 값으로 남아
+  // 운영 버전과 같아지고, startPipeline 의 "후보 없음" 가드가 영구히 참이 되어 재실행이 잠긴다.
+  const syncModels = useCallback(() => {
+    return apiGet("/api/v3/orchestration/models")
       .then((models) => {
-        if (!alive || !Array.isArray(models)) return;
+        if (!Array.isArray(models)) return;
         setModelCandidates(
           Object.fromEntries(
             models
@@ -213,13 +214,13 @@ export function AppStateProvider({ children }) {
         );
       })
       .catch((err) => {
-        if (!alive) return;
         addConsoleLog(`WARN: 모델 레지스트리 동기화 실패 — ${err?.message ?? "알 수 없는 오류"}`);
       });
-    return () => {
-      alive = false;
-    };
   }, [addConsoleLog]);
+
+  useEffect(() => {
+    syncModels();
+  }, [syncModels]);
 
   // 카탈로그 롤업 동기화 — 실패하면 null 로 남긴다(Overview 가 mock_data.json 으로 폴백).
   useEffect(() => {
@@ -497,6 +498,9 @@ export function AppStateProvider({ children }) {
             activeVersion === null ? undefined : "api"
           )
         );
+        // 승급으로 운영 버전이 올라갔으니 다음 후보(next_version)도 다시 받아 온다 — 이 값이
+        // 멈춰 있으면 같은 파이프라인의 두 번째 실행이 "후보 없음"으로 막힌다.
+        syncModels();
       }
       return undefined;
     }
@@ -516,7 +520,7 @@ export function AppStateProvider({ children }) {
     return () => {
       if (pipelineTimerRef.current) clearTimeout(pipelineTimerRef.current);
     };
-  }, [pipelineStep, pipelineRunning, addConsoleLog, pushNotification, pipelineRun, pipelineResult]);
+  }, [pipelineStep, pipelineRunning, addConsoleLog, pushNotification, pipelineRun, pipelineResult, syncModels]);
 
   const injectDrift = useCallback(() => {
     if (pipelineRunning || driftStartTimerRef.current) return;
