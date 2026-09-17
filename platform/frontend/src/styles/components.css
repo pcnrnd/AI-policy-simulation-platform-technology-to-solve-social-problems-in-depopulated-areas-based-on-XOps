@@ -180,16 +180,6 @@
   animation: pulse-orange 2s infinite;
 }
 
-/* 데모 표시 OFF — 활성 신호색(teal)과 구분되는 비활성 회색. 점 맥동은 쓰지 않는다. */
-.system-status.mock-data-visibility-status {
-  color: var(--text-muted);
-  background-color: rgba(128, 138, 154, 0.12);
-  border-color: currentColor;
-}
-.system-status.mock-data-visibility-status .status-indicator {
-  background-color: var(--text-muted);
-  animation: none;
-}
 
 /* Buttons */
 .btn {
@@ -547,11 +537,6 @@ td.cell-actions {
   background-color: rgba(var(--accent-orange-rgb), 0.02);
   border-color: currentColor;
 }
-[data-theme="light"] .system-status.mock-data-visibility-status {
-  background-color: rgba(93, 107, 128, 0.12);
-  border-color: currentColor;
-}
-
 [data-theme="light"] .outlier-tag {
   background-color: rgba(var(--accent-red-rgb), 0.02);
   border-color: currentColor;
@@ -599,6 +584,29 @@ td.cell-actions {
   align-items: center;
   gap: 8px;
   margin-left: auto;
+}
+
+/* 값이 없을 때의 안내 — 차트·표를 없애지 않고 그 자리에 왜 비었는지만 남긴다.
+   캔버스 위에 겹치므로 포인터 이벤트는 통과시킨다(차트 상호작용을 막지 않는다). */
+.monitor-empty-note {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0 var(--space-xl);
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+.monitor-empty-cell {
+  padding: var(--space-l) var(--space-m);
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 /* 테이블 페이저 */

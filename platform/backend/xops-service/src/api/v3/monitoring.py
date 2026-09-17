@@ -1,6 +1,9 @@
 """MLOps 모니터링 엔드포인트 — 6대 지표·드리프트(PSI/KL)·이상치·설명가능성.
 
-GET 계열은 mock_data.json 시드(대시보드 시계열)를 서빙하고, POST 계열은 입력으로 실제 계산.
+GET 계열은 `model_id` 가 주어지면 실측(SQLite 실행 이력·학습 아티팩트)을 먼저 찾고, 없을 때만
+mock_data.json 시드로 내려간다. 어느 쪽을 내려줬는지는 응답의 `source`("measured"|"seed")에
+항상 표기한다 — 화면이 데모 표시 OFF에서 시드를 값 자리에 넣지 않으려면 이 구분이 필요하다.
+POST 계열은 입력으로 실제 계산한다(시드와 무관).
 """
 
 from __future__ import annotations
@@ -15,6 +18,7 @@ from src.mlops.monitoring.drift import DriftDetector, DriftResult
 from src.mlops.monitoring.explain import ExplainabilityModule
 from src.mlops.monitoring.metrics import MetricCollector
 from src.mlops.monitoring.outliers import OutlierDetector
+from src.mlops.monitoring import sources
 from src.mlops.orchestration.registry import get_registry
 from src.schemas.monitoring import ClassificationInput, DriftInput, ExplainInput, OutlierInput, RegressionInput
 
@@ -37,11 +41,20 @@ def _maybe_retrain(result: DriftResult, model_id: str | None, auto_retrain: bool
 
 
 @router.get("/metrics")
-def metrics_history() -> dict[str, Any]:
-    """6대 지표 시계열 + 최신 스냅샷 (대시보드용 시드)."""
+def metrics_history(
+    model_id: str | None = Query(None, description="실측 지표를 읽을 모델. 생략하면 시드"),
+) -> dict[str, Any]:
+    """6대 지표 시계열 + 최신 스냅샷.
+
+    `model_id` 의 실측 학습 실행이 있으면 그 지표 추이(`source="measured"`)를, 없으면
+    시드 시계열(`source="seed"`)을 돌려준다.
+    """
+    measured = sources.measured_metrics(model_id) if model_id else None
+    if measured is not None:
+        return {**measured, "source": "measured", "model_id": model_id}
     hist = get_seed()["metrics_history"]
     latest = {k: hist[k][-1] for k in _SERIES if k in hist}
-    return {"history": hist, "latest": latest}
+    return {"history": hist, "latest": latest, "labels": None, "latency_ms": None, "source": "seed"}
 
 
 @router.post("/metrics/regression")
@@ -71,6 +84,9 @@ def drift_from_seed(
         "buckets": dist["buckets"],
         "reference": dist["reference"],
         "current": current,
+        # PSI/KL 계산 자체는 실계산이지만 **입력 분포가 시드**다. 실 추론 입력 수집 경로가
+        # 없는 동안은 실측이라고 표기하지 않는다(화면은 이 표기로 빈 상태를 고른다).
+        "source": "seed",
         "retrain": _maybe_retrain(result, model_id, auto_retrain),
     }
 
@@ -94,9 +110,29 @@ def detect_outliers(body: OutlierInput, method: str = Query("zscore", pattern="^
 
 
 @router.get("/explain")
-def explain_from_seed() -> dict[str, Any]:
-    """SHAP 특징 중요도 (시드) + 사용 backend 표기."""
-    return {"backend": _explain.backend, "features": get_seed()["shap_features"]}
+def explain_from_seed(
+    model_id: str | None = Query(None, description="실측 기여도를 읽을 모델. 생략하면 시드"),
+) -> dict[str, Any]:
+    """특징 중요도 + 사용 backend 표기.
+
+    `model_id` 의 현행 운영 버전에 학습 아티팩트가 있으면 그 표준화 계수를 기여도로 쓴다
+    (`source="measured"`). 없으면 시드 `shap_features`(`source="seed"`).
+    """
+    if model_id:
+        version = next(
+            (m["version"] for m in get_registry().models() if m["model_id"] == model_id), None
+        )
+        measured = sources.measured_features(model_id, version) if version else None
+        if measured:
+            return {
+                "backend": _explain.backend,
+                "features": measured,
+                "source": "measured",
+                "model_id": model_id,
+                "version": version,
+                "basis": "표준화 릿지 계수 (1 표준편차당 타깃 변화율)",
+            }
+    return {"backend": _explain.backend, "features": get_seed()["shap_features"], "source": "seed"}
 
 
 @router.post("/explain")

@@ -27,19 +27,13 @@ export default function Header({ title, onToggleSidebar, sidebarOpen, menuButton
     monitorCollectStatus,
     notifications,
     unreadCount,
-    markNotificationsRead,
-    mockDataVisible
+    markNotificationsRead
   } = useAppState();
 
   // 알림 벨 드롭다운 — 열 때 읽음 처리, 외부 클릭 시 닫힘
   const [notifOpen, setNotifOpen] = useState(false);
   const bellRef = useRef(null);
   const notifRef = useRef(null);
-
-  // 데모 표시를 끄면 벨 드롭다운도 함께 접는다 — 다시 켤 때 열린 채로 되살아나지 않도록.
-  useEffect(() => {
-    if (!mockDataVisible) setNotifOpen(false);
-  }, [mockDataVisible]);
 
   useEffect(() => {
     if (!notifOpen) return undefined;
@@ -84,16 +78,11 @@ export default function Header({ title, onToggleSidebar, sidebarOpen, menuButton
     statusText = "이상 현상: 데이터 드리프트 감지 (임계 초과)";
   }
 
-  if (!mockDataVisible) {
-    // 상태 문구(정상·드리프트·재학습)는 감추되 빈칸으로 두지 않는다.
-    // 보이는 라벨은 OFF만, 보조기술에는 데이터 표시가 꺼져 있음을 남긴다.
-    statusClass = "system-status mock-data-visibility-status";
-    statusText = "OFF";
-  }
+  // 데모 표시 토글은 데이터 유무만 바꾸므로 헤더 구조·조작은 토글과 무관하게 항상 같다.
+  // 위 상태 문구도 아래 수집 칩·알림도 시드가 아니라 실행 중 상태와 실제 API 판정에서 온다.
 
   // 활성 문구와 분리된 별도 칩 — 모니터 화면과 같은 API 응답 기준으로 성공/실패/미수집만 알린다.
-  // OFF에서는 위 활성 문구도 "OFF" 하나로 접히므로 칩도 함께 감춘다(데모 표시 계약과 일관).
-  const collectChip = mockDataVisible ? COLLECT_CHIP[monitorCollectStatus] ?? COLLECT_CHIP.unknown : null;
+  const collectChip = COLLECT_CHIP[monitorCollectStatus] ?? COLLECT_CHIP.unknown;
 
   return (
     <header className="main-header">
@@ -114,44 +103,36 @@ export default function Header({ title, onToggleSidebar, sidebarOpen, menuButton
         </div>
       </div>
       <div className="header-controls">
-        <div
-          className={statusClass}
-          role="status"
-          aria-live="polite"
-          aria-label={mockDataVisible ? undefined : "데이터 표시 OFF"}
-        >
+        <div className={statusClass} role="status" aria-live="polite">
           <span className="status-indicator" aria-hidden="true"></span>
           <span>{statusText}</span>
         </div>
-        {collectChip && (
-          <span
-            className="system-status"
-            role="status"
-            aria-live="polite"
-            style={{
-              padding: "2px 10px",
-              fontSize: 11,
-              color: collectChip.color,
-              backgroundColor: collectChip.bg,
-              borderColor: "currentColor"
-            }}
-          >
-            <i className={`fa-solid ${collectChip.icon}`} aria-hidden="true"></i>
-            <span>{collectChip.label}</span>
-          </span>
-        )}
+        <span
+          className="system-status"
+          role="status"
+          aria-live="polite"
+          style={{
+            padding: "2px 10px",
+            fontSize: 11,
+            color: collectChip.color,
+            backgroundColor: collectChip.bg,
+            borderColor: "currentColor"
+          }}
+        >
+          <i className={`fa-solid ${collectChip.icon}`} aria-hidden="true"></i>
+          <span>{collectChip.label}</span>
+        </span>
         <div className="alert-badge-container" ref={bellRef}>
           <button
             className="alert-icon-btn"
-            aria-label={mockDataVisible ? `알림 (읽지 않음 ${unreadCount}건)` : "알림"}
-            aria-expanded={mockDataVisible && notifOpen}
+            aria-label={`알림 (읽지 않음 ${unreadCount}건)`}
+            aria-expanded={notifOpen}
             aria-controls="recent-notifications"
             onClick={toggleNotif}
-            disabled={!mockDataVisible}
           >
             <i className="fa-solid fa-bell" aria-hidden="true"></i>
           </button>
-          {mockDataVisible && unreadCount > 0 && <div className="alert-dot" aria-hidden="true"></div>}
+          {unreadCount > 0 && <div className="alert-dot" aria-hidden="true"></div>}
           {notifOpen && (
             <div
               ref={notifRef}
