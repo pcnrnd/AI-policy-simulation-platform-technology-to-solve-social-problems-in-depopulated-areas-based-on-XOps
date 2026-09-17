@@ -45,6 +45,30 @@ class WriteBody(BaseModel):
     data: dict[str, Any] = Field(default_factory=dict)
 
 
+class BuiltApiRequest(BaseModel):
+    """`API 빌드·등록` 으로 발급한 API 구성 — 호출에 필요한 요청 파라미터만 담는다.
+
+    실행 자체는 기존 `/{source_id}` 계약을 그대로 쓰므로 여기서는 저장·목록·삭제만 한다.
+    """
+
+    id: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_\-]+$")
+    method: str = Field(pattern="^(GET|POST|PUT|PATCH|DELETE)$")
+    source_id: str = Field(min_length=1, max_length=64)
+    source_label: str = ""
+    filter: str = Field("", max_length=256)
+    sort: str = Field("", max_length=MAX_IDENTIFIER_LENGTH)
+    page: int = Field(1, ge=1)
+    page_size: int = Field(20, ge=1, le=200)
+    auth_method: str = Field("JWT", pattern="^(JWT|OAuth2)$")
+
+
+class BuiltApiSummary(BuiltApiRequest):
+    """목록 응답 — 저장 시각(UTC ISO8601)이 추가된다."""
+
+    created_at: str
+    endpoint: str
+
+
 class ColumnDef(BaseModel):
     """컬럼 정의. name 은 생성 SQL에 식별자로 조립되므로 allowlist 패턴을 강제한다."""
 

@@ -3,11 +3,12 @@
 // JSX는 없지만 컴포넌트 소유 경계(components/realdata/*.jsx)를 지키기 위해 .jsx로 둔다.
 import { apiGet, apiSend } from "../../lib/api.js";
 
-const TOKEN_SOURCE = "realdata-namwon";
 const BASE = "/api/v3/realdata";
 
 export async function issueRealdataToken() {
-  const res = await apiSend("POST", `/api/v3/dataops/token/${TOKEN_SOURCE}`, {});
+  // 소스 무관 발급 경로. `/token/{source_id}` 는 카탈로그 존재를 검사하므로 카탈로그에 없는
+  // 주체("realdata-namwon")로는 404가 났다 — dts 로그에서 실제로 404로 확인.
+  const res = await apiSend("POST", "/api/v3/dataops/token", {});
   return res.access_token;
 }
 

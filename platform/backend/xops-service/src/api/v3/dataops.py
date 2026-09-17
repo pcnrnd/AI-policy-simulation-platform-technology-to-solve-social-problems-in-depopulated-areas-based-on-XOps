@@ -12,23 +12,49 @@ from fastapi import APIRouter, Depends, Query
 
 from src.api.dependencies import require_auth, require_client
 from src.auth.jwt import issue_jwt, issue_oauth2
+from src.core import db
+from src.core.exceptions import SourceNotFoundError
+from src.core.settings import get_settings
 from src.dataops.catalog import get_catalog
 from src.dataops.liveness import annotate
 from src.dataops.service import DataService
-from src.schemas.dataops import ArchiveRegisterRequest, SourceSummary, TokenResponse, WriteBody
+from src.schemas.dataops import (
+    ArchiveRegisterRequest,
+    BuiltApiRequest,
+    BuiltApiSummary,
+    SourceSummary,
+    TokenResponse,
+    WriteBody,
+)
 
 router = APIRouter(prefix="/dataops", tags=["dataops"])
 _service = DataService()
 
 
 # ── 인증 발급 ──────────────────────────────────────────────
+@router.post("/token", response_model=TokenResponse)
+def issue_catalog_token(_: None = Depends(require_client)) -> TokenResponse:
+    """소스에 매이지 않은 JWT 발급.
+
+    `/token/{source_id}` 는 미존재 소스에 유효 토큰을 내주지 않도록 카탈로그 존재를 검사한다(P-D2).
+    그런데 카탈로그 등록은 "아직 없는 소스"를 만드는 요청이라 그 검사와 태생적으로 충돌해,
+    소스를 고르지 않은 상태에서는 등록용 토큰을 받을 수 없었다. 권한은 scope 로만 판정하므로
+    소스 표기가 없는 토큰을 따로 내준다 — 기존 경로와 검증 규칙은 그대로다.
+    """
+    return TokenResponse(access_token=issue_jwt(), scope=get_settings().jwt_scope)
+
+
 @router.post("/token/{source_id}", response_model=TokenResponse)
 def issue_token(source_id: str, _: None = Depends(require_client)) -> TokenResponse:
     """소스 접근용 JWT 발급 (HS256, scope data:read data:write)."""
-    from src.core.settings import get_settings
-
     get_catalog().get(source_id)  # 카탈로그에 없으면 SourceNotFoundError(404) — 미존재 소스에 유효 토큰 발급 방지
     return TokenResponse(access_token=issue_jwt(source_id), scope=get_settings().jwt_scope)
+
+
+@router.post("/oauth2")
+def issue_catalog_oauth2(_: None = Depends(require_client)) -> dict[str, Any]:
+    """소스에 매이지 않은 OAuth2 발급 — 위 `/token` 과 같은 이유."""
+    return issue_oauth2()
 
 
 @router.post("/oauth2/{source_id}")
@@ -81,6 +107,39 @@ def delete_source(
     """사용자 등록 소스 삭제 (기본 시드 소스는 보호)."""
     get_catalog().remove(source_id)
     return {"deleted": source_id}
+
+
+# ── 발급 API 목록 (API 빌드·등록 결과) ─────────────────────
+# `/{source_id}` 동적 경로보다 먼저 선언한다 — 뒤에 두면 GET /apis 가 소스 조회로 잡힌다.
+def _to_summary(api: dict[str, Any]) -> dict[str, Any]:
+    return {**api, "endpoint": f"{get_settings().api_prefix}/dataops/{api['source_id']}"}
+
+
+@router.get("/apis", response_model=list[BuiltApiSummary])
+def list_built_apis() -> list[dict[str, Any]]:
+    """빌드·등록된 API 목록 (최근 순). 조회는 카탈로그 GET과 같이 공개."""
+    return [_to_summary(api) for api in db.list_built_apis()]
+
+
+@router.post("/apis", response_model=BuiltApiSummary, status_code=201)
+def register_built_api(
+    body: BuiltApiRequest,
+    _: dict[str, Any] = Depends(require_auth("data:write")),
+) -> dict[str, Any]:
+    """API 구성 등록 — 같은 id 재등록은 덮어쓴다. 대상 소스가 없으면 404."""
+    get_catalog().get(body.source_id)
+    return _to_summary(db.upsert_built_api(body.model_dump()))
+
+
+@router.delete("/apis/{api_id}")
+def delete_built_api(
+    api_id: str,
+    _: dict[str, Any] = Depends(require_auth("data:write")),
+) -> dict[str, str]:
+    """발급 API 제거."""
+    if not db.delete_built_api(api_id):
+        raise SourceNotFoundError(f"발급 API를 찾을 수 없습니다: {api_id}")
+    return {"deleted": api_id}
 
 
 # ── CRUD (가상화 API) ──────────────────────────────────────
