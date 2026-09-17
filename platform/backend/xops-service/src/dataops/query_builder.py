@@ -11,6 +11,8 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from src.dataops.safety import split_filter_conditions
+
 Column = dict[str, Any]
 Range = dict[str, Any] | None
 
@@ -79,21 +81,24 @@ def build_sql(
     return f"SELECT {col_list}\n  FROM {table}{where}{order}{limit};"
 
 
-def _mongo_filter_of(filter_expr: str | None) -> str | None:
-    if not filter_expr:
-        return None
-    m = _FILTER_RE.match(filter_expr)
-    if not m:
-        return f"/* 미해석 조건: {filter_expr} */"
-    col, op, raw = m.group(1), m.group(2), m.group(3)
-    try:
-        val: Any = int(raw)
-    except ValueError:
+def _mongo_filter_parts(filter_expr: str | None) -> list[str]:
+    """` AND ` 로 결합된 각 조건을 MQL 조각으로. 해석 불가 조건은 주석으로 보존한다."""
+    parts: list[str] = []
+    for condition in split_filter_conditions(filter_expr):
+        m = _FILTER_RE.match(condition)
+        if not m:
+            parts.append(f"/* 미해석 조건: {condition} */")
+            continue
+        col, op, raw = m.group(1), m.group(2), m.group(3)
         try:
-            val = float(raw)
+            val: Any = int(raw)
         except ValueError:
-            val = f'"{raw.strip(chr(39)).strip(chr(34))}"'
-    return f"{col}: {val}" if op == "=" else f"{col}: {{ {_OPS_MQL[op]}: {val} }}"
+            try:
+                val = float(raw)
+            except ValueError:
+                val = f'"{raw.strip(chr(39)).strip(chr(34))}"'
+        parts.append(f"{col}: {val}" if op == "=" else f"{col}: {{ {_OPS_MQL[op]}: {val} }}")
+    return parts
 
 
 def _mongo_match(range_: Range, filter_expr: str | None) -> str:
@@ -102,9 +107,7 @@ def _mongo_match(range_: Range, filter_expr: str | None) -> str:
         parts.append(
             f"{range_['column']}: {{ $gte: {json.dumps(range_['from'])}, $lte: {json.dumps(range_['to'])} }}"
         )
-    f = _mongo_filter_of(filter_expr)
-    if f:
-        parts.append(f)
+    parts.extend(_mongo_filter_parts(filter_expr))
     return f"{{ {', '.join(parts)} }}"
 
 
@@ -165,13 +168,19 @@ def build_mongo_query(*, range_: Range, filter_expr: str | None) -> dict[str, An
     query: dict[str, Any] = {}
     if range_:
         query[range_["column"]] = {"$gte": range_["from"], "$lte": range_["to"]}
-    if filter_expr:
-        match = _FILTER_RE.match(filter_expr.strip())
+    for condition in split_filter_conditions(filter_expr):
+        match = _FILTER_RE.match(condition)
         if match is None:  # safety 가 이미 막지만, 방어적으로 무시한다.
-            return query
+            continue
         column, op, raw = match.group(1), match.group(2), match.group(3)
         value = _mongo_value(raw)
-        query[column] = value if op == "=" else {_OPS_MQL[op]: value}
+        clause = value if op == "=" else {_OPS_MQL[op]: value}
+        prior = query.get(column)
+        # 같은 컬럼의 두 범위 조건(`age > 20 AND age < 40`)은 덮어쓰지 않고 합친다.
+        if isinstance(prior, dict) and isinstance(clause, dict):
+            prior.update(clause)
+        else:
+            query[column] = clause
     return query
 
 
@@ -179,15 +188,15 @@ def _write_where(range_: Range, filter_expr: str | None) -> tuple[str, list[Any]
     """쓰기 실행용 WHERE — 값을 리터럴로 조립하지 않고 %s 파라미터로 분리한다.
 
     표시용 `_sql_where` 와 같은 입력(range·filter)에서 만들며, filter 는 이미
-    safety.assert_safe_filter 를 통과한 `col op value` 단일 조건이다.
+    safety.assert_safe_filter 를 통과한 `col op value` 조건들의 ` AND ` 결합이다.
     """
     parts: list[str] = []
     params: list[Any] = []
     if range_:
         parts.append(f"{range_['column']} BETWEEN %s AND %s")
         params.extend([range_["from"], range_["to"]])
-    if filter_expr:
-        match = _FILTER_RE.match(filter_expr.strip())
+    for condition in split_filter_conditions(filter_expr):
+        match = _FILTER_RE.match(condition)
         if match:
             column, op, raw = match.group(1), match.group(2), match.group(3)
             parts.append(f"{column} {op} %s")
