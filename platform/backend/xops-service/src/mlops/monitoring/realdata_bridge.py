@@ -102,8 +102,15 @@ def _representative(features: list[dict[str, Any]]) -> dict[str, Any] | None:
     return max(usable, key=lambda f: f["psi"]) if usable else None
 
 
+def _bucket_edge_label(value: float) -> str:
+    """구간 경계 표기 — 방문객·소비액은 자릿수가 커서 지수 표기(3.16e+04)로는 읽히지 않는다."""
+    if abs(value) >= 1000:
+        return f"{value:,.0f}"
+    return f"{value:.4g}"
+
+
 def _bucket_labels(edges: list[float]) -> list[str]:
-    return [f"{edges[i]:.4g}~{edges[i + 1]:.4g}" for i in range(len(edges) - 1)]
+    return [f"{_bucket_edge_label(edges[i])}~{_bucket_edge_label(edges[i + 1])}" for i in range(len(edges) - 1)]
 
 
 def drift(model_id: str) -> dict[str, Any] | None:
