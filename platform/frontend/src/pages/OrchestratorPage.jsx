@@ -27,6 +27,19 @@ const RUN_STATE_LABEL = {
   failed: "실패"
 };
 
+const REALDATA_RUN_STATE_LABEL = {
+  saved: "후보 등록",
+  succeeded: "후보 등록",
+  failed: "실패",
+  cancelled: "취소"
+};
+
+function runStateLabel(run) {
+  const label =
+    run.source === "realdata" ? REALDATA_RUN_STATE_LABEL[run.state] : RUN_STATE_LABEL[run.state];
+  return label ?? run.state;
+}
+
 // 저장된 실행 로그의 ISO 타임스탬프를 콘솔 표기(hh:mm:ss)로. 파싱 실패 시 원문을 남긴다.
 function logTime(ts) {
   const parsed = new Date(ts);
@@ -481,7 +494,8 @@ export default function OrchestratorPage() {
                       </div>
                     </td>
                     <td style={{ fontSize: 12 }}>
-                      {orDash(p.model_id)} {orDash(p.base_version)}
+                      {orDash(p.model_id)}{" "}
+                      {isRealdata && !p.base_version ? "· 반영 버전 없음" : orDash(p.base_version)}
                       {isRealdata
                         ? ` · 최신 후보 ${orDash(p.candidate_version)}`
                         : candidateAvailable
@@ -504,7 +518,7 @@ export default function OrchestratorPage() {
                             {orDash(last.run_id)}
                           </button>
                           <div style={{ color: "var(--text-muted)" }}>
-                            {orDash(logTime(last.finished_at))} · {orDash(RUN_STATE_LABEL[last.state] ?? last.state)}
+                            {orDash(logTime(last.finished_at))} · {orDash(runStateLabel(last))}
                           </div>
                         </>
                       ) : (
@@ -900,7 +914,7 @@ export default function OrchestratorPage() {
                       </td>
                       <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>{orDash(r.trigger)}</td>
                       <td style={{ fontSize: 12 }}>
-                        {orDash(RUN_STATE_LABEL[r.state] ?? r.state)}
+                        {orDash(runStateLabel(r))}
                         <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
                           {orDash(r.active_version)}
                           {/* 실데이터 job은 승급 지표가 아니라 등록된 후보의 검증 지표를 남긴다. */}
