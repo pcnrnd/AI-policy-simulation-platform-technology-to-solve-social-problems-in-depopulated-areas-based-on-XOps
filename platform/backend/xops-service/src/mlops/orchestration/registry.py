@@ -102,13 +102,19 @@ class ModelRegistry:
         metrics, source = found
         return metrics if source == "trained" else None
 
-    def models(self) -> list[dict[str, Any]]:
-        """등록된 운영 모델과 현재 버전/지표. 승급 이력이 있으면 실측 지표를 노출한다."""
+    def models(self, include_seed: bool = True) -> list[dict[str, Any]]:
+        """등록된 운영 모델과 현재 버전/지표. 승급 이력이 있으면 실측 지표를 노출한다.
+
+        `include_seed=False` 면 아직 학습 아티팩트가 없어 지표가 시드인 모델(`metrics_source="seed"`)을
+        뺀다 — 데모 표시 OFF 화면이 시드 버전·지표를 실측처럼 읽지 않게 하기 위한 것이다.
+        """
         out: list[dict[str, Any]] = []
         for model_id, info in self._store.items():
             version = self._version(model_id, info["version"])
             found = self._artifact_metrics(model_id, version)
             metrics, source = found if found is not None else (info["metrics"], "seed")
+            if not include_seed and source == "seed":
+                continue
             out.append(
                 {
                     **info,
@@ -121,20 +127,36 @@ class ModelRegistry:
             )
         return out
 
-    def runs(self, pipeline_id: str | None = None) -> list[dict[str, Any]]:
+    def runs(self, pipeline_id: str | None = None, include_seed: bool = True) -> list[dict[str, Any]]:
+        """실행 이력. `include_seed=False` 면 시드 파이프라인이 만든 실행을 뺀다.
+
+        실행 행 자체는 실제 산출물이지만 학습 입력이 시드 시계열(`mlops/training/dataset.py`)이라
+        데모 표시 OFF 화면에서는 실측으로 읽히면 안 된다. 파이프라인에 매이지 않은 실행
+        (`/events` 발화)도 같은 시드 입력이라 함께 뺀다.
+        """
         runs = db.list_runs()
-        return [r for r in runs if r.get("pipeline_id") == pipeline_id] if pipeline_id else runs
+        if pipeline_id:
+            return [r for r in runs if r.get("pipeline_id") == pipeline_id]
+        if include_seed:
+            return runs
+        return [r for r in runs if r.get("pipeline_id") and r["pipeline_id"] not in db.SEED_PIPELINE_IDS]
 
     # ── 파이프라인 등록 ─────────────────────────────────────
-    def pipelines(self) -> list[dict[str, Any]]:
+    def pipelines(self, include_seed: bool = True) -> list[dict[str, Any]]:
         """등록된 파이프라인 + 대상 모델의 현행/다음 후보 버전.
 
         후보 버전은 저장하지 않고 매번 현행 버전에서 파생한다 — 고정 상수로 두면 한 번
         승급한 뒤 현행과 같아져 실행이 영구히 잠긴다.
+
+        `include_seed=False` 면 부트스트랩 시드 파이프라인(`db.SEED_PIPELINE_IDS`)을 뺀다.
+        기준 모델·후보 버전은 그대로 시드 레지스트리에서 읽는다 — 사용자가 등록한 파이프라인도
+        같은 모델을 대상으로 할 수 있어서 여기서 모델까지 걸러 내면 버전 칸이 빈다.
         """
         models = {m["model_id"]: m for m in self.models()}
         out: list[dict[str, Any]] = []
         for pipeline in db.list_pipelines():
+            if not include_seed and pipeline["id"] in db.SEED_PIPELINE_IDS:
+                continue
             model = models.get(pipeline["model_id"])
             out.append(
                 {

@@ -56,8 +56,13 @@ export default function Overview() {
   // (롤업이 함께 내려 주는 레지스트리 실측 F1 `overviewSummary.model` 연결은 이 탭 소관 밖이라
   //  건드리지 않고 인계 자료의 연동 지점으로만 남긴다.)
   const f1Value = f1Override !== null ? f1Override.toFixed(3) : allowSeed ? "0.884" : "–";
-  const f1Label =
-    f1Override !== null && servingVersion ? `최적 (SOTA ${servingVersion})` : "최적 (SOTA)";
+  // 값이 "–" 인데 "최적 (SOTA)" 배지를 붙이면 측정이 없는 상태를 최고 성능이라고 단정한다.
+  const f1Measured = f1Override !== null || allowSeed;
+  const f1Label = !f1Measured
+    ? "측정 없음"
+    : f1Override !== null && servingVersion
+      ? `최적 (SOTA ${servingVersion})`
+      : "최적 (SOTA)";
   const f1Sub =
     f1Override !== null
       ? "연합 재학습 성공"
@@ -210,8 +215,11 @@ export default function Overview() {
           value={f1Value}
           footer={
             <>
-              <span className="trend-up" style={{ color: "var(--accent-teal)" }}>
-                <i className="fa-solid fa-circle-check"></i> {f1Label}
+              <span
+                className="trend-up"
+                style={{ color: f1Measured ? "var(--accent-teal)" : "var(--text-muted)" }}
+              >
+                <i className={`fa-solid ${f1Measured ? "fa-circle-check" : "fa-minus"}`}></i> {f1Label}
               </span>
               <span className="text-secondary">{f1Sub}</span>
             </>
@@ -229,7 +237,10 @@ export default function Overview() {
                 <span className="trend-up">
                   <i className="fa-solid fa-arrow-right"></i> Active
                 </span>
-                <span className="text-secondary">주민·복지·산업·공간·스마트팜·시설</span>
+                {/* 카테고리 문구는 시드 6종 이름이다 — 실데이터 롤업에는 그 구성이 없다. */}
+                <span className="text-secondary">
+                  {allowSeed ? "주민·복지·산업·공간·스마트팜·시설" : "실적재 데이터 소스"}
+                </span>
               </>
             ) : (
               <span className="text-secondary">{NO_DEMO_DATA} — 카탈로그 롤업을 받지 못했습니다</span>
@@ -274,7 +285,9 @@ export default function Overview() {
         </Card>
 
         <Card
-          title={`${currentRegion.name} 정책 영향 프로파일`}
+          // 지자체 목록·이름은 시드(mock_data.json regions) 전용이라 실저장소 대응값이 없다 —
+          // 데모 OFF에서는 제목·요약문에서 이름을 빼고, 선택 자체는 조작 UI라 그대로 둔다.
+          title={allowSeed ? `${currentRegion.name} 정책 영향 프로파일` : "정책 영향 프로파일"}
           icon="fa-bullseye"
           headerRight={
             <label className="compact-select-field">
@@ -304,7 +317,7 @@ export default function Overview() {
           </div>
           <p className="chart-summary">
             {radarSummary === null
-              ? `${NO_DEMO_DATA} — ${currentRegion.name} 정책 영향 프로파일에 쓸 실데이터가 없습니다.`
+              ? `${NO_DEMO_DATA} — 정책 영향 프로파일에 쓸 실데이터가 없습니다.`
               : `${currentRegion.name} 지표: ${radarSummary}.`}
           </p>
         </Card>

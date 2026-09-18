@@ -30,6 +30,11 @@ _explain = ExplainabilityModule()
 
 _SERIES = ("accuracy", "f1", "precision", "recall", "mse", "mae")
 
+# GET 3종의 시드 폴백 게이트. 기본 false = 데모 표시 OFF — 실측이 없으면 시드 값을 내려보내는
+# 대신 빈 응답(`source: null`)으로 답한다. 화면이 `source` 만 보고 거르던 규칙을 응답 자체로
+# 옮긴 것이라, 데모 OFF에서는 시드 수치가 네트워크 응답에도 남지 않는다.
+_INCLUDE_SEED = Query(False, description="실측이 없을 때 시드 값으로 폴백 — 데모 표시 ON 전용")
+
 
 def _maybe_retrain(result: DriftResult, model_id: str | None, auto_retrain: bool) -> dict[str, Any] | None:
     """드리프트가 임계를 넘고 auto_retrain이면 해당 모델의 재학습을 자동 발화."""
@@ -43,15 +48,18 @@ def _maybe_retrain(result: DriftResult, model_id: str | None, auto_retrain: bool
 @router.get("/metrics")
 def metrics_history(
     model_id: str | None = Query(None, description="실측 지표를 읽을 모델. 생략하면 시드"),
+    include_seed: bool = _INCLUDE_SEED,
 ) -> dict[str, Any]:
     """6대 지표 시계열 + 최신 스냅샷.
 
     `model_id` 의 실측 학습 실행이 있으면 그 지표 추이(`source="measured"`)를, 없으면
-    시드 시계열(`source="seed"`)을 돌려준다.
+    시드 시계열(`source="seed"`)을 돌려준다. `include_seed=false` 면 시드 대신 빈 시계열이다.
     """
     measured = sources.measured_metrics(model_id) if model_id else None
     if measured is not None:
         return {**measured, "source": "measured", "model_id": model_id}
+    if not include_seed:
+        return {"history": {}, "latest": {}, "labels": None, "latency_ms": None, "source": None}
     hist = get_seed()["metrics_history"]
     latest = {k: hist[k][-1] for k in _SERIES if k in hist}
     return {"history": hist, "latest": latest, "labels": None, "latency_ms": None, "source": "seed"}
@@ -74,8 +82,16 @@ def drift_from_seed(
     drifted: bool = Query(False, description="true면 드리프트 주입 분포 사용"),
     model_id: str | None = Query(None, description="드리프트 감지 시 재학습 대상 모델"),
     auto_retrain: bool = Query(False, description="드리프트 임계 초과 시 재학습 자동 발화"),
+    include_seed: bool = _INCLUDE_SEED,
 ) -> dict[str, Any]:
-    """시드 분포(reference vs current_normal|current_drifted)로 PSI/KL 판정."""
+    """시드 분포(reference vs current_normal|current_drifted)로 PSI/KL 판정.
+
+    PSI/KL 계산은 실계산이지만 **입력 분포가 시드**다. 실 추론 입력 수집 경로가 아직 없으므로
+    `include_seed=false`(데모 표시 OFF)에서는 판정 자체를 내지 않고 빈 분포를 돌려준다.
+    실데이터 드리프트는 `GET /realdata/models/{model_id}/drift` 가 따로 담당한다.
+    """
+    if not include_seed:
+        return {"buckets": [], "reference": [], "current": [], "source": None, "retrain": None}
     dist = get_seed()["drift_distribution"]
     current = dist["current_drifted"] if drifted else dist["current_normal"]
     result = _drift.detect(dist["reference"], current)
@@ -112,6 +128,7 @@ def detect_outliers(body: OutlierInput, method: str = Query("zscore", pattern="^
 @router.get("/explain")
 def explain_from_seed(
     model_id: str | None = Query(None, description="실측 기여도를 읽을 모델. 생략하면 시드"),
+    include_seed: bool = _INCLUDE_SEED,
 ) -> dict[str, Any]:
     """특징 중요도 + 사용 backend 표기.
 
@@ -132,6 +149,8 @@ def explain_from_seed(
                 "version": version,
                 "basis": "표준화 릿지 계수 (1 표준편차당 타깃 변화율)",
             }
+    if not include_seed:
+        return {"backend": _explain.backend, "features": [], "source": None}
     return {"backend": _explain.backend, "features": get_seed()["shap_features"], "source": "seed"}
 
 

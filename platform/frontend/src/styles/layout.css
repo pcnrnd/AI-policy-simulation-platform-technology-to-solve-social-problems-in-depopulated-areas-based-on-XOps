@@ -342,8 +342,10 @@ body.drawer-open {
    - DataOps STEP ① 카탈로그(.catalog-live-region) — 서버가 live_rows로 실적재만 내려줌
    - 종합 대시보드(#tab-overview-panel) — 롤업 실측치만 쓰고 시드 항목은 빈 상태 문구로 대체
    - 정책 시뮬레이터 & 추천(#tab-simulator-panel) — allowSeed로 시드 파생 값만 차단, 조작 UI는 유지
-   - 자동화 리포팅(#tab-reporter-panel) — 미리보기·바인딩 값만 차단
-   아직 전환 전(가림 유지): 오케스트레이터.
+   - 자동화 리포팅(#tab-reporter-panel) — 미리보기·바인딩 값·내보내기 차단
+   - DataOps(#tab-dataops-panel) — 카탈로그를 include_seed 로 서버에서 걸러 받음
+   - 오케스트레이터(#tab-mlops-orch-panel) — 파이프라인·모델·실행 이력을 include_seed 로 걸러 받음
+   전 탭 전환 완료. 이 목록은 이제 패널 바깥(헤더·경보 팝업)에만 실효가 있다.
    data-values-source는 전달 경로일 뿐 실제/데모 데이터 구분이나 표시 예외가 아니다. */
 .mock-values-hidden .content-body :where(
   canvas,
@@ -422,7 +424,10 @@ body.drawer-open {
   visibility: visible !important;
 }
 
-/* 종합 대시보드·정책 시뮬레이터·자동화 리포팅도 데이터 계층에서 시드를 차단하므로 가리지 않는다.
+/* 나머지 탭도 전부 데이터 계층에서 시드를 차단하므로 가리지 않는다(DataOps·오케스트레이터 포함).
+   오케스트레이터는 파이프라인·Model Store·실행 이력을 `include_seed` 로 서버에서 걸러 받고,
+   DataOps 는 카탈로그를 같은 방식으로 받는다 — 두 탭 다 목록에 남은 것은 실데이터뿐이라 가릴 값이 없다.
+   위 가림 목록은 이제 패널 바깥(헤더·경보 팝업)에만 실효가 있다.
    가리면 빈 상태 문구("데모 데이터 없음 — …")까지 함께 사라져 "왜 비었는지"를 읽을 수 없고,
    표·차트를 가리면 그 안의 선택 버튼까지 클릭·포커스가 막힌다.
    공용 셀렉터는 오케스트레이터에서 계속 가려야 해서 위 목록에서 지우지 않고 여기서 되살린다. */
@@ -431,7 +436,9 @@ body.drawer-open {
 .mock-values-hidden .content-body :is(
   #tab-overview-panel,
   #tab-simulator-panel,
-  #tab-reporter-panel
+  #tab-reporter-panel,
+  #tab-dataops-panel,
+  #tab-mlops-orch-panel
 ) :where(
   canvas,
   tbody,

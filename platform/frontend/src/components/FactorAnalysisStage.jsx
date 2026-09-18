@@ -31,7 +31,9 @@ export default function FactorAnalysisStage({
       id="stage-factor"
       no="STAGE ①"
       title="사회문제 요인분석"
-      sub={`${region.name} · ${region.theme}`}
+      // 지역명·테마는 시드(mock_data.json regions) 전용이라 실저장소 대응값이 없다 —
+      // 표시할 데이터가 없는 상태(unavailableText)에서는 부제로도 내보내지 않는다.
+      sub={unavailableText ? "대상 지자체 정보 없음" : `${region.name} · ${region.theme}`}
       open={open}
       onToggle={onToggle}
     >
@@ -41,9 +43,12 @@ export default function FactorAnalysisStage({
           <i className="fa-solid fa-flask" aria-hidden="true"></i>
           <div>
             <strong>요인분석 실행</strong>
+            {/* 연계 소스 건수·XAI·딥러닝 모델명은 시드 케이스 정의에서 온다 — 데이터가 없는
+                상태에서는 숫자·모델명을 내보내지 않고 실행 안내만 남긴다(버튼은 그대로 조작 가능). */}
             <p>
-              연계 소스 {c.dataSources.length}개 · {ai.xai ?? "XAI"} ·{" "}
-              {(ai.deepLearning ?? []).join(" / ")}
+              {unavailableText
+                ? "연계 소스·모델 구성 정보 없음"
+                : `연계 소스 ${c.dataSources.length}개 · ${ai.xai ?? "XAI"} · ${(ai.deepLearning ?? []).join(" / ")}`}
             </p>
           </div>
         </div>

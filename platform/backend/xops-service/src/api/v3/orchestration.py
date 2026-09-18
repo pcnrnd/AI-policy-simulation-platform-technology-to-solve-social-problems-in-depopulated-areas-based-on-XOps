@@ -19,17 +19,23 @@ from src.schemas.orchestration import EventRequest, PipelineCreateRequest, Pipel
 router = APIRouter(prefix="/orchestration", tags=["orchestration"])
 
 
+# 목록 GET 3개의 `include_seed` 는 기본 false — 데모 표시 OFF가 기본 상태다.
+# 시드 데이터는 지우지 않고 목록에서만 빠지며, 데모 ON 화면이 `include_seed=true` 로 되살린다.
+# 단건 경로(`/pipelines/{id}/run`, `/runs/{id}/logs`)와 쓰기 경로는 이 필터를 적용하지 않는다.
+_INCLUDE_SEED = Query(False, description="데모 시드(기본 파이프라인·시드 지표 모델)까지 포함 — 데모 표시 ON 전용")
+
+
 @router.get("/models")
-def list_models() -> list[dict[str, Any]]:
+def list_models(include_seed: bool = _INCLUDE_SEED) -> list[dict[str, Any]]:
     """등록된 운영 모델과 현재 버전/지표."""
-    return get_registry().models()
+    return get_registry().models(include_seed=include_seed)
 
 
 # ── ML 파이프라인 등록 ──────────────────────────────────────
 @router.get("/pipelines")
-def list_pipelines() -> list[dict[str, Any]]:
+def list_pipelines(include_seed: bool = _INCLUDE_SEED) -> list[dict[str, Any]]:
     """등록된 재학습 파이프라인 (등록이 없으면 빈 목록)."""
-    return get_registry().pipelines()
+    return get_registry().pipelines(include_seed=include_seed)
 
 
 @router.post("/pipelines", status_code=201)
@@ -64,9 +70,12 @@ def run_pipeline(pipeline_id: str, body: PipelineRunRequest | None = None) -> di
 
 # ── 실행 이력·로그 ──────────────────────────────────────────
 @router.get("/runs")
-def list_runs(pipeline_id: str | None = Query(None, description="파이프라인별 이력만")) -> list[dict[str, Any]]:
+def list_runs(
+    pipeline_id: str | None = Query(None, description="파이프라인별 이력만"),
+    include_seed: bool = _INCLUDE_SEED,
+) -> list[dict[str, Any]]:
     """파이프라인 실행 이력 (최신 우선)."""
-    return list(reversed(get_registry().runs(pipeline_id)))
+    return list(reversed(get_registry().runs(pipeline_id, include_seed=include_seed)))
 
 
 @router.get("/runs/{run_id}/logs")

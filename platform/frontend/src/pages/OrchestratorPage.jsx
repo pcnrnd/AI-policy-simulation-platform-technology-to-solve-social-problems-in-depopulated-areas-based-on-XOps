@@ -127,8 +127,17 @@ export default function OrchestratorPage() {
     consoleLogs,
     startPipeline,
     resetPipeline,
-    addConsoleLog
+    addConsoleLog,
+    mockDataVisible
   } = useAppState();
+
+  // 데모 표시 토글은 화면 구조가 아니라 **데이터 유무**만 바꾼다. OFF에서는 시드(백엔드 부트스트랩
+  // 파이프라인·시드 지표 모델·상수 Model Store 이력)를 데이터 계층에서 끊고 빈 상태 문구를 남긴다.
+  // 가림 CSS로 지우면 실데이터 행까지 함께 사라지고 "왜 비었는지"를 읽을 수 없다.
+  const allowSeed = mockDataVisible;
+  const NO_DEMO_DATA = "데모 데이터 없음";
+  // 저장된 실행 레코드가 없을 때만 쓰이는 프런트 상수 폴백값 — 데모 OFF에서는 넘기지 않는다.
+  const seedOr = (seedValue) => (allowSeed ? seedValue : null);
 
   const modelName = (id) => MODEL_REGISTRY.find((m) => m.id === id)?.name || id || "–";
   const pipelineBusy = pipelineRunning || pipelineScheduled;
@@ -171,10 +180,12 @@ export default function OrchestratorPage() {
 
   const reloadCatalog = useCallback(async () => {
     try {
+      // 데모 OFF면 서버가 시드 파이프라인·시드 지표 모델·그 파이프라인이 만든 실행을 빼고 내려준다.
+      // include_seed 는 호출마다 적어 둔다(공유 변수로 감추면 새 호출에서 빠져도 드러나지 않는다).
       const [pipelineRows, runRows, modelRows] = await Promise.all([
-        apiGet("/api/v3/orchestration/pipelines"),
-        apiGet("/api/v3/orchestration/runs"),
-        apiGet("/api/v3/orchestration/models")
+        apiGet(`/api/v3/orchestration/pipelines?include_seed=${mockDataVisible}`),
+        apiGet(`/api/v3/orchestration/runs?include_seed=${mockDataVisible}`),
+        apiGet(`/api/v3/orchestration/models?include_seed=${mockDataVisible}`)
       ]);
       setPipelines(Array.isArray(pipelineRows) ? pipelineRows : []);
       setRuns(Array.isArray(runRows) ? runRows : []);
@@ -186,7 +197,7 @@ export default function OrchestratorPage() {
       setCatalogError(message);
       addConsoleLog(`ERROR: 파이프라인 카탈로그 로드 실패 — ${message}`);
     }
-  }, [addConsoleLog]);
+  }, [addConsoleLog, mockDataVisible]);
 
   useEffect(() => {
     reloadCatalog();
@@ -239,7 +250,10 @@ export default function OrchestratorPage() {
   const [statusFocusRequest, setStatusFocusRequest] = useState(0);
   const pipelineRows = pipelines ?? [];
   const pl = paginate(pipelineRows, plPage, PAGE_SIZE);
-  const store = paginate(modelStore, storePage, PAGE_SIZE);
+  // Model Store 는 상수 이력(MODEL_STORE)으로 시작하고 백엔드가 확인해 준 행만 source="api" 가 된다.
+  // 데모 OFF에서는 확인된 행만 남긴다 — 표 전체를 CSS로 가리던 예전 방식은 실데이터 행까지 지웠다.
+  const visibleStore = allowSeed ? modelStore : modelStore.filter((m) => m.source === "api");
+  const store = paginate(visibleStore, storePage, PAGE_SIZE);
   const runList = paginate(runs, runPage, PAGE_SIZE);
 
   // 현재(또는 선택한) 실행의 저장 레코드 — 실행 ID·시각·단계는 프런트 생성값이 아니라 이 값을 쓴다.
@@ -517,24 +531,24 @@ export default function OrchestratorPage() {
             <div className="run-meta" data-values-source={activeRun ? "api" : "mock"}>
               <span className="run-meta-item">
                 <span className="run-meta-label">대상 모델</span>
-                {orDash(activeRun?.model_id ?? pipelineRun.model)} {orDash(pipelineRun.baseVersion)} → 후보{" "}
-                {orDash(activeRun?.active_version ?? pipelineRun.candidateVersion)}
+                {orDash(activeRun?.model_id ?? seedOr(pipelineRun.model))} {orDash(seedOr(pipelineRun.baseVersion))} →
+                후보 {orDash(activeRun?.active_version ?? seedOr(pipelineRun.candidateVersion))}
               </span>
               <span className="run-meta-item">
                 <span className="run-meta-label">실행 ID</span>
-                <code>{orDash(activeRun?.run_id ?? pipelineRun.runId)}</code>
+                <code>{orDash(activeRun?.run_id ?? seedOr(pipelineRun.runId))}</code>
               </span>
               <span className="run-meta-item">
                 <span className="run-meta-label">실험</span>
-                <code>{orDash(pipelineRun.experiment)}</code>
+                <code>{orDash(seedOr(pipelineRun.experiment))}</code>
               </span>
               <span className="run-meta-item">
                 <span className="run-meta-label">트리거</span>
-                {orDash(activeRun?.trigger ?? pipelineRun.trigger)}
+                {orDash(activeRun?.trigger ?? seedOr(pipelineRun.trigger))}
               </span>
               <span className="run-meta-item">
                 <span className="run-meta-label">시작</span>
-                {orDash(activeRun ? logTime(activeRun.started_at) : pipelineRun.startedAt)}
+                {orDash(activeRun ? logTime(activeRun.started_at) : seedOr(pipelineRun.startedAt))}
               </span>
               <span className="run-meta-item">
                 <span className="run-meta-label">종료</span>
@@ -647,6 +661,17 @@ export default function OrchestratorPage() {
               </tr>
             </thead>
             <tbody>
+              {store.pageRows.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={7}
+                    style={{ fontSize: 12, color: "var(--text-muted)", textAlign: "center", padding: "18px 8px" }}
+                  >
+                    {NO_DEMO_DATA} — 백엔드 레지스트리가 확인해 준 모델 버전이 없습니다. 재학습을 실행하면
+                    승급된 버전이 이 자리에 기록됩니다.
+                  </td>
+                </tr>
+              )}
               {store.pageRows.map((m) => {
                 const st = STORE_STATUS_STYLE[m.status] ?? STORE_STATUS_STYLE.이전;
                 return (
@@ -698,7 +723,7 @@ export default function OrchestratorPage() {
         <TablePager
           page={store.safePage}
           totalPages={store.totalPages}
-          totalCount={modelStore.length}
+          totalCount={visibleStore.length}
           pageSize={PAGE_SIZE}
           onChange={setStorePage}
         />

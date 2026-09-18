@@ -176,8 +176,9 @@ export function AppStateProvider({ children }) {
   // 응답에 없는 상수 이력 행은 표기하지 않아 OFF에서 가려진다.
   // 승급 직후에도 다시 부른다 — 한 번만 읽으면 modelCandidates.nextVersion 이 승급 전 값으로 남아
   // 운영 버전과 같아지고, startPipeline 의 "후보 없음" 가드가 영구히 참이 되어 재실행이 잠긴다.
+  // 데모 표시 OFF면 시드 지표 모델(metrics_source="seed")을 빼고 받는다 — 목록 계약은 카탈로그와 같다.
   const syncModels = useCallback(() => {
-    return apiGet("/api/v3/orchestration/models")
+    return apiGet(`/api/v3/orchestration/models?include_seed=${mockDataVisible}`)
       .then((models) => {
         if (!Array.isArray(models)) return;
         setModelCandidates(
@@ -216,16 +217,17 @@ export function AppStateProvider({ children }) {
       .catch((err) => {
         addConsoleLog(`WARN: 모델 레지스트리 동기화 실패 — ${err?.message ?? "알 수 없는 오류"}`);
       });
-  }, [addConsoleLog]);
+  }, [addConsoleLog, mockDataVisible]);
 
   useEffect(() => {
     syncModels();
   }, [syncModels]);
 
   // 카탈로그 롤업 동기화 — 실패하면 null 로 남긴다(Overview 가 mock_data.json 으로 폴백).
+  // 데모 표시 OFF면 시드 소스·시드 지표 모델을 뺀 롤업을 받는다(소스 건수가 시드 7종을 포함하던 결함).
   useEffect(() => {
     let alive = true;
-    apiGet("/api/v3/overview/summary")
+    apiGet(`/api/v3/overview/summary?include_seed=${mockDataVisible}`)
       .then((summary) => {
         if (!alive) return;
         setOverviewSummary(summary);
@@ -237,7 +239,7 @@ export function AppStateProvider({ children }) {
     return () => {
       alive = false;
     };
-  }, [addConsoleLog]);
+  }, [addConsoleLog, mockDataVisible]);
 
   const dismissAlert = useCallback((id) => {
     setAlerts((prev) => prev.filter((a) => a.id !== id));
@@ -511,7 +513,13 @@ export function AppStateProvider({ children }) {
       pipelineStep === 5 && pipelineRun
         ? ` [Docker 이미지: ${pipelineRun.model}:${pipelineRun.candidateVersion} 컨테이너 배포]`
         : "";
-    addConsoleLog(step.log + dockerSuffix, false, step.warn || false);
+    // 단계 로그 문구에는 시드 수치(PSI 0.384 · Accuracy 0.892→0.925 · 소스 6종)가 박혀 있다.
+    // 데모 표시 OFF에서는 단계 이름만 남기고 그 수치를 남기지 않는다 — 실행 자체는 백엔드 응답이 판정한다.
+    addConsoleLog(
+      mockDataVisible ? step.log + dockerSuffix : `INFO: ${step.desc} 단계 진행`,
+      false,
+      mockDataVisible ? step.warn || false : false
+    );
 
     pipelineTimerRef.current = setTimeout(() => {
       setPipelineStep((s) => s + 1);
@@ -520,7 +528,16 @@ export function AppStateProvider({ children }) {
     return () => {
       if (pipelineTimerRef.current) clearTimeout(pipelineTimerRef.current);
     };
-  }, [pipelineStep, pipelineRunning, addConsoleLog, pushNotification, pipelineRun, pipelineResult, syncModels]);
+  }, [
+    pipelineStep,
+    pipelineRunning,
+    addConsoleLog,
+    pushNotification,
+    pipelineRun,
+    pipelineResult,
+    syncModels,
+    mockDataVisible
+  ]);
 
   const injectDrift = useCallback(() => {
     if (pipelineRunning || driftStartTimerRef.current) return;
