@@ -635,3 +635,95 @@
   color: var(--accent-orange);
   background-color: rgba(var(--accent-orange-rgb), 0.06);
 }
+
+/* ── STEP③ 필터 조건 편집기 ────────────────────────────────────────────
+   백엔드 문법(`컬럼 연산자 값` 을 AND 로 결합, 최대 5개)을 한 행 = 한 조건으로 나타낸다.
+   행 앞의 WHERE·AND 표기는 생성 SQL과 같은 순서로 읽히게 하는 안내 표시다. */
+.filter-builder {
+  margin-bottom: var(--space-s);
+}
+.filter-builder-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-s);
+  margin-bottom: var(--space-xs);
+}
+.filter-builder-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+.filter-mode-toggle {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  font-size: 11px;
+}
+.filter-mode-toggle[aria-pressed="true"] {
+  background: var(--surface-hover);
+  text-decoration: underline;
+}
+.filter-row-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.filter-row {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1.2fr) 88px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-xs);
+}
+/* 결합 표기는 읽기 전용 라벨 — 값 입력과 혼동되지 않게 코드체·저채도로 둔다. */
+.filter-row-join {
+  color: var(--text-muted);
+  font-family: "Courier New", monospace;
+  font-size: 11px;
+  text-align: right;
+}
+.filter-row-op {
+  font-family: "Courier New", monospace;
+}
+.filter-row-del {
+  padding: 4px 10px;
+  font-size: 11px;
+}
+.filter-builder-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-s);
+  margin-top: var(--space-xs);
+}
+.filter-row-add {
+  padding: 4px 12px;
+  font-size: 11px;
+}
+.filter-limit-note,
+.filter-empty-note {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+@media (max-width: 600px) {
+  /* 좁은 폭에서는 결합 표기를 행 위로 올리고 컬럼·연산자·값을 세로로 쌓는다. */
+  .filter-row {
+    grid-template-columns: 1fr auto;
+  }
+  .filter-row-join {
+    grid-column: 1 / -1;
+    text-align: left;
+  }
+  .filter-row .select-control,
+  .filter-row .input-control {
+    grid-column: 1 / -1;
+  }
+  .filter-row-del {
+    grid-column: 1 / -1;
+  }
+}

@@ -1,6 +1,8 @@
 // DataOps Data API Builder 시뮬레이션 헬퍼 — CRUD/필터/정렬/페이징 + JWT 인증 + DB Adapter/SQL 생성.
 // 무분별한 저장소 직접 접근을 막고 API+메타데이터로 추상화한다는 Notion 명세를 클라이언트에서 재현.
 
+import { splitFilterConditions } from "./filterExpression.js";
+
 export const HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"];
 
 function base64url(obj) {
@@ -115,24 +117,25 @@ export function buildSql({ method, table, columns, range, filter, sort, page, pa
   }
 }
 
-/** 사용자 filter(`col > 100` 형태)를 MQL 조건으로 변환. 해석 불가 시 $expr 주석으로 보존. */
-function mongoFilterOf(filter) {
-  if (!filter) return null;
-  const m = filter.match(/^(\w+)\s*(>=|<=|!=|=|>|<)\s*(.+)$/);
-  if (!m) return `/* 미해석 조건: ${filter} */`;
-  const [, col, op, rawVal] = m;
-  const num = Number(rawVal);
-  const val = Number.isFinite(num) ? num : `"${rawVal.replace(/^['"]|['"]$/g, "")}"`;
-  const OPS = { ">": "$gt", ">=": "$gte", "<": "$lt", "<=": "$lte", "!=": "$ne" };
-  return op === "=" ? `${col}: ${val}` : `${col}: { ${OPS[op]}: ${val} }`;
+/** 사용자 filter(` AND ` 로 결합된 `col > 100` 조건들)를 MQL 조각으로. 해석 불가 시 주석으로 보존.
+ *  분리 규칙은 백엔드 safety.split_filter_conditions 와 같다. */
+function mongoFilterParts(filter) {
+  return splitFilterConditions(filter).map((condition) => {
+    const m = condition.match(/^(\w+)\s*(>=|<=|!=|=|>|<)\s*(.+)$/);
+    if (!m) return `/* 미해석 조건: ${condition} */`;
+    const [, col, op, rawVal] = m;
+    const num = Number(rawVal);
+    const val = Number.isFinite(num) ? num : `"${rawVal.replace(/^['"]|['"]$/g, "")}"`;
+    const OPS = { ">": "$gt", ">=": "$gte", "<": "$lt", "<=": "$lte", "!=": "$ne" };
+    return op === "=" ? `${col}: ${val}` : `${col}: { ${OPS[op]}: ${val} }`;
+  });
 }
 
 /** 메타데이터 range + filter → MQL match 식 (이미지의 db.obj1.find(seq:{$gt..,$lt..}) 재현). */
 function mongoMatch(range, filter) {
   const parts = [];
   if (range) parts.push(`${range.column}: { $gte: ${JSON.stringify(range.from)}, $lte: ${JSON.stringify(range.to)} }`);
-  const f = mongoFilterOf(filter);
-  if (f) parts.push(f);
+  parts.push(...mongoFilterParts(filter));
   return `{ ${parts.join(", ")} }`;
 }
 
