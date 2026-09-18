@@ -190,6 +190,7 @@
   "metadata_schemas": [
     {
       "id": "ds_01_resident_registry",
+      "is_seed": true,
       "label": "주민등록",
       "source": "RDB · PostgreSQL",
       "object": "tb_resident_movement",
@@ -208,6 +209,7 @@
     },
     {
       "id": "ds_02_local_welfare",
+      "is_seed": true,
       "label": "복지·재정",
       "source": "RDB · PostgreSQL",
       "object": "tb_welfare_budget",
@@ -226,6 +228,7 @@
     },
     {
       "id": "ds_03_industrial_factories",
+      "is_seed": true,
       "label": "산업·공장",
       "source": "RDB · PostgreSQL",
       "object": "tb_factory_registry",
@@ -244,6 +247,7 @@
     },
     {
       "id": "ds_04_spatial_geojson",
+      "is_seed": true,
       "label": "공간정보",
       "source": "공간 DB · PostGIS",
       "object": "geo_grid_cells",
@@ -261,6 +265,7 @@
     },
     {
       "id": "ds_05_smartfarm",
+      "is_seed": true,
       "label": "스마트팜",
       "source": "시계열 DB · TimescaleDB",
       "object": "ts_smartfarm_yield",
@@ -281,6 +286,7 @@
     },
     {
       "id": "ds_06_settlement_facility",
+      "is_seed": true,
       "label": "정주여건시설",
       "source": "RDB · PostgreSQL",
       "object": "tb_settlement_facility",
@@ -300,6 +306,7 @@
     },
     {
       "id": "ds_07_civil_complaints",
+      "is_seed": true,
       "label": "민원·정주의견",
       "source": "NoSQL · MongoDB",
       "object": "col_civil_complaints",
@@ -319,6 +326,7 @@
     },
     {
       "id": "ds_08_admin_boundary",
+      "is_seed": false,
       "label": "행정구역경계(실데이터)",
       "source": "공간 DB · PostGIS",
       "object": "geo_admin_boundary",
@@ -337,6 +345,7 @@
     },
     {
       "id": "ds_09_welfare_facility",
+      "is_seed": false,
       "label": "사회복지시설(실데이터)",
       "source": "RDB · PostgreSQL",
       "object": "tb_welfare_facility",
@@ -361,6 +370,7 @@
     },
     {
       "id": "ds_10_bccard_dong_industry_sales",
+      "is_seed": false,
       "label": "BC카드 남원시 지역소비(행정동×업종×성별)",
       "source": "RDB · PostgreSQL",
       "object": "ext_bccard_dong_industry_sales",
@@ -368,7 +378,7 @@
       "archive": { "tier": "Cold", "retention": "영구 보존", "loaded_at": "2026-09-11", "rows": 212342 },
       "lineage": { "origin": "BC카드 남원시 지역소비데이터(협약 제공, platform/data/real 원본 sha256 89a950)", "version": "v1", "commit": "89a950" },
       "range": { "column": "base_ym", "from": 201901, "to": 202312 },
-      "tags": ["소비", "외부데이터"],
+      "tags": ["소비", "외부데이터", "실데이터"],
       "columns": [
         { "name": "base_ym", "type": "INTEGER", "description": "기준년월(YYYYMM) (원본: 기준년월)" },
         { "name": "customer_type", "type": "TEXT", "description": "외지인/현지인 (원본: 고객구분)" },
@@ -382,6 +392,7 @@
     },
     {
       "id": "ds_11_kt_namwon_monthly_dong_visitors",
+      "is_seed": false,
       "label": "KT 남원시 행정동 월별 방문객",
       "source": "RDB · PostgreSQL",
       "object": "ext_kt_namwon_monthly_dong_visitors",
@@ -389,7 +400,7 @@
       "archive": { "tier": "Hot", "retention": "5년 보존", "loaded_at": "2026-09-11", "rows": 1334 },
       "lineage": { "origin": "KT 남원시 행정동 방문객 데이터(협약 제공, platform/data/real 원본 sha256 bd6d3a)", "version": "v1", "commit": "bd6d3a" },
       "range": { "column": "base_ym", "from": 201901, "to": 202310 },
-      "tags": ["방문객", "외부데이터"],
+      "tags": ["방문객", "외부데이터", "실데이터"],
       "columns": [
         { "name": "base_ym", "type": "INTEGER", "description": "기준년월(YYYYMM) (원본: 월별)" },
         { "name": "sido_name", "type": "TEXT", "description": "시도명" },
@@ -405,6 +416,7 @@
     },
     {
       "id": "ds_12_kt_namwon_visitors_by_sex_age",
+      "is_seed": false,
       "label": "KT 남원시 행정동 성·연령별 방문객",
       "source": "RDB · PostgreSQL",
       "object": "ext_kt_namwon_visitors_by_sex_age",
@@ -412,7 +424,7 @@
       "archive": { "tier": "Hot", "retention": "5년 보존", "loaded_at": "2026-09-11", "rows": 21342 },
       "lineage": { "origin": "KT 남원시 행정동 방문객 데이터(협약 제공, platform/data/real 원본 sha256 bd6d3a)", "version": "v1", "commit": "bd6d3a" },
       "range": { "column": "base_ym", "from": 201901, "to": 202310 },
-      "tags": ["방문객", "외부데이터"],
+      "tags": ["방문객", "외부데이터", "실데이터"],
       "columns": [
         { "name": "base_ym", "type": "INTEGER", "description": "기준년월(YYYYMM) (원본: 월별)" },
         { "name": "sido_name", "type": "TEXT", "description": "시도명" },

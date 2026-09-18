@@ -35,7 +35,8 @@ class _EmptyCatalog:
 
 def test_rollup_is_public_and_reports_unknown_when_no_storage(client: TestClient) -> None:
     """인증 없이 조회되고, 저장소에 닿지 못하면 0이 아니라 '확인 불가'로 보고한다."""
-    catalog = client.get("/api/v3/dataops/catalog").json()
+    # 집계는 카탈로그 전체(시드 포함)를 센다 — 목록 기본값과 달리 데모 필터를 적용하지 않는다.
+    catalog = client.get("/api/v3/dataops/catalog", params={"include_seed": "true"}).json()
 
     response = client.get(_URL)  # Authorization 헤더 없음 — 공개 조회
     body = response.json()

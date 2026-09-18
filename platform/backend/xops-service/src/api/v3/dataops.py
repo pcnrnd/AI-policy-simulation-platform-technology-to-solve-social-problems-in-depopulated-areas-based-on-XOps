@@ -71,14 +71,19 @@ def issue_oauth2_token(source_id: str, _: None = Depends(require_client)) -> dic
 def list_catalog(
     q: str = Query("", description="소스명·태그·설명·객체명 부분 일치 검색"),
     live: bool = Query(False, description="각 소스의 실적재 행수(live_rows)를 함께 조회"),
+    include_seed: bool = Query(False, description="데모 시드 소스(is_seed)까지 포함 — 데모 표시 ON 전용"),
 ) -> list[dict[str, Any]]:
     """메타데이터 카탈로그 목록/검색.
 
     `live=true` 면 소스별로 저장소를 읽어 `live_rows` 를 덧붙인다. 등록만 되어 있고 실제로는
     적재되지 않은 소스를 가려내기 위한 것이다. 기본값이 false 이므로 기존 응답은 그대로다.
     확인하지 못한 소스(DSN 부재·드라이버 미설치·연결 실패)는 0이 아니라 null 이 된다.
+
+    `include_seed` 의 기본값은 false — 목록의 기본은 실데이터(+사용자 등록분)다. 데모 표시 ON
+    화면만 `include_seed=true` 로 시드까지 받는다. 단건 조회·토큰 발급·CRUD 는 이 필터와
+    무관하다(데모 ON에서 고른 시드 소스가 곧바로 404가 되면 안 된다).
     """
-    sources = get_catalog().search(q)
+    sources = get_catalog().search(q, include_seed=include_seed)
     return annotate(sources) if live else sources
 
 

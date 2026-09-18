@@ -35,6 +35,8 @@ class SourceSummary(BaseModel):
     range: dict[str, Any] | None = None
     columns: list[dict[str, Any]] = Field(default_factory=list)
     user_registered: bool = False
+    # 데모(시드) 소스 여부 — 시드 파일이 직접 표시한다. 데모 표시 OFF 목록에서 제외되는 기준.
+    is_seed: bool = False
     # `?live=true` 일 때만 채워진다. 0 = 등록됐지만 미적재, null = 확인 불가(DSN·드라이버·연결 실패).
     live_rows: int | None = None
 
