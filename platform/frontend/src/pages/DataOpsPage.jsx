@@ -8,8 +8,10 @@ import ArchiveRegisterForm from "../components/ArchiveRegisterForm.jsx";
 import ConfirmDialog from "../components/ConfirmDialog.jsx";
 import NextStepBanner from "../components/NextStepBanner.jsx";
 import InfoTip from "../components/InfoTip.jsx";
+import FilterBuilder from "../components/FilterBuilder.jsx";
 import { useAppState } from "../context/AppStateContext.jsx";
 import { apiGet, apiSend } from "../lib/api.js";
+import { filterValidationMessage } from "../lib/filterExpression.js";
 import { HTTP_METHODS, AUTH_METHODS, adapterOf, buildQuery } from "../lib/dataopsApi.js";
 import { getScrollBehavior } from "../lib/motion.js";
 
@@ -24,18 +26,8 @@ const BUILT_APIS_URL = "/api/v3/dataops/apis";
 const TOKEN_URLS = { JWT: "/api/v3/dataops/token", OAuth2: "/api/v3/dataops/oauth2" };
 // 401은 화면의 토큰이 이미 무효(만료·서명 불일치)라는 뜻 — 폐기 후 재발급을 안내한다.
 const TOKEN_DISCARDED_MESSAGE = "토큰이 만료·무효화되어 폐기했습니다. 토큰을 다시 발급한 뒤 시도하세요.";
-const FILTER_PATTERN = /^(\w+)\s*(>=|<=|!=|=|>|<)\s*('[^';]*'|"[^";]*"|-?\d+(?:\.\d+)?|\w+)$/;
-
-function filterValidationMessage(value, columns = []) {
-  const expression = String(value ?? "").trim();
-  if (!expression) return null;
-  const match = expression.match(FILTER_PATTERN);
-  if (!match) return "‘컬럼 연산자 값’ 형식으로 한 조건만 입력하세요. 예: in_flow_count > 100";
-  if (!columns.some((column) => column.name === match[1])) {
-    return `현재 스키마에 ‘${match[1]}’ 컬럼이 없습니다. 목록에 있는 컬럼명을 사용하세요.`;
-  }
-  return null;
-}
+// 필터 문법·검증은 조건 행 UI와 같은 규칙을 써야 하므로 lib/filterExpression.js 한 곳에 둔다.
+const FILTER_ERROR_ID = "dataops-filter-error";
 
 // 응답이 실 저장소가 아니라 스텁으로 내려왔으면 그 사유를 뽑는다(없으면 null).
 function degradeReasonOf(body) {
@@ -1230,29 +1222,21 @@ export default function DataOpsPage() {
                   </select>
                 </label>
               </div>
+              <FilterBuilder
+                key={target.id}
+                value={filterText}
+                columns={target.columns}
+                error={filterError}
+                errorId={FILTER_ERROR_ID}
+                inputRef={filterRef}
+                onBlur={() => validateBuilderFilter()}
+                onChange={(nextValue) => {
+                  setFilterText(nextValue);
+                  // 이미 띄운 오류만 즉시 갱신한다 — 입력 중에 새 오류를 띄우지는 않는다.
+                  if (filterError) setFilterError(filterValidationMessage(nextValue, target.columns));
+                }}
+              />
               <div className="builder-control-grid">
-                <label className="control-field">
-                  <span>필터 조건 (선택)</span>
-                  <input
-                    ref={filterRef}
-                    className="input-control mock-data-output"
-                    placeholder="예: in_flow_count > 100"
-                    value={filterText}
-                    onChange={(e) => {
-                      const nextValue = e.target.value;
-                      setFilterText(nextValue);
-                      if (filterError) setFilterError(filterValidationMessage(nextValue, target.columns));
-                    }}
-                    onBlur={() => validateBuilderFilter()}
-                    aria-invalid={Boolean(filterError)}
-                    aria-describedby={filterError ? "dataops-filter-error" : undefined}
-                  />
-                  {filterError && (
-                    <span id="dataops-filter-error" className="field-error">
-                      {filterError}
-                    </span>
-                  )}
-                </label>
                 <label className="control-field">
                   <span>정렬 컬럼 (선택)</span>
                   <select className="select-control mock-data-output" value={sortCol} onChange={(e) => setSortCol(e.target.value)}>
