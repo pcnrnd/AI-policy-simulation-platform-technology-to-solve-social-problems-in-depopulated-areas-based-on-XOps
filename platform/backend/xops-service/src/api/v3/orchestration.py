@@ -9,10 +9,12 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
+from src.api.dependencies import optional_auth
 from src.core import db
 from src.core.exceptions import SourceNotFoundError
+from src.mlops.monitoring import realdata_bridge
 from src.mlops.orchestration.registry import get_registry
 from src.schemas.orchestration import EventRequest, PipelineCreateRequest, PipelineRunRequest
 
@@ -24,18 +26,38 @@ router = APIRouter(prefix="/orchestration", tags=["orchestration"])
 # 단건 경로(`/pipelines/{id}/run`, `/runs/{id}/logs`)와 쓰기 경로는 이 필터를 적용하지 않는다.
 _INCLUDE_SEED = Query(False, description="데모 시드(기본 파이프라인·시드 지표 모델)까지 포함 — 데모 표시 ON 전용")
 
+# 데모 표시 OFF에서 실데이터 학습 job·모델을 같은 스키마로 함께 내려준다. 실데이터는
+# `data:read` 토큰이 있는 호출에만 싣는다 — 토큰 없는 기존 공개 GET은 계약이 그대로다.
+_OPTIONAL_AUTH = Depends(optional_auth("data:read"))
+
+
+def _with_realdata(include_seed: bool, auth: dict[str, Any] | None) -> bool:
+    return not include_seed and auth is not None
+
 
 @router.get("/models")
-def list_models(include_seed: bool = _INCLUDE_SEED) -> list[dict[str, Any]]:
+def list_models(
+    include_seed: bool = _INCLUDE_SEED,
+    auth: dict[str, Any] | None = _OPTIONAL_AUTH,
+) -> list[dict[str, Any]]:
     """등록된 운영 모델과 현재 버전/지표."""
-    return get_registry().models(include_seed=include_seed)
+    rows = get_registry().models(include_seed=include_seed)
+    if _with_realdata(include_seed, auth):
+        rows = rows + realdata_bridge.models()
+    return rows
 
 
 # ── ML 파이프라인 등록 ──────────────────────────────────────
 @router.get("/pipelines")
-def list_pipelines(include_seed: bool = _INCLUDE_SEED) -> list[dict[str, Any]]:
+def list_pipelines(
+    include_seed: bool = _INCLUDE_SEED,
+    auth: dict[str, Any] | None = _OPTIONAL_AUTH,
+) -> list[dict[str, Any]]:
     """등록된 재학습 파이프라인 (등록이 없으면 빈 목록)."""
-    return get_registry().pipelines(include_seed=include_seed)
+    rows = get_registry().pipelines(include_seed=include_seed)
+    if _with_realdata(include_seed, auth):
+        rows = rows + realdata_bridge.pipelines()
+    return rows
 
 
 @router.post("/pipelines", status_code=201)
@@ -73,16 +95,24 @@ def run_pipeline(pipeline_id: str, body: PipelineRunRequest | None = None) -> di
 def list_runs(
     pipeline_id: str | None = Query(None, description="파이프라인별 이력만"),
     include_seed: bool = _INCLUDE_SEED,
+    auth: dict[str, Any] | None = _OPTIONAL_AUTH,
 ) -> list[dict[str, Any]]:
     """파이프라인 실행 이력 (최신 우선)."""
-    return list(reversed(get_registry().runs(pipeline_id, include_seed=include_seed)))
+    rows = list(reversed(get_registry().runs(pipeline_id, include_seed=include_seed)))
+    if _with_realdata(include_seed, auth):
+        rows = rows + realdata_bridge.runs(pipeline_id)
+    return rows
 
 
 @router.get("/runs/{run_id}/logs")
-def get_run_logs(run_id: str) -> dict[str, Any]:
-    """실행 하나의 저장된 로그 라인."""
+def get_run_logs(run_id: str, auth: dict[str, Any] | None = _OPTIONAL_AUTH) -> dict[str, Any]:
+    """실행 하나의 저장된 로그 라인. 실데이터 job은 job 레코드의 상태 전이를 라인으로 만든다."""
     run = db.get_run(run_id)
     if run is None:
+        if auth is not None:
+            realdata = realdata_bridge.run_logs(run_id)
+            if realdata is not None:
+                return realdata
         raise SourceNotFoundError(f"실행 기록을 찾을 수 없습니다: {run_id}")
     return {"run_id": run_id, "state": run.get("state"), "logs": run.get("logs", [])}
 

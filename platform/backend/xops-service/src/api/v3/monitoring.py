@@ -11,14 +11,15 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import Any
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
+from src.api.dependencies import optional_auth
 from src.core.seed import get_seed
 from src.mlops.monitoring.drift import DriftDetector, DriftResult
 from src.mlops.monitoring.explain import ExplainabilityModule
 from src.mlops.monitoring.metrics import MetricCollector
 from src.mlops.monitoring.outliers import OutlierDetector
-from src.mlops.monitoring import sources
+from src.mlops.monitoring import realdata_bridge, sources
 from src.mlops.orchestration.registry import get_registry
 from src.schemas.monitoring import ClassificationInput, DriftInput, ExplainInput, OutlierInput, RegressionInput
 
@@ -35,6 +36,15 @@ _SERIES = ("accuracy", "f1", "precision", "recall", "mse", "mae")
 # 옮긴 것이라, 데모 OFF에서는 시드 수치가 네트워크 응답에도 남지 않는다.
 _INCLUDE_SEED = Query(False, description="실측이 없을 때 시드 값으로 폴백 — 데모 표시 ON 전용")
 
+# 데모 표시 OFF(`include_seed=false`)에서 실데이터 모델을 물어보면 rd_* 저장소를 같은 스키마로
+# 돌려준다. 실데이터는 `data:read` 토큰이 있는 호출에만 싣는다 — 토큰이 없으면 기존 공개 GET
+# 계약 그대로 빈 응답이다(401을 새로 만들지 않고, 무인증으로 실데이터를 흘리지도 않는다).
+_OPTIONAL_AUTH = Depends(optional_auth("data:read"))
+
+
+def _realdata_allowed(model_id: str | None, include_seed: bool, auth: dict[str, Any] | None) -> bool:
+    return not include_seed and auth is not None and realdata_bridge.is_realdata_model(model_id)
+
 
 def _maybe_retrain(result: DriftResult, model_id: str | None, auto_retrain: bool) -> dict[str, Any] | None:
     """드리프트가 임계를 넘고 auto_retrain이면 해당 모델의 재학습을 자동 발화."""
@@ -49,12 +59,17 @@ def _maybe_retrain(result: DriftResult, model_id: str | None, auto_retrain: bool
 def metrics_history(
     model_id: str | None = Query(None, description="실측 지표를 읽을 모델. 생략하면 시드"),
     include_seed: bool = _INCLUDE_SEED,
+    auth: dict[str, Any] | None = _OPTIONAL_AUTH,
 ) -> dict[str, Any]:
     """6대 지표 시계열 + 최신 스냅샷.
 
     `model_id` 의 실측 학습 실행이 있으면 그 지표 추이(`source="measured"`)를, 없으면
     시드 시계열(`source="seed"`)을 돌려준다. `include_seed=false` 면 시드 대신 빈 시계열이다.
     """
+    if _realdata_allowed(model_id, include_seed, auth):
+        realdata = realdata_bridge.metrics(model_id)  # type: ignore[arg-type]
+        if realdata is not None:
+            return realdata
     measured = sources.measured_metrics(model_id) if model_id else None
     if measured is not None:
         return {**measured, "source": "measured", "model_id": model_id}
@@ -83,6 +98,7 @@ def drift_from_seed(
     model_id: str | None = Query(None, description="드리프트 감지 시 재학습 대상 모델"),
     auto_retrain: bool = Query(False, description="드리프트 임계 초과 시 재학습 자동 발화"),
     include_seed: bool = _INCLUDE_SEED,
+    auth: dict[str, Any] | None = _OPTIONAL_AUTH,
 ) -> dict[str, Any]:
     """시드 분포(reference vs current_normal|current_drifted)로 PSI/KL 판정.
 
@@ -90,6 +106,10 @@ def drift_from_seed(
     `include_seed=false`(데모 표시 OFF)에서는 판정 자체를 내지 않고 빈 분포를 돌려준다.
     실데이터 드리프트는 `GET /realdata/models/{model_id}/drift` 가 따로 담당한다.
     """
+    if _realdata_allowed(model_id, include_seed, auth):
+        realdata = realdata_bridge.drift(model_id)  # type: ignore[arg-type]
+        if realdata is not None:
+            return realdata
     if not include_seed:
         return {"buckets": [], "reference": [], "current": [], "source": None, "retrain": None}
     dist = get_seed()["drift_distribution"]
@@ -129,12 +149,17 @@ def detect_outliers(body: OutlierInput, method: str = Query("zscore", pattern="^
 def explain_from_seed(
     model_id: str | None = Query(None, description="실측 기여도를 읽을 모델. 생략하면 시드"),
     include_seed: bool = _INCLUDE_SEED,
+    auth: dict[str, Any] | None = _OPTIONAL_AUTH,
 ) -> dict[str, Any]:
     """특징 중요도 + 사용 backend 표기.
 
     `model_id` 의 현행 운영 버전에 학습 아티팩트가 있으면 그 표준화 계수를 기여도로 쓴다
     (`source="measured"`). 없으면 시드 `shap_features`(`source="seed"`).
     """
+    if _realdata_allowed(model_id, include_seed, auth):
+        realdata = realdata_bridge.explain(model_id)  # type: ignore[arg-type]
+        if realdata is not None:
+            return {"backend": "linear-shap", **realdata}
     if model_id:
         version = next(
             (m["version"] for m in get_registry().models() if m["model_id"] == model_id), None
