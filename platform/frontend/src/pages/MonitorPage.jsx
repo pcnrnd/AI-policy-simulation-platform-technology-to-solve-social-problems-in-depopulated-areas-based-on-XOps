@@ -824,12 +824,18 @@ export default function MonitorPage() {
   const hasUsableFeatures = (resp) =>
     Array.isArray(resp?.features) && resp.features.some((f) => Number.isFinite(f?.value));
   const featuresUsable = hasUsableFeatures(shapUsable);
+  const PSI_EMPTY_SOURCE = "드리프트 판정(PSI)";
   const emptySources = [
     // 6계열 중 일부만 비어도 "성능 지표 전체가 데모"로 읽히지 않게 결손 계열을 밝힌다.
     lastCollected && !allSeriesUsable ? `성능 지표(${emptySeries.join("·")})` : null,
     lastCollected && !featuresUsable ? "특징 기여도" : null,
-    driftStatus === "ok" && !psiUsable ? "드리프트 판정(PSI)" : null
+    driftStatus === "ok" && !psiUsable ? PSI_EMPTY_SOURCE : null
   ].filter(Boolean);
+  // PSI만 비어 있는 상태는 상단 배너로 계속 띄우지 않는다 — 값이 없다는 사실은 드리프트 카드
+  // 안의 한 줄 안내와 배지("판정 없음")·분포 차트 빈 상태 문구가 이미 같은 자리에서 알린다.
+  // 수집 판정(툴바 문구·헤더 칩)에서는 빼지 않는다: 빠뜨리면 값이 없는데 "정상 수신"이 된다.
+  const psiEmptyOnly = driftStatus === "ok" && !psiUsable;
+  const bannerEmptySources = emptySources.filter((source) => source !== PSI_EMPTY_SOURCE);
   const failedSources = [
     monitoringError ? "실시간 성능·설명" : null,
     driftStatus === "error" ? "드리프트 판정" : null
@@ -899,10 +905,10 @@ export default function MonitorPage() {
             tone: "pending",
             message: `실시간 성능·설명 API와 드리프트 판정을 확인하는 동안 ${allowSeed ? "대체 값을 표시합니다." : "값을 비워 둡니다."}`
           }
-        : collectPhase === "empty"
+        : collectPhase === "empty" && bannerEmptySources.length > 0
           ? {
               tone: "warn",
-              message: `${emptySources.join("·")}에 사용할 실측 값이 없습니다. ${allowSeed ? "대체 값을 표시합니다." : "해당 값은 비워 두며, 재학습을 실행하면 실측 지표가 쌓입니다."}`
+              message: `${bannerEmptySources.join("·")}에 사용할 실측 값이 없습니다. ${allowSeed ? "대체 값을 표시합니다." : "해당 값은 비워 두며, 재학습을 실행하면 실측 지표가 쌓입니다."}`
             }
           : null;
 
@@ -948,6 +954,7 @@ export default function MonitorPage() {
           ></i>{" "}
           {collectStatus.text}
         </span>
+        <div className="monitor-actions">
         <div className="monitor-options">
           <label className="compact-select-field">
             <span>대상 모델</span>
@@ -984,6 +991,7 @@ export default function MonitorPage() {
         >
           <i className={`fa-solid ${driftAction.icon}`} aria-hidden="true"></i> {driftAction.label}
         </button>
+        </div>
       </div>
       {/* 상태 안내 슬롯 — 배너가 붙고 떨어져도 아래 지표 카드가 위아래로 밀리지 않도록 높이를 예약한다(§11 상태 전환) */}
       <div className="monitor-state-slot">
@@ -1099,6 +1107,11 @@ export default function MonitorPage() {
               {driftLabel}
             </span>
           </div>
+          {psiEmptyOnly && (
+            <p className="monitor-card-note" role="status">
+              드리프트 판정에 사용할 실측 분포가 없습니다 — 재학습을 실행하면 판정 값이 쌓입니다.
+            </p>
+          )}
         </div>
 
         <div

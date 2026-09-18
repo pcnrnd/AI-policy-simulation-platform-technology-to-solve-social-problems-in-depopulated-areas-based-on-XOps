@@ -579,11 +579,28 @@ td.cell-actions {
 .monitor-collected > i {
   color: var(--accent-teal);
 }
+/* 대상 모델·조회 구간 select와 실행 버튼은 한 그룹으로 접힌다. 툴바의 직계 자식 3개를
+   그대로 두면 1366폭에서 버튼만 둘째 줄 왼쪽으로 떨어져 상태 문구와 어긋나 보인다. */
+.monitor-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
 .monitor-options {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-left: auto;
+}
+
+/* KPI 카드 안의 보조 안내 한 줄 — 값이 없는 사유를 카드 밖 배너가 아니라 그 자리에서 알린다. */
+.monitor-card-note {
+  margin: var(--space-s) 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-muted);
 }
 
 /* 값이 없을 때의 안내 — 차트·표를 없애지 않고 그 자리에 왜 비었는지만 남긴다.

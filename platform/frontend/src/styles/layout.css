@@ -432,6 +432,7 @@ body.drawer-open {
   .content-body {
     --content-pad: var(--space-l);
   }
+  .monitor-actions,
   .monitor-options {
     width: 100%;
   }
