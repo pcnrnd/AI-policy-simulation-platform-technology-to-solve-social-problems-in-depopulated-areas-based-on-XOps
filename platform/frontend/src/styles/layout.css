@@ -334,127 +334,16 @@ body.drawer-open {
   margin-bottom: var(--space-xxl);
 }
 
-/* 데모 표시 OFF의 **과도기** 가림 규칙.
-   원칙은 "토글은 UI를 바꾸지 않고 데이터 유무만 바꾼다"이므로, 최종형은 이 CSS가 아니라
-   각 화면의 데이터 계층이 시드를 실값 자리에 넣지 않는 것이다(빈 자리는 "–"·빈 상태 문구).
-   전환이 끝난 화면의 셀렉터부터 여기서 지우거나 아래 예외로 뺀다. 현재 전환 완료:
-   - MLOps 성능 모니터링(#tab-mlops-monitor-panel) — MonitorPage가 응답 `source`로 시드를 차단
-   - DataOps STEP ① 카탈로그(.catalog-live-region) — 서버가 live_rows로 실적재만 내려줌
-   - 종합 대시보드(#tab-overview-panel) — 롤업 실측치만 쓰고 시드 항목은 빈 상태 문구로 대체
-   - 정책 시뮬레이터 & 추천(#tab-simulator-panel) — allowSeed로 시드 파생 값만 차단, 조작 UI는 유지
-   - 자동화 리포팅(#tab-reporter-panel) — 미리보기·바인딩 값·내보내기 차단
-   - DataOps(#tab-dataops-panel) — 카탈로그를 include_seed 로 서버에서 걸러 받음
-   - 오케스트레이터(#tab-mlops-orch-panel) — 파이프라인·모델·실행 이력을 include_seed 로 걸러 받음
-   전 탭 전환 완료. 이 목록은 이제 패널 바깥(헤더·경보 팝업)에만 실효가 있다.
+/* 데모 표시 OFF의 가림 규칙은 `.content-body` 안에서 전부 제거했다.
+   원칙은 "토글은 UI를 바꾸지 않고 데이터 유무만 바꾼다" 이고, 이제 여섯 탭 전부가 데이터 계층에서
+   시드를 차단한다 — 카탈로그·오케스트레이션·롤업·모니터링 GET 은 `include_seed`(기본 false)로
+   서버가 시드를 빼고 내려주고, 시드 전용 항목(지역·요인분석 케이스·보고서 본문)은 화면이
+   `allowSeed` 로 끊고 빈 상태 문구를 남긴다.
+
+   가림 방식으로 되돌리지 않는다. 요소 종류(tbody·canvas·.stat-value…)로 거는 규칙이라
+   같은 표 안의 실데이터 행과 "왜 비었는지"를 말하는 빈 상태 문구까지 함께 지웠고, 표를 가리면
+   그 안의 선택 버튼이 클릭·포커스에서 막혔다(오케스트레이터 Model Store 가 그 사례).
    data-values-source는 전달 경로일 뿐 실제/데모 데이터 구분이나 표시 예외가 아니다. */
-.mock-values-hidden .content-body :where(
-  canvas,
-  tbody,
-  .stat-value,
-  .chart-summary,
-  .trend-up,
-  .trend-down,
-  .system-status,
-  .run-meta,
-  .node-status,
-  .promotion-criteria,
-  .workflow-statusbar,
-  .catalog-selected-chip,
-  .token-line,
-  .sql-preview,
-  .api-response,
-  .built-resp-head,
-  .mock-data-output,
-  .table-pager,
-  .catalog-result-status,
-  .console-log,
-  .async-feedback,
-  .xops-next-step,
-  .routing-flow,
-  /* .query-lang-chip 은 생성 질의의 언어(SQL/MQL) 셀렉터 — 실데이터에서 파생한 조작 표시이므로
-     가림 대상이 아니다(G11 정정). */
-  .resp-origin-chip,
-  .card-title-area > :not(.card-title)
-  /* 시뮬레이터·리포터 전용 셀렉터(.pl-* · .sim-* · .grade-chip · .slider-val · .map-float-legend ·
-     .map-data-details · .reco-* · .report-preview-panel)와 Overview 전용 .stat-unit·.stat-footer는
-     데이터 계층 차단(allowSeed)으로 옮겨서 여기서 제거했다. 슬라이더 값·검색 결과 건수·지도 범례처럼
-     조작 상태를 읽는 표시는 애초에 가릴 목업 값이 아니다. */
-) {
-  visibility: hidden !important;
-  /* 입력·버튼의 transition: all 때문에 OFF 직후 값이 잠시 남지 않도록 한다. */
-  transition: none !important;
-}
-
-/* 인증 상태 안내(#catalog-auth-hint)는 데이터 출력이 아니라 조작 안내이므로
-   .catalog-result-status가 숨겨져도 예외로 노출한다(visibility는 자식에서 재정의 가능). */
-.mock-values-hidden .content-body #catalog-auth-hint {
-  visibility: visible !important;
-}
-
-/* DataOps STEP ① 메타데이터 카탈로그는 데모 토글과 무관하게 같은 UI로 남는다.
-   토글은 "데이터 유무"를 바꾸는 것이지 조작 UI를 없애는 것이 아니며, OFF에서는 서버가
-   실적재(live_rows)로 걸러 준 실데이터 소스만 목록에 오므로 가릴 목업 값이 아니다.
-   표를 가리면 행 안의 선택 버튼까지 클릭·포커스가 막혀 실소스를 고를 수 없다. */
-.mock-values-hidden .content-body .catalog-live-region :where(
-  tbody,
-  .table-pager,
-  .catalog-selected-chip,
-  .system-status
-),
-.mock-values-hidden .content-body .catalog-result-status {
-  visibility: visible !important;
-}
-
-/* MLOps 성능 모니터링 탭은 데이터 계층에서 시드를 차단하므로 가리지 않는다.
-   가리면 실측 지표·빈 상태 문구까지 함께 사라져 "왜 비었는지"를 읽을 수 없다.
-   공용 셀렉터(canvas·tbody·.stat-value 등)는 다른 탭에서 계속 가려야 해서 목록에서 지우지 않고
-   이 패널 범위에서만 되살린다. 전환이 끝난 탭이 늘어나면 이 목록이 아니라 위 목록이 줄어든다. */
-.mock-values-hidden .content-body #tab-mlops-monitor-panel :where(
-  canvas,
-  tbody,
-  .stat-value,
-  .trend-up,
-  .system-status,
-  .mock-data-output,
-  .async-feedback,
-  .xops-next-step,
-  .table-pager,
-  .card-title-area > :not(.card-title)
-) {
-  visibility: visible !important;
-}
-
-/* 나머지 탭도 전부 데이터 계층에서 시드를 차단하므로 가리지 않는다(DataOps·오케스트레이터 포함).
-   오케스트레이터는 파이프라인·Model Store·실행 이력을 `include_seed` 로 서버에서 걸러 받고,
-   DataOps 는 카탈로그를 같은 방식으로 받는다 — 두 탭 다 목록에 남은 것은 실데이터뿐이라 가릴 값이 없다.
-   위 가림 목록은 이제 패널 바깥(헤더·경보 팝업)에만 실효가 있다.
-   가리면 빈 상태 문구("데모 데이터 없음 — …")까지 함께 사라져 "왜 비었는지"를 읽을 수 없고,
-   표·차트를 가리면 그 안의 선택 버튼까지 클릭·포커스가 막힌다.
-   공용 셀렉터는 오케스트레이터에서 계속 가려야 해서 위 목록에서 지우지 않고 여기서 되살린다. */
-/* 패널 id는 :is()로 묶어 위 가림 규칙(클래스 2개)보다 명시도를 높인다 — :where()로 묶으면
-   명시도가 같아져 규칙 순서에만 기대게 된다. */
-.mock-values-hidden .content-body :is(
-  #tab-overview-panel,
-  #tab-simulator-panel,
-  #tab-reporter-panel,
-  #tab-dataops-panel,
-  #tab-mlops-orch-panel
-) :where(
-  canvas,
-  tbody,
-  .stat-value,
-  .chart-summary,
-  .trend-up,
-  .trend-down,
-  .system-status,
-  .mock-data-output,
-  .async-feedback,
-  .xops-next-step,
-  .table-pager,
-  .card-title-area > :not(.card-title)
-) {
-  visibility: visible !important;
-}
 
 /* 지도 오버레이(마커·격자·시설·팝업)는 CSS로 가리지 않는다 — SimulatorPage가 데모 OFF에서
    레이어에 시드 피처를 아예 올리지 않는다(레이어 그룹은 남아 토글은 계속 조작 가능). */

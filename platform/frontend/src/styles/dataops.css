@@ -597,23 +597,6 @@
   border: 1px solid var(--border-color);
 }
 
-/* ── 데모 표시 OFF에서 STEP ②·③ 출력 유지 (L0 감사 G5) ──────────────────
-   데모 토글은 UI가 아니라 데이터 유무만 바꾼다. STEP ②의 스키마 표는 카탈로그가 가리키는
-   실 테이블의 컬럼 정의이고(seed 정의와 pg information_schema 가 일치함을 실측 확인),
-   STEP ③의 토큰·생성 SQL·응답은 전부 실 저장소 왕복 결과다(`source_kind="database"`).
-   가릴 목업 값이 아니므로 두 단계 본문 전체를 표시 상태로 되돌린다.
-
-   원래는 layout.css 의 .mock-values-hidden 목록에서 DataOps 전용 셀렉터를 빼는 것이 맞지만
-   그 파일은 공통 규칙이라 다른 레인 소유다. 여기서는 CollapsibleStage 가 부여하는 안정적인
-   id(#dstep-schema-body·#dstep-builder-body)로 범위를 한정해 되돌리고, 공통 목록 정리는
-   L3 변경 요청으로 남긴다. id 선택자가 있어 (1,2,0) > 가림 규칙 (0,2,0) 으로 이긴다. */
-.mock-values-hidden .content-body #dstep-schema-body,
-.mock-values-hidden .content-body #dstep-schema-body *,
-.mock-values-hidden .content-body #dstep-builder-body,
-.mock-values-hidden .content-body #dstep-builder-body * {
-  visibility: visible !important;
-}
-
 /* 카탈로그 행 전체가 소스 선택 영역 — 이름 텍스트만 눌리면 행을 눌러도 반응이 없어
    "선택이 안 된다"로 읽힌다. 행 안의 삭제 버튼은 onClick 에서 전파를 막는다. */
 .catalog-row-select {

@@ -290,17 +290,3 @@
   background-color: rgba(var(--accent-purple-rgb), 0.06);
 }
 
-/* 데모 표시 OFF에서도 실저장소(SQLite) 유래 출력은 계속 보인다 — 토글은 데이터 유무만 바꾸고
-   UI를 바꾸지 않는다는 규약. layout.css의 전역 가림은 요소 종류로 걸리므로 여기서 이 카드들만
-   되돌린다(layout.css는 공통 소유라 수정하지 않는다). */
-.mock-values-hidden .content-body .orchestrator-live :where(
-  tbody,
-  .run-meta,
-  .node-status,
-  .system-status,
-  .console-log,
-  .table-pager,
-  .card-title-area > :not(.card-title)
-) {
-  visibility: visible !important;
-}
