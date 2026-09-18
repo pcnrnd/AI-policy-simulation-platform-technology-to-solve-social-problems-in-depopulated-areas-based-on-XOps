@@ -1,8 +1,8 @@
 """데모 표시 OFF 기준 DataOps e2e — 카탈로그(실적재) → 스키마 → 토큰 → API 빌드 → 호출.
 
-데모 토글은 프런트 CSS 전용이라 백엔드에는 개념이 없다. 그래서 "데모 OFF 상태"란 곧
-**실적재된 소스만 고르고, 그 소스로 API를 만들어 호출했을 때 실 저장소 행이 돌아오는가**
-이다. 이 파일은 그 한 바퀴를 STEP ①→②→③ 순서 그대로 고정한다.
+"데모 OFF 상태"란 곧 **시드가 아닌 소스(`is_seed=false`)만 고르고, 그 소스로 API를 만들어
+호출했을 때 실 저장소 행이 돌아오는가** 이다. 카탈로그 목록의 기본값이 그 상태이고, 데모 ON
+화면만 `include_seed=true` 를 붙인다. 이 파일은 그 한 바퀴를 STEP ①→②→③ 순서 그대로 고정한다.
 
 실 컨테이너 대신 어댑터를 주입해 CI에서도 돌아가게 하고, 실 DB 왕복은 별도 스모크로 남긴다
 (`test_dataops_real_db.py` 와 같은 방침).
@@ -73,17 +73,19 @@ def test_demo_off_full_round_trip(
     client: TestClient, monkeypatch: pytest.MonkeyPatch, live_counts: None
 ) -> None:
     """STEP ① 실적재 소스 선택 → ② 스키마 → ③ 토큰·API 호출까지 한 바퀴."""
-    # ── STEP ① 카탈로그: 실적재 행수를 함께 받는다 ──
+    # ── STEP ① 카탈로그: 목록 기본값이 곧 데모 OFF 목록(실데이터 + 사용자 등록분)이다 ──
     catalog = client.get(_CATALOG, params={"live": "true"}).json()
     by_id = {s["id"]: s for s in catalog}
 
+    assert all(not s["is_seed"] for s in catalog), "데모 시드는 데모 OFF 목록에 담기지 않는다"
+    assert _EMPTY_SOURCE not in by_id, "시드 소스는 적재 여부와 무관하게 빠진다"
     assert by_id[_LIVE_SOURCE]["live_rows"] == 1334, "적재된 소스는 실제 행수가 실려야 한다"
-    assert by_id[_EMPTY_SOURCE]["live_rows"] == 0, "미적재 소스는 0 — 프런트가 목록에서 제외한다"
     assert by_id["ds_09_welfare_facility"]["live_rows"] is None, "확인 불가는 0과 구분된다"
 
-    # 프런트가 데모 OFF에서 실제로 고르는 목록 = live_rows != 0
-    selectable = [s["id"] for s in catalog if s["live_rows"] != 0]
-    assert _LIVE_SOURCE in selectable and _EMPTY_SOURCE not in selectable
+    # 데모 ON 경로만 시드를 함께 내려준다 — 시드를 지운 게 아니라 목록에서만 뺐다는 확인.
+    on_catalog = client.get(_CATALOG, params={"live": "true", "include_seed": "true"}).json()
+    assert _EMPTY_SOURCE in {s["id"] for s in on_catalog}
+    assert len(on_catalog) == len(catalog) + 7, "시드 7종이 데모 ON에서만 추가된다"
 
     # ── STEP ② 스키마: 선택한 소스의 컬럼 정의가 그대로 온다 ──
     schema = client.get(f"{_CATALOG}/{_LIVE_SOURCE}").json()

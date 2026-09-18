@@ -10,10 +10,51 @@ def test_health(client: TestClient) -> None:
 
 
 def test_catalog_list_and_search(client: TestClient) -> None:
-    all_sources = client.get("/api/v3/dataops/catalog").json()
-    assert len(all_sources) == 12  # 시드 7종 + 실데이터 2종(ds_08·ds_09) + 외부데이터 3종(ds_10~12)
-    filtered = client.get("/api/v3/dataops/catalog", params={"q": "MongoDB"}).json()
+    # 데모 표시 ON 경로 — 시드 7종 + 실데이터 2종(ds_08·ds_09) + 외부데이터 3종(ds_10~12)
+    all_sources = client.get("/api/v3/dataops/catalog", params={"include_seed": "true"}).json()
+    assert len(all_sources) == 12
+    filtered = client.get(
+        "/api/v3/dataops/catalog", params={"q": "MongoDB", "include_seed": "true"}
+    ).json()
     assert all("MongoDB" in (s.get("source") or "") for s in filtered)
+
+
+def test_catalog_default_excludes_demo_seed(client: TestClient) -> None:
+    """목록 기본값 = 데모 표시 OFF — 실데이터(ds_08~12)만 남는다."""
+    body = client.get("/api/v3/dataops/catalog").json()
+
+    assert [s["id"] for s in body] == [
+        "ds_08_admin_boundary",
+        "ds_09_welfare_facility",
+        "ds_10_bccard_dong_industry_sales",
+        "ds_11_kt_namwon_monthly_dong_visitors",
+        "ds_12_kt_namwon_visitors_by_sex_age",
+    ]
+    assert all(not s["is_seed"] for s in body)
+    # 검색도 같은 목록 위에서 돈다 — 시드 태그로는 아무것도 걸리지 않는다.
+    assert client.get("/api/v3/dataops/catalog", params={"q": "인구이동"}).json() == []
+
+
+def test_catalog_include_seed_restores_full_list(client: TestClient) -> None:
+    """데모 표시 ON — 시드 7종이 되돌아온다. 목록에서 빠졌을 뿐 지워지지 않았다는 확인."""
+    body = client.get("/api/v3/dataops/catalog", params={"include_seed": "true"}).json()
+
+    assert len(body) == 12
+    assert [s["id"] for s in body if s["is_seed"]] == [
+        "ds_01_resident_registry",
+        "ds_02_local_welfare",
+        "ds_03_industrial_factories",
+        "ds_04_spatial_geojson",
+        "ds_05_smartfarm",
+        "ds_06_settlement_facility",
+        "ds_07_civil_complaints",
+    ]
+
+
+def test_seed_source_stays_reachable_when_hidden_from_listing(client: TestClient) -> None:
+    """목록 필터는 단건 조회·토큰 발급에 걸리지 않는다 — 데모 ON에서 고른 소스가 404가 되면 안 된다."""
+    assert client.get("/api/v3/dataops/catalog/ds_01_resident_registry").status_code == 200
+    assert client.post("/api/v3/dataops/token/ds_01_resident_registry").status_code == 200
 
 
 def test_unknown_source_404(client: TestClient, auth_headers: dict[str, str]) -> None:

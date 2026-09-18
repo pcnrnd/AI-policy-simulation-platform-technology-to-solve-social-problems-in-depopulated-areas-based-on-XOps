@@ -17,9 +17,10 @@ import { getScrollBehavior } from "../lib/motion.js";
 
 const READY_RESPONSE = `// [POST·GET·PUT·PATCH·DELETE] 요청을 전송하면 표준 REST 응답이 표시됩니다.`;
 const CATALOG_URL = "/api/v3/dataops/catalog";
-// 목록 조회는 항상 실적재 행수(live_rows)를 함께 받는다. 데모 토글로 요청을 바꾸면 화면이 토글에
-// 따라 달라지므로, 표시는 늘 같게 두고 토글은 "어떤 소스를 셀 것인가"에만 쓴다(서버가 60초 캐시).
-const CATALOG_LIST_URL = `${CATALOG_URL}?live=true`;
+// 목록 조회는 항상 실적재 행수(live_rows)를 함께 받는다(서버가 60초 캐시).
+// 데모 표시 OFF면 서버가 시드(is_seed) 소스를 빼고 내려준다 — 카탈로그 표·검색·건수·STEP①
+// 선택·API 빌더 드롭다운이 전부 이 목록 하나만 보므로 걸러 내는 곳도 여기 한 곳이다.
+const catalogListUrl = (includeSeed) => `${CATALOG_URL}?live=true&include_seed=${includeSeed}`;
 const BUILT_APIS_URL = "/api/v3/dataops/apis";
 // `/token/{source_id}` 는 미존재 소스에 토큰을 내주지 않으려고 카탈로그 존재를 검사한다.
 // 등록은 "아직 없는 소스"를 만드는 요청이라 그 검사와 충돌하므로, 소스에 매이지 않은 발급 경로를 쓴다.
@@ -218,16 +219,17 @@ export default function DataOpsPage() {
   const BUILT_PAGE_SIZE = 10;
   const [builtPage, setBuiltPage] = useState(1);
 
-  // 카탈로그 최초 로드
+  // 카탈로그 로드 — 데모 표시 토글에 따라 시드 포함 여부가 달라지므로 토글할 때 다시 받는다.
   useEffect(() => {
     let alive = true;
     setCatalogError(null);
-    apiGet(CATALOG_LIST_URL)
+    apiGet(catalogListUrl(mockDataVisible))
       .then((list) => {
         if (!alive) return;
         setSources(list);
         setCatalogError(null);
-        setSourceId((cur) => cur ?? list[0]?.id ?? null);
+        // 데모 OFF로 바뀌면 고르고 있던 시드 소스가 목록에서 사라진다 — 그때만 첫 소스로 옮긴다.
+        setSourceId((cur) => (list.some((s) => s.id === cur) ? cur : list[0]?.id ?? null));
         setLoading(false);
       })
       .catch((err) => {
@@ -240,10 +242,10 @@ export default function DataOpsPage() {
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [mockDataVisible]);
 
   const refreshCatalog = async () => {
-    const list = await apiGet(CATALOG_LIST_URL);
+    const list = await apiGet(catalogListUrl(mockDataVisible));
     setSources(list);
     return list;
   };
@@ -756,22 +758,17 @@ export default function DataOpsPage() {
     pageSize
   });
 
-  // 데모 표시 OFF = "실제로 적재된 데이터만". UI는 그대로 두고 목록에 담기는 소스만 달라진다.
-  // 저장소에서 0건으로 확인된 소스만 빠지고, live_rows 가 null(확인 불가)인 소스는 남긴다
-  // — 미적재(0)와 확인 실패(null)를 섞으면 DB 장애가 '데이터 없음'처럼 보인다.
-  // 사용자가 직접 등록한 소스는 적재 전(0건)이라도 남긴다 — 방금 등록한 소스가 목록에서 사라지면
-  // 등록 자체가 실패한 것처럼 보이고, 다시 선택할 수도 없다. 행의 '적재 행수 0'이 미적재를 말해 준다.
-  const visibleSources = mockDataVisible
-    ? sources
-    : sources.filter((s) => s.live_rows !== 0 || s.user_registered);
-
+  // 데모 표시 OFF = "실데이터(+사용자 등록분)만". 어떤 소스를 담을지는 서버가 `include_seed` 로
+  // 이미 갈라 놓았으므로(위 catalogListUrl) 여기서 다시 거르지 않는다 — 적재 행수로 추정하던
+  // 예전 규칙은 DB 장애를 '데이터 없음'처럼 보이게 만들었다. 미적재(live_rows 0)는 행에서 알린다.
+  //
   // 카탈로그 검색 — 소스명·태그·설명·객체명 부분 일치
   const q = catalogQuery.trim().toLowerCase();
   const filteredSources = q
-    ? visibleSources.filter((s) =>
+    ? sources.filter((s) =>
         [s.label, s.description, s.object, ...(s.tags ?? [])].join(" ").toLowerCase().includes(q)
       )
-    : visibleSources;
+    : sources;
   const catalogSources = [...filteredSources].sort((a, b) => {
     if (catalogSort === "loaded") {
       return String(b.archive?.loaded_at ?? "").localeCompare(String(a.archive?.loaded_at ?? ""), "ko");
@@ -881,8 +878,8 @@ export default function DataOpsPage() {
           <div className="catalog-result-status" role="status" aria-live="polite">
             <span>
               {q
-                ? `전체 ${visibleSources.length}건 중 검색 결과 ${filteredSources.length}건`
-                : `전체 ${visibleSources.length}건`}
+                ? `전체 ${sources.length}건 중 검색 결과 ${filteredSources.length}건`
+                : `전체 ${sources.length}건`}
             </span>
             {q && (
               <button type="button" className="btn btn-tertiary" onClick={() => { setCatalogQuery(""); setCatalogPage(1); }}>
