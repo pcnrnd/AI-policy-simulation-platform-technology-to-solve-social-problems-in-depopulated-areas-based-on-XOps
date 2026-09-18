@@ -634,7 +634,7 @@ export default function SimulatorPage() {
           <p id="map-accessible-summary" className="sr-only mock-data-output">
             {allowSeed
               ? `현재 선택 지역은 ${currentRegion.name}, 위험지수 ${currentRegion.riskIndex}, ${riskGrade(currentRegion.riskIndex).label}입니다.`
-              : `현재 선택 지역은 ${currentRegion.name}입니다. 위험지수는 ${NO_DEMO_DATA} 상태입니다.`}
+              : `선택 지역 정보는 ${NO_DEMO_DATA} 상태입니다.`}
             위험등급 마커 {layerVis.markers ? "표시" : "숨김"}, 인구밀도 격자 {layerVis.grid ? "표시" : "숨김"},
             시설물 {layerVis.facilities ? "표시" : "숨김"} 상태입니다. 지역은 오른쪽 지자체 목록에서 키보드로 선택할 수 있습니다.
           </p>
@@ -981,8 +981,9 @@ export default function SimulatorPage() {
       <CollapsibleStage
         id="stage-report"
         no="STAGE ④"
+        // reportFocus 는 시드 케이스 정의의 문장이라 데모 OFF에서는 부제로 내보내지 않는다.
         title="추천"
-        sub={currentRegion.case.reportFocus}
+        sub={allowSeed ? currentRegion.case.reportFocus : null}
         open={openStages["stage-report"]}
         onToggle={() => toggleStage("stage-report")}
       >

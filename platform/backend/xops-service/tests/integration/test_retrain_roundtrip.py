@@ -29,7 +29,8 @@ def _trigger(client: TestClient, **payload: Any) -> dict[str, Any]:
 
 
 def _entry(client: TestClient, model_id: str = _MODEL) -> dict[str, Any]:
-    models = client.get("/api/v3/orchestration/models").json()
+    # 승급 전에는 지표가 시드라 기본 목록(데모 OFF)에 나오지 않는다 — 래칫 전후를 같은 눈으로 보려면 ON 경로다.
+    models = client.get("/api/v3/orchestration/models", params={"include_seed": "true"}).json()
     return next(m for m in models if m["model_id"] == model_id)
 
 
@@ -79,7 +80,7 @@ def test_retrain_promote_deploy_round_trip(client: TestClient, reset_model: Call
     assert after["metrics"] != before["metrics"]
 
     # 실행 이력에 남는다.
-    runs = client.get("/api/v3/orchestration/runs").json()
+    runs = client.get("/api/v3/orchestration/runs", params={"include_seed": "true"}).json()
     assert any(entry["run_id"] == run["run_id"] for entry in runs)
 
 

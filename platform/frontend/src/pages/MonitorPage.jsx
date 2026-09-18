@@ -139,11 +139,12 @@ export default function MonitorPage() {
     setMonitoringLoading(true);
     setMonitoringError(null);
     // model_id 를 함께 보내 백엔드가 실측(SQLite 실행 이력·학습 아티팩트)을 먼저 찾게 한다.
-    // 요청은 데모 토글과 무관하다 — 토글로 요청을 바꾸면 화면이 아니라 서버 응답이 달라진다.
-    const params = { model_id: modelTarget };
+    // 실측이 없을 때의 시드 폴백은 데모 표시 ON 에서만 받는다 — OFF 에서는 시드 수치가
+    // 네트워크 응답에도 남지 않게 서버가 빈 응답(`source: null`)을 내려준다.
+    // include_seed 는 호출마다 적어 둔다(공유 변수로 감추면 새 호출에서 빠져도 드러나지 않는다).
     return Promise.all([
-      apiGet("/api/v3/monitoring/metrics", { params }),
-      apiGet("/api/v3/monitoring/explain", { params })
+      apiGet("/api/v3/monitoring/metrics", { params: { model_id: modelTarget, include_seed: mockDataVisible } }),
+      apiGet("/api/v3/monitoring/explain", { params: { model_id: modelTarget, include_seed: mockDataVisible } })
     ])
       .then(([m, s]) => {
         if (requestId !== monitoringRequestRef.current) return;
@@ -161,7 +162,7 @@ export default function MonitorPage() {
       .finally(() => {
         if (requestId === monitoringRequestRef.current) setMonitoringLoading(false);
       });
-  }, [addConsoleLog, modelTarget]);
+  }, [addConsoleLog, modelTarget, mockDataVisible]);
 
   // 백엔드 PSI/KL 판정 재조회(표시 전용) — driftInjected 변경 효과와 [다시 시도] 버튼이 같은 경로를 쓴다.
   // 재학습 발화는 injectDrift → 오케스트레이션 이벤트 경로가 단독 담당(중복 트리거 방지).
@@ -170,7 +171,8 @@ export default function MonitorPage() {
     setDriftResp(null);
     setDriftStatus("pending");
     return apiGet("/api/v3/monitoring/drift", {
-      params: { drifted: driftInjected, model_id: DRIFT_MODEL_ID }
+      // 시드 분포 판정도 데모 표시 ON 전용 — 실 추론 입력 수집 경로가 아직 없다.
+      params: { drifted: driftInjected, model_id: DRIFT_MODEL_ID, include_seed: mockDataVisible }
     })
       .then((d) => {
         if (requestId !== driftRequestRef.current) return;
@@ -183,7 +185,7 @@ export default function MonitorPage() {
         setDriftStatus("error");
         addConsoleLog(`ERROR: 드리프트 조회 실패 — ${err.message}`);
       });
-  }, [driftInjected, addConsoleLog]);
+  }, [driftInjected, addConsoleLog, mockDataVisible]);
 
   useEffect(() => {
     loadMonitoringData();
@@ -274,6 +276,13 @@ export default function MonitorPage() {
     modelStore?.find((m) => m.modelId === modelId && m.status === "운영")?.version ??
     fallback;
 
+  // 대상 모델 선택지 — 데모 OFF에서는 백엔드가 내려준 모델(시드 지표 제외)만 남긴다.
+  // 상수 레지스트리(MODEL_REGISTRY)는 시드 모델명·버전이라 옵션 텍스트로도 내보내지 않는다.
+  const NO_DEMO_DATA = "데모 데이터 없음";
+  const selectableModels = allowSeed
+    ? MODEL_REGISTRY
+    : MODEL_REGISTRY.filter((m) => modelCandidates?.[m.id]);
+
   const AXIS_OPTS = {
     responsive: true,
     maintainAspectRatio: false,
@@ -328,16 +337,20 @@ export default function MonitorPage() {
       const seed = seedSeries(key);
       return Array.isArray(seed) ? seed : [];
     };
+    // 모델별 오프셋(accDelta·errRatio)은 시드 한 벌로 세 모델을 구분해 보이려는 **데모 장치**다.
+    // 실측 계열(metricsUsable)에 적용하면 백엔드가 측정한 값이 시드 상수로 왜곡되므로 적용하지 않는다.
+    const measured = Array.isArray(metricsUsable?.history?.accuracy) && metricsUsable.history.accuracy.length > 0;
     // 원시값을 그대로 검사한다 — Number(null)·Number("")·Number(false)는 0이라,
     // 강제 변환을 거치면 값이 없는 표본이 0.000짜리 실측치로 둔갑해 화면에 남는다.
-    const tune = (key, isError) =>
-      source(key)
-        .filter((v) => Number.isFinite(v))
-        .map((v) =>
-          isError
-            ? Number((v * targetModel.errRatio).toFixed(3))
-            : Math.min(0.99, Math.max(0, Number((v + targetModel.accDelta).toFixed(3))))
-        );
+    const tune = (key, isError) => {
+      const values = source(key).filter((v) => Number.isFinite(v));
+      if (measured) return values.map((v) => Number(v.toFixed(3)));
+      return values.map((v) =>
+        isError
+          ? Number((v * targetModel.errRatio).toFixed(3))
+          : Math.min(0.99, Math.max(0, Number((v + targetModel.accDelta).toFixed(3))))
+      );
+    };
     return Object.fromEntries(
       Object.entries(METRIC_SERIES).map(([key, isError]) => [key, tune(key, isError)])
     );
@@ -358,8 +371,10 @@ export default function MonitorPage() {
   const axisLabels = useMemo(() => {
     const measured = metricsUsable?.labels;
     if (Array.isArray(measured) && measured.length > 0) return measured.slice(-windowHours);
+    // 데모 OFF에는 그릴 계열이 없다 — 시각 라벨만 남기면 관측 주기가 있는 것처럼 보인다(빈 축).
+    if (!allowSeed) return [];
     return hourlyLabels.slice(-windowHours);
-  }, [metricsUsable, hourlyLabels, windowHours]);
+  }, [metricsUsable, hourlyLabels, windowHours, allowSeed]);
 
   const metricsData = useMemo(() => {
     const series = (key) => windowSeries[key];
@@ -616,6 +631,18 @@ export default function MonitorPage() {
       driftPipeline
     );
   const buildDriftAction = () => {
+    // 드리프트 시뮬레이션은 시드 분포(PSI 0.384)·시드 파이프라인을 재현하는 **데모 장치**다.
+    // 데모 표시 OFF에서 눌리면 PSI 카드는 "판정 없음"인데 배너·로그·벨 알림만 드리프트를
+    // 단언하는 모순이 생기므로 잠근다. 실데이터 드리프트는 아래 실데이터 평가 패널이 담당한다.
+    if (!allowSeed) {
+      return {
+        icon: "fa-vial-circle-check",
+        label: "이상 시나리오 재현 (데모 전용)",
+        locked: true,
+        run: undefined,
+        title: "드리프트 시뮬레이션은 시드 분포를 재현하는 데모 기능입니다. 설정에서 데모 데이터 표시를 켜면 실행할 수 있습니다."
+      };
+    }
     if (driftInFlight) {
       return {
         icon: "fa-hourglass-half",
@@ -788,7 +815,9 @@ export default function MonitorPage() {
   const precisionSrc = srcOf(metricFromApi("precision"));
   const recallSrc = srcOf(metricFromApi("recall"));
   const metricsChartSrc = srcOf(allSeriesUsable);
-  const shapSrc = srcOf(hasUsableFeatures(shapResp));
+  // 소비자가 실제로 읽는 값(shapUsable) 기준이어야 한다 — 원본 응답(shapResp)으로 판정하면
+  // 시드 응답이 왔을 때 빈 카드에 "api" 표기가 붙는다.
+  const shapSrc = srcOf(hasUsableFeatures(shapUsable));
   // 분포 차트는 buckets·reference·current를 한 응답에서 모두 받아야 실측이다(일부만 오면 mock 폴백이 섞인다).
   const driftChartSrc = srcOf(
     Array.isArray(driftUsable?.buckets) &&
@@ -814,9 +843,15 @@ export default function MonitorPage() {
           <label className="compact-select-field">
             <span>대상 모델</span>
             <select className="select-control mock-data-output" value={modelTarget} onChange={(e) => setModelTarget(e.target.value)}>
-              {MODEL_REGISTRY.map((m) => (
-                <option key={m.id} value={m.id}>{m.name} {servingVersionOf(m.id, m.version)}</option>
-              ))}
+              {/* 데모 OFF에서는 백엔드가 확인해 준 모델(실측 지표 보유)만 고를 수 있다. 상수 레지스트리
+                  이름·버전은 시드라 옵션 텍스트로도 내보내지 않는다. */}
+              {selectableModels.length === 0 ? (
+                <option value={modelTarget}>{NO_DEMO_DATA} — 확인된 운영 모델 없음</option>
+              ) : (
+                selectableModels.map((m) => (
+                  <option key={m.id} value={m.id}>{m.name} {servingVersionOf(m.id, m.version)}</option>
+                ))
+              )}
             </select>
           </label>
           <label className="compact-select-field">
@@ -1139,21 +1174,12 @@ export default function MonitorPage() {
         icon="fa-gauge-high"
       >
         <div className="grid-cols-3" style={{ marginBottom: 0 }}>
-          <GaugeChart
-            value={metricValue("precision") ?? 0}
-            displayText={metricValue("precision") === null ? "–" : undefined}
-            label="Precision"
-            data-values-source={precisionSrc}
-          />
-          <GaugeChart
-            value={metricValue("recall") ?? 0}
-            displayText={metricValue("recall") === null ? "–" : undefined}
-            label="Recall"
-            data-values-source={recallSrc}
-          />
+          {/* 값이 없으면 null 을 그대로 넘긴다 — 0으로 바꿔 넘기면 게이지가 "위험"/"정상"을 단정한다. */}
+          <GaugeChart value={metricValue("precision")} label="Precision" data-values-source={precisionSrc} />
+          <GaugeChart value={metricValue("recall")} label="Recall" data-values-source={recallSrc} />
           {/* 실측 지연(학습 시 측정한 1건 추론 지연)이 있으면 api, 없으면 시드 상수 또는 '측정 없음'. */}
           <GaugeChart
-            value={latencyMs === null ? 0 : latencyMs / LATENCY_ROLLBACK_MS}
+            value={latencyMs === null ? null : latencyMs / LATENCY_ROLLBACK_MS}
             displayText={latencyText}
             label="예측 지연"
             goodThreshold={0.75}

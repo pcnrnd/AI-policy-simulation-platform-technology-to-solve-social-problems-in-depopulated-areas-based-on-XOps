@@ -125,9 +125,14 @@ def test_unauthenticated_call_is_rejected(client: TestClient, live_counts: None)
 def test_overview_total_matches_counted_sources(
     client: TestClient, live_counts: None
 ) -> None:
-    """같은 실측 출처를 Overview 롤업도 쓴다 — 카탈로그와 합계가 어긋나지 않는다."""
+    """같은 실측 출처를 Overview 롤업도 쓴다 — 카탈로그와 합계가 어긋나지 않는다.
+
+    롤업 기본값도 데모 OFF라 시드 소스는 애초에 세지 않는다(미적재 시드 ds_05 는 목록에 없다).
+    """
     summary = client.get("/api/v3/overview/summary").json()
 
-    assert summary["archive_rows_total"] == 1334, "센 소스(1334 + 0)만 합산된다"
-    assert summary["archive_rows_counted"] == 2
-    assert summary["archive_rows_unknown"] == summary["source_count"] - 2
+    assert summary["source_count"] == 5, "데모 OFF 롤업은 실데이터 소스만 센다"
+    assert summary["archive_rows_total"] == 1334, "센 소스(ds_11)만 합산된다"
+    assert summary["archive_rows_counted"] == 1
+    assert summary["archive_rows_unknown"] == summary["source_count"] - 1
+    assert summary["model"] is None, "지표가 시드인 모델은 데모 OFF 롤업에 실리지 않는다"

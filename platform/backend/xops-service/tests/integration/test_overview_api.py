@@ -17,6 +17,8 @@ from src.dataops import liveness as liveness_module
 from src.dataops import summary as summary_module
 
 _URL = "/api/v3/overview/summary"
+# 롤업 기본값은 데모 표시 OFF(시드 제외)다 — 시드 소스·시드 지표 모델을 보는 테스트는 ON 경로로 부른다.
+_DEMO_ON = {"include_seed": "true"}
 
 
 @pytest.fixture(autouse=True)
@@ -29,7 +31,7 @@ class _EmptyCatalog:
     """소스가 하나도 없는 카탈로그 — 시드 파일이 비었거나 아직 적재 전인 상태."""
 
     @staticmethod
-    def list_sources() -> list[dict[str, Any]]:
+    def list_sources(include_seed: bool = True) -> list[dict[str, Any]]:
         return []
 
 
@@ -38,7 +40,7 @@ def test_rollup_is_public_and_reports_unknown_when_no_storage(client: TestClient
     # 집계는 카탈로그 전체(시드 포함)를 센다 — 목록 기본값과 달리 데모 필터를 적용하지 않는다.
     catalog = client.get("/api/v3/dataops/catalog", params={"include_seed": "true"}).json()
 
-    response = client.get(_URL)  # Authorization 헤더 없음 — 공개 조회
+    response = client.get(_URL, params=_DEMO_ON)  # Authorization 헤더 없음 — 공개 조회
     body = response.json()
 
     assert response.status_code == 200
@@ -63,10 +65,10 @@ def test_rollup_is_public_and_reports_unknown_when_no_storage(client: TestClient
 
 def test_model_snapshot_is_composed_from_orchestration_models(client: TestClient) -> None:
     """F1·운영 버전은 /orchestration/models 와 같은 출처를 합성한 값이다."""
-    models = client.get("/api/v3/orchestration/models").json()
+    models = client.get("/api/v3/orchestration/models", params=_DEMO_ON).json()
     serving = next(m for m in models if m["model_id"] == "population-forecast")
 
-    model = client.get(_URL).json()["model"]
+    model = client.get(_URL, params=_DEMO_ON).json()["model"]
 
     assert model["serving_version"] == serving["version"]
     assert model["f1"] == serving["metrics"]["f1"]
@@ -80,7 +82,7 @@ def test_mixed_catalog_counts_only_reachable_sources(
     reachable = {"ds_01_resident_registry": 60, "ds_09_welfare_facility": 17}
     monkeypatch.setattr(liveness_module, "_count", lambda schema: reachable.get(schema["id"]))
 
-    body = client.get(_URL).json()
+    body = client.get(_URL, params=_DEMO_ON).json()
     kinds = {s["id"]: s["source_kind"] for s in body["sources"]}
     rows = {s["id"]: s["archive_rows"] for s in body["sources"]}
 
@@ -115,7 +117,7 @@ def test_empty_catalog_returns_zeroed_rollup(
     """소스가 없어도 500 이 아니라 0 으로 채운 롤업을 돌려준다(프론트가 폴백할 수 있게)."""
     monkeypatch.setattr(summary_module, "get_catalog", _EmptyCatalog)
 
-    response = client.get(_URL)
+    response = client.get(_URL, params=_DEMO_ON)
     body = response.json()
 
     assert response.status_code == 200
@@ -131,7 +133,7 @@ def test_unknown_serving_model_yields_null_snapshot(monkeypatch: pytest.MonkeyPa
 
     class _OtherModels:
         @staticmethod
-        def models() -> list[dict[str, Any]]:
+        def models(include_seed: bool = True) -> list[dict[str, Any]]:
             return [{"model_id": "other", "version": "v1.0", "metrics": {"f1": 0.5}}]
 
     monkeypatch.setattr(summary_module, "get_registry", _OtherModels)
@@ -144,7 +146,7 @@ def test_seed_archive_rows_no_longer_reach_the_total(monkeypatch: pytest.MonkeyP
 
     class _OddCatalog:
         @staticmethod
-        def list_sources() -> list[dict[str, Any]]:
+        def list_sources(include_seed: bool = True) -> list[dict[str, Any]]:
             return [
                 {"id": "ds_text", "source": "RDB · PostgreSQL", "archive": {"rows": "많음"}},
                 {"id": "ds_huge", "source": "RDB · PostgreSQL", "archive": {"rows": 1_248_000}},

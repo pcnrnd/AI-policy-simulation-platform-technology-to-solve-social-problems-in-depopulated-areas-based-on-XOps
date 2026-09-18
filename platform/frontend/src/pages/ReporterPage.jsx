@@ -150,12 +150,19 @@ export default function ReporterPage() {
         setBinding(result);
         setBindingMs(ms);
         setLastUpdated(new Date().toLocaleTimeString("ko-KR"));
-        setBindingFeedback({
-          tone: "success",
-          message: `${region.name} 데이터 ${result.collected_rows.toLocaleString()}행을 갱신했습니다.`
-        });
+        // 갱신 건수·Accuracy 는 로컬에서 합성한 시드 값이다 — 데모 OFF에서는 수치를 남기지 않는다.
+        setBindingFeedback(
+          allowSeed
+            ? {
+                tone: "success",
+                message: `${region.name} 데이터 ${result.collected_rows.toLocaleString()}행을 갱신했습니다.`
+              }
+            : { tone: "info", message: `${NO_DEMO_DATA} — 바인딩할 실데이터가 없습니다.` }
+        );
         addConsoleLog(
-          `INFO: 리포트 지표 API 자동 갱신 (${result.source}) - 수집 ${result.collected_rows}행, Accuracy ${result.indicators.accuracy}`
+          allowSeed
+            ? `INFO: 리포트 지표 API 자동 갱신 (${result.source}) - 수집 ${result.collected_rows}행, Accuracy ${result.indicators.accuracy}`
+            : "INFO: 리포트 지표 바인딩 갱신 — 표시할 실데이터 없음"
         );
       } catch (err) {
         if (requestId !== refreshRequestRef.current) return;
@@ -223,6 +230,15 @@ export default function ReporterPage() {
   };
 
   const handleDownload = () => {
+    // 미리보기는 데이터 계층에서 막혀 있지만 내보내기 경로에는 가드가 없었다 — 화면은 비었는데
+    // 시드로 가득 찬 docx/xlsx/hwp/md 가 생성됐다. 데모 OFF에서는 파일을 만들지 않는다.
+    if (!allowSeed) {
+      setReportFeedback({
+        tone: "info",
+        message: `${NO_DEMO_DATA} — 내보낼 보고서 데이터가 없습니다. 설정에서 데모 데이터 표시를 켜면 생성할 수 있습니다.`
+      });
+      return;
+    }
     const fmt = EXPORT_FORMATS.find((f) => f.id === format) ?? EXPORT_FORMATS[0];
     const baseName = `R_D_인구소멸대응보고서_${regionShortName(region)}`;
     const filename = dedupeFilename(baseName, fmt.ext);

@@ -53,6 +53,11 @@ _SEED_PIPELINES: list[dict[str, Any]] = [
     },
 ]
 
+# 데모(시드) 파이프라인 id — 데모 표시 OFF 목록에서 빼는 기준.
+# 행에 표식 컬럼을 두지 않고 id 집합으로 가른다: `pipelines.id` 가 PRIMARY KEY 라 사용자가
+# 같은 id로 등록할 수 없고, 이미 배포된 SQLite 를 건드리지 않아도 된다.
+SEED_PIPELINE_IDS: frozenset[str] = frozenset(p["id"] for p in _SEED_PIPELINES)
+
 
 def init_db() -> None:
     """테이블 생성 (idempotent) + 파이프라인 카탈로그 최초 1회 시드."""

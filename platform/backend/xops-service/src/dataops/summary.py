@@ -52,9 +52,13 @@ def _rollup(schema: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _model_snapshot(model_id: str = OVERVIEW_MODEL_ID) -> dict[str, Any] | None:
-    """현행 운영 버전과 F1 — /orchestration/models 와 같은 출처를 그대로 합성한다."""
-    for model in get_registry().models():
+def _model_snapshot(model_id: str = OVERVIEW_MODEL_ID, include_seed: bool = True) -> dict[str, Any] | None:
+    """현행 운영 버전과 F1 — /orchestration/models 와 같은 출처를 그대로 합성한다.
+
+    `include_seed=False` 면 지표가 시드인 모델은 아예 나오지 않으므로 None 이 되고, 화면은
+    "측정값 없음"을 고른다.
+    """
+    for model in get_registry().models(include_seed=include_seed):
         if model.get("model_id") != model_id:
             continue
         metrics = model.get("metrics") or {}
@@ -67,10 +71,14 @@ def _model_snapshot(model_id: str = OVERVIEW_MODEL_ID) -> dict[str, Any] | None:
     return None
 
 
-def build_overview_summary() -> dict[str, Any]:
-    """Overview 지표 카드·아카이브 도넛용 롤업 (공개 조회, 소스별 실적재 행수 포함)."""
+def build_overview_summary(include_seed: bool = True) -> dict[str, Any]:
+    """Overview 지표 카드·아카이브 도넛용 롤업 (공개 조회, 소스별 실적재 행수 포함).
+
+    `include_seed=False`(데모 표시 OFF)면 시드 소스와 시드 지표 모델을 빼고 센다 — 예전에는
+    `source_count` 가 시드 7종을 포함한 12를 실측처럼 표시했다.
+    """
     settings = get_settings()
-    sources = [_rollup(s) for s in get_catalog().list_sources()]
+    sources = [_rollup(s) for s in get_catalog().list_sources(include_seed=include_seed)]
     counted = [s["archive_rows"] for s in sources if s["archive_rows"] is not None]
     # 한 소스라도 실제로 세었으면 실 저장소 평면으로 본다. 개별 판정은 sources[].source_kind.
     return {
@@ -85,5 +93,5 @@ def build_overview_summary() -> dict[str, Any]:
         "archive_rows_counted": len(counted),
         "archive_rows_unknown": len(sources) - len(counted),
         "sources": sources,
-        "model": _model_snapshot(),
+        "model": _model_snapshot(include_seed=include_seed),
     }

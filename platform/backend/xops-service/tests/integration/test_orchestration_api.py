@@ -9,9 +9,37 @@ from fastapi.testclient import TestClient
 
 
 def test_list_models(client: TestClient) -> None:
-    models = client.get("/api/v3/orchestration/models").json()
+    """레지스트리 3종은 데모 표시 ON 경로에서 나온다(기본값은 시드 지표 모델 제외)."""
+    models = client.get("/api/v3/orchestration/models", params={"include_seed": "true"}).json()
     ids = {m["model_id"] for m in models}
     assert {"population-forecast", "vital-population", "settlement-demand"} <= ids
+
+
+def test_demo_off_hides_seed_models_and_pipelines(client: TestClient) -> None:
+    """기본값(데모 OFF)에서는 시드 파이프라인 3종과 시드 지표 모델이 목록에 없다."""
+    pipelines = client.get("/api/v3/orchestration/pipelines").json()
+    assert {p["id"] for p in pipelines} & {
+        "PL-POP-RETRAIN-01",
+        "PL-VITAL-RETRAIN-02",
+        "PL-SETTLE-RETRAIN-03",
+    } == set()
+
+    models = client.get("/api/v3/orchestration/models").json()
+    assert all(m["metrics_source"] != "seed" for m in models)
+
+    on_pipelines = client.get("/api/v3/orchestration/pipelines", params={"include_seed": "true"}).json()
+    assert {"PL-POP-RETRAIN-01", "PL-VITAL-RETRAIN-02", "PL-SETTLE-RETRAIN-03"} <= {p["id"] for p in on_pipelines}
+
+
+def test_demo_off_hides_runs_from_seed_pipelines(client: TestClient) -> None:
+    """시드 파이프라인 실행은 행 자체는 실행 산출물이지만 학습 입력이 시드라 목록에서 뺀다."""
+    client.post("/api/v3/orchestration/pipelines/PL-POP-RETRAIN-01/run", json={"trigger": "manual"})
+
+    off = client.get("/api/v3/orchestration/runs").json()
+    on = client.get("/api/v3/orchestration/runs", params={"include_seed": "true"}).json()
+
+    assert all(r.get("pipeline_id") != "PL-POP-RETRAIN-01" for r in off)
+    assert any(r.get("pipeline_id") == "PL-POP-RETRAIN-01" for r in on)
 
 
 def test_unknown_model_404(client: TestClient) -> None:
@@ -71,7 +99,8 @@ def test_rejected_when_candidate_worse(client: TestClient) -> None:
 
 def test_runs_recorded(client: TestClient) -> None:
     client.post("/api/v3/orchestration/events", json={"model_id": "population-forecast", "trigger": "manual"})
-    runs = client.get("/api/v3/orchestration/runs").json()
+    # /events 발화는 파이프라인에 매이지 않은 실행이라 데모 ON 경로에서 조회한다.
+    runs = client.get("/api/v3/orchestration/runs", params={"include_seed": "true"}).json()
     assert len(runs) >= 1
     assert "run_id" in runs[0]
 
