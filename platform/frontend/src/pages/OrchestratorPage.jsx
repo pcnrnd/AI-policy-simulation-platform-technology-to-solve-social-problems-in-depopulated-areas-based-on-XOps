@@ -6,12 +6,18 @@ import NextStepBanner from "../components/NextStepBanner.jsx";
 import PipelineRegisterForm from "../components/PipelineRegisterForm.jsx";
 import TablePager, { paginate } from "../components/TablePager.jsx";
 import RealdataTrainingPanel from "../components/realdata/RealdataTrainingPanel.jsx";
+import { getRealdataToken, getTrainingRun, startTrainingRun } from "../components/realdata/realdataClient.jsx";
 import { useAppState } from "../context/AppStateContext.jsx";
 import { PIPELINE_NODES } from "../constants/pipeline.js";
 import { MODEL_REGISTRY } from "../constants/models.js";
 import { apiGet, apiSend } from "../lib/api.js";
 
 const PAGE_SIZE = 5;
+
+// 실데이터 학습 job 폴링 — 하단 실데이터 학습 패널과 같은 종결 상태·주기를 쓴다.
+const JOB_POLL_MS = 1500;
+const JOB_POLL_LIMIT = 40;
+const JOB_TERMINAL_STATES = new Set(["saved", "failed", "cancelled"]);
 
 const RUN_STATE_LABEL = {
   succeeded: "승급 완료",
@@ -112,6 +118,11 @@ function connectorStatus(index, currentStep, terminalState = null) {
 }
 
 // 빈 값 자리는 대시("–", §10 UI-04)로 채운다 — 숫자 0과 구분되고 문장 구분자(—)와도 섞이지 않는다.
+// 실데이터 회귀 지표 표기 — 원 단위(수만~수억)라 천단위 구분으로 줄여 읽는다.
+function fmtMetric(value) {
+  return Number.isFinite(value) ? Number(value).toLocaleString(undefined, { maximumFractionDigits: 1 }) : "–";
+}
+
 function orDash(value) {
   return value === null || value === undefined || value === "" ? "–" : value;
 }
@@ -177,15 +188,42 @@ export default function OrchestratorPage() {
   const [registerOpen, setRegisterOpen] = useState(false);
   const [selectedRunId, setSelectedRunId] = useState(null);
   const [runLogs, setRunLogs] = useState(null);
+  // 실데이터(rd_*) 접근 토큰 — 백엔드는 `data:read` 토큰이 있는 호출에만 실데이터 job·모델을 싣는다.
+  // undefined = 확인 전(카탈로그 요청을 보내지 않는다), null = 발급 실패, 문자열 = 발급 완료.
+  const [realdataToken, setRealdataToken] = useState(allowSeed ? null : undefined);
+  // 실데이터 학습 실행 중인 모델 id — 카탈로그 행의 상태 배지·실행 잠금이 이 값을 본다.
+  const [realdataBusyModel, setRealdataBusyModel] = useState(null);
+  const realdataRunBusyRef = useRef(false);
+
+  useEffect(() => {
+    if (allowSeed) {
+      setRealdataToken(null);
+      return undefined;
+    }
+    let alive = true;
+    setRealdataToken(undefined);
+    getRealdataToken()
+      .then((token) => alive && setRealdataToken(token))
+      .catch((err) => {
+        if (!alive) return;
+        setRealdataToken(null);
+        addConsoleLog(`WARN: 실데이터 토큰 발급 실패 — ${err?.message ?? "알 수 없는 오류"}`);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [allowSeed, addConsoleLog]);
 
   const reloadCatalog = useCallback(async () => {
     try {
       // 데모 OFF면 서버가 시드 파이프라인·시드 지표 모델·그 파이프라인이 만든 실행을 빼고 내려준다.
       // include_seed 는 호출마다 적어 둔다(공유 변수로 감추면 새 호출에서 빠져도 드러나지 않는다).
+      // 데모 OFF에서는 토큰을 함께 보낸다 — 실데이터 학습 job·모델은 인증된 호출에만 실린다.
+      const token = realdataToken ?? undefined;
       const [pipelineRows, runRows, modelRows] = await Promise.all([
-        apiGet(`/api/v3/orchestration/pipelines?include_seed=${mockDataVisible}`),
-        apiGet(`/api/v3/orchestration/runs?include_seed=${mockDataVisible}`),
-        apiGet(`/api/v3/orchestration/models?include_seed=${mockDataVisible}`)
+        apiGet(`/api/v3/orchestration/pipelines?include_seed=${mockDataVisible}`, { token }),
+        apiGet(`/api/v3/orchestration/runs?include_seed=${mockDataVisible}`, { token }),
+        apiGet(`/api/v3/orchestration/models?include_seed=${mockDataVisible}`, { token })
       ]);
       setPipelines(Array.isArray(pipelineRows) ? pipelineRows : []);
       setRuns(Array.isArray(runRows) ? runRows : []);
@@ -197,11 +235,15 @@ export default function OrchestratorPage() {
       setCatalogError(message);
       addConsoleLog(`ERROR: 파이프라인 카탈로그 로드 실패 — ${message}`);
     }
-  }, [addConsoleLog, mockDataVisible]);
+  }, [addConsoleLog, mockDataVisible, realdataToken]);
+
+  // 토큰 확인 전에 보내면 실데이터가 빠진 목록을 먼저 그리고 곧바로 다시 그린다.
+  const catalogReady = allowSeed || realdataToken !== undefined;
 
   useEffect(() => {
+    if (!catalogReady) return;
     reloadCatalog();
-  }, [reloadCatalog]);
+  }, [reloadCatalog, catalogReady]);
 
   // 실행이 끝나면(백엔드 PipelineRun 수신) 이력을 다시 읽고 그 실행의 로그를 펼친다.
   useEffect(() => {
@@ -216,7 +258,9 @@ export default function OrchestratorPage() {
       return undefined;
     }
     let alive = true;
-    apiGet(`/api/v3/orchestration/runs/${encodeURIComponent(selectedRunId)}/logs`)
+    apiGet(`/api/v3/orchestration/runs/${encodeURIComponent(selectedRunId)}/logs`, {
+      token: realdataToken ?? undefined
+    })
       .then((data) => alive && setRunLogs(data))
       .catch((err) => {
         if (!alive) return;
@@ -226,7 +270,7 @@ export default function OrchestratorPage() {
     return () => {
       alive = false;
     };
-  }, [selectedRunId, addConsoleLog]);
+  }, [selectedRunId, addConsoleLog, realdataToken]);
 
   // aria-disabled 는 클릭을 막지 않으므로(§9 A11Y-01 규약) 실행 차단은 여기서 한다.
   const handleDeletePipeline = async (pipelineId) => {
@@ -277,6 +321,55 @@ export default function OrchestratorPage() {
       resetBusyRef.current = false;
     });
     addConsoleLog("INFO: MLOps 재학습 파이프라인이 초기화되었습니다.");
+  };
+
+  // 실데이터 행 [실행] — 하단 실데이터 학습 패널의 [학습 실행]과 같은 API를 호출한다.
+  // 중복 실행 방지는 백엔드가 담당한다(모델별 활성 job이 있으면 409 JobConflict).
+  const handleRealdataRun = async (pipeline) => {
+    if (realdataRunBusyRef.current || !realdataToken) return;
+    if (!pipeline.dataset_id) {
+      addConsoleLog(
+        `WARN: ${pipeline.name} 실행 불가 — 사용할 스냅샷이 없습니다. 아래 [실데이터 학습] 패널에서 스냅샷을 먼저 생성하세요.`,
+        false,
+        true
+      );
+      return;
+    }
+    realdataRunBusyRef.current = true;
+    setRealdataBusyModel(pipeline.model_id);
+    try {
+      const started = await startTrainingRun(realdataToken, pipeline.model_id, pipeline.dataset_id);
+      const jobId = started.data.job_id;
+      addConsoleLog(`INFO: 실데이터 학습 실행 — ${jobId} (${pipeline.name} · 데이터셋 ${pipeline.dataset_id})`);
+      setSelectedRunId(jobId);
+      await reloadCatalog();
+      // job은 백그라운드 스레드에서 돈다 — 종결 상태까지 폴링한 뒤 이력·로그를 다시 읽는다.
+      for (let attempt = 0; attempt < JOB_POLL_LIMIT; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, JOB_POLL_MS));
+        const polled = await getTrainingRun(realdataToken, jobId);
+        if (!JOB_TERMINAL_STATES.has(polled.data?.state)) continue;
+        addConsoleLog(
+          polled.data.error
+            ? `WARN: 실데이터 학습 종료 — ${jobId} · ${polled.data.state} (${polled.data.error})`
+            : `INFO: 실데이터 학습 완료 — ${jobId} · 후보 ${polled.data.candidate_version}`,
+          false,
+          Boolean(polled.data.error)
+        );
+        break;
+      }
+    } catch (err) {
+      addConsoleLog(
+        err?.status === 409
+          ? `WARN: ${pipeline.name} 실행 거부 — 이미 활성 학습 작업이 있습니다.`
+          : `WARN: 실데이터 학습 실행 실패 — ${err?.message ?? "알 수 없는 오류"}`,
+        false,
+        true
+      );
+    } finally {
+      realdataRunBusyRef.current = false;
+      setRealdataBusyModel(null);
+      await reloadCatalog();
+    }
   };
 
   // 카탈로그 [실행] → 실행 시작 + 아래 실행 상태 카드로 초점·스크롤 (누른 곳에서 결과가 보이도록)
@@ -364,11 +457,21 @@ export default function OrchestratorPage() {
             </thead>
             <tbody>
               {pl.pageRows.map((p) => {
-                const isRunning = pipelineRunning && pipelineRun?.pipelineId === p.id;
+                // 실데이터 행은 등록 파이프라인이 아니라 실데이터 학습 job의 진입점이다 —
+                // 상태·실행 잠금·삭제 가능 여부가 데모 파이프라인과 다르다.
+                const isRealdata = p.source === "realdata";
+                const isRunning = isRealdata
+                  ? realdataBusyModel === p.model_id
+                  : pipelineRunning && pipelineRun?.pipelineId === p.id;
                 const last = lastRunOf(p);
                 // 후보 버전은 백엔드가 현행에서 파생해 내려준다 — 상수 후보와 달리 승급 후에도 잠기지 않는다.
-                const candidateAvailable = Boolean(p.candidate_version) && p.candidate_version !== p.base_version;
-                const runLocked = pipelineBusy || !candidateAvailable;
+                // 실데이터 학습은 같은 스냅샷으로도 다시 돌릴 수 있어 후보 유무로 잠그지 않는다.
+                const candidateAvailable = isRealdata
+                  ? Boolean(p.dataset_id)
+                  : Boolean(p.candidate_version) && p.candidate_version !== p.base_version;
+                const runLocked = isRealdata
+                  ? isRunning || !realdataToken || !p.dataset_id
+                  : pipelineBusy || !candidateAvailable;
                 return (
                   <tr key={p.id}>
                     <td>
@@ -379,8 +482,15 @@ export default function OrchestratorPage() {
                     </td>
                     <td style={{ fontSize: 12 }}>
                       {orDash(p.model_id)} {orDash(p.base_version)}
-                      {candidateAvailable ? ` → ${orDash(p.candidate_version)}` : " · 다음 후보 미등록"}
-                      <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{orDash(p.experiment)}</div>
+                      {isRealdata
+                        ? ` · 최신 후보 ${orDash(p.candidate_version)}`
+                        : candidateAvailable
+                          ? ` → ${orDash(p.candidate_version)}`
+                          : " · 다음 후보 미등록"}
+                      <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
+                        {orDash(p.experiment)}
+                        {isRealdata && p.dataset_id ? ` · 스냅샷 ${p.dataset_id}` : ""}
+                      </div>
                     </td>
                     <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>{orDash(p.trigger_policy)}</td>
                     <td style={{ fontSize: 11, color: "var(--text-secondary)" }}>
@@ -414,36 +524,51 @@ export default function OrchestratorPage() {
                           borderColor: "currentColor"
                         }}
                       >
-                        {isRunning ? "진행 중" : candidateAvailable ? "대기" : "후보 필요"}
+                        {isRunning ? "진행 중" : candidateAvailable ? "대기" : isRealdata ? "스냅샷 필요" : "후보 필요"}
                       </span>
                     </td>
                     <td className="cell-actions">
                       <button
                         className="btn btn-primary"
                         style={{ padding: "5px 14px", fontSize: 12 }}
-                        onClick={(event) => handleRun(event, toRunDef(p), runLocked)}
+                        onClick={(event) => {
+                          if (!isRealdata) {
+                            handleRun(event, toRunDef(p), runLocked);
+                            return;
+                          }
+                          event.preventDefault();
+                          if (!runLocked) handleRealdataRun(p);
+                        }}
                         aria-disabled={runLocked}
                         title={
-                          !candidateAvailable
-                            ? "대상 모델의 다음 후보 버전을 확인할 수 없습니다. 모델 레지스트리 응답을 확인하세요."
-                            : pipelineBusy
-                              ? "다른 재학습 파이프라인이 실행 중입니다. 완료 후 실행할 수 있습니다."
-                              : `${p.name} 파이프라인을 즉시 실행합니다`
+                          isRealdata
+                            ? !p.dataset_id
+                              ? "사용할 스냅샷이 없습니다. 아래 [실데이터 학습] 패널에서 스냅샷을 먼저 생성하세요."
+                              : isRunning
+                                ? "이 모델의 실데이터 학습이 실행 중입니다."
+                                : `최신 스냅샷(${p.dataset_id})으로 실데이터 학습을 실행합니다 — 아래 [실데이터 학습] 패널의 [학습 실행]과 같은 동작입니다.`
+                            : !candidateAvailable
+                              ? "대상 모델의 다음 후보 버전을 확인할 수 없습니다. 모델 레지스트리 응답을 확인하세요."
+                              : pipelineBusy
+                                ? "다른 재학습 파이프라인이 실행 중입니다. 완료 후 실행할 수 있습니다."
+                                : `${p.name} 파이프라인을 즉시 실행합니다`
                         }
                         aria-label={`${orDash(p.name)} 파이프라인 실행`}
                       >
                         <i className="fa-solid fa-play"></i> 실행
                       </button>
-                      <button
-                        className="btn btn-secondary"
-                        style={{ padding: "5px 12px", fontSize: 12, marginLeft: 6 }}
-                        onClick={() => handleDeletePipeline(p.id)}
-                        aria-disabled={pipelineBusy}
-                        title="등록을 해제합니다. 실행 이력은 남습니다."
-                        aria-label={`${orDash(p.name)} 파이프라인 등록 해제`}
-                      >
-                        <i className="fa-solid fa-trash" aria-hidden="true"></i>
-                      </button>
+                      {!isRealdata && (
+                        <button
+                          className="btn btn-secondary"
+                          style={{ padding: "5px 12px", fontSize: 12, marginLeft: 6 }}
+                          onClick={() => handleDeletePipeline(p.id)}
+                          aria-disabled={pipelineBusy}
+                          title="등록을 해제합니다. 실행 이력은 남습니다."
+                          aria-label={`${orDash(p.name)} 파이프라인 등록 해제`}
+                        >
+                          <i className="fa-solid fa-trash" aria-hidden="true"></i>
+                        </button>
+                      )}
                     </td>
                   </tr>
                 );
@@ -768,12 +893,22 @@ export default function OrchestratorPage() {
                       </td>
                       <td style={{ fontSize: 12 }}>
                         {orDash(r.pipeline_id)}
-                        <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{orDash(r.model_id)}</div>
+                        <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
+                          {orDash(r.model_id)}
+                          {r.dataset_id ? ` · ${r.dataset_id}` : ""}
+                        </div>
                       </td>
                       <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>{orDash(r.trigger)}</td>
                       <td style={{ fontSize: 12 }}>
                         {orDash(RUN_STATE_LABEL[r.state] ?? r.state)}
-                        <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{orDash(r.active_version)}</div>
+                        <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
+                          {orDash(r.active_version)}
+                          {/* 실데이터 job은 승급 지표가 아니라 등록된 후보의 검증 지표를 남긴다. */}
+                          {r.candidate_metrics?.mae !== undefined && r.candidate_metrics?.mae !== null
+                            ? ` · MAE ${fmtMetric(r.candidate_metrics.mae)}`
+                            : ""}
+                          {r.error ? ` · ${r.error}` : ""}
+                        </div>
                       </td>
                       <td style={{ fontSize: 11, color: "var(--text-secondary)" }}>
                         {orDash(logTime(r.started_at))} → {orDash(r.finished_at ? logTime(r.finished_at) : null)}

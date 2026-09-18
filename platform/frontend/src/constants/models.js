@@ -71,3 +71,10 @@ export const RETRAIN_PIPELINES = [
     triggerPolicy: "수동"
   }
 ];
+
+// 실데이터 연계(R3·R4) 고정 모델 2종의 화면 표시명 — 백엔드 realdata_bridge.MODEL_NAMES와 같은 문구.
+// 모니터·오케스트레이터·실데이터 패널이 같은 이름을 쓰도록 여기 한 곳에 둔다.
+export const REALDATA_MODEL_LABELS = {
+  "namwon-nonlocal-visitors-next-month": "남원 타지역 방문객(익월)",
+  "namwon-observed-sales-next-month": "남원 관측 소비(익월)"
+};
