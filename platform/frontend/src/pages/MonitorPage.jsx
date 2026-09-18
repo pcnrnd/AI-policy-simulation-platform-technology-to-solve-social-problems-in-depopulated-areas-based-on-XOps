@@ -1109,7 +1109,7 @@ export default function MonitorPage() {
         <Card
           title={
             <>
-              MLOps 6대 핵심 평가지표 실시간 모니터링
+              MLOps AI 평가지표 실시간 모니터링
               <InfoTip
                 text={
                   latestMetrics
