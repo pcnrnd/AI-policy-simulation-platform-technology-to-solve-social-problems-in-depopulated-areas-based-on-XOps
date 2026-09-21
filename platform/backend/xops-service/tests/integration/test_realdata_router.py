@@ -25,20 +25,26 @@ def test_health_envelope_is_error_without_pg_dsn(client: TestClient) -> None:
     assert body["provenance"]["computed_at"]
 
 
-def test_health_reports_table_counts_when_dsn_configured(
+def test_health_reports_table_status_when_dsn_configured(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """DSN이 있고 카운트가 성공하면 allowlist 전체 테이블의 COUNT를 반환한다."""
+    """DSN이 있으면 allowlist 전체 테이블의 존재 여부(불리언)를 반환한다 — COUNT가 아니다."""
     settings = Settings(pg_dsn="postgresql://xops:xops@localhost:5433/xops_dataops")
     monkeypatch.setattr(realdata_module, "get_settings", lambda: settings)
-    monkeypatch.setattr(realdata_module, "fetch_count", lambda table: 42)
+    monkeypatch.setattr(
+        realdata_module,
+        "fetch_table_existence",
+        lambda tables: {table: table != "ext_gwto_daily_trend" for table in tables},
+    )
 
     body = client.get(_HEALTH_URL).json()
 
     assert body["status"] == "ok"
     assert body["data"]["pg_dsn_configured"] is True
-    assert set(body["data"]["table_counts"]) == ALLOWED_TABLES
-    assert all(v == 42 for v in body["data"]["table_counts"].values())
+    status = body["data"]["table_status"]
+    assert set(status) == ALLOWED_TABLES  # 29개 전부 계속 보고한다(계약 축소 없음)
+    assert status["ext_gwto_daily_trend"] is False
+    assert all(v is True for k, v in status.items() if k != "ext_gwto_daily_trend")
 
 
 def test_dong_map_requires_auth(client: TestClient) -> None:

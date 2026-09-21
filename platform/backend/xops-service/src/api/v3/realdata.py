@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends
 
 from src.api.dependencies import require_auth
 from src.core.settings import get_settings
-from src.realdata.pg_reader import ALLOWED_TABLES, RealdataUnavailable, fetch_count
+from src.realdata.pg_reader import ALLOWED_TABLES, RealdataUnavailable, fetch_table_existence
 from src.schemas.realdata import Envelope, Provenance
 
 router = APIRouter(prefix="/realdata", tags=["realdata"])
@@ -36,15 +36,15 @@ def _envelope(status: str, *, message: str | None = None, data: Any = None, **pr
 
 @router.get("/health")
 def health() -> dict[str, Any]:
-    """PG DSN 유무·허용 테이블 3개 COUNT — 인증 없음(조회 전용 상태 확인)."""
+    """PG DSN 유무·허용 테이블 전체의 존재 여부 — 인증 없음(조회 전용 상태 확인)."""
     settings = get_settings()
     if not settings.pg_dsn:
         return _envelope("error", message="XOPS_PG_DSN이 설정되지 않았습니다.")
     try:
-        counts = {table: fetch_count(table) for table in sorted(ALLOWED_TABLES)}
+        tables = fetch_table_existence(sorted(ALLOWED_TABLES))
     except RealdataUnavailable as exc:
         return _envelope("error", message=str(exc))
-    return _envelope("ok", data={"pg_dsn_configured": True, "table_counts": counts})
+    return _envelope("ok", data={"pg_dsn_configured": True, "table_status": tables})
 
 
 @router.get("/dong-map")
