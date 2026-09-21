@@ -67,7 +67,10 @@ def test_prod_default_secret_rejected() -> None:
 
 
 def test_prod_custom_secret_ok() -> None:
-    Settings(environment="prod", jwt_secret="a-real-secret").validate_runtime()
+    # prod 기동에는 시크릿과 함께 토큰 발급 게이트 자격증명도 필요하다.
+    Settings(
+        environment="prod", jwt_secret="a-real-secret", client_id="cid", client_secret="csec"
+    ).validate_runtime()
 
 
 def test_dev_default_secret_ok() -> None:

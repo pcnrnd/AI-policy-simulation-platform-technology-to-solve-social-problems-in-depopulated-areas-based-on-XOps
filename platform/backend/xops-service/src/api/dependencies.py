@@ -50,8 +50,12 @@ def require_client(
     x_client_id: str | None = Header(None),
     x_client_secret: str | None = Header(None),
 ) -> None:
-    """토큰 발급 게이트 — prod에서 client 자격증명이 설정된 경우에만 검증(dev는 개방)."""
+    """토큰 발급 게이트 — prod는 항상 검증(dev는 개방).
+
+    자격증명 미설정은 게이트 해제가 아니다. prod에서 미설정이면 `Settings.validate_runtime`이
+    기동을 거부하므로, 여기까지 온 prod 요청은 반드시 설정된 값과 대조된다.
+    """
     settings = get_settings()
-    if settings.environment == "prod" and settings.client_id:
+    if settings.environment == "prod":
         if x_client_id != settings.client_id or x_client_secret != settings.client_secret:
             raise AuthError("클라이언트 자격증명이 유효하지 않습니다 (X-Client-Id / X-Client-Secret).")
