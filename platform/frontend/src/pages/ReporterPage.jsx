@@ -5,7 +5,8 @@ import { useAppState } from "../context/AppStateContext.jsx";
 import {
   buildReportBlocks,
   buildReportRows,
-  blocksToMarkdown
+  blocksToMarkdown,
+  formatMetric
 } from "../lib/reportContent.js";
 import {
   buildDocx,
@@ -27,11 +28,9 @@ function regionShortName(region) {
   return parts[parts.length - 1] || region.name;
 }
 
-function buildPreview(region, template, driftInjected, live) {
-  const psiLine = driftInjected ? "0.384 (드리프트 위험 발생)" : "0.045 (매우 안정)";
+function buildPreview(region, template, live) {
   const tenYearPop = Math.round(region.population * 0.81).toLocaleString();
-  const accuracy = live ? live.indicators.accuracy : 0.892;
-  const outliers = live ? live.indicators.outliers : driftInjected ? 3 : 0;
+  const indicators = live?.indicators ?? null;
 
   return (
     <>
@@ -53,13 +52,23 @@ function buildPreview(region, template, driftInjected, live) {
         수준으로 급감할 것으로 예측됩니다.
       </p>
 
-      <h3>2. MLOps 인공지능 모델 검증지표</h3>
-      <ul>
-        <li>글로벌 협업 모델 Accuracy: {accuracy} (SOTA 기준)</li>
-        <li>연합 데이터 소스 최근 10시간 MSE 오차: 0.041 만족</li>
-        <li>입력 데이터 분산 안정성 (PSI): {psiLine}</li>
-        <li>검출 이상치(Outliers): {outliers}건</li>
-      </ul>
+      {indicators && (
+        <>
+          <h3>2. MLOps 인공지능 모델 검증지표</h3>
+          <ul>
+            <li>예측 오차 (WAPE): {formatMetric(indicators.wape)}</li>
+            <li>
+              예측 오차 (MAE): {formatMetric(indicators.mae)} (기준선 MAE{" "}
+              {formatMetric(indicators.baselineMae)})
+            </li>
+            {(indicators.psi ?? []).map((entry) => (
+              <li key={entry.label}>
+                입력 데이터 분산 안정성 (PSI): {entry.label} {formatMetric(entry.psi, 4)}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
 
       <h3>3. SHAP 중요 기여 특성에 따른 최적 맞춤 대책</h3>
       <p>
@@ -94,8 +103,7 @@ function buildPreview(region, template, driftInjected, live) {
 }
 
 export default function ReporterPage() {
-  const { appData, currentRegion, setCurrentRegion, driftInjected, addConsoleLog, mockDataVisible } =
-    useAppState();
+  const { appData, currentRegion, setCurrentRegion, addConsoleLog, mockDataVisible } = useAppState();
   const templates = appData.report_templates;
   const regions = appData.regions;
 
@@ -112,7 +120,6 @@ export default function ReporterPage() {
   // Data source API 자동 바인딩 상태 (Notion: 데이터 갱신 부분 자동 업데이트)
   const [binding, setBinding] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [refreshCount, setRefreshCount] = useState(0);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [usedNames, setUsedNames] = useState(() => new Set());
   const [bindingFeedback, setBindingFeedback] = useState(null);
@@ -128,9 +135,9 @@ export default function ReporterPage() {
     [templates, templateId]
   );
 
-  // 양식에 연결된 Data source를 API로 호출해 지표를 자동 갱신.
+  // 양식에 연결된 실데이터 API(평가·드리프트)를 호출해 지표를 자동 갱신.
   const refreshBinding = useCallback(
-    async (count) => {
+    async () => {
       const requestId = ++refreshRequestRef.current;
       setRefreshing(true);
       setPreview(null);
@@ -139,44 +146,43 @@ export default function ReporterPage() {
       setLastUpdated(null);
       setBindingFeedback({ tone: "pending", message: `${region.name} 데이터를 갱신하고 있습니다.` });
       try {
-        const result = await fetchReportData(region, driftInjected, count);
+        const result = await fetchReportData(region);
         if (requestId !== refreshRequestRef.current) return;
+        // 활성 모델·지표가 없으면 null — 사유를 지어내지 않고 빈 상태로 둔다.
+        if (!result) {
+          setBindingFeedback(null);
+          addConsoleLog("INFO: 리포트 지표 갱신 - 표시할 데이터 없음");
+          return;
+        }
         setBinding(result);
         setLastUpdated(new Date().toLocaleTimeString("ko-KR"));
-        // 갱신 건수·Accuracy 는 로컬에서 합성한 시드 값이다 — 데모 OFF에서는 수치를 남기지 않는다.
         setBindingFeedback(
           allowSeed
-            ? {
-                tone: "success",
-                message: `${region.name} 데이터 ${result.collected_rows.toLocaleString()}행을 갱신했습니다.`
-              }
+            ? { tone: "success", message: `${region.name} 데이터를 갱신했습니다.` }
             : { tone: "info", message: NO_DEMO_DATA }
         );
         addConsoleLog(
           allowSeed
-            ? `INFO: 리포트 지표 API 자동 갱신 (${result.source}) - 수집 ${result.collected_rows}행, Accuracy ${result.indicators.accuracy}`
+            ? `INFO: 리포트 지표 API 자동 갱신 (${result.source}) - WAPE ${result.indicators.wape}`
             : "INFO: 리포트 지표 바인딩 갱신 — 표시할 실데이터 없음"
         );
       } catch (err) {
         if (requestId !== refreshRequestRef.current) return;
-        setBindingFeedback({
-          tone: "error",
-          message: `데이터를 갱신하지 못했습니다. ${err?.message ?? "잠시 후 다시 시도하세요."}`
-        });
+        // 조회 실패도 빈 상태로 둔다(화면 사유 문구 없음). 원인은 콘솔 기록으로만 남긴다.
+        setBindingFeedback(null);
         addConsoleLog(`ERROR: 리포트 데이터 바인딩 실패 - ${err?.message ?? "알 수 없는 오류"}`);
       } finally {
         if (requestId === refreshRequestRef.current) setRefreshing(false);
       }
     },
-    [region, driftInjected, addConsoleLog]
+    [region, allowSeed, addConsoleLog]
   );
 
-  // 지자체/드리프트 변경 시 자동 재바인딩.
+  // 지자체 변경 시 자동 재바인딩(드리프트 토글은 실측 지표에 영향을 주지 않는다).
   useEffect(() => {
-    refreshBinding(0);
-    setRefreshCount(0);
+    refreshBinding();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [regionId, driftInjected]);
+  }, [regionId]);
 
   useEffect(() => {
     if (currentRegion?.id && currentRegion.id !== regionId) setRegionId(currentRegion.id);
@@ -189,9 +195,7 @@ export default function ReporterPage() {
   }, [templateId]);
 
   const handleManualRefresh = () => {
-    const next = refreshCount + 1;
-    setRefreshCount(next);
-    refreshBinding(next);
+    refreshBinding();
   };
 
   const handleGenerate = () => {
@@ -205,7 +209,7 @@ export default function ReporterPage() {
       addConsoleLog(`WARN: 보고서 미리보기 생성 중단 - ${region.name} 실데이터 없음`);
       return;
     }
-    setPreview(buildPreview(region, template, driftInjected, binding));
+    setPreview(buildPreview(region, template, binding));
     setReportFeedback({ tone: "success", message: `${region.name} 보고서 미리보기를 생성했습니다.` });
     addConsoleLog(`INFO: 보고서 미리보기 생성 성공 - ${region.name}`);
   };
@@ -242,7 +246,7 @@ export default function ReporterPage() {
     };
 
     try {
-      const blocks = buildReportBlocks(region, template, driftInjected, extra);
+      const blocks = buildReportBlocks(region, template, extra);
 
       let blob;
       if (fmt.id === "docx") {
@@ -250,7 +254,7 @@ export default function ReporterPage() {
       } else if (fmt.id === "xlsx") {
         blob = buildXlsx({
           sheetName: "지표요약",
-          rows: buildReportRows(region, template, driftInjected, extra)
+          rows: buildReportRows(region, template, extra)
         });
       } else if (fmt.id === "hwp") {
         blob = buildHwpHtml({ title: template.title, blocks });
@@ -306,14 +310,10 @@ export default function ReporterPage() {
             <div>
               엔드포인트:{" "}
               <code style={{ color: "var(--accent-blue)" }}>
-                {allowSeed ? binding?.source ?? "연결 중…" : NO_DEMO_DATA}
+                {allowSeed ? binding?.source ?? "—" : NO_DEMO_DATA}
               </code>
             </div>
-            <div>Adapter: {allowSeed ? binding?.adapter ?? "—" : "—"}</div>
-            <div>
-              수집 행 수: {allowSeed && binding ? binding.collected_rows.toLocaleString() : "—"} · 마지막 갱신:{" "}
-              {allowSeed ? lastUpdated ?? "—" : "—"}
-            </div>
+            <div>마지막 갱신: {allowSeed ? lastUpdated ?? "—" : "—"}</div>
           </div>
           <button
             className="btn btn-secondary"
