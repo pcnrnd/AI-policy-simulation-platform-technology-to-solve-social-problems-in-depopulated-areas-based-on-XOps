@@ -64,7 +64,7 @@ export function pickAdapter(sourceId) {
   if (sourceId.includes("welfare") || sourceId.includes("industrial") || sourceId.includes("facility")) {
     return "PostgreSQLAdapter";
   }
-  return "PostgreSQLAdapter (In-Memory Cache)";
+  return "PostgreSQLAdapter";
 }
 
 /** 문서형(NoSQL) 저장소 여부 — Adapter가 SQL 대신 MQL(Mongo Query Language)을 생성한다. */
