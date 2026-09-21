@@ -89,11 +89,16 @@ def test_demo_off_explain_returns_no_seed_features(client: TestClient) -> None:
     assert j["source"] is None and j["features"] == []
 
 
-def test_metrics_become_measured_after_retrain(client: TestClient, reset_model) -> None:
+def test_metrics_become_measured_after_retrain(client: TestClient, reset_model, await_run) -> None:
     """재학습 1회로 실측 지표 추이가 생기고, 학습 시 실측한 추론 지연이 함께 온다."""
     model_id = "settlement-demand"
     reset_model(model_id)
-    client.post("/api/v3/orchestration/events", json={"model_id": model_id, "trigger": "manual"})
+    await_run(
+        client,
+        client.post(
+            "/api/v3/orchestration/events", json={"model_id": model_id, "trigger": "manual"}
+        ).json(),
+    )
 
     j = client.get("/api/v3/monitoring/metrics", params={"model_id": model_id}).json()
     assert j["source"] == "measured"
@@ -105,13 +110,16 @@ def test_metrics_become_measured_after_retrain(client: TestClient, reset_model) 
     assert j["latency_ms"] is None or j["latency_ms"] > 0
 
 
-def test_explain_becomes_measured_after_promotion(client: TestClient, reset_model) -> None:
+def test_explain_becomes_measured_after_promotion(client: TestClient, reset_model, await_run) -> None:
     """승급된 버전의 아티팩트가 있으면 기여도는 학습된 계수에서 나온다(시드 아님)."""
     model_id = "vital-population"
     reset_model(model_id)
-    run = client.post(
-        "/api/v3/orchestration/events", json={"model_id": model_id, "trigger": "manual"}
-    ).json()
+    run = await_run(
+        client,
+        client.post(
+            "/api/v3/orchestration/events", json={"model_id": model_id, "trigger": "manual"}
+        ).json(),
+    )
 
     j = client.get("/api/v3/monitoring/explain", params={"model_id": model_id}).json()
     if run["state"] != "succeeded":  # 승급되지 않았으면 아티팩트가 없어 시드로 남는다

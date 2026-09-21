@@ -20,6 +20,7 @@ const JOB_POLL_LIMIT = 40;
 const JOB_TERMINAL_STATES = new Set(["saved", "failed", "cancelled"]);
 
 const RUN_STATE_LABEL = {
+  running: "실행 중",
   succeeded: "승급 완료",
   rejected: "승급 반려",
   rolled_back: "자동 롤백",
@@ -109,6 +110,8 @@ function storedNodeStatus(index, run) {
   if (!stage) {
     const reached = (run.stages ?? []).length;
     if (index === reached) {
+      // 접수만 된 실행은 아직 이 단계에 닿지 않았을 뿐이라 실패로 그리지 않는다.
+      if (run.state === "running") return { className: "idle", label: "실행 중", icon: "fa-clock" };
       return run.state === "debounced"
         ? { className: "failed", label: "실행 조정", icon: "fa-pause" }
         : { className: "failed", label: run.state === "rejected" ? "승급 반려" : "미실행", icon: "fa-ban" };
