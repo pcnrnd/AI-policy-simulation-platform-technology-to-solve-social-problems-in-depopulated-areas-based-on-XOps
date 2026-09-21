@@ -1,4 +1,4 @@
-"""읽기 전용 실데이터 PG 리더 — public.ext_* 중 허용된 3개 테이블만 조회한다.
+"""읽기 전용 실데이터 PG 리더 — public.ext_* 중 `ALLOWED_TABLES`에 열거된 테이블만 조회한다.
 
 `db_max_rows`(dataops의 표시용 상한)를 적용하지 않고 `fetchmany`로 전량 스트리밍한다
 (계약 R1). 쓰기 경로는 없다 — 이 모듈은 SELECT만 만든다. 테이블·컬럼명은 파라미터
@@ -13,11 +13,40 @@ from typing import Any, Sequence
 from src.core.settings import get_settings
 from src.dataops.safety import assert_safe_identifier
 
-# 고정 allowlist — 계약(G0 §1) 밖 ext_* 테이블(예: ext_gwto_*, ext_kt_nowon_*)은 대상이 아니다.
+# 고정 allowlist — 적재된 ext_* 중에서도 여기 열거된 것만 조회할 수 있다(ext_kt_nowon_*은 아직 대상이 아니다).
+# 와일드카드·접두어 매칭으로 바꾸지 않는다 — 임의 테이블 접근을 막는 안전장치라 열거 형태를 유지한다.
 ALLOWED_TABLES = {
+    # 남원
     "ext_kt_namwon_monthly_dong_visitors",
     "ext_bccard_dong_industry_sales",
     "ext_kt_namwon_visitors_by_sex_age",
+    # 강원 18시군구 관광·소비
+    "ext_gwto_s1_1_nonlocal_monthly",
+    "ext_gwto_s1_2_total_tourists_monthly",
+    "ext_gwto_s1_3_tourists_age",
+    "ext_gwto_s1_4_tourists_sex",
+    "ext_gwto_s1_5_foreigners",
+    "ext_gwto_datalab_foreigners",
+    "ext_gwto_s1_6_lodging",
+    "ext_gwto_s1_7_residence_region",
+    "ext_gwto_s1_8_residence_city",
+    "ext_gwto_s2_1_consumption_monthly",
+    "ext_gwto_s2_2_consumption_age",
+    "ext_gwto_s2_3_consumption_sex",
+    "ext_gwto_s2_4_consumption_industry",
+    "ext_gwto_s2_5_consumption_hour",
+    "ext_gwto_s2_6_tourist_spending_power",
+    "ext_gwto_s3_1_city_tourists",
+    "ext_gwto_s3_2_city_age",
+    "ext_gwto_s3_3_city_sex",
+    "ext_gwto_s3_4_city_hour",
+    "ext_gwto_s3_5_city_lodging",
+    "ext_gwto_s3_6_city_region",
+    "ext_gwto_s3_7_city_consumption",
+    "ext_gwto_s4_1_navi_top500_prev_month",
+    "ext_gwto_s4_2_navi_top500_prev_year",
+    "ext_gwto_s4_3_navi_summary_500",
+    "ext_gwto_daily_trend",
 }
 
 _FETCH_BATCH = 1000

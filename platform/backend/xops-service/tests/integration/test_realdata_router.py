@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from src.api.v3 import realdata as realdata_module
 from src.core.settings import Settings
+from src.realdata.pg_reader import ALLOWED_TABLES
 
 _HEALTH_URL = "/api/v3/realdata/health"
 _DONG_MAP_URL = "/api/v3/realdata/dong-map"
@@ -27,7 +28,7 @@ def test_health_envelope_is_error_without_pg_dsn(client: TestClient) -> None:
 def test_health_reports_table_counts_when_dsn_configured(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """DSN이 있고 카운트가 성공하면 3개 허용 테이블의 COUNT를 반환한다."""
+    """DSN이 있고 카운트가 성공하면 allowlist 전체 테이블의 COUNT를 반환한다."""
     settings = Settings(pg_dsn="postgresql://xops:xops@localhost:5433/xops_dataops")
     monkeypatch.setattr(realdata_module, "get_settings", lambda: settings)
     monkeypatch.setattr(realdata_module, "fetch_count", lambda table: 42)
@@ -36,11 +37,7 @@ def test_health_reports_table_counts_when_dsn_configured(
 
     assert body["status"] == "ok"
     assert body["data"]["pg_dsn_configured"] is True
-    assert set(body["data"]["table_counts"]) == {
-        "ext_bccard_dong_industry_sales",
-        "ext_kt_namwon_monthly_dong_visitors",
-        "ext_kt_namwon_visitors_by_sex_age",
-    }
+    assert set(body["data"]["table_counts"]) == ALLOWED_TABLES
     assert all(v == 42 for v in body["data"]["table_counts"].values())
 
 
