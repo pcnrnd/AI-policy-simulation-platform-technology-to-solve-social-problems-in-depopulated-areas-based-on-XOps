@@ -54,8 +54,15 @@ class _FakeConn:
 
 
 def test_fetch_all_rejects_table_outside_allowlist() -> None:
+    # 적재는 되어 있지만 등록하지 않은 노원 축제 테이블 — allowlist가 적재 목록과 별개임을 고정한다.
     with pytest.raises(RealdataUnavailable):
-        pg_reader.fetch_all("ext_gwto_daily_trend", ["base_ym"])
+        pg_reader.fetch_all("ext_kt_nowon_daily_visitors", ["base_ym"])
+
+
+def test_allowlist_covers_namwon_and_gwto_only() -> None:
+    assert len(pg_reader.ALLOWED_TABLES) == 29
+    assert len([t for t in pg_reader.ALLOWED_TABLES if t.startswith("ext_gwto_")]) == 26
+    assert not [t for t in pg_reader.ALLOWED_TABLES if t.startswith("ext_kt_nowon_")]
 
 
 def test_fetch_all_rejects_unsafe_column_identifier() -> None:
