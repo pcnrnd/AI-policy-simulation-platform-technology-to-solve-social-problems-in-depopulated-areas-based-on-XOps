@@ -30,7 +30,7 @@ def test_register_list_invoke_delete_roundtrip(client: TestClient, auth_headers:
     assert body["endpoint"] == "/api/v3/dataops/ds_01_resident_registry"
     assert body["created_at"]
 
-    listed = client.get(_APIS)
+    listed = client.get(_APIS, headers=auth_headers)
     assert listed.status_code == 200
     entry = next(a for a in listed.json() if a["id"] == _BUILT["id"])
     assert entry["filter"] == "in_flow_count > 100"
@@ -46,20 +46,22 @@ def test_register_list_invoke_delete_roundtrip(client: TestClient, auth_headers:
     removed = client.delete(f"{_APIS}/{_BUILT['id']}", headers=auth_headers)
     assert removed.status_code == 200
     assert removed.json() == {"deleted": _BUILT["id"]}
-    assert all(a["id"] != _BUILT["id"] for a in client.get(_APIS).json())
+    assert all(a["id"] != _BUILT["id"] for a in client.get(_APIS, headers=auth_headers).json())
 
 
 def test_same_configuration_rebuild_updates_in_place(client: TestClient, auth_headers: dict[str, str]) -> None:
     """같은 id 재등록은 행을 늘리지 않는다 — 화면이 같은 구성을 시그니처 id로 보내기 때문."""
     client.post(_APIS, json=_BUILT, headers=auth_headers)
     client.post(_APIS, json={**_BUILT, "page_size": 50}, headers=auth_headers)
-    rows = [a for a in client.get(_APIS).json() if a["id"] == _BUILT["id"]]
+    rows = [a for a in client.get(_APIS, headers=auth_headers).json() if a["id"] == _BUILT["id"]]
     assert len(rows) == 1
     assert rows[0]["page_size"] == 50
     client.delete(f"{_APIS}/{_BUILT['id']}", headers=auth_headers)
 
 
 def test_write_requires_scope_and_unknown_targets_404(client: TestClient, auth_headers: dict[str, str]) -> None:
+    # 목록도 무인증이면 401 — 소스 id·필터·스키마 힌트가 실린다.
+    assert client.get(_APIS).status_code == 401
     assert client.post(_APIS, json=_BUILT).status_code == 401
     assert client.delete(f"{_APIS}/{_BUILT['id']}").status_code == 401
     # 카탈로그에 없는 소스로는 API를 발급하지 않는다(목록에 즉시 '원천 없음'이 생기는 것을 막는다).
@@ -68,6 +70,8 @@ def test_write_requires_scope_and_unknown_targets_404(client: TestClient, auth_h
     assert client.delete(f"{_APIS}/api_not_there", headers=auth_headers).status_code == 404
 
 
-def test_apis_path_is_not_shadowed_by_source_route(client: TestClient) -> None:
-    """`/apis` 가 `/{source_id}` 보다 먼저 선언돼야 한다 — 뒤면 소스 조회로 잡혀 401이 난다."""
-    assert client.get(_APIS).status_code == 200
+def test_apis_path_is_not_shadowed_by_source_route(client: TestClient, auth_headers: dict[str, str]) -> None:
+    """`/apis` 가 `/{source_id}` 보다 먼저 선언돼야 한다 — 뒤면 소스 'apis' 조회로 잡혀 404가 난다."""
+    listed = client.get(_APIS, headers=auth_headers)
+    assert listed.status_code == 200
+    assert isinstance(listed.json(), list)

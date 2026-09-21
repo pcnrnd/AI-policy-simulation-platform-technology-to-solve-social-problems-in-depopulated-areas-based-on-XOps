@@ -121,8 +121,10 @@ def _to_summary(api: dict[str, Any]) -> dict[str, Any]:
 
 
 @router.get("/apis", response_model=list[BuiltApiSummary])
-def list_built_apis() -> list[dict[str, Any]]:
-    """빌드·등록된 API 목록 (최근 순). 조회는 카탈로그 GET과 같이 공개."""
+def list_built_apis(
+    _: dict[str, Any] = Depends(require_auth("data:read")),
+) -> list[dict[str, Any]]:
+    """빌드·등록된 API 목록 (최근 순). 소스 id·필터·스키마 힌트가 실리므로 `data:read`를 요구한다."""
     return [_to_summary(api) for api in db.list_built_apis()]
 
 

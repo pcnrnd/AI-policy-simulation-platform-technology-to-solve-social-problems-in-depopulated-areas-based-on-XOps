@@ -252,7 +252,7 @@ export default function DataOpsPage() {
 
   // 발급 API 목록 — 서버 영속. 실패해도 카탈로그 화면은 살려 두고 목록 자리에만 사유를 남긴다.
   const refreshBuiltApis = async () => {
-    const list = await apiGet(BUILT_APIS_URL);
+    const list = await apiGet(BUILT_APIS_URL, { token: await ensureToken() });
     setBuiltApis(list.map(fromServerApi));
     setBuiltApisError(null);
     return list;
@@ -260,7 +260,9 @@ export default function DataOpsPage() {
 
   useEffect(() => {
     let alive = true;
-    apiGet(BUILT_APIS_URL)
+    // 목록도 data:read를 요구한다 — 등록·삭제와 같은 ensureToken 경로로 토큰을 확보한다.
+    ensureToken()
+      .then((t) => apiGet(BUILT_APIS_URL, { token: t }))
       .then((list) => {
         if (!alive) return;
         setBuiltApis(list.map(fromServerApi));
@@ -420,18 +422,24 @@ export default function DataOpsPage() {
   const executeRequest = async (cfg) => {
     const path = `/api/v3/dataops/${cfg.source.id}`;
     try {
+      // 새로고침 직후엔 token state가 비어 있다 — 등록·삭제와 같은 경로로 여기서 확보한다.
+      const authToken = await ensureToken();
       let body;
       if (cfg.method === "GET") {
         body = await apiGet(path, {
-          token,
+          token: authToken,
           params: { filter: cfg.filter, sort: cfg.sort, page: cfg.page, page_size: cfg.pageSize }
         });
       } else if (cfg.method === "DELETE") {
-        body = await apiSend("DELETE", path, { token, params: { filter: cfg.filter } });
+        body = await apiSend("DELETE", path, { token: authToken, params: { filter: cfg.filter } });
       } else if (cfg.method === "POST") {
-        body = await apiSend("POST", path, { token, body: { data: {} } });
+        body = await apiSend("POST", path, { token: authToken, body: { data: {} } });
       } else {
-        body = await apiSend(cfg.method, path, { token, params: { filter: cfg.filter }, body: { data: {} } });
+        body = await apiSend(cfg.method, path, {
+          token: authToken,
+          params: { filter: cfg.filter },
+          body: { data: {} }
+        });
       }
       return { ok: true, body };
     } catch (err) {
