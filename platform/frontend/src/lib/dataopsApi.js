@@ -223,33 +223,45 @@ export function buildApiResponse({ method, schema, adapter, query, payload, filt
 }
 
 /* ------------------------------------------------------------------ *
- * 자동 리포팅 ↔ Data source API 바인딩
- *   Notion: "API 형태로 Data source를 자동 리포팅 양식에 연결하여
- *            고정된 지표지만 데이터 갱신되는 부분 자동 업데이트"
+ * 자동 리포팅 ↔ 실데이터 API 바인딩
+ *   리포트 지표는 합성하지 않는다 — 활성 모델의 evaluation(WAPE·MAE)과
+ *   drift(PSI)를 실제로 호출해 채우고, 채울 값이 없으면 빈 상태로 둔다.
  * ------------------------------------------------------------------ */
 
-/** 리포트 양식에 바인딩되는 지표를 Data API Builder GET 형태로 산출. */
-export function buildReportIndicators(region, driftInjected, refreshCount = 0) {
-  const table = "report_indicators";
-  const adapter = pickAdapter("welfare"); // In-Memory Cache 경유
-  const sql =
-    `SELECT metric, value, collected_at\n  FROM ${table}\n` +
-    `  WHERE region_id = '${region.id}'\n  ORDER BY collected_at DESC LIMIT 50;`;
+const REALDATA_BASE = "/api/v3/realdata";
 
-  // 갱신 시마다 신규 수집행이 누적되고 정확도가 미세 변동 → "자동 업데이트" 가시화.
-  const rows = 1240 + refreshCount * 7;
-  const jitter = ((refreshCount * 13) % 7) / 1000; // 0.000~0.006 결정적 변동
-  const accuracy = Number(((driftInjected ? 0.872 : 0.892) + jitter).toFixed(3));
+/** 활성 버전이 있는 첫 모델 — 모델 ID는 하드코딩하지 않는다. */
+export function pickActiveModel(models = []) {
+  return models.find((m) => m.active_version) ?? null;
+}
+
+/** drift 응답 → `[{ label, psi }]`. 집계하지 않고 피처·타깃 실측값을 그대로 옮긴다. */
+function psiEntries(driftResponse) {
+  const data = driftResponse?.status === "ok" ? driftResponse.data : null;
+  if (!data || data.status !== "ok") return [];
+  const entries = (data.features ?? []).map((f) => ({ label: f.feature, psi: f.psi }));
+  if (data.target) entries.push({ label: "타깃(y)", psi: data.target.psi });
+  return entries;
+}
+
+/**
+ * 실호출 응답 → 리포트 바인딩 모델. 활성 모델이나 검증지표가 없으면 null(빈 상태).
+ * population·birthRate는 대응 실데이터 소스가 없어 지자체 시드 값을 그대로 옮긴다.
+ */
+export function toReportIndicators(region, model, evaluationResponse, driftResponse) {
+  const validation = evaluationResponse?.status === "ok" ? evaluationResponse.data?.validation : null;
+  if (!model || !validation) return null;
 
   return {
-    source: `/api/v3/dataops/${table}`,
-    adapter,
-    sql,
-    collected_rows: rows,
+    source: `${REALDATA_BASE}/models/${model.model_id}/evaluation`,
+    driftSource: `${REALDATA_BASE}/models/${model.model_id}/drift`,
+    modelId: model.model_id,
+    version: model.active_version,
     indicators: {
-      accuracy,
-      psi: driftInjected ? 0.384 : 0.045,
-      outliers: driftInjected ? 3 : 0,
+      wape: validation.metrics?.wape ?? null,
+      mae: validation.metrics?.mae ?? null,
+      baselineMae: validation.baseline?.mae ?? null,
+      psi: psiEntries(driftResponse),
       population: region.population,
       birthRate: region.birthRate
     }
@@ -257,14 +269,25 @@ export function buildReportIndicators(region, driftInjected, refreshCount = 0) {
 }
 
 /**
- * In-memory Data API Builder를 통한 비동기 GET 시뮬레이션.
- * 표준 REST로 리포트 지표를 응답하여 양식에 자동 연결한다.
- * @returns {Promise<ReturnType<typeof buildReportIndicators>>}
+ * 리포트 지표 실호출 — 활성 모델의 평가·드리프트를 읽어 바인딩 모델로 돌려준다.
+ * @returns {Promise<ReturnType<typeof toReportIndicators>>} 활성 모델·지표가 없으면 null
  */
-export function fetchReportData(region, driftInjected, refreshCount = 0) {
-  return new Promise((resolve) => {
-    setTimeout(() => resolve(buildReportIndicators(region, driftInjected, refreshCount)), 240);
-  });
+export async function fetchReportData(region) {
+  // ponytail: realdataClient 는 .jsx 라 node 테스트가 정적 import 를 읽지 못한다 → 호출 시점 import.
+  // 정적 import 로 되돌리면 reportIndicators.test.mjs 가 깨진다(빌드의 혼합 import 경고는 무해 —
+  // 다른 화면이 이미 정적으로 물고 있어 같은 청크에 남는다).
+  const { getRealdataToken, getModels, getEvaluation, getDrift } = await import(
+    "../components/realdata/realdataClient.jsx"
+  );
+  const token = await getRealdataToken();
+  const model = pickActiveModel((await getModels(token)).data ?? []);
+  if (!model) return null;
+
+  const [evaluation, drift] = await Promise.all([
+    getEvaluation(token, model.model_id, model.active_version),
+    getDrift(token, model.model_id, model.active_version)
+  ]);
+  return toReportIndicators(region, model, evaluation, drift);
 }
 
 /** 401 미인증 응답. */

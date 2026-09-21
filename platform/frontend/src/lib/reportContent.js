@@ -7,8 +7,30 @@ const SHAP_TOP = [
   { rank: "3순위 위험", factor: "평균 연령 증가", shap: "-0.152" }
 ];
 
-function psiText(driftInjected) {
-  return driftInjected ? "0.384 (드리프트 위험 감지)" : "0.045 (안정)";
+/** 실측 지표 표시 — 값이 없으면 숫자를 만들지 않고 대시로 둔다. */
+export function formatMetric(value, digits = 3) {
+  return typeof value === "number" ? value.toFixed(digits) : "–";
+}
+
+/**
+ * 모델 검증지표 블록 — evaluation(WAPE·MAE)·drift(PSI) 실측값만 싣는다.
+ * 바인딩이 없으면(활성 모델 없음·조회 실패) 섹션 자체를 비운다.
+ */
+function modelMetricBlocks(live) {
+  if (!live) return [];
+  return [
+    { type: "heading", level: 2, text: "2. MLOps AI 모델 검증지표" },
+    {
+      type: "list",
+      items: [
+        `예측 오차 (WAPE): ${formatMetric(live.wape)}`,
+        `예측 오차 (MAE): ${formatMetric(live.mae)} (기준선 MAE ${formatMetric(live.baselineMae)})`,
+        ...(live.psi ?? []).map(
+          (entry) => `입력 데이터 분산 안정성 (PSI): ${entry.label} ${formatMetric(entry.psi, 4)}`
+        )
+      ]
+    }
+  ];
 }
 
 // 정책 품의·기안 공통양식 머리말 (제목·기안자·일시·결재).
@@ -111,12 +133,9 @@ function vitalPopulationBlocks(region, vital) {
   ];
 }
 
-function analysisBlocks(region, driftInjected, populationChange, live) {
+function analysisBlocks(region, populationChange, live) {
   const tenYearBase = Math.round(region.population * 0.81).toLocaleString();
   const tenYearPolicy = Math.round(region.population * 0.95).toLocaleString();
-  // 라이브 바인딩 지표가 있으면 우선 사용(API 자동 갱신 반영), 없으면 정적 기본값.
-  const accuracy = live ? live.accuracy : 0.892;
-  const outliers = live ? live.outliers : driftInjected ? 3 : 0;
   return [
     { type: "heading", level: 2, text: "1. 분석 개요 및 대상 지자체 기본 현황" },
     {
@@ -136,15 +155,7 @@ function analysisBlocks(region, driftInjected, populationChange, live) {
       ]
     },
     ...populationTrendBlock(populationChange),
-    { type: "heading", level: 2, text: "2. MLOps AI 모델 검증지표" },
-    {
-      type: "list",
-      items: [
-        `예측 모델 정확도 (Accuracy): ${accuracy}`,
-        `데이터 분산 안정성 (PSI): ${psiText(driftInjected)}`,
-        `검출된 이상치 (Outliers): ${outliers}건`
-      ]
-    },
+    ...modelMetricBlocks(live),
     { type: "heading", level: 2, text: "3. SHAP 특징 중요도 기여 요인 분석" },
     { type: "list", items: SHAP_TOP.map((s) => `${s.rank}: ${s.factor} (SHAP ${s.shap})`) },
     { type: "heading", level: 2, text: "4. 정책 효과 시뮬레이션 예측" },
@@ -199,7 +210,7 @@ function caseBlocks(region) {
 }
 
 /** 포맷 중립 블록 모델 (docx/hwp/markdown 공통 소스). */
-export function buildReportBlocks(region, template, driftInjected, extra = {}) {
+export function buildReportBlocks(region, template, extra = {}) {
   const header = approvalHeader(region);
   if (template.id === "template_task_order") {
     return [...header, ...taskOrderBlocks(region)];
@@ -210,11 +221,12 @@ export function buildReportBlocks(region, template, driftInjected, extra = {}) {
   if (template.id === "template_smartfarm" || template.id === "template_settlement") {
     return [...header, ...caseBlocks(region)];
   }
-  return [...header, ...analysisBlocks(region, driftInjected, extra.populationChange, extra.live)];
+  return [...header, ...analysisBlocks(region, extra.populationChange, extra.live)];
 }
 
 /** Excel(.xlsx) 용 2차원 표 — 지표 요약. */
-export function buildReportRows(region, template, driftInjected, extra = {}) {
+export function buildReportRows(region, template, extra = {}) {
+  const live = extra.live;
   const rows = [
     ["인구감소 대응 R&D 지표 요약", template.title],
     ["보고서 번호", `RD-POP-2026-${region.id.toUpperCase()}`],
@@ -227,9 +239,15 @@ export function buildReportRows(region, template, driftInjected, extra = {}) {
     ["기본 현황", "출산율(명)", region.birthRate],
     ["기본 현황", "고령화지수(%)", region.agingIndex],
     ["기본 현황", "인구소멸 위험지수", region.riskIndex],
-    ["모델 검증", "Accuracy", extra.live ? extra.live.accuracy : 0.892],
-    ["모델 검증", "PSI", driftInjected ? 0.384 : 0.045],
-    ["모델 검증", "이상치 검출(건)", extra.live ? extra.live.outliers : driftInjected ? 3 : 0],
+    // 모델 검증 행은 실측 바인딩이 있을 때만 싣는다 — 없으면 값을 만들지 않고 행을 비운다.
+    ...(live
+      ? [
+          ["모델 검증", "WAPE", live.wape],
+          ["모델 검증", "MAE", live.mae],
+          ["모델 검증", "기준선 MAE", live.baselineMae],
+          ...(live.psi ?? []).map((entry) => ["모델 검증", `PSI (${entry.label})`, entry.psi])
+        ]
+      : []),
     ["SHAP 기여", "청년 복지 예산", 0.354],
     ["SHAP 기여", "제조업 일자리", 0.281],
     ["SHAP 위험", "평균 연령 증가", -0.152],
