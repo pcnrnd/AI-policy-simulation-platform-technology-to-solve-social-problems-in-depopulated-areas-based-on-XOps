@@ -297,3 +297,25 @@ def test_retrain_needed_true_when_drift_psi_above_threshold(monkeypatch: pytest.
     )
 
     assert candidates.retrain_needed(_MODEL_ID) is True
+
+
+def test_retrain_needed_cached_calls_underlying_once_within_ttl(monkeypatch: pytest.MonkeyPatch) -> None:
+    """목록 GET이 스냅샷 재생성을 매번 부르지 않는다 — 캐시 적중이면 실판정을 다시 돌리지 않는다."""
+    candidates.reset_retrain_cache()
+    calls: list[str] = []
+
+    def _fake(model_id: str) -> bool:
+        calls.append(model_id)
+        return True
+
+    monkeypatch.setattr(candidates, "retrain_needed", _fake)
+
+    assert candidates.retrain_needed_cached(_MODEL_ID) is True
+    assert candidates.retrain_needed_cached(_MODEL_ID) is True
+    assert calls == [_MODEL_ID]
+
+    candidates.reset_retrain_cache()
+    assert candidates.retrain_needed_cached(_MODEL_ID) is True
+    assert calls == [_MODEL_ID, _MODEL_ID]
+
+    candidates.reset_retrain_cache()  # 다른 테스트로 캐시가 새지 않게

@@ -9,6 +9,7 @@ docstring에 명시했다(완료 보고에도 동일 내용을 옮긴다) — �
 from __future__ import annotations
 
 import json
+from time import monotonic
 from types import ModuleType
 from typing import Any
 
@@ -371,3 +372,26 @@ def retrain_needed(model_id: str) -> bool:
     if target and (target.get("psi") or 0.0) >= threshold:
         return True
     return False
+
+
+# 판정 한 번이 스냅샷 재생성(PG 전량 SELECT/GROUP BY + rd_datasets upsert + 파일 쓰기)을 부른다.
+# `GET /realdata/models`는 화면 마운트마다 호출되므로 목록 경로는 캐시판을 쓴다
+# (dataops.liveness와 같은 프로세스 내 dict + TTL). 판정 갱신이 최대 TTL만큼 늦는다.
+_RETRAIN_CACHE_TTL_SECONDS = 60.0
+_retrain_cache: dict[str, tuple[float, bool]] = {}
+
+
+def reset_retrain_cache() -> None:
+    """테스트·상태 변경용 캐시 비우기."""
+    _retrain_cache.clear()
+
+
+def retrain_needed_cached(model_id: str) -> bool:
+    """`retrain_needed`의 TTL 캐시판 — 자주 불리는 목록 조회 경로 전용."""
+    now = monotonic()
+    cached = _retrain_cache.get(model_id)
+    if cached is not None and now - cached[0] < _RETRAIN_CACHE_TTL_SECONDS:
+        return cached[1]
+    value = retrain_needed(model_id)
+    _retrain_cache[model_id] = (now, value)
+    return value
