@@ -159,7 +159,6 @@ export default function OrchestratorPage() {
   // 파이프라인·시드 지표 모델·상수 Model Store 이력)를 데이터 계층에서 끊고 빈 상태 문구를 남긴다.
   // 가림 CSS로 지우면 실데이터 행까지 함께 사라지고 "왜 비었는지"를 읽을 수 없다.
   const allowSeed = mockDataVisible;
-  const NO_DEMO_DATA = "데모 데이터 없음";
   // 저장된 실행 레코드가 없을 때만 쓰이는 프런트 상수 폴백값 — 데모 OFF에서는 넘기지 않는다.
   const seedOr = (seedValue) => (allowSeed ? seedValue : null);
 
@@ -215,17 +214,16 @@ export default function OrchestratorPage() {
     }
     let alive = true;
     setRealdataToken(undefined);
+    // 토큰은 사용자 관심사가 아니다 — 실패하면 1회 자동 재시도하고(캐시는 실패 시 비워진다),
+    // 그래도 못 받으면 사유 문구 없이 잠긴 상태로 둔다.
     getRealdataToken()
+      .catch(() => getRealdataToken())
       .then((token) => alive && setRealdataToken(token))
-      .catch((err) => {
-        if (!alive) return;
-        setRealdataToken(null);
-        addConsoleLog(`WARN: 실데이터 토큰 발급 실패 — ${err?.message ?? "알 수 없는 오류"}`);
-      });
+      .catch(() => alive && setRealdataToken(null));
     return () => {
       alive = false;
     };
-  }, [allowSeed, addConsoleLog]);
+  }, [allowSeed]);
 
   const reloadCatalog = useCallback(async () => {
     try {
@@ -423,7 +421,7 @@ export default function OrchestratorPage() {
         headerRight={
           <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
             <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
-              {pipelines === null ? "불러오는 중" : `${pipelineRows.length}건 등록`} · 모델 레지스트리 연동 · 드리프트 감지 시 자동 실행
+              {pipelines === null ? "불러오는 중" : `${pipelineRows.length}건 등록`} · 드리프트 감지 시 자동 실행
             </span>
             <button
               className="btn btn-primary"
@@ -497,7 +495,7 @@ export default function OrchestratorPage() {
                       ? "이 모델의 실데이터 학습이 실행 중입니다."
                       : `최신 스냅샷(${p.dataset_id})으로 실데이터 학습을 실행합니다 — 아래 [실데이터 학습] 패널의 [학습 실행]과 같은 동작입니다.`
                   : !candidateAvailable
-                    ? "대상 모델의 다음 후보 버전을 확인할 수 없습니다. 모델 레지스트리 응답을 확인하세요."
+                    ? "대상 모델의 다음 후보 버전을 확인할 수 없습니다."
                     : pipelineBusy
                       ? "다른 재학습 파이프라인이 실행 중입니다. 완료 후 실행할 수 있습니다."
                       : `${p.name} 파이프라인을 즉시 실행합니다`;
@@ -814,8 +812,7 @@ export default function OrchestratorPage() {
                     colSpan={7}
                     style={{ fontSize: 12, color: "var(--text-muted)", textAlign: "center", padding: "18px 8px" }}
                   >
-                    {NO_DEMO_DATA} — 백엔드 레지스트리가 확인해 준 모델 버전이 없습니다. 재학습을 실행하면
-                    승급된 버전이 이 자리에 기록됩니다.
+                    재학습 후 표시됩니다.
                   </td>
                 </tr>
               )}
