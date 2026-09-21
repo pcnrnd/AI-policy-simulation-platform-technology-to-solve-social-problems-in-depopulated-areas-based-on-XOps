@@ -9,20 +9,29 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 from datetime import datetime, timezone
-from functools import lru_cache
 from typing import Any
 
 from src.core.settings import get_settings
 
 
-@lru_cache
+# 커넥션은 스레드마다 하나 — uvicorn 스레드풀 워커와 학습 job 백그라운드 스레드가 하나를 공유하면
+# 트랜잭션도 공유돼 한 스레드의 commit이 다른 스레드의 미완 쓰기까지 함께 커밋한다.
+# 스키마는 커넥션이 아니라 파일에 있으므로 새 스레드의 커넥션은 init_db를 다시 돌릴 필요가 없다.
+# ponytail: WAL의 단일 writer 제약은 그대로라 동시 쓰기는 sqlite3 기본 busy timeout(5초)만큼 기다린다.
+_local = threading.local()
+
+
 def _conn() -> sqlite3.Connection:
-    settings = get_settings()
-    settings.db_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(settings.db_path), check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
+    conn: sqlite3.Connection | None = getattr(_local, "conn", None)
+    if conn is None:
+        settings = get_settings()
+        settings.db_path.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(str(settings.db_path), check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        _local.conn = conn
     return conn
 
 
