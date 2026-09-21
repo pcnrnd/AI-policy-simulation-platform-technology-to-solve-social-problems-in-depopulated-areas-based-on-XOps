@@ -134,14 +134,25 @@ def fetch_all(
     return _fetch_streaming(sql, params, columns)
 
 
-def fetch_count(table: str) -> int:
-    """`SELECT COUNT(*)` — health 체크 등 존재 확인에 쓴다."""
-    _assert_allowed_table(table)
-    with _connect() as conn:
-        with conn.cursor() as cur:
-            cur.execute(f"SELECT COUNT(*) FROM {table}")
-            row = cur.fetchone()
-            return int(row[0]) if row else 0
+def fetch_table_existence(tables: Sequence[str]) -> dict[str, bool]:
+    """`tables` 존재 여부를 카탈로그 조회 한 번으로 확인한다(health 체크용).
+
+    `COUNT(*)`는 테이블마다 전량 스캔이라 allowlist 29개를 돌면 최악 29×statement_timeout이다.
+    `to_regclass`는 카탈로그만 보므로 테이블 크기와 무관하고, 테이블명을 식별자가 아니라
+    `text[]` 값으로 바인딩해 주입 여지도 없다.
+    """
+    names = sorted(tables)
+    for table in names:
+        _assert_allowed_table(table)
+    if not names:
+        return {}
+
+    sql = (
+        "SELECT c.t, to_regclass('public.' || c.t) IS NOT NULL AS present "
+        "FROM unnest(%s::text[]) AS c(t)"
+    )
+    rows = _fetch_streaming(sql, [names], ["t", "present"])
+    return {row["t"]: bool(row["present"]) for row in rows}
 
 
 def fetch_aggregate(
