@@ -236,6 +236,34 @@ def test_pipelines_demo_off_lists_realdata_entry(client: TestClient, auth_header
     assert entry["source"] == "realdata"
 
 
+def test_pipelines_fresh_install_uses_snapshot_dataset(client: TestClient, auth_headers: dict[str, str]) -> None:
+    """학습 job·후보가 아직 없어도 스냅샷이 있으면 행이 나오고 dataset_id가 실린다.
+
+    dataset_id가 비면 화면의 [실행]이 영구히 잠겨 신선 설치에서 첫 학습을 시작할 수 없다.
+    """
+    conn = _conn()
+    for table in ("rd_training_jobs", "rd_model_candidates", "rd_active_models"):
+        conn.execute(f"DELETE FROM {table}")
+    conn.execute(
+        "INSERT OR REPLACE INTO rd_datasets "
+        "(dataset_id, spec_json, quality_json, observed_from, observed_to, row_count, content_hash, file_path, created_at) "
+        # created_at을 멀리 잡아 다른 테스트가 남긴 스냅샷보다 최신이 되게 한다(최신 1건을 고르는지도 함께 본다).
+        "VALUES (?, ?, '{}', 202301, 202310, 69, '00ff3407ad9f', '/tmp/ds.json', '2999-01-01T00:00:00+00:00')",
+        (_DATASET_ID, json.dumps({"target": "nonlocal_visitors", "model_id": _MODEL_ID})),
+    )
+    conn.commit()
+    try:
+        rows = client.get(
+            "/api/v3/orchestration/pipelines", params={"include_seed": "false"}, headers=auth_headers
+        ).json()
+        entry = next(r for r in rows if r["id"] == realdata_bridge.pipeline_id_for(_MODEL_ID))
+        assert entry["dataset_id"] == _DATASET_ID
+        assert entry["candidate_version"] is None
+    finally:
+        conn.execute("DELETE FROM rd_datasets WHERE dataset_id = ?", (_DATASET_ID,))
+        conn.commit()
+
+
 def test_models_demo_off_lists_realdata_models(client: TestClient, auth_headers: dict[str, str]) -> None:
     rows = client.get("/api/v3/orchestration/models", params={"include_seed": "false"}, headers=auth_headers).json()
 

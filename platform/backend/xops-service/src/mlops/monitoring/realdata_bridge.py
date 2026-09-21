@@ -21,6 +21,7 @@ from src.mlops.monitoring.drift import DriftDetector
 from src.realdata import candidates as candidates_mod
 from src.realdata import jobs as jobs_mod
 from src.realdata import monitoring as rd_monitoring
+from src.realdata import snapshot as snapshot_mod
 
 _logger = get_logger("xops.monitoring.realdata")
 _drift = DriftDetector()
@@ -234,13 +235,26 @@ def pipeline_id_for(model_id: str) -> str:
     return f"{_PIPELINE_PREFIX}{model_id}"
 
 
+def _latest_dataset_id(model_id: str) -> str | None:
+    """job 이력이 없을 때의 스냅샷 진입점 — rd_datasets는 created_at 내림차순이다.
+
+    신선 설치(스냅샷만 있고 학습 job은 아직 없음)에서 dataset_id가 비면 화면의 [실행]이
+    영구히 잠긴다. 실행에 필요한 값은 job 이력이 아니라 스냅샷이므로 여기서 직접 읽는다.
+    """
+    for ds in snapshot_mod.list_datasets():
+        if ds.get("spec", {}).get("model_id") == model_id:
+            return ds["dataset_id"]
+    return None
+
+
 def pipelines() -> list[dict[str, Any]]:
     """실데이터 학습을 카탈로그 1행으로. 등록 파이프라인이 아니라 실행 job의 진입점이다."""
     out: list[dict[str, Any]] = []
     for model_id, name in PIPELINE_NAMES.items():
         job_rows = jobs_mod.list_jobs(model_id)
         version = resolve_version(model_id)
-        if version is None and not job_rows:
+        dataset_id = job_rows[0]["dataset_id"] if job_rows else _latest_dataset_id(model_id)
+        if version is None and not job_rows and dataset_id is None:
             continue
         active = candidates_mod.get_active(model_id)
         out.append(
@@ -253,7 +267,7 @@ def pipelines() -> list[dict[str, Any]]:
                 "base_version": active["version"] if active else None,
                 "candidate_version": version,
                 # 하단 실데이터 학습 패널과 같은 입력으로 실행하도록 최근 스냅샷을 함께 내려준다.
-                "dataset_id": job_rows[0]["dataset_id"] if job_rows else None,
+                "dataset_id": dataset_id,
                 "created_at": job_rows[-1]["requested_at"] if job_rows else None,
                 "source": SOURCE,
             }
