@@ -51,6 +51,10 @@ ALLOWED_TABLES = {
 
 _FETCH_BATCH = 1000
 
+# 쿼리 상한 — ext_* 조회는 LIMIT이 없어(계약 R1 전량 스트리밍) 한 건이 서버 스레드를 무한정 잡을 수 있다.
+# settings.db_timeout_seconds는 연결 수립용이라 그대로 두고, 실행 시간은 여기서 끊는다.
+_STATEMENT_TIMEOUT_MS = 30_000
+
 
 class RealdataUnavailable(RuntimeError):
     """DSN 미설정·드라이버 미설치·허용되지 않은 테이블 — 시드 폴백 없이 호출자가 status=error로 노출."""
@@ -69,7 +73,11 @@ def _connect() -> Any:
         import psycopg  # type: ignore[import-not-found]  # ponytail: 지연 import, 선택 의존성
     except ImportError as exc:
         raise RealdataUnavailable("psycopg 미설치 — pip install psycopg[binary]") from exc
-    return psycopg.connect(settings.pg_dsn, connect_timeout=int(settings.db_timeout_seconds))
+    return psycopg.connect(
+        settings.pg_dsn,
+        connect_timeout=int(settings.db_timeout_seconds),
+        options=f"-c statement_timeout={_STATEMENT_TIMEOUT_MS}",
+    )
 
 
 def _jsonable(value: Any) -> Any:
