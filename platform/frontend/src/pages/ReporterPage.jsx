@@ -1,6 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import Card from "../components/Card.jsx";
-import PerfBadge from "../components/PerfBadge.jsx";
 import { NO_DEMO_DATA } from "../components/PendingData.jsx";
 import { useAppState } from "../context/AppStateContext.jsx";
 import {
@@ -15,7 +14,6 @@ import {
   downloadBlob
 } from "../lib/reportExport.js";
 import { fetchReportData } from "../lib/dataopsApi.js";
-import { measureAsync } from "../lib/perf.js";
 
 const EXPORT_FORMATS = [
   { id: "docx", label: "Word (.docx)", icon: "fa-file-word", ext: "docx" },
@@ -113,7 +111,6 @@ export default function ReporterPage() {
 
   // Data source API 자동 바인딩 상태 (Notion: 데이터 갱신 부분 자동 업데이트)
   const [binding, setBinding] = useState(null);
-  const [bindingMs, setBindingMs] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshCount, setRefreshCount] = useState(0);
   const [lastUpdated, setLastUpdated] = useState(null);
@@ -139,16 +136,12 @@ export default function ReporterPage() {
       setPreview(null);
       setReportFeedback(null);
       setBinding(null);
-      setBindingMs(null);
       setLastUpdated(null);
       setBindingFeedback({ tone: "pending", message: `${region.name} 데이터를 갱신하고 있습니다.` });
       try {
-        const { result, ms } = await measureAsync(() =>
-          fetchReportData(region, driftInjected, count)
-        );
+        const result = await fetchReportData(region, driftInjected, count);
         if (requestId !== refreshRequestRef.current) return;
         setBinding(result);
-        setBindingMs(ms);
         setLastUpdated(new Date().toLocaleTimeString("ko-KR"));
         // 갱신 건수·Accuracy 는 로컬에서 합성한 시드 값이다 — 데모 OFF에서는 수치를 남기지 않는다.
         setBindingFeedback(
@@ -308,7 +301,6 @@ export default function ReporterPage() {
               <i className="fa-solid fa-link" style={{ color: "var(--accent-teal)" }}></i>{" "}
               템플릿 가변 저장 구조 — Data source API 자동 바인딩
             </div>
-            <PerfBadge ms={bindingMs} label="API 응답" />
           </div>
           <div className="mock-data-output" style={{ fontSize: 11, color: "var(--text-secondary)", lineHeight: 1.6 }}>
             <div>
