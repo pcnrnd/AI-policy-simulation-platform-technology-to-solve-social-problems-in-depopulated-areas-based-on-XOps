@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import sys
 from typing import Any
 
 import pytest
@@ -85,6 +86,23 @@ def test_connect_raises_when_dsn_missing(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setattr(pg_reader, "get_settings", lambda: Settings(pg_dsn=""))
     with pytest.raises(RealdataUnavailable):
         pg_reader.fetch_all("ext_kt_namwon_monthly_dong_visitors", ["base_ym"])
+
+
+def test_connect_applies_statement_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    """전량 조회에 LIMIT이 없으므로 실행 시간 상한은 연결 옵션으로만 걸린다."""
+    captured: dict[str, Any] = {}
+
+    class _FakePsycopg:
+        @staticmethod
+        def connect(dsn: str, **kwargs: Any) -> str:
+            captured.update({"dsn": dsn, **kwargs})
+            return "conn"
+
+    monkeypatch.setattr(pg_reader, "get_settings", lambda: Settings(pg_dsn="postgresql://x/y"))
+    monkeypatch.setitem(sys.modules, "psycopg", _FakePsycopg)
+
+    assert pg_reader._connect() == "conn"
+    assert captured["options"] == f"-c statement_timeout={pg_reader._STATEMENT_TIMEOUT_MS}"
 
 
 def test_fetch_all_streams_all_batches_and_binds_where(monkeypatch: pytest.MonkeyPatch) -> None:
