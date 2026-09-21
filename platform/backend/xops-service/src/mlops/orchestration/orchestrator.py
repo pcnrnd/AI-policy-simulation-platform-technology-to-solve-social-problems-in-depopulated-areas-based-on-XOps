@@ -87,6 +87,10 @@ class Orchestrator:
         stamp = datetime.now(timezone.utc).strftime("%Y%m%d")
         return f"RUN-{stamp}-{self._counter:04d}"
 
+    def next_run_id(self) -> str:
+        """접수(202) 시점에 run_id를 먼저 발급하기 위한 공개 진입점."""
+        return self._next_run_id()
+
     def _train(self, event: RetrainEvent, *, horizon: int, version: str) -> TrainingResult | None:
         """실제 학습 수행. 실패하면 None을 돌려 fallback 경로로 넘긴다."""
         try:
@@ -105,10 +109,15 @@ class Orchestrator:
         measured_current: dict[str, float] | None = None,
         horizon: int | None = None,
         pipeline_id: str | None = None,
+        run_id: str | None = None,
     ) -> PipelineRun:
-        """이벤트 하나를 상태머신에 태워 실행 결과를 반환. 기준선 선택은 `_evaluate` 참조."""
+        """이벤트 하나를 상태머신에 태워 실행 결과를 반환. 기준선 선택은 `_evaluate` 참조.
+
+        `run_id`를 받으면 그 id로 기록한다 — 접수(202) 시점에 이미 남긴 진행 중 실행을
+        같은 id로 갱신하기 위해서다.
+        """
         run = PipelineRun(
-            run_id=self._next_run_id(),
+            run_id=run_id or self._next_run_id(),
             model_id=event.model_id,
             trigger=event.trigger,
             state="queued",

@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Any
 
@@ -15,10 +14,16 @@ from src.api.dependencies import optional_auth
 from src.core import db
 from src.core.exceptions import SourceNotFoundError
 from src.mlops.monitoring import realdata_bridge
-from src.mlops.orchestration.registry import get_registry
+from src.mlops.orchestration.registry import RUNNING_STATE, get_registry, recover_stale_runs
 from src.schemas.orchestration import EventRequest, PipelineCreateRequest, PipelineRunRequest
 
 router = APIRouter(prefix="/orchestration", tags=["orchestration"])
+
+
+@router.on_event("startup")
+def _recover_stale_runs_on_startup() -> None:
+    """기동 시 진행 중으로 남은 실행을 마감한다(realdata 학습 job과 같은 방침)."""
+    recover_stale_runs()
 
 
 # 목록 GET 3개의 `include_seed` 는 기본 false — 데모 표시 OFF가 기본 상태다.
@@ -75,19 +80,19 @@ def delete_pipeline(pipeline_id: str) -> dict[str, str]:
     return {"deleted": pipeline_id}
 
 
-@router.post("/pipelines/{pipeline_id}/run")
+@router.post("/pipelines/{pipeline_id}/run", status_code=202)
 def run_pipeline(pipeline_id: str, body: PipelineRunRequest | None = None) -> dict[str, Any]:
-    """등록 파이프라인 실행 → 실행 레코드·단계 상태·로그가 SQLite에 남는다."""
+    """등록 파이프라인 실행 접수 — `/events` 와 같은 백그라운드 경로(모델별 락을 함께 쓴다)."""
     registry = get_registry()
     pipeline = registry.get_pipeline(pipeline_id)
     request = body or PipelineRunRequest()
-    run = registry.trigger(
+    run_id = registry.start_trigger(
         model_id=pipeline["model_id"],
         trigger=request.trigger,
         candidate_latency_ms=request.candidate_latency_ms,
         pipeline_id=pipeline_id,
     )
-    return asdict(run)
+    return db.get_run(run_id) or {"run_id": run_id, "state": RUNNING_STATE}
 
 
 # ── 실행 이력·로그 ──────────────────────────────────────────
@@ -104,6 +109,15 @@ def list_runs(
     return rows
 
 
+@router.get("/runs/{run_id}")
+def get_run(run_id: str) -> dict[str, Any]:
+    """실행 하나의 현재 상태 — 접수(202) 뒤 종결까지 폴링하는 경로."""
+    run = db.get_run(run_id)
+    if run is None:
+        raise SourceNotFoundError(f"실행 기록을 찾을 수 없습니다: {run_id}")
+    return run
+
+
 @router.get("/runs/{run_id}/logs")
 def get_run_logs(run_id: str, auth: dict[str, Any] | None = _OPTIONAL_AUTH) -> dict[str, Any]:
     """실행 하나의 저장된 로그 라인. 실데이터 job은 job 레코드의 상태 전이를 라인으로 만든다."""
@@ -117,14 +131,18 @@ def get_run_logs(run_id: str, auth: dict[str, Any] | None = _OPTIONAL_AUTH) -> d
     return {"run_id": run_id, "state": run.get("state"), "logs": run.get("logs", [])}
 
 
-@router.post("/events")
+@router.post("/events", status_code=202)
 def trigger_event(body: EventRequest) -> dict[str, Any]:
-    """재학습 이벤트 발생 → 상태머신 실행."""
-    run = get_registry().trigger(
+    """재학습 이벤트 접수 → 백그라운드 실행. 결과는 `GET /runs/{run_id}` 로 확인한다.
+
+    학습·평가·배포가 요청 스레드를 붙잡지 않고, 진행 중 상태가 저장돼 프로세스가 죽어도
+    실행 흔적이 남는다(기동 시 `recover_stale_runs`가 마감).
+    """
+    run_id = get_registry().start_trigger(
         model_id=body.model_id,
         trigger=body.trigger,
         candidate_metrics=body.candidate_metrics,
         candidate_latency_ms=body.candidate_latency_ms,
         pipeline_id=body.pipeline_id,
     )
-    return asdict(run)
+    return db.get_run(run_id) or {"run_id": run_id, "state": RUNNING_STATE}

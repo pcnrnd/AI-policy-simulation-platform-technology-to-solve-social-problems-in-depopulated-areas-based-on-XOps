@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import shutil
 import tempfile
+import time
 from typing import Callable
 
 # 테스트는 격리된 임시 SQLite를 사용 — dev DB 오염 방지. app import 전에 설정해야 함.
@@ -31,6 +32,30 @@ from src.core import db  # noqa: E402
 @pytest.fixture()
 def client() -> TestClient:
     return TestClient(app)
+
+
+_RUN_TERMINAL_STATES = ("succeeded", "rejected", "rolled_back", "debounced", "failed")
+
+
+@pytest.fixture()
+def await_run() -> Callable[..., dict]:
+    """오케스트레이션 접수(202) 응답을 받아 실행이 끝날 때까지 폴링한다.
+
+    `POST /orchestration/events`·`/pipelines/{id}/run`이 백그라운드 스레드로 도는 뒤로는
+    종결 상태를 보려면 `GET /orchestration/runs/{run_id}`를 다시 읽어야 한다.
+    """
+
+    def _await(client: TestClient, accepted: dict, timeout_s: float = 60.0) -> dict:
+        run_id = accepted["run_id"]
+        deadline = time.monotonic() + timeout_s
+        while time.monotonic() < deadline:
+            run = client.get(f"/api/v3/orchestration/runs/{run_id}").json()
+            if run.get("state") in _RUN_TERMINAL_STATES:
+                return run
+            time.sleep(0.05)
+        raise AssertionError(f"실행이 제한 시간 안에 끝나지 않았습니다: {run_id}")
+
+    return _await
 
 
 @pytest.fixture()

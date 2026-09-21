@@ -277,6 +277,24 @@ def append_run(run: dict[str, Any]) -> None:
     _conn().commit()
 
 
+def upsert_run(run: dict[str, Any]) -> None:
+    """같은 run_id 행이 있으면 바꿔 쓴다 — 진행 중으로 남긴 실행을 종료 상태로 갱신하는 경로.
+
+    runs 테이블은 run_json 한 칸이라 run_id 색인이 없다. `get_run` 과 같은 방침으로 훑는다
+    (이력이 작다). 색인이 필요해지면 run_id를 컬럼으로 승격한다.
+    """
+    run_id = run.get("run_id")
+    for row in _conn().execute("SELECT seq, run_json FROM runs ORDER BY seq DESC").fetchall():
+        if json.loads(row["run_json"]).get("run_id") == run_id:
+            _conn().execute(
+                "UPDATE runs SET run_json = ? WHERE seq = ?",
+                (json.dumps(run, ensure_ascii=False), row["seq"]),
+            )
+            _conn().commit()
+            return
+    append_run(run)
+
+
 def list_runs() -> list[dict[str, Any]]:
     rows = _conn().execute("SELECT run_json FROM runs ORDER BY seq").fetchall()
     return [json.loads(r["run_json"]) for r in rows]

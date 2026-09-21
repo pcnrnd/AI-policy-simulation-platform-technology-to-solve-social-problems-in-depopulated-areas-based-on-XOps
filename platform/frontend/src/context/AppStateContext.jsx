@@ -10,6 +10,20 @@ const STEP_DELAY_MS = 2500;
 const ALERT_AUTO_DISMISS_MS = 5000;
 const MOCK_DATA_STORAGE_KEY = "decline-poc-mock-data";
 
+// 오케스트레이션 실행은 접수(202) 후 백그라운드에서 돈다 — 실데이터 학습 job과 같은 방식으로 폴링한다.
+const RUN_POLL_MS = 700;
+const RUN_POLL_LIMIT = 90;
+const RUN_TERMINAL_STATES = new Set(["succeeded", "rejected", "rolled_back", "debounced", "failed"]);
+
+async function awaitRunResult(runId) {
+  for (let attempt = 0; attempt < RUN_POLL_LIMIT; attempt += 1) {
+    const run = await apiGet(`/api/v3/orchestration/runs/${encodeURIComponent(runId)}`);
+    if (RUN_TERMINAL_STATES.has(run?.state)) return run;
+    await new Promise((resolve) => setTimeout(resolve, RUN_POLL_MS));
+  }
+  throw new Error("실행 결과를 확인하지 못했습니다.");
+}
+
 // 목업 데이터 전역 표시 여부. 저장값이 없거나 손상됐거나 스토리지를 못 쓰면 기본 노출(true).
 function readMockDataVisible() {
   try {
@@ -339,9 +353,12 @@ export function AppStateProvider({ children }) {
 
       // 백엔드 오케스트레이션 이벤트 발생 — 실제 승급/롤백 결정을 수신 (애니메이션은 UX)
       try {
-        const backend = await apiSend("POST", "/api/v3/orchestration/events", {
+        const accepted = await apiSend("POST", "/api/v3/orchestration/events", {
           body: { model_id: pl.model, trigger: backendTrigger, candidate_latency_ms: 120 }
         });
+        if (requestId !== pipelineRequestRef.current) return;
+        // 접수(202)만 받은 상태다 — 승급/롤백 판정은 실행이 끝난 뒤 다시 읽는다.
+        const backend = await awaitRunResult(accepted.run_id);
         if (requestId !== pipelineRequestRef.current) return;
         setPipelineResult(backend);
         addConsoleLog(

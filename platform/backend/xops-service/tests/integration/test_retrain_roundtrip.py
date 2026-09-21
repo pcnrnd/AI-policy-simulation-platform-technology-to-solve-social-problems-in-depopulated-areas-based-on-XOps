@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 from typing import Any, Callable
 
@@ -20,12 +21,22 @@ _MODEL = "population-forecast"
 _EVENTS = "/api/v3/orchestration/events"
 
 
+_TERMINAL_STATES = ("succeeded", "rejected", "rolled_back", "debounced", "failed")
+
+
 def _trigger(client: TestClient, **payload: Any) -> dict[str, Any]:
+    """이벤트 접수(202) 후 실행이 끝날 때까지 기다린 결과를 돌려준다."""
     body = {"model_id": _MODEL, "trigger": "manual", **payload}
     response = client.post(_EVENTS, json=body)
-    assert response.status_code == 200, response.text
-    result: dict[str, Any] = response.json()
-    return result
+    assert response.status_code == 202, response.text
+    run_id = response.json()["run_id"]
+    deadline = time.monotonic() + 60.0
+    while time.monotonic() < deadline:
+        result: dict[str, Any] = client.get(f"/api/v3/orchestration/runs/{run_id}").json()
+        if result.get("state") in _TERMINAL_STATES:
+            return result
+        time.sleep(0.05)
+    raise AssertionError(f"실행이 제한 시간 안에 끝나지 않았습니다: {run_id}")
 
 
 def _entry(client: TestClient, model_id: str = _MODEL) -> dict[str, Any]:
@@ -177,9 +188,7 @@ def test_corrupt_seed_does_not_break_the_endpoint(
     broken = {"regions": [{"id": "x", "history": [1000, 0, 980], "riskIndex": None, "birthRate": 0.8, "agingIndex": 33.0}]}
     monkeypatch.setattr(trainer_module, "get_seed", lambda: broken)
 
-    response = client.post(_EVENTS, json={"model_id": _MODEL, "trigger": "manual"})
-    assert response.status_code == 200  # ZeroDivisionError/TypeError로 500이 되지 않는다
-    run = response.json()
+    run = _trigger(client)  # ZeroDivisionError/TypeError로 실행이 failed 되지 않는다
     assert run["training"]["source"] == "derived"
     assert run["artifact_path"] is None
     assert run["state"] == "succeeded"
@@ -194,9 +203,7 @@ def test_non_array_regions_seed_does_not_break_the_endpoint(
     reset_model(_MODEL)
     monkeypatch.setattr(trainer_module, "get_seed", lambda: {"regions": None})
 
-    response = client.post(_EVENTS, json={"model_id": _MODEL, "trigger": "manual"})
-    assert response.status_code == 200  # TypeError로 500이 되지 않는다
-    run = response.json()
+    run = _trigger(client)  # TypeError로 실행이 failed 되지 않는다
     assert run["training"]["source"] == "derived"
     assert run["artifact_path"] is None
 
