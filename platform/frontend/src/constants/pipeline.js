@@ -13,12 +13,12 @@ export const PIPELINE_STEPS = [
   {
     name: "node-train",
     desc: "3. Retraining",
-    log: "INFO: Flower 연합학습 엔진 기반 분산 학습 개시. 연합 클라이언트 노드에서 분할 가중치 병렬 트레이닝 시작 (Differential Privacy 적용)."
+    log: "INFO: 분산 학습 개시. 분할 가중치 병렬 트레이닝 시작."
   },
   {
     name: "node-eval",
     desc: "4. Evaluation",
-    log: "INFO: 학습 완료. 모델 메트릭 자동 비교 연산 수행. [SOTA 검증성공: Accuracy 기존 0.892 -> 신규 0.925 (+3.3% 향상, 승급 기준 1.5% 돌파)]. 자동 테스트 통과 — 유닛 12/12 · 통합 5/5 · 성능 P95 138ms."
+    log: "INFO: 학습 완료. 모델 메트릭 자동 비교 연산 수행. [SOTA 검증성공: Accuracy 기존 0.892 -> 신규 0.925 (+3.3% 향상, 승급 기준 1.5% 돌파)]."
   },
   {
     name: "node-deploy",
@@ -28,7 +28,7 @@ export const PIPELINE_STEPS = [
   {
     name: "node-rollback",
     desc: "6. SOTA Promoted",
-    log: "SUCCESS: 최적 성능 모델(SOTA)로 최종 승급 승격 완료! Helm Chart 및 모델 레지스트리 정보 자동 갱신 완료."
+    log: "SUCCESS: 최적 성능 모델(SOTA)로 최종 승급 승격 완료!"
   }
 ];
 

@@ -30,10 +30,13 @@ const TOKEN_DISCARDED_MESSAGE = "토큰이 만료·무효화되어 폐기했습�
 // 필터 문법·검증은 조건 행 UI와 같은 규칙을 써야 하므로 lib/filterExpression.js 한 곳에 둔다.
 const FILTER_ERROR_ID = "dataops-filter-error";
 
-// 응답이 실 저장소가 아니라 스텁으로 내려왔으면 그 사유를 뽑는다(없으면 null).
+// 응답이 실 저장소가 아니라 스텁으로 내려왔는지 판정한다(아니면 null).
+// 백엔드 원문 사유는 사용자가 조치할 수 없는 내부 정보라 화면에 싣지 않고 개발자 콘솔로만 흘린다.
 function degradeReasonOf(body) {
   if (!body || body.source_kind !== "in-memory") return null;
-  return body.source_kind_reason || "저장소에 연결하지 못해 표준 응답 형태만 반환했습니다.";
+  const reason = body.source_kind_reason || "";
+  console.debug("[dataops] in-memory fallback", reason);
+  return reason || "-";
 }
 
 // 카탈로그 선택 → 스키마 검토 → API 호출의 순차 흐름 (시뮬레이터 탭과 동일 패턴)
@@ -155,7 +158,7 @@ function RoutingFlow({ method, source, adapter, queryLang }) {
       sub: `${source.source} · ${source.object}${range ? ` · ${range.column} ${range.from}~${range.to}` : ""}`
     },
     { icon: "fa-plug", title: "Adapter 선택", sub: adapter },
-    { icon: "fa-database", title: `${queryLang} 생성·실행`, sub: "In-Memory 처리" },
+    { icon: "fa-database", title: `${queryLang} 생성·실행`, sub: "" },
     { icon: "fa-reply", title: "REST 응답", sub: "표준 JSON" }
   ];
   return (
@@ -165,7 +168,8 @@ function RoutingFlow({ method, source, adapter, queryLang }) {
           <div className="routing-step">
             <i className={"fa-solid " + s.icon} aria-hidden="true"></i>
             <div className="routing-step-title">{s.title}</div>
-            <div className="routing-step-sub">{s.sub}</div>
+            {/* sub가 비어도 단계 카드 높이는 나머지와 같아야 한다. */}
+            <div className="routing-step-sub">{s.sub || " "}</div>
           </div>
           {i < steps.length - 1 && (
             <i className="fa-solid fa-chevron-right routing-arrow" aria-hidden="true"></i>
@@ -991,7 +995,7 @@ export default function DataOpsPage() {
                       </td>
                       <td style={{ fontSize: 11, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
                         {s.range ? (
-                          <span title={`Adapter가 쿼리에 자동 주입하는 적재 범위 (${s.range.column})`}>
+                          <span title={`조회에 적용할 적재 범위 (${s.range.column})`}>
                             <code style={{ fontSize: 10 }}>{s.range.column}</code> {s.range.from}~{s.range.to}
                           </span>
                         ) : (
@@ -1139,7 +1143,7 @@ export default function DataOpsPage() {
         id="dstep-builder"
         no="STEP ③"
         title="Data API 빌드 · 호출"
-        sub="표준 SQL 설정 기반 CRUD·필터·정렬·페이징을 In-Memory로 처리 — JWT/OAuth2 인증으로 저장소 비노출"
+        sub="표준 SQL 설정 기반 CRUD·필터·정렬·페이징"
         open={openStages["dstep-builder"]}
         onToggle={() => toggleStage("dstep-builder")}
       >
@@ -1328,8 +1332,7 @@ export default function DataOpsPage() {
             {degradeNote && (
               <p className="dataops-degrade-note mock-data-output" role="status">
                 <i className="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>{" "}
-                실 저장소 조회에 실패해 표준 응답 형태(source_kind=in-memory)만 반환했습니다. 표시된 행수·샘플은
-                실측값이 아닙니다. 사유: {degradeNote}
+                표시된 행수·샘플은 실측값이 아닙니다.
               </p>
             )}
           </Card>
@@ -1481,8 +1484,7 @@ export default function DataOpsPage() {
                               {builtResult.degrade && (
                                 <p className="dataops-degrade-note mock-data-output" role="status">
                                   <i className="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>{" "}
-                                  실 저장소 조회에 실패해 표준 응답 형태(source_kind=in-memory)만 반환했습니다.
-                                  사유: {builtResult.degrade}
+                                  표시된 행수·샘플은 실측값이 아닙니다.
                                 </p>
                               )}
                             </td>

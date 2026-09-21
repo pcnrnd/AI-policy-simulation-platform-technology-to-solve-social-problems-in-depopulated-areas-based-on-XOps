@@ -215,9 +215,10 @@ export function AppStateProvider({ children }) {
         );
       })
       .catch((err) => {
-        addConsoleLog(`WARN: 모델 레지스트리 동기화 실패 — ${err?.message ?? "알 수 없는 오류"}`);
+        // 사용자가 조치할 수 없는 내부 동기화 실패다 — 화면 로그 대신 개발자 콘솔로만 남긴다.
+        console.warn("[orchestration] model sync failed", err);
       });
-  }, [addConsoleLog, mockDataVisible]);
+  }, [mockDataVisible]);
 
   useEffect(() => {
     syncModels();
@@ -234,12 +235,13 @@ export function AppStateProvider({ children }) {
       })
       .catch((err) => {
         if (!alive) return;
-        addConsoleLog(`WARN: 카탈로그 롤업 동기화 실패 — ${err?.message ?? "알 수 없는 오류"}`);
+        // 위와 같다 — 요약을 못 받으면 화면은 빈 자리로 두고 사유는 개발자 콘솔에만 남긴다.
+        console.warn("[overview] summary sync failed", err);
       });
     return () => {
       alive = false;
     };
-  }, [addConsoleLog, mockDataVisible]);
+  }, [mockDataVisible]);
 
   const dismissAlert = useCallback((id) => {
     setAlerts((prev) => prev.filter((a) => a.id !== id));
