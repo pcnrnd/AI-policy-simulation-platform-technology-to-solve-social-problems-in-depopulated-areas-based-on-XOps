@@ -274,7 +274,9 @@ export default function DataOpsPage() {
       })
       .catch((err) => {
         if (!alive) return;
-        setBuiltApisError(err?.message ?? "발급 API 목록을 불러오지 못했습니다.");
+        // 사유 원문에는 인증 실패 응답 본문이 섞여 들어온다 — 화면에는 실패 여부만 알리고 원문은 개발자 콘솔로만 남긴다.
+        console.warn("[dataops] built apis load failed", err);
+        setBuiltApisError(true);
       });
     return () => {
       alive = false;
@@ -1354,7 +1356,7 @@ export default function DataOpsPage() {
           {builtApisError ? (
             <p className="dataops-degrade-note" role="alert">
               <i className="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>{" "}
-              발급 API 목록을 불러오지 못했습니다. {builtApisError}
+              발급 API 목록을 불러오지 못했습니다.
             </p>
           ) : builtApis.length === 0 ? (
             <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>
