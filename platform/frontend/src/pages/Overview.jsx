@@ -52,20 +52,30 @@ export default function Overview() {
   const servingVersion = modelStore.find(
     (m) => m.modelId === POPULATION_MODEL_ID && m.status === "운영"
   )?.version;
-  // 남은 0.884는 시드 상수다 — 데모 OFF에서는 값을 비우고 사유만 남긴다.
-  // (롤업이 함께 내려 주는 레지스트리 실측 F1 `overviewSummary.model` 연결은 이 탭 소관 밖이라
-  //  건드리지 않고 인계 자료의 연동 지점으로만 남긴다.)
-  const f1Value = f1Override !== null ? f1Override.toFixed(3) : allowSeed ? "0.884" : "–";
+  // F1은 두 경로로 실측된다 — 이번 세션의 재학습 승급(f1Override)과 롤업이 실어 주는 레지스트리
+  // 스냅샷(metrics_source === "trained"). 둘 다 없으면 남는 0.884는 시드 상수다.
+  const summaryModel = overviewSummary?.model ?? null;
+  const measuredF1 =
+    f1Override !== null
+      ? f1Override
+      : summaryModel?.metrics_source === "trained" && typeof summaryModel.f1 === "number"
+        ? summaryModel.f1
+        : null;
+  const f1Value = measuredF1 !== null ? measuredF1.toFixed(3) : allowSeed ? "0.884" : "–";
   // 값이 "–" 인데 "최적 (SOTA)" 배지를 붙이면 측정이 없는 상태를 최고 성능이라고 단정한다.
-  const f1Measured = f1Override !== null || allowSeed;
+  const f1Measured = measuredF1 !== null || allowSeed;
+  const f1ServingVersion = servingVersion ?? summaryModel?.serving_version;
+  const f1Origin = measuredF1 !== null ? "api" : "mock";
   const f1Label = !f1Measured
     ? "측정 없음"
-    : f1Override !== null && servingVersion
-      ? `최적 (SOTA ${servingVersion})`
+    : measuredF1 !== null && f1ServingVersion
+      ? `실측 (${f1ServingVersion})`
       : "최적 (SOTA)";
   const f1Sub =
-    f1Override !== null
-      ? "연합 재학습 성공"
+    measuredF1 !== null
+      ? f1Override !== null
+        ? "연합 재학습 성공"
+        : "학습 아티팩트 실측값"
       : allowSeed
         ? "데이터 소스 통합 기준"
         : "재학습 후 표시됩니다";
@@ -212,6 +222,7 @@ export default function Overview() {
         <StatCard
           label="글로벌 모델 F1-score"
           icon="fa-bullseye"
+          dataSource={f1Origin}
           value={f1Value}
           footer={
             <>
