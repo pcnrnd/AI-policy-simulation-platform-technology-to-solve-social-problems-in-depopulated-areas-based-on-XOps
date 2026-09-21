@@ -157,7 +157,7 @@ export default function ReporterPage() {
                 tone: "success",
                 message: `${region.name} 데이터 ${result.collected_rows.toLocaleString()}행을 갱신했습니다.`
               }
-            : { tone: "info", message: `${NO_DEMO_DATA} — 바인딩할 실데이터가 없습니다.` }
+            : { tone: "info", message: NO_DEMO_DATA }
         );
         addConsoleLog(
           allowSeed
@@ -207,7 +207,7 @@ export default function ReporterPage() {
       setPreview(null);
       setReportFeedback({
         tone: "error",
-        message: `${NO_DEMO_DATA} — 보고서 본문에 쓸 실데이터가 없어 미리보기를 채우지 못했습니다.`
+        message: NO_DEMO_DATA
       });
       addConsoleLog(`WARN: 보고서 미리보기 생성 중단 - ${region.name} 실데이터 없음`);
       return;
@@ -235,7 +235,7 @@ export default function ReporterPage() {
     if (!allowSeed) {
       setReportFeedback({
         tone: "info",
-        message: `${NO_DEMO_DATA} — 내보낼 보고서 데이터가 없습니다. 설정에서 데모 데이터 표시를 켜면 생성할 수 있습니다.`
+        message: `${NO_DEMO_DATA} — 설정에서 데모 데이터 표시를 켜면 생성할 수 있습니다.`
       });
       return;
     }
@@ -442,8 +442,7 @@ export default function ReporterPage() {
             <>
               <h2>인구감소 대응 R&D 분석 리포트 요약서</h2>
               <p style={{ textAlign: "center", color: "#4b5563", fontSize: 12, marginBottom: 30 }}>
-                {NO_DEMO_DATA} — 보고서 본문은 지자체 인구·위험지수·모니터링 지표(시드 전용)에서
-                채워지므로 표시할 내용이 없습니다. 템플릿·지자체·형식 선택은 그대로 조작할 수 있습니다.
+                {NO_DEMO_DATA}
               </p>
             </>
           ) : (

@@ -257,7 +257,7 @@ export default function ScenarioCompare({ region, snapshot, onApply, addConsoleL
               <Line data={displayChartData} options={chartOpts} />
               {!allowSeed && (
                 <ChartEmptyNote>
-                  {NO_DEMO_DATA} — 추이는 지자체 인구(시드 전용)에서 계산되므로 표시할 계열이 없습니다.
+                  {NO_DEMO_DATA} — 표시할 계열이 없습니다.
                 </ChartEmptyNote>
               )}
             </div>
@@ -271,7 +271,7 @@ export default function ScenarioCompare({ region, snapshot, onApply, addConsoleL
                     : " 비교할 저장 시나리오를 선택하면 추이가 함께 표시됩니다."}
                 </>
               ) : (
-                `${NO_DEMO_DATA} — 저장한 변수 조합은 그대로 유지되며, 예측 인구·증감률만 비어 있습니다.`
+                `${NO_DEMO_DATA} — 예측 인구·증감률이 비어 있습니다.`
               )}
             </p>
 

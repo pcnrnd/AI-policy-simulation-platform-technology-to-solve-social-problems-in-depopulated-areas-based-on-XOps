@@ -68,7 +68,7 @@ export default function Overview() {
       ? "연합 재학습 성공"
       : allowSeed
         ? "데이터 소스 통합 기준"
-        : `${NO_DEMO_DATA} — 재학습을 실행하면 실측 F1이 표시됩니다`;
+        : "재학습 후 표시됩니다";
 
   // 카탈로그 롤업(GET /api/v3/overview/summary)이 실 저장소를 물고 있을 때만 API 값을 쓴다.
   // 요청 실패(overviewSummary === null)나 In-Memory degrade면 mock_data.json 으로 폴백하고,
@@ -205,7 +205,7 @@ export default function Overview() {
                 <span className="text-secondary">전분기 대비</span>
               </>
             ) : (
-              <span className="text-secondary">{NO_DEMO_DATA} — 전국 집계 실데이터 경로 없음</span>
+              <span className="text-secondary">{NO_DEMO_DATA}</span>
             )
           }
         />
@@ -243,7 +243,7 @@ export default function Overview() {
                 </span>
               </>
             ) : (
-              <span className="text-secondary">{NO_DEMO_DATA} — 카탈로그 롤업을 받지 못했습니다</span>
+              <span className="text-secondary">{NO_DEMO_DATA}</span>
             )
           }
         />
@@ -266,13 +266,13 @@ export default function Overview() {
             <Doughnut data={sourceData} options={doughnutOpts} />
             {sourceRowsEmpty && (
               <ChartEmptyNote>
-                {NO_DEMO_DATA} — 롤업(/overview/summary)이 실적재 행수를 세지 못했습니다.
+                {NO_DEMO_DATA}
               </ChartEmptyNote>
             )}
           </div>
           <p className="chart-summary">
             {sourceRowsEmpty ? (
-              `${NO_DEMO_DATA} — 저장소에서 센 적재 행수가 없어 소스별 적재량을 표시할 수 없습니다.`
+              `${NO_DEMO_DATA} — 표시할 적재량이 없습니다.`
             ) : (
               <>
                 총 {sourceTotal.toLocaleString()}행 중 가장 큰 소스는 {largestSource?.label ?? "–"} {largestSource?.rows.toLocaleString() ?? 0}행입니다.
@@ -311,13 +311,13 @@ export default function Overview() {
             <Radar data={radarData} options={radarOpts} />
             {radarSummary === null && (
               <ChartEmptyNote>
-                {NO_DEMO_DATA} — 지자체 정책영향·출산율·위험지수는 시드 전용 항목이라 실저장소 대응값이 없습니다.
+                {NO_DEMO_DATA}
               </ChartEmptyNote>
             )}
           </div>
           <p className="chart-summary">
             {radarSummary === null
-              ? `${NO_DEMO_DATA} — 정책 영향 프로파일에 쓸 실데이터가 없습니다.`
+              ? NO_DEMO_DATA
               : `${currentRegion.name} 지표: ${radarSummary}.`}
           </p>
         </Card>

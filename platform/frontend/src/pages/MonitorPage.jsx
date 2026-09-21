@@ -379,9 +379,6 @@ export default function MonitorPage() {
 
   // 대상 모델 선택지 — 데모 OFF에서는 백엔드가 내려준 모델(시드 지표 제외)만 남긴다.
   // 상수 레지스트리(MODEL_REGISTRY)는 시드 모델명·버전이라 옵션 텍스트로도 내보내지 않는다.
-  const NO_DEMO_DATA = "데모 데이터 없음";
-  // 데모 OFF에서는 백엔드가 확인해 준 실데이터 모델(이름·후보 버전)만 고를 수 있다.
-  // 상수 레지스트리(MODEL_REGISTRY)는 시드 모델명·버전이라 옵션 텍스트로도 내보내지 않는다.
   const selectableModels = allowSeed
     ? MODEL_REGISTRY
     : realdataModels.map((m) => ({ id: m.model_id, name: m.name ?? m.model_id, version: m.version }));
@@ -744,7 +741,7 @@ export default function MonitorPage() {
         label: "이상 시나리오 재현 (데모 전용)",
         locked: true,
         run: undefined,
-        title: "드리프트 시뮬레이션은 시드 분포를 재현하는 데모 기능입니다. 설정에서 데모 데이터 표시를 켜면 실행할 수 있습니다."
+        title: "설정에서 데모 데이터 표시를 켜면 실행할 수 있습니다."
       };
     }
     if (driftInFlight) {
@@ -962,7 +959,7 @@ export default function MonitorPage() {
               {/* 데모 OFF에서는 백엔드가 확인해 준 모델(실측 지표 보유)만 고를 수 있다. 상수 레지스트리
                   이름·버전은 시드라 옵션 텍스트로도 내보내지 않는다. */}
               {selectableModels.length === 0 ? (
-                <option value={modelTarget}>{NO_DEMO_DATA} — 확인된 운영 모델 없음</option>
+                <option value={modelTarget}>운영 모델 없음</option>
               ) : (
                 selectableModels.map((m) => (
                   <option key={m.id} value={m.id}>{m.name} {servingVersionOf(m.id, m.version)}</option>

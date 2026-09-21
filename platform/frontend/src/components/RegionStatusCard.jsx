@@ -60,8 +60,7 @@ export default function RegionStatusCard({ regions, currentRegionId, onSelectReg
             {sorted.length === 0 && (
               <tr>
                 <td className="empty-table-cell" colSpan={6}>
-                  {NO_DEMO_DATA} — 지자체 인구·고령화지수·출산율·위험등급은 시드 전용 항목이라
-                  실저장소에 대응 값이 없습니다.
+                  {NO_DEMO_DATA}
                 </td>
               </tr>
             )}

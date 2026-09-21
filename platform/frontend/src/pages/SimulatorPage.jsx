@@ -100,7 +100,7 @@ export default function SimulatorPage() {
   // 여기 데이터 계층에서 시드를 차단하고, 조작 컨트롤(검색·슬라이더·버튼·레이어 토글·지도 범례)은
   // 그대로 조작 가능한 채로 값 자리에만 사유 문구를 남긴다. 계산 로직 자체는 건드리지 않는다.
   const allowSeed = mockDataVisible;
-  const SEED_ONLY_NOTE = `${NO_DEMO_DATA} — 이 값은 시드(mock_data.json) 전용이라 실저장소 대응값이 없습니다.`;
+  const SEED_ONLY_NOTE = NO_DEMO_DATA;
 
   // 지도 레이어 토글 / 검색 (플로팅 패널)
   const [layerVis, setLayerVis] = useState({ markers: true, grid: true, facilities: true });
@@ -139,7 +139,7 @@ export default function SimulatorPage() {
     addConsoleLog(
       allowSeed
         ? `INFO: ${currentRegion.name} 정책 추천 도출 완료 — 1순위 '${ranked[0].name}' (점수 ${ranked[0].score.toLocaleString()}).`
-        : `WARN: ${currentRegion.name} 정책 추천 도출 — ${NO_DEMO_DATA}(입력이 시드 전용이라 결과를 표시하지 않습니다).`
+        : `WARN: ${currentRegion.name} 정책 추천 도출 — ${NO_DEMO_DATA}.`
     );
     // 결과는 STAGE ④에 렌더되므로 — 펼친 뒤 화면으로 이동해 즉시 보이게 한다
     setOpenStages((s) => ({ ...s, "stage-report": true }));
@@ -653,8 +653,7 @@ export default function SimulatorPage() {
             <div className="map-float-section-label">표시 레이어</div>
             {!allowSeed && (
               <p className="map-theme-note">
-                {NO_DEMO_DATA} — 마커·격자·시설물 레이어에 올릴 실저장소 공간 데이터가 없어 비어 있습니다.
-                토글·범례는 그대로 조작할 수 있습니다.
+                {NO_DEMO_DATA} — 표시할 공간 데이터가 없습니다.
               </p>
             )}
             <label className="map-float-toggle">
@@ -1003,8 +1002,7 @@ export default function SimulatorPage() {
                 </>
               ) : (
                 <>
-                  {NO_DEMO_DATA} — RICE 추천은 지자체 인구·정책영향 가중치(시드 전용)에서 계산되므로
-                  표시할 값이 없습니다. 추천 도출 버튼과 변수 슬라이더는 그대로 조작할 수 있습니다.
+                  {NO_DEMO_DATA}
                 </>
               )}
             </div>
