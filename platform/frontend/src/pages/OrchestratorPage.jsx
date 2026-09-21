@@ -323,7 +323,9 @@ export default function OrchestratorPage() {
   // 잠금은 native disabled 대신 aria-disabled로 건다. disabled를 걸면 자기 활성화로 잠기는 순간
   // 브라우저가 초점을 body로 떨어뜨린다(§9 A11Y-01). 실행 차단은 핸들러 가드가 담당한다.
   // ref 가드: 같은 틱의 연타는 state 갱신 전이라 resetLocked로 막을 수 없다(초기화 로그 중복 방지).
-  const resetLocked = !pipelineRun || pipelineBusy;
+  // 진행 중에도 초기화는 열어 둔다 — resetPipeline이 타이머·요청 세대를 정리하므로,
+  // 실행이 끝나지 않는 상태(응답 없음)에서 새로고침 말고 빠져나갈 길이 여기뿐이다.
+  const resetLocked = !pipelineRun;
   const handleReset = (event) => {
     if (resetLocked || resetBusyRef.current) {
       event.preventDefault();
@@ -387,9 +389,11 @@ export default function OrchestratorPage() {
 
   // 카탈로그 [실행] → 실행 시작 + 아래 실행 상태 카드로 초점·스크롤 (누른 곳에서 결과가 보이도록)
   // ref 가드: 같은 틱의 연타는 state 갱신 전이라 pipelineBusy로 막을 수 없다(중복 오케스트레이션 요청 방지).
-  const handleRun = (event, plDef, locked) => {
+  const handleRun = (event, plDef, locked, lockReason) => {
     if (locked || runBusyRef.current) {
       event.preventDefault();
+      // 잠긴 버튼을 눌렀는데 아무 흔적도 남지 않으면 "먹통"으로 보인다. 사유는 버튼 title과 같은 문구를 쓴다.
+      if (locked) addConsoleLog(`WARN: 파이프라인 실행 불가 — ${lockReason}`, false, true);
       return;
     }
     runBusyRef.current = true;
@@ -485,6 +489,18 @@ export default function OrchestratorPage() {
                 const runLocked = isRealdata
                   ? isRunning || !realdataToken || !p.dataset_id
                   : pipelineBusy || !candidateAvailable;
+                // 버튼 title = 잠금 사유(또는 실행 안내). 잠긴 클릭의 콘솔 로그도 같은 문구를 쓴다.
+                const runTitle = isRealdata
+                  ? !p.dataset_id
+                    ? "사용할 스냅샷이 없습니다. 아래 [실데이터 학습] 패널에서 스냅샷을 먼저 생성하세요."
+                    : isRunning
+                      ? "이 모델의 실데이터 학습이 실행 중입니다."
+                      : `최신 스냅샷(${p.dataset_id})으로 실데이터 학습을 실행합니다 — 아래 [실데이터 학습] 패널의 [학습 실행]과 같은 동작입니다.`
+                  : !candidateAvailable
+                    ? "대상 모델의 다음 후보 버전을 확인할 수 없습니다. 모델 레지스트리 응답을 확인하세요."
+                    : pipelineBusy
+                      ? "다른 재학습 파이프라인이 실행 중입니다. 완료 후 실행할 수 있습니다."
+                      : `${p.name} 파이프라인을 즉시 실행합니다`;
                 return (
                   <tr key={p.id}>
                     <td>
@@ -547,26 +563,18 @@ export default function OrchestratorPage() {
                         style={{ padding: "5px 14px", fontSize: 12 }}
                         onClick={(event) => {
                           if (!isRealdata) {
-                            handleRun(event, toRunDef(p), runLocked);
+                            handleRun(event, toRunDef(p), runLocked, runTitle);
                             return;
                           }
                           event.preventDefault();
-                          if (!runLocked) handleRealdataRun(p);
+                          if (runLocked) {
+                            addConsoleLog(`WARN: 파이프라인 실행 불가 — ${runTitle}`, false, true);
+                            return;
+                          }
+                          handleRealdataRun(p);
                         }}
                         aria-disabled={runLocked}
-                        title={
-                          isRealdata
-                            ? !p.dataset_id
-                              ? "사용할 스냅샷이 없습니다. 아래 [실데이터 학습] 패널에서 스냅샷을 먼저 생성하세요."
-                              : isRunning
-                                ? "이 모델의 실데이터 학습이 실행 중입니다."
-                                : `최신 스냅샷(${p.dataset_id})으로 실데이터 학습을 실행합니다 — 아래 [실데이터 학습] 패널의 [학습 실행]과 같은 동작입니다.`
-                            : !candidateAvailable
-                              ? "대상 모델의 다음 후보 버전을 확인할 수 없습니다. 모델 레지스트리 응답을 확인하세요."
-                              : pipelineBusy
-                                ? "다른 재학습 파이프라인이 실행 중입니다. 완료 후 실행할 수 있습니다."
-                                : `${p.name} 파이프라인을 즉시 실행합니다`
-                        }
+                        title={runTitle}
                         aria-label={`${orDash(p.name)} 파이프라인 실행`}
                       >
                         <i className="fa-solid fa-play"></i> 실행
