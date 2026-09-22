@@ -3,11 +3,13 @@
 // 합성 상수(accuracy 0.892 / psi 0.045 / outliers 0·3)로 되돌아가는 회귀를 막는다.
 //   1. 지표 매핑 — evaluation 의 WAPE·MAE·기준선 MAE, drift 의 실측 PSI 가 그대로 실린다.
 //   2. 빈 상태 — 활성 모델 없음 / model_required / 오류면 null 이고, 본문·표에 모델 검증 항목이 없다.
+//   3. 피처 표기명 — 내부 피처명(y_lag1·month_sin·dong_*)이 리포트에 그대로 나가지 않는다.
 import assert from "node:assert/strict";
 import {
   pickActiveModel,
   pickExplainTarget,
   pickModelDataset,
+  featureLabel,
   toExplainBinding,
   toReportIndicators
 } from "./dataopsApi.js";
@@ -22,7 +24,7 @@ const check = (name, fn) => {
 
 const REGION = { id: "namwon", name: "전북 남원시", population: 76000, birthRate: 0.82, agingIndex: 33.1, riskIndex: 0.21 };
 const TEMPLATE = { id: "template_analysis", title: "인구감소 대응 R&D 분석 리포트" };
-const MODEL = { model_id: "namwon-nonlocal-visitors-next-month", active_version: "v3" };
+const MODEL = { model_id: "namwon-nonlocal-visitors-next-month", active_version: "v3", target: "nonlocal_visitors" };
 
 const EVALUATION_OK = {
   status: "ok",
@@ -168,7 +170,7 @@ check("local_visitors 가 없으면 다른 컬럼으로 대체하지 않고 빈 
 });
 
 check("기여도는 |phi| 내림차순이고 행정동명으로 표기한다", () => {
-  const bound = toExplainBinding(EXPLAIN_OK, TARGET, DONG_MAP_OK);
+  const bound = toExplainBinding(EXPLAIN_OK, TARGET, DONG_MAP_OK, MODEL.target);
   assert.equal(bound.baseYm, 202310);
   assert.equal(bound.dongCode, "45190310");
   assert.equal(bound.dongName, "주천면");
@@ -178,24 +180,27 @@ check("기여도는 |phi| 내림차순이고 행정동명으로 표기한다", (
 });
 
 check("explain 이 ok 가 아니면 빈 상태로 둔다", () => {
-  assert.equal(toExplainBinding({ status: "model_required", data: null }, TARGET, DONG_MAP_OK), null);
-  assert.equal(toExplainBinding({ status: "empty", message: "관측행이 없습니다.", data: null }, TARGET, DONG_MAP_OK), null);
-  assert.equal(toExplainBinding({ status: "error", message: "boom", data: null }, TARGET, DONG_MAP_OK), null);
-  assert.equal(toExplainBinding(EXPLAIN_OK, null, DONG_MAP_OK), null);
+  assert.equal(toExplainBinding({ status: "model_required", data: null }, TARGET, DONG_MAP_OK, MODEL.target), null);
+  assert.equal(toExplainBinding({ status: "empty", message: "관측행이 없습니다.", data: null }, TARGET, DONG_MAP_OK, MODEL.target), null);
+  assert.equal(toExplainBinding({ status: "error", message: "boom", data: null }, TARGET, DONG_MAP_OK, MODEL.target), null);
+  assert.equal(toExplainBinding(EXPLAIN_OK, null, DONG_MAP_OK, MODEL.target), null);
   // 대응표를 못 읽으면 이름을 지어내지 않고 코드만 남긴다.
-  assert.equal(toExplainBinding(EXPLAIN_OK, TARGET, { status: "error" }).dongName, null);
+  assert.equal(toExplainBinding(EXPLAIN_OK, TARGET, { status: "error" }, MODEL.target).dongName, null);
 });
 
 check("본문·표에 실측 기여도가 실리고 SHAP 합성 상수는 없다", () => {
-  const explain = toExplainBinding(EXPLAIN_OK, TARGET, DONG_MAP_OK);
+  const explain = toExplainBinding(EXPLAIN_OK, TARGET, DONG_MAP_OK, MODEL.target);
   const text = JSON.stringify(buildReportBlocks(REGION, TEMPLATE, { explain }));
-  assert.match(text, /month_sin \(기여도 -0\.8700\)/);
+  assert.match(text, /계절성\(월, 사인\) \(기여도 -0\.8700\)/);
   assert.match(text, /202310 · 주천면/);
   assert.doesNotMatch(text, /0\.354|0\.281|0\.152|청년 복지 예산 가중치|제조업 공장 일자리/);
   assert.doesNotMatch(text, /내부 설명 문구/);
 
   const rows = buildReportRows(REGION, TEMPLATE, { explain });
-  assert.deepEqual(rows.find((r) => r[1] === "month_sin"), ["SHAP 기여 (202310 · 주천면)", "month_sin", -0.87]);
+  assert.deepEqual(rows.find((r) => r[1] === "계절성(월, 사인)"), ["SHAP 기여 (202310 · 주천면)", "계절성(월, 사인)", -0.87]);
+  // 원본 피처명은 바인딩에 남지만 본문·엑셀로는 나가지 않는다(폴백 y_lag12 만 예외).
+  assert.doesNotMatch(text, /month_sin|y_lag1/);
+  assert.equal(rows.some((r) => r[1] === "y_lag1"), false);
 });
 
 check("explain 바인딩이 없으면 본문·표에 SHAP 항목을 만들지 않는다", () => {
@@ -205,10 +210,41 @@ check("explain 바인딩이 없으면 본문·표에 SHAP 항목을 만들지 �
 });
 
 check("리포트 바인딩에 explain 이 그대로 실린다", () => {
-  const explain = toExplainBinding(EXPLAIN_OK, TARGET, DONG_MAP_OK);
+  const explain = toExplainBinding(EXPLAIN_OK, TARGET, DONG_MAP_OK, MODEL.target);
   assert.deepEqual(toReportIndicators(REGION, MODEL, EVALUATION_OK, DRIFT_OK, explain).explain, explain);
   // 넘기지 않으면 null — 기본값이 상수로 채워지지 않는다.
   assert.equal(toReportIndicators(REGION, MODEL, EVALUATION_OK, DRIFT_OK).explain, null);
+});
+
+check("피처 표기명은 모델 타깃에 따라 조립된다", () => {
+  const DONGS = DONG_MAP_OK.data.entries;
+  // y_* 는 타깃의 랙이다 — 생활인구가 아니라 모델 타깃 이름이 들어가야 한다.
+  assert.equal(featureLabel("y_lag1", "nonlocal_visitors", DONGS), "직전월 외지인 방문객");
+  assert.equal(featureLabel("y_lag1", "observed_sales_krw", DONGS), "직전월 소비 매출 추정액");
+  assert.equal(featureLabel("y_lag2", "nonlocal_visitors", DONGS), "2개월 전 외지인 방문객");
+  assert.equal(featureLabel("y_lag3", "nonlocal_visitors", DONGS), "3개월 전 외지인 방문객");
+  assert.equal(featureLabel("y_yoy", "observed_sales_krw", DONGS), "전년 동월 소비 매출 추정액");
+  assert.equal(featureLabel("has_yoy", "nonlocal_visitors", DONGS), "전년 동월 값 유무");
+  // 두 계절성 피처가 같이 상위에 와도 서로 구분된다.
+  assert.equal(featureLabel("month_sin", "nonlocal_visitors", DONGS), "계절성(월, 사인)");
+  assert.equal(featureLabel("month_cos", "nonlocal_visitors", DONGS), "계절성(월, 코사인)");
+  // 행정동 원핫은 대응표의 이름으로 바꾼다.
+  assert.equal(featureLabel("dong_45190250", "nonlocal_visitors", DONGS), "행정동: 운봉읍");
+});
+
+check("뜻을 모르는 피처·타깃·행정동 코드는 원본을 그대로 남긴다", () => {
+  const DONGS = DONG_MAP_OK.data.entries;
+  assert.equal(featureLabel("unknown_feature", "nonlocal_visitors", DONGS), "unknown_feature");
+  // 대응표에 없는 코드는 이름을 지어내지 않는다.
+  assert.equal(featureLabel("dong_99999999", "nonlocal_visitors", DONGS), "dong_99999999");
+  assert.equal(featureLabel("dong_45190250", "nonlocal_visitors", []), "dong_45190250");
+  // 매핑에 없는 타깃 문자열은 그대로 쓰고, 타깃을 모르면 y_* 도 원본으로 둔다.
+  assert.equal(featureLabel("y_lag1", "some_new_target", DONGS), "직전월 some_new_target");
+  assert.equal(featureLabel("y_lag1", null, DONGS), "y_lag1");
+  // 바인딩은 표기명과 원본 피처명을 함께 남긴다(추적 가능성).
+  const bound = toExplainBinding(EXPLAIN_OK, TARGET, DONG_MAP_OK, MODEL.target);
+  assert.deepEqual(bound.contributions.map((c) => c.feature), ["month_sin", "y_lag12", "y_lag1"]);
+  assert.deepEqual(bound.contributions.map((c) => c.label), ["계절성(월, 사인)", "y_lag12", "직전월 외지인 방문객"]);
 });
 
 console.log(`\n${passed} passed`);

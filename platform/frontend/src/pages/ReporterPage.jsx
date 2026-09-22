@@ -80,7 +80,7 @@ function buildPreview(region, template, live) {
           <ul>
             {explain.contributions.map((c) => (
               <li key={c.feature}>
-                {c.feature}: 기여도 {formatMetric(c.phi, 4)}
+                {c.label}: 기여도 {formatMetric(c.phi, 4)}
               </li>
             ))}
           </ul>
