@@ -195,7 +195,7 @@ export default function RealdataTrainingPanel() {
 
   return (
     <Card
-      title="실데이터 학습 (남원)"
+      title="실데이터 학습"
       icon="fa-flask-vial"
       className="page-section realdata-panel"
       dataSource="api"
