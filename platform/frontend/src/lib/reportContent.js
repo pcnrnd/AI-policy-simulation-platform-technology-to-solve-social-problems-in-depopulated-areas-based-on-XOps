@@ -1,11 +1,28 @@
 // 보고서 콘텐츠 빌더 — 지자체/템플릿/드리프트 상태로부터 포맷 중립 블록 모델과
 // Excel 표·Markdown 문자열을 생성한다. 템플릿 종류에 따라 본문 구성을 분기.
 
-const SHAP_TOP = [
-  { rank: "1순위 기여", factor: "청년 복지 예산 가중치", shap: "+0.354" },
-  { rank: "2순위 기여", factor: "제조업 공장 일자리 유치", shap: "+0.281" },
-  { rank: "3순위 위험", factor: "평균 연령 증가", shap: "-0.152" }
-];
+/**
+ * 기준 시점·행정동 표기 — 어느 스냅샷의 어느 행정동 기여도인지 본문에서 드러나야 한다.
+ * 대응표에 없는 코드면 코드를 그대로 쓴다(이름을 지어내지 않는다).
+ */
+function explainBasis(explain) {
+  return `${explain.baseYm} · ${explain.dongName ?? explain.dongCode}`;
+}
+
+/**
+ * SHAP 기여도 블록 — explain 실측값만 싣는다. 바인딩이 없으면 섹션 자체를 비운다.
+ * feature 는 모델 피처명 그대로 쓴다(한국어 라벨 매핑은 제품 판단이라 만들지 않는다).
+ */
+function shapBlocks(explain) {
+  if (!explain) return [];
+  return [
+    { type: "heading", level: 2, text: `3. SHAP 특징 중요도 기여 요인 분석 (${explainBasis(explain)})` },
+    {
+      type: "list",
+      items: explain.contributions.map((c, i) => `${i + 1}순위: ${c.feature} (기여도 ${formatMetric(c.phi, 4)})`)
+    }
+  ];
+}
 
 /** 실측 지표 표시 — 값이 없으면 숫자를 만들지 않고 대시로 둔다. */
 export function formatMetric(value, digits = 3) {
@@ -133,7 +150,7 @@ function vitalPopulationBlocks(region, vital) {
   ];
 }
 
-function analysisBlocks(region, populationChange, live) {
+function analysisBlocks(region, populationChange, live, explain) {
   const tenYearBase = Math.round(region.population * 0.81).toLocaleString();
   const tenYearPolicy = Math.round(region.population * 0.95).toLocaleString();
   return [
@@ -156,8 +173,7 @@ function analysisBlocks(region, populationChange, live) {
     },
     ...populationTrendBlock(populationChange),
     ...modelMetricBlocks(live),
-    { type: "heading", level: 2, text: "3. SHAP 특징 중요도 기여 요인 분석" },
-    { type: "list", items: SHAP_TOP.map((s) => `${s.rank}: ${s.factor} (SHAP ${s.shap})`) },
+    ...shapBlocks(explain),
     { type: "heading", level: 2, text: "4. 정책 효과 시뮬레이션 예측" },
     {
       type: "list",
@@ -221,12 +237,13 @@ export function buildReportBlocks(region, template, extra = {}) {
   if (template.id === "template_smartfarm" || template.id === "template_settlement") {
     return [...header, ...caseBlocks(region)];
   }
-  return [...header, ...analysisBlocks(region, extra.populationChange, extra.live)];
+  return [...header, ...analysisBlocks(region, extra.populationChange, extra.live, extra.explain)];
 }
 
 /** Excel(.xlsx) 용 2차원 표 — 지표 요약. */
 export function buildReportRows(region, template, extra = {}) {
   const live = extra.live;
+  const explain = extra.explain;
   const rows = [
     ["인구감소 대응 R&D 지표 요약", template.title],
     ["보고서 번호", `RD-POP-2026-${region.id.toUpperCase()}`],
@@ -248,9 +265,10 @@ export function buildReportRows(region, template, extra = {}) {
           ...(live.psi ?? []).map((entry) => ["모델 검증", `PSI (${entry.label})`, entry.psi])
         ]
       : []),
-    ["SHAP 기여", "청년 복지 예산", 0.354],
-    ["SHAP 기여", "제조업 일자리", 0.281],
-    ["SHAP 위험", "평균 연령 증가", -0.152],
+    // SHAP 행도 explain 실측 바인딩이 있을 때만 싣는다 — 기여도를 만들지 않는다.
+    ...(explain
+      ? explain.contributions.map((c) => [`SHAP 기여 (${explainBasis(explain)})`, c.feature, c.phi])
+      : []),
     ["시뮬레이션", "10년 후 인구(현행)", Math.round(region.population * 0.81)],
     ["시뮬레이션", "10년 후 인구(정책적용)", Math.round(region.population * 0.95)]
   ];

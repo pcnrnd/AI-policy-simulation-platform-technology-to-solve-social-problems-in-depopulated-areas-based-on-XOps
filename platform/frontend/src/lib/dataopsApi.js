@@ -235,6 +235,55 @@ export function pickActiveModel(models = []) {
   return models.find((m) => m.active_version) ?? null;
 }
 
+/** 활성 모델의 최신 스냅샷 — `/realdata/datasets` 는 created_at 내림차순이라 첫 건이 최신이다. */
+export function pickModelDataset(datasets = [], model) {
+  if (!model) return null;
+  return datasets.find((d) => d?.spec?.model_id === model.model_id) ?? null;
+}
+
+/**
+ * 설명 대상 행 선택 — 최신 base_ym(`observed_to`)에서 `local_visitors` 가 최대인 행정동.
+ * rows 가 절단됐거나(`message` 비어있지 않음) `local_visitors` 컬럼이 없으면 null(빈 상태).
+ * 대체 컬럼으로 "생활인구 최대"를 흉내내지 않는다.
+ * @returns {{ baseYm: number, dongCode: string } | null}
+ */
+export function pickExplainTarget(datasetResponse, observedTo) {
+  if (datasetResponse?.status !== "ok" || datasetResponse.message) return null;
+  const rows = datasetResponse.data?.rows;
+  if (!Array.isArray(rows) || typeof observedTo !== "number") return null;
+
+  const latest = rows.filter((r) => r?.base_ym === observedTo);
+  // 소비 모델 스냅샷에는 local_visitors 가 없다 — 그 경우 선택 자체를 포기한다.
+  const withPopulation = latest.filter((r) => typeof r.local_visitors === "number");
+  if (withPopulation.length === 0) return null;
+
+  const top = withPopulation.reduce((a, b) => (b.local_visitors > a.local_visitors ? b : a));
+  if (typeof top.dong_code !== "string") return null;
+  return { baseYm: observedTo, dongCode: top.dong_code };
+}
+
+/**
+ * explain 응답 → `{ baseYm, dongCode, dongName, contributions }`. `ok` 가 아니면 null(빈 상태).
+ * 기여도는 `|phi|` 내림차순으로 정렬한다. `note` 는 내부 설명 문구라 옮기지 않는다.
+ */
+export function toExplainBinding(explainResponse, target, dongMapResponse) {
+  const data = explainResponse?.status === "ok" ? explainResponse.data : null;
+  const raw = data?.contributions;
+  if (!target || !Array.isArray(raw) || raw.length === 0) return null;
+
+  const entries = dongMapResponse?.status === "ok" ? dongMapResponse.data?.entries ?? [] : [];
+  const match = entries.find((e) => e?.dong_code === target.dongCode);
+
+  return {
+    baseYm: target.baseYm,
+    dongCode: target.dongCode,
+    dongName: match?.dong_name ?? null,
+    contributions: [...raw]
+      .map((c) => ({ feature: c.feature, value: c.value, phi: c.phi }))
+      .sort((a, b) => Math.abs(b.phi) - Math.abs(a.phi))
+  };
+}
+
 /** drift 응답 → `[{ label, psi }]`. 집계하지 않고 피처·타깃 실측값을 그대로 옮긴다. */
 function psiEntries(driftResponse) {
   const data = driftResponse?.status === "ok" ? driftResponse.data : null;
@@ -248,11 +297,12 @@ function psiEntries(driftResponse) {
  * 실호출 응답 → 리포트 바인딩 모델. 활성 모델이나 검증지표가 없으면 null(빈 상태).
  * population·birthRate는 대응 실데이터 소스가 없어 지자체 시드 값을 그대로 옮긴다.
  */
-export function toReportIndicators(region, model, evaluationResponse, driftResponse) {
+export function toReportIndicators(region, model, evaluationResponse, driftResponse, explain = null) {
   const validation = evaluationResponse?.status === "ok" ? evaluationResponse.data?.validation : null;
   if (!model || !validation) return null;
 
   return {
+    explain,
     source: `${REALDATA_BASE}/models/${model.model_id}/evaluation`,
     driftSource: `${REALDATA_BASE}/models/${model.model_id}/drift`,
     modelId: model.model_id,
@@ -276,18 +326,48 @@ export async function fetchReportData(region) {
   // ponytail: realdataClient 는 .jsx 라 node 테스트가 정적 import 를 읽지 못한다 → 호출 시점 import.
   // 정적 import 로 되돌리면 reportIndicators.test.mjs 가 깨진다(빌드의 혼합 import 경고는 무해 —
   // 다른 화면이 이미 정적으로 물고 있어 같은 청크에 남는다).
-  const { getRealdataToken, getModels, getEvaluation, getDrift } = await import(
-    "../components/realdata/realdataClient.jsx"
-  );
+  const { getRealdataToken, getModels, getDatasets, getEvaluation, getDrift, getExplain } =
+    await import("../components/realdata/realdataClient.jsx");
+  // api.js 도 호출 시점 import — 최상위 import.meta.env 가 node 테스트에서 터진다.
+  const { apiGet } = await import("./api.js");
   const token = await getRealdataToken();
   const model = pickActiveModel((await getModels(token)).data ?? []);
   if (!model) return null;
 
-  const [evaluation, drift] = await Promise.all([
+  const [evaluation, drift, explain] = await Promise.all([
     getEvaluation(token, model.model_id, model.active_version),
-    getDrift(token, model.model_id, model.active_version)
+    getDrift(token, model.model_id, model.active_version),
+    fetchExplainBinding(token, model, { getDatasets, getExplain, apiGet })
   ]);
-  return toReportIndicators(region, model, evaluation, drift);
+  return toReportIndicators(region, model, evaluation, drift, explain);
+}
+
+/**
+ * SHAP 기여도 실호출 — 최신 스냅샷의 `observed_to` 월에서 생활인구가 가장 많은 행정동을 고른다.
+ * 어느 단계든 조건을 못 채우면 null(빈 상태). 사유 문구는 만들지 않는다.
+ */
+async function fetchExplainBinding(token, model, { getDatasets, getExplain, apiGet }) {
+  try {
+    const dataset = pickModelDataset((await getDatasets(token)).data?.datasets ?? [], model);
+    if (!dataset) return null;
+
+    // include_rows 는 5,000행 상한이 있다 — 절단되면 최대값을 믿을 수 없어 pickExplainTarget 이 버린다.
+    const withRows = await apiGet(`${REALDATA_BASE}/datasets/${dataset.dataset_id}`, {
+      token,
+      params: { include_rows: true }
+    });
+    const target = pickExplainTarget(withRows, dataset.observed_to);
+    if (!target) return null;
+
+    const [explain, dongMap] = await Promise.all([
+      getExplain(token, model.model_id, model.active_version, target.baseYm, target.dongCode),
+      apiGet(`${REALDATA_BASE}/dong-map`, { token })
+    ]);
+    return toExplainBinding(explain, target, dongMap);
+  } catch {
+    // 조회 실패도 빈 상태 — 평가·드리프트 바인딩까지 같이 버리지 않는다.
+    return null;
+  }
 }
 
 /** 401 미인증 응답. */
