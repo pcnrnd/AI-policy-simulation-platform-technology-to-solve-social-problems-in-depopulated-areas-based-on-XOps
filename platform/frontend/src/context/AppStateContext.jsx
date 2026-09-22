@@ -10,6 +10,20 @@ const STEP_DELAY_MS = 2500;
 const ALERT_AUTO_DISMISS_MS = 5000;
 const MOCK_DATA_STORAGE_KEY = "decline-poc-mock-data";
 
+// 오케스트레이션 실행은 접수(202) 후 백그라운드에서 돈다 — 실데이터 학습 job과 같은 방식으로 폴링한다.
+const RUN_POLL_MS = 700;
+const RUN_POLL_LIMIT = 90;
+const RUN_TERMINAL_STATES = new Set(["succeeded", "rejected", "rolled_back", "debounced", "failed"]);
+
+async function awaitRunResult(runId) {
+  for (let attempt = 0; attempt < RUN_POLL_LIMIT; attempt += 1) {
+    const run = await apiGet(`/api/v3/orchestration/runs/${encodeURIComponent(runId)}`);
+    if (RUN_TERMINAL_STATES.has(run?.state)) return run;
+    await new Promise((resolve) => setTimeout(resolve, RUN_POLL_MS));
+  }
+  throw new Error("실행 결과를 확인하지 못했습니다.");
+}
+
 // 목업 데이터 전역 표시 여부. 저장값이 없거나 손상됐거나 스토리지를 못 쓰면 기본 노출(true).
 function readMockDataVisible() {
   try {
@@ -115,6 +129,11 @@ export function AppStateProvider({ children }) {
   const [pipelineHistory, setPipelineHistory] = useState({});
   // Model Store — 모델·실험 버전 이력 (승급 완료 시 신규 운영 버전 추가)
   const [modelStore, setModelStore] = useState(MODEL_STORE);
+  // 백엔드 모델 레지스트리 요약 — { [model_id]: { version, nextVersion, metricsSource } }.
+  // 다음 후보 버전은 백엔드가 현행 운영 버전에서 파생한다(registry.next_version). 프런트 상수
+  // (RETRAIN_PIPELINES[].candidateVersion)는 승급 한 번이면 운영 버전과 같아져 재학습 실행 조건이
+  // 영구히 거짓이 된다 — 조건은 백엔드가 아는 후보를 본다.
+  const [modelCandidates, setModelCandidates] = useState({});
   // 백엔드 오케스트레이션 이벤트 결과(PipelineRun) — 애니메이션 완료 시 실제 승급/롤백 반영
   const [pipelineResult, setPipelineResult] = useState(null);
   // 카탈로그 롤업(소스 수·아카이브 행수) — Overview 지표 카드·도넛이 쓴다.
@@ -169,11 +188,27 @@ export function AppStateProvider({ children }) {
   // 응답이 주는 것은 model_id·version·metrics뿐이라(mlops/orchestration/registry.py) 학습데이터·
   // 하이퍼파라미터·등록일은 프런트 합성값으로 남고, Accuracy는 metrics.accuracy를 받았을 때만 api다.
   // 응답에 없는 상수 이력 행은 표기하지 않아 OFF에서 가려진다.
-  useEffect(() => {
-    let alive = true;
-    apiGet("/api/v3/orchestration/models")
+  // 승급 직후에도 다시 부른다 — 한 번만 읽으면 modelCandidates.nextVersion 이 승급 전 값으로 남아
+  // 운영 버전과 같아지고, startPipeline 의 "후보 없음" 가드가 영구히 참이 되어 재실행이 잠긴다.
+  // 데모 표시 OFF면 시드 지표 모델(metrics_source="seed")을 빼고 받는다 — 목록 계약은 카탈로그와 같다.
+  const syncModels = useCallback(() => {
+    return apiGet(`/api/v3/orchestration/models?include_seed=${mockDataVisible}`)
       .then((models) => {
-        if (!alive || !Array.isArray(models)) return;
+        if (!Array.isArray(models)) return;
+        setModelCandidates(
+          Object.fromEntries(
+            models
+              .filter((m) => typeof m?.model_id === "string" && typeof m?.version === "string")
+              .map((m) => [
+                m.model_id,
+                {
+                  version: m.version,
+                  nextVersion: typeof m.next_version === "string" ? m.next_version : null,
+                  metricsSource: m.metrics_source ?? null
+                }
+              ])
+          )
+        );
         setModelStore((prev) =>
           models.reduce((store, m) => {
             if (typeof m?.model_id !== "string" || typeof m?.version !== "string") return store;
@@ -194,30 +229,33 @@ export function AppStateProvider({ children }) {
         );
       })
       .catch((err) => {
-        if (!alive) return;
-        addConsoleLog(`WARN: 모델 레지스트리 동기화 실패 — ${err?.message ?? "알 수 없는 오류"}`);
+        // 사용자가 조치할 수 없는 내부 동기화 실패다 — 화면 로그 대신 개발자 콘솔로만 남긴다.
+        console.warn("[orchestration] model sync failed", err);
       });
-    return () => {
-      alive = false;
-    };
-  }, [addConsoleLog]);
+  }, [mockDataVisible]);
+
+  useEffect(() => {
+    syncModels();
+  }, [syncModels]);
 
   // 카탈로그 롤업 동기화 — 실패하면 null 로 남긴다(Overview 가 mock_data.json 으로 폴백).
+  // 데모 표시 OFF면 시드 소스·시드 지표 모델을 뺀 롤업을 받는다(소스 건수가 시드 7종을 포함하던 결함).
   useEffect(() => {
     let alive = true;
-    apiGet("/api/v3/overview/summary")
+    apiGet(`/api/v3/overview/summary?include_seed=${mockDataVisible}`)
       .then((summary) => {
         if (!alive) return;
         setOverviewSummary(summary);
       })
       .catch((err) => {
         if (!alive) return;
-        addConsoleLog(`WARN: 카탈로그 롤업 동기화 실패 — ${err?.message ?? "알 수 없는 오류"}`);
+        // 위와 같다 — 요약을 못 받으면 화면은 빈 자리로 두고 사유는 개발자 콘솔에만 남긴다.
+        console.warn("[overview] summary sync failed", err);
       });
     return () => {
       alive = false;
     };
-  }, [addConsoleLog]);
+  }, [mockDataVisible]);
 
   const dismissAlert = useCallback((id) => {
     setAlerts((prev) => prev.filter((a) => a.id !== id));
@@ -281,7 +319,9 @@ export function AppStateProvider({ children }) {
       }
       const backendTrigger = triggerLabel.includes("드리프트") ? "drift" : "manual";
       const currentServing = modelStore.find((model) => model.modelId === pl.model && model.status === "운영");
-      if (currentServing?.version === pl.candidateVersion) {
+      // 후보 버전은 백엔드 레지스트리가 아는 값을 쓴다. 응답 전(초기 렌더)에만 상수로 폴백한다.
+      const candidateVersion = modelCandidates[pl.model]?.nextVersion ?? pl.candidateVersion;
+      if (currentServing?.version === candidateVersion) {
         const message = `${pl.name}은 현재 운영 버전(${currentServing.version})보다 새로운 후보가 등록되지 않아 실행할 수 없습니다.`;
         addConsoleLog(`WARN: ${message}`);
         pushNotification({ severity: "warn", title: "재학습 후보 없음", message });
@@ -296,7 +336,7 @@ export function AppStateProvider({ children }) {
         pipelineName: pl.name,
         model: pl.model,
         baseVersion: currentServing?.version ?? pl.baseVersion,
-        candidateVersion: pl.candidateVersion,
+        candidateVersion,
         experiment: pl.experiment,
         trigger: triggerLabel,
         startedAt: `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`
@@ -313,9 +353,12 @@ export function AppStateProvider({ children }) {
 
       // 백엔드 오케스트레이션 이벤트 발생 — 실제 승급/롤백 결정을 수신 (애니메이션은 UX)
       try {
-        const backend = await apiSend("POST", "/api/v3/orchestration/events", {
+        const accepted = await apiSend("POST", "/api/v3/orchestration/events", {
           body: { model_id: pl.model, trigger: backendTrigger, candidate_latency_ms: 120 }
         });
+        if (requestId !== pipelineRequestRef.current) return;
+        // 접수(202)만 받은 상태다 — 승급/롤백 판정은 실행이 끝난 뒤 다시 읽는다.
+        const backend = await awaitRunResult(accepted.run_id);
         if (requestId !== pipelineRequestRef.current) return;
         setPipelineResult(backend);
         addConsoleLog(
@@ -373,7 +416,7 @@ export function AppStateProvider({ children }) {
       if (requestId !== pipelineRequestRef.current) return;
       setPipelineStep(1);
     },
-    [pipelineRunning, modelStore, resetPipeline, addConsoleLog, pushNotification]
+    [pipelineRunning, modelStore, modelCandidates, resetPipeline, addConsoleLog, pushNotification]
   );
 
   useEffect(() => {
@@ -476,6 +519,9 @@ export function AppStateProvider({ children }) {
             activeVersion === null ? undefined : "api"
           )
         );
+        // 승급으로 운영 버전이 올라갔으니 다음 후보(next_version)도 다시 받아 온다 — 이 값이
+        // 멈춰 있으면 같은 파이프라인의 두 번째 실행이 "후보 없음"으로 막힌다.
+        syncModels();
       }
       return undefined;
     }
@@ -486,7 +532,13 @@ export function AppStateProvider({ children }) {
       pipelineStep === 5 && pipelineRun
         ? ` [Docker 이미지: ${pipelineRun.model}:${pipelineRun.candidateVersion} 컨테이너 배포]`
         : "";
-    addConsoleLog(step.log + dockerSuffix, false, step.warn || false);
+    // 단계 로그 문구에는 시드 수치(PSI 0.384 · Accuracy 0.892→0.925 · 소스 6종)가 박혀 있다.
+    // 데모 표시 OFF에서는 단계 이름만 남기고 그 수치를 남기지 않는다 — 실행 자체는 백엔드 응답이 판정한다.
+    addConsoleLog(
+      mockDataVisible ? step.log + dockerSuffix : `INFO: ${step.desc} 단계 진행`,
+      false,
+      mockDataVisible ? step.warn || false : false
+    );
 
     pipelineTimerRef.current = setTimeout(() => {
       setPipelineStep((s) => s + 1);
@@ -495,7 +547,16 @@ export function AppStateProvider({ children }) {
     return () => {
       if (pipelineTimerRef.current) clearTimeout(pipelineTimerRef.current);
     };
-  }, [pipelineStep, pipelineRunning, addConsoleLog, pushNotification, pipelineRun, pipelineResult]);
+  }, [
+    pipelineStep,
+    pipelineRunning,
+    addConsoleLog,
+    pushNotification,
+    pipelineRun,
+    pipelineResult,
+    syncModels,
+    mockDataVisible
+  ]);
 
   const injectDrift = useCallback(() => {
     if (pipelineRunning || driftStartTimerRef.current) return;
@@ -550,6 +611,7 @@ export function AppStateProvider({ children }) {
     pipelineResult,
     pipelineHistory,
     modelStore,
+    modelCandidates,
     overviewSummary,
     f1Override,
     metricOverrides,

@@ -9,7 +9,7 @@ import {
   getEvaluation,
   getExplain,
   getModels,
-  issueRealdataToken
+  getRealdataToken
 } from "./realdataClient.jsx";
 
 const MODEL_LABELS = {
@@ -54,7 +54,7 @@ export default function RealdataEvaluationPanel() {
   const requestRef = useRef(0);
 
   useEffect(() => {
-    issueRealdataToken()
+    getRealdataToken()
       .then(setToken)
       .catch((err) => setAuthError(err.message || "인증 토큰 발급에 실패했습니다."));
   }, []);

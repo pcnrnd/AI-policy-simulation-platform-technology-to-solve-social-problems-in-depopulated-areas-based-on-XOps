@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Line } from "react-chartjs-2";
 import Card from "./Card.jsx";
 import ConfirmDialog from "./ConfirmDialog.jsx";
+import { ChartEmptyNote, NO_DEMO_DATA } from "./PendingData.jsx";
 import { useChartTheme } from "../hooks/useChartTheme.js";
 import { YEAR_LABELS, computeTrends, computeScenarioTrend, budgetToFactor, controlBoostOf } from "../lib/simulation.js";
 
@@ -31,7 +32,10 @@ function persistScenarios(scenarios) {
 
 // 슬라이더 변수 조합을 "시나리오"로 저장하고, 10개년 인구 추이를 나란히 비교한다.
 // 시나리오는 지자체(regionId) 단위로 관리되며 localStorage에 보존된다.
-export default function ScenarioCompare({ region, snapshot, onApply, addConsoleLog }) {
+//
+// allowSeed=false(데모 표시 OFF): 저장·적용·삭제·비교 선택은 그대로 조작 가능하되, 추이 값은
+// 지자체 인구(시드 전용)에서 계산되므로 예측 인구·증감률·차트를 빈 상태로 둔다.
+export default function ScenarioCompare({ region, snapshot, onApply, addConsoleLog, allowSeed = true }) {
   const ct = useChartTheme();
   const [scenarios, setScenarios] = useState(loadScenarios);
   const [name, setName] = useState("");
@@ -185,6 +189,10 @@ export default function ScenarioCompare({ region, snapshot, onApply, addConsoleL
     plugins: { legend: { labels: { color: ct.legend, boxWidth: 12 } } }
   };
 
+  // 계산 자체는 그대로 두고(로직 보존), 표시 단계에서만 시드 파생 계열을 비운다.
+  const displayChartData = allowSeed ? chartData : { labels: YEAR_LABELS, datasets: [] };
+  const popCell = (text) => (allowSeed ? text : "–");
+
   const summaryRows = scenarioTrends.map(({ scenario, trend }) => {
     const finalPop = trend.simTrend[9];
     const growth = (((finalPop - region.population) / region.population) * 100).toFixed(1);
@@ -246,14 +254,25 @@ export default function ScenarioCompare({ region, snapshot, onApply, addConsoleL
           <div className="scenario-body">
             {/* 비교 차트 */}
             <div style={{ position: "relative", height: 220, width: "100%" }}>
-              <Line data={chartData} options={chartOpts} />
+              <Line data={displayChartData} options={chartOpts} />
+              {!allowSeed && (
+                <ChartEmptyNote>
+                  {NO_DEMO_DATA} — 표시할 계열이 없습니다.
+                </ChartEmptyNote>
+              )}
             </div>
             <p className="chart-summary">
-              자연감소 기준은 10년 후 {baseFinal.toLocaleString()}명이며, 현재 설정은 {currentFinal.toLocaleString()}명
-              ({parseFloat(currentGrowth) > 0 ? "+" : ""}{currentGrowth}%)으로 기준 대비 {currentVsBase >= 0 ? "+" : ""}{currentVsBase.toLocaleString()}명입니다.
-              {scenarioTrends.length > 0
-                ? ` 비교 중인 저장 시나리오 ${scenarioTrends.length}개의 연도별 추이는 차트와 아래 요약표에서 확인할 수 있습니다.`
-                : " 비교할 저장 시나리오를 선택하면 추이가 함께 표시됩니다."}
+              {allowSeed ? (
+                <>
+                  자연감소 기준은 10년 후 {baseFinal.toLocaleString()}명이며, 현재 설정은 {currentFinal.toLocaleString()}명
+                  ({parseFloat(currentGrowth) > 0 ? "+" : ""}{currentGrowth}%)으로 기준 대비 {currentVsBase >= 0 ? "+" : ""}{currentVsBase.toLocaleString()}명입니다.
+                  {scenarioTrends.length > 0
+                    ? ` 비교 중인 저장 시나리오 ${scenarioTrends.length}개의 연도별 추이는 차트와 아래 요약표에서 확인할 수 있습니다.`
+                    : " 비교할 저장 시나리오를 선택하면 추이가 함께 표시됩니다."}
+                </>
+              ) : (
+                `${NO_DEMO_DATA} — 예측 인구·증감률이 비어 있습니다.`
+              )}
             </p>
 
             {/* 요약 테이블 */}
@@ -283,12 +302,11 @@ export default function ScenarioCompare({ region, snapshot, onApply, addConsoleL
                     <td className="cell-num">
                       {snapshot.welfareWeight}/{snapshot.industryWeight}/{snapshot.housingWeight}
                     </td>
-                    <td className="cell-num">{currentFinal.toLocaleString()}명</td>
+                    <td className="cell-num">{popCell(`${currentFinal.toLocaleString()}명`)}</td>
                     <td
-                      className={`cell-num ${parseFloat(currentGrowth) >= 0 ? "trend-up" : "trend-down"}`}
+                      className={`cell-num ${!allowSeed ? "" : parseFloat(currentGrowth) >= 0 ? "trend-up" : "trend-down"}`}
                     >
-                      {parseFloat(currentGrowth) > 0 ? "+" : ""}
-                      {currentGrowth}%
+                      {popCell(`${parseFloat(currentGrowth) > 0 ? "+" : ""}${currentGrowth}%`)}
                     </td>
                     <td className="cell-actions">–</td>
                   </tr>
@@ -322,12 +340,12 @@ export default function ScenarioCompare({ region, snapshot, onApply, addConsoleL
                           {s.welfareWeight}/{s.industryWeight}/{s.housingWeight}
                         </td>
                         <td className="cell-num">
-                          {row ? `${row.finalPop.toLocaleString()}명` : "–"}
+                          {row ? popCell(`${row.finalPop.toLocaleString()}명`) : "–"}
                         </td>
                         <td
-                          className={`cell-num ${row && parseFloat(row.growth) >= 0 ? "trend-up" : "trend-down"}`}
+                          className={`cell-num ${!allowSeed ? "" : row && parseFloat(row.growth) >= 0 ? "trend-up" : "trend-down"}`}
                         >
-                          {row ? `${parseFloat(row.growth) > 0 ? "+" : ""}${row.growth}%` : "–"}
+                          {row ? popCell(`${parseFloat(row.growth) > 0 ? "+" : ""}${row.growth}%`) : "–"}
                         </td>
                         <td className="cell-actions">
                           <button

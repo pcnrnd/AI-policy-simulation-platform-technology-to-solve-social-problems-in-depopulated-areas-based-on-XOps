@@ -9,31 +9,86 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 from datetime import datetime, timezone
-from functools import lru_cache
 from typing import Any
 
 from src.core.settings import get_settings
 
 
-@lru_cache
+# 커넥션은 스레드마다 하나 — uvicorn 스레드풀 워커와 학습 job 백그라운드 스레드가 하나를 공유하면
+# 트랜잭션도 공유돼 한 스레드의 commit이 다른 스레드의 미완 쓰기까지 함께 커밋한다.
+# 스키마는 커넥션이 아니라 파일에 있으므로 새 스레드의 커넥션은 init_db를 다시 돌릴 필요가 없다.
+# ponytail: WAL의 단일 writer 제약은 그대로라 동시 쓰기는 sqlite3 기본 busy timeout(5초)만큼 기다린다.
+_local = threading.local()
+
+
 def _conn() -> sqlite3.Connection:
-    settings = get_settings()
-    settings.db_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(settings.db_path), check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
+    conn: sqlite3.Connection | None = getattr(_local, "conn", None)
+    if conn is None:
+        settings = get_settings()
+        settings.db_path.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(str(settings.db_path), check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        _local.conn = conn
     return conn
 
 
+# 최초 1회 적재하는 기본 파이프라인 카탈로그 — 모델 레지스트리 3종과 1:1.
+# 사용자가 지운 뒤 다시 살아나면 안 되므로 pipelines 테이블이 **없던** 최초 생성 시에만 넣는다.
+# 후보 버전은 저장하지 않는다(현행 버전에서 매번 파생 — registry.pipelines 참조).
+_SEED_PIPELINES: list[dict[str, Any]] = [
+    {
+        "id": "PL-POP-RETRAIN-01",
+        "name": "인구이동 예측 재학습",
+        "model_id": "population-forecast",
+        "trigger_policy": "드리프트(PSI > 0.2)·성능 저하(Acc < 0.85) 자동 · 수동",
+        "experiment": "EXP-POP-DECLINE-031",
+    },
+    {
+        "id": "PL-VITAL-RETRAIN-02",
+        "name": "생활인구 추정 재학습",
+        "model_id": "vital-population",
+        "trigger_policy": "주간 배치 (매주 월 02:00)",
+        "experiment": "EXP-VITAL-POP-012",
+    },
+    {
+        "id": "PL-SETTLE-RETRAIN-03",
+        "name": "정주여건 수요예측 재학습",
+        "model_id": "settlement-demand",
+        "trigger_policy": "수동",
+        "experiment": "EXP-SETTLE-DMD-007",
+    },
+]
+
+# 데모(시드) 파이프라인 id — 데모 표시 OFF 목록에서 빼는 기준.
+# 행에 표식 컬럼을 두지 않고 id 집합으로 가른다: `pipelines.id` 가 PRIMARY KEY 라 사용자가
+# 같은 id로 등록할 수 없고, 이미 배포된 SQLite 를 건드리지 않아도 된다.
+SEED_PIPELINE_IDS: frozenset[str] = frozenset(p["id"] for p in _SEED_PIPELINES)
+
+
 def init_db() -> None:
-    """테이블 생성 (idempotent)."""
+    """테이블 생성 (idempotent) + 파이프라인 카탈로그 최초 1회 시드."""
     conn = _conn()
+    fresh_pipelines = (
+        conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='pipelines'").fetchone() is None
+    )
     conn.executescript(
         """
         CREATE TABLE IF NOT EXISTS user_sources (id TEXT PRIMARY KEY, schema_json TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS model_versions (model_id TEXT PRIMARY KEY, version TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS runs (seq INTEGER PRIMARY KEY AUTOINCREMENT, run_json TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS pipelines (
+            id TEXT PRIMARY KEY,
+            definition_json TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS built_apis (
+            id TEXT PRIMARY KEY,
+            definition_json TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS model_artifacts (
             model_id TEXT NOT NULL,
             version TEXT NOT NULL,
@@ -43,6 +98,9 @@ def init_db() -> None:
         """
     )
     conn.commit()
+    if fresh_pipelines:
+        for pipeline in _SEED_PIPELINES:
+            add_pipeline(pipeline)
     apply_rd_migrations(conn)
 
 
@@ -152,6 +210,32 @@ def delete_user_source(source_id: str) -> bool:
     return cur.rowcount > 0
 
 
+# ── 발급 API(Data API 빌드 결과) ────────────────────────────
+def upsert_built_api(api: dict[str, Any]) -> dict[str, Any]:
+    """빌드된 API 구성 저장 — 같은 id면 덮어쓴다(재빌드가 중복 행을 만들지 않게)."""
+    created_at = api.get("created_at") or datetime.now(timezone.utc).isoformat()
+    stored = {**api, "created_at": created_at}
+    _conn().execute(
+        "INSERT INTO built_apis (id, definition_json, created_at) VALUES (?, ?, ?) "
+        "ON CONFLICT(id) DO UPDATE SET definition_json = excluded.definition_json",
+        (stored["id"], json.dumps(stored, ensure_ascii=False), created_at),
+    )
+    _conn().commit()
+    return stored
+
+
+def list_built_apis() -> list[dict[str, Any]]:
+    """최근 빌드 순."""
+    rows = _conn().execute("SELECT definition_json FROM built_apis ORDER BY created_at DESC, id DESC").fetchall()
+    return [json.loads(r["definition_json"]) for r in rows]
+
+
+def delete_built_api(api_id: str) -> bool:
+    cur = _conn().execute("DELETE FROM built_apis WHERE id = ?", (api_id,))
+    _conn().commit()
+    return cur.rowcount > 0
+
+
 # ── 모델 버전 오버라이드 ────────────────────────────────────
 def get_model_version(model_id: str) -> str | None:
     row = _conn().execute("SELECT version FROM model_versions WHERE model_id = ?", (model_id,)).fetchone()
@@ -193,6 +277,64 @@ def append_run(run: dict[str, Any]) -> None:
     _conn().commit()
 
 
+def upsert_run(run: dict[str, Any]) -> None:
+    """같은 run_id 행이 있으면 바꿔 쓴다 — 진행 중으로 남긴 실행을 종료 상태로 갱신하는 경로.
+
+    runs 테이블은 run_json 한 칸이라 run_id 색인이 없다. `get_run` 과 같은 방침으로 훑는다
+    (이력이 작다). 색인이 필요해지면 run_id를 컬럼으로 승격한다.
+    """
+    run_id = run.get("run_id")
+    for row in _conn().execute("SELECT seq, run_json FROM runs ORDER BY seq DESC").fetchall():
+        if json.loads(row["run_json"]).get("run_id") == run_id:
+            _conn().execute(
+                "UPDATE runs SET run_json = ? WHERE seq = ?",
+                (json.dumps(run, ensure_ascii=False), row["seq"]),
+            )
+            _conn().commit()
+            return
+    append_run(run)
+
+
 def list_runs() -> list[dict[str, Any]]:
     rows = _conn().execute("SELECT run_json FROM runs ORDER BY seq").fetchall()
     return [json.loads(r["run_json"]) for r in rows]
+
+
+def get_run(run_id: str) -> dict[str, Any] | None:
+    """실행 하나를 run_id로. 이력이 작아 파이썬에서 훑는다 — 인덱스가 필요해지면 컬럼으로 승격."""
+    for run in reversed(list_runs()):
+        if run.get("run_id") == run_id:
+            return run
+    return None
+
+
+# ── ML 파이프라인 정의 ──────────────────────────────────────
+def add_pipeline(pipeline: dict[str, Any]) -> None:
+    """등록 — 같은 id가 이미 있으면 sqlite3.IntegrityError."""
+    _conn().execute(
+        "INSERT INTO pipelines (id, definition_json, created_at) VALUES (?, ?, ?)",
+        (
+            pipeline["id"],
+            json.dumps(pipeline, ensure_ascii=False),
+            pipeline.get("created_at") or datetime.now(timezone.utc).isoformat(),
+        ),
+    )
+    _conn().commit()
+
+
+def get_pipeline(pipeline_id: str) -> dict[str, Any] | None:
+    row = _conn().execute(
+        "SELECT definition_json FROM pipelines WHERE id = ?", (pipeline_id,)
+    ).fetchone()
+    return json.loads(row["definition_json"]) if row else None
+
+
+def list_pipelines() -> list[dict[str, Any]]:
+    rows = _conn().execute("SELECT definition_json FROM pipelines ORDER BY created_at, id").fetchall()
+    return [json.loads(r["definition_json"]) for r in rows]
+
+
+def delete_pipeline(pipeline_id: str) -> bool:
+    cur = _conn().execute("DELETE FROM pipelines WHERE id = ?", (pipeline_id,))
+    _conn().commit()
+    return cur.rowcount > 0

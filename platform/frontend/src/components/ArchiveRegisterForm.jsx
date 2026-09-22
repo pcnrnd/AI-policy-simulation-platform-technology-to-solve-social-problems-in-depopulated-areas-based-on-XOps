@@ -421,7 +421,7 @@ export default function ArchiveRegisterForm({ onRegister, onCancel, onSubmitting
 
       {/* 수집 범위 (선택) */}
       <div className="archive-reg-sub-label">
-        수집 범위 <span>(선택 — Adapter가 쿼리에 자동 주입하는 적재 스코프)</span>
+        수집 범위 <span>(선택 — 조회에 적용할 적재 범위)</span>
       </div>
       <div className="archive-reg-range-row">
         <label className="archive-reg-field">

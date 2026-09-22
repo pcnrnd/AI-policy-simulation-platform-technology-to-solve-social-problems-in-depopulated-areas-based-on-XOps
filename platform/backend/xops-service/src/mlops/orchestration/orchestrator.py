@@ -28,6 +28,10 @@ _STAGES = ("queued", "preparing", "training", "evaluating", "deploying")
 _DEFAULT_CANDIDATE_LATENCY_MS = 120.0
 
 
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
 def _derive_candidate(current: dict[str, float]) -> dict[str, float]:
     """후보 지표 파생 fallback (accuracy +0.028, 오차 ×0.72).
 
@@ -50,13 +54,22 @@ class PipelineRun:
     model_id: str
     trigger: str
     state: str
+    # 어느 등록 파이프라인이 띄운 실행인지. 파이프라인 없이 이벤트만 온 경우 None.
+    pipeline_id: str | None = None
+    started_at: str = field(default_factory=_now_iso)
+    finished_at: str | None = None
     stages: list[dict[str, Any]] = field(default_factory=list)
+    # 실행 로그 라인 — 실행 기록과 같은 행에 영속된다(별도 테이블·수집기 없이 조회 가능).
+    logs: list[dict[str, Any]] = field(default_factory=list)
     evaluation: dict[str, Any] | None = None
     deploy: dict[str, Any] | None = None
     active_version: str | None = None
     candidate_metrics: dict[str, float] | None = None
     training: dict[str, Any] | None = None
     artifact_path: str | None = None
+
+    def log(self, level: str, message: str) -> None:
+        self.logs.append({"ts": _now_iso(), "level": level, "message": message})
 
 
 class Orchestrator:
@@ -73,6 +86,10 @@ class Orchestrator:
         self._counter += 1
         stamp = datetime.now(timezone.utc).strftime("%Y%m%d")
         return f"RUN-{stamp}-{self._counter:04d}"
+
+    def next_run_id(self) -> str:
+        """접수(202) 시점에 run_id를 먼저 발급하기 위한 공개 진입점."""
+        return self._next_run_id()
 
     def _train(self, event: RetrainEvent, *, horizon: int, version: str) -> TrainingResult | None:
         """실제 학습 수행. 실패하면 None을 돌려 fallback 경로로 넘긴다."""
@@ -91,16 +108,60 @@ class Orchestrator:
         candidate_version: str,
         measured_current: dict[str, float] | None = None,
         horizon: int | None = None,
+        pipeline_id: str | None = None,
+        run_id: str | None = None,
     ) -> PipelineRun:
-        """이벤트 하나를 상태머신에 태워 실행 결과를 반환. 기준선 선택은 `_evaluate` 참조."""
-        run = PipelineRun(run_id=self._next_run_id(), model_id=event.model_id, trigger=event.trigger, state="queued")
+        """이벤트 하나를 상태머신에 태워 실행 결과를 반환. 기준선 선택은 `_evaluate` 참조.
+
+        `run_id`를 받으면 그 id로 기록한다 — 접수(202) 시점에 이미 남긴 진행 중 실행을
+        같은 id로 갱신하기 위해서다.
+        """
+        run = PipelineRun(
+            run_id=run_id or self._next_run_id(),
+            model_id=event.model_id,
+            trigger=event.trigger,
+            state="queued",
+            pipeline_id=pipeline_id,
+        )
+        self._execute(
+            run,
+            event,
+            current_metrics=current_metrics,
+            current_version=current_version,
+            candidate_version=candidate_version,
+            measured_current=measured_current,
+            horizon=horizon,
+        )
+        run.finished_at = _now_iso()
+        run.log("INFO" if run.state == "succeeded" else "WARN", f"실행 종료 — 상태 {run.state}")
+        return run
+
+    def _execute(
+        self,
+        run: PipelineRun,
+        event: RetrainEvent,
+        *,
+        current_metrics: dict[str, float],
+        current_version: str,
+        candidate_version: str,
+        measured_current: dict[str, float] | None,
+        horizon: int | None,
+    ) -> None:
+        """상태머신 본체. 종료 시각·종료 로그는 호출자(`handle_event`)가 한 곳에서 남긴다."""
+        run.log(
+            "INFO",
+            f"재학습 이벤트 접수 — 모델 {event.model_id} · 트리거 {event.trigger} · "
+            f"현행 {current_version} → 후보 {candidate_version}",
+        )
 
         if not self._bus.accept(event, now=event.created_at):
             run.state = "debounced"
-            return run
+            run.log("WARN", "최근 실행과 간격이 짧아 이벤트가 조정(debounce)되었습니다.")
+            return
 
         for stage in _STAGES[:2]:  # queued, preparing
             run.stages.append({"stage": stage, "status": "done"})
+            run.log("INFO", f"[{stage}] 완료")
 
         # 후보 지표가 명시로 들어오면 학습 결과를 쓰지 않으므로 학습 자체를 건너뛴다.
         # 계산·디스크 쓰기를 아끼고, DB에 기록되는 지표(주입값)와 아티팩트 파일의
@@ -115,10 +176,15 @@ class Orchestrator:
         promote = self._evaluate(
             run, event, trained, current_metrics=current_metrics, measured_current=measured_current
         )
+        evaluation = run.evaluation or {}
+        run.log(
+            "INFO" if promote else "WARN",
+            f"[evaluating] {'승급 판정' if promote else '승급 반려'} — {evaluation.get('reason', '판정 근거 없음')}",
+        )
         if not promote:
             run.state = "rejected"
             run.active_version = current_version
-            return run
+            return
 
         self._deploy(
             run,
@@ -127,7 +193,6 @@ class Orchestrator:
             current_version=current_version,
             candidate_version=candidate_version,
         )
-        return run
 
     def _evaluate(
         self,
@@ -172,6 +237,11 @@ class Orchestrator:
         run.deploy = asdict(deploy)
         run.active_version = deploy.active_version
         run.state = "rolled_back" if deploy.rolled_back else "succeeded"
+        run.log(
+            "WARN" if deploy.rolled_back else "SUCCESS",
+            f"[deploying] {'롤백 — 직전 버전 유지' if deploy.rolled_back else '배포 완료'} "
+            f"(운영 {deploy.active_version}) — {deploy.reason}",
+        )
 
     def _record_training(
         self,
@@ -190,6 +260,12 @@ class Orchestrator:
         # stage 로그에는 요약만 — 상세는 run.training에 한 번만 담아 실행 이력 행을 키우지 않는다.
         status = "done" if trained else "skipped"
         run.stages.append({"stage": "training", "status": status, "source": source})
+        detail = (
+            f"표본 {summary.get('dataset', {}).get('rows', '-')}행 · 후보 {summary.get('candidates_evaluated', '-')}개 평가"
+            if trained is not None
+            else ("후보 지표가 명시로 주입되어 학습을 건너뜁니다." if source == "explicit" else "학습 실패 — 파생 후보로 대체합니다.")
+        )
+        run.log("INFO" if trained is not None or source == "explicit" else "WARN", f"[training] {source} — {detail}")
 
     @staticmethod
     def _resolve_candidate(

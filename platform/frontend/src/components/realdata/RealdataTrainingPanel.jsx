@@ -9,7 +9,7 @@ import {
   getDatasets,
   getModels,
   getTrainingRun,
-  issueRealdataToken,
+  getRealdataToken,
   restoreCandidate,
   startTrainingRun
 } from "./realdataClient.jsx";
@@ -50,7 +50,7 @@ export default function RealdataTrainingPanel() {
 
   // ── 토큰 발급(자동, 1회) ─────────────────────────────────
   useEffect(() => {
-    issueRealdataToken()
+    getRealdataToken()
       .then(setToken)
       .catch((err) => setAuthError(err.message || "인증 토큰 발급에 실패했습니다."));
   }, []);

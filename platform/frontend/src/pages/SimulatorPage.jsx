@@ -7,7 +7,7 @@ import PipelineStepper from "../components/PipelineStepper.jsx";
 import CollapsibleStage from "../components/CollapsibleStage.jsx";
 import FactorAnalysisStage from "../components/FactorAnalysisStage.jsx";
 import FactorResultStage from "../components/FactorResultStage.jsx";
-import PendingData from "../components/PendingData.jsx";
+import PendingData, { NO_DEMO_DATA } from "../components/PendingData.jsx";
 import ScenarioCompare from "../components/ScenarioCompare.jsx";
 import RealdataAnalysisPanel from "../components/realdata/RealdataAnalysisPanel.jsx";
 import { useAppState } from "../context/AppStateContext.jsx";
@@ -90,9 +90,17 @@ export default function SimulatorPage() {
     budgetTotal,
     setBudgetTotal,
     addConsoleLog,
-    navigateToTab
+    navigateToTab,
+    mockDataVisible
   } = useAppState();
   const ct = useChartTheme();
+
+  // 데모 표시 토글은 화면 구조가 아니라 **데이터 유무**만 바꾼다. 이 탭의 지자체 인구·위험지수·
+  // 요인분석 케이스·시설물은 전부 mock_data.json 전용이라 실저장소 대응값이 없다 — OFF에서는
+  // 여기 데이터 계층에서 시드를 차단하고, 조작 컨트롤(검색·슬라이더·버튼·레이어 토글·지도 범례)은
+  // 그대로 조작 가능한 채로 값 자리에만 사유 문구를 남긴다. 계산 로직 자체는 건드리지 않는다.
+  const allowSeed = mockDataVisible;
+  const SEED_ONLY_NOTE = NO_DEMO_DATA;
 
   // 지도 레이어 토글 / 검색 (플로팅 패널)
   const [layerVis, setLayerVis] = useState({ markers: true, grid: true, facilities: true });
@@ -127,8 +135,11 @@ export default function SimulatorPage() {
     );
     setRecommendation(ranked);
     setRecoSig(currentSig);
+    // 랭킹 계산은 그대로 두되, 데모 OFF에서는 시드 파생 점수를 로그로도 내보내지 않는다.
     addConsoleLog(
-      `INFO: ${currentRegion.name} 정책 추천 도출 완료 — 1순위 '${ranked[0].name}' (점수 ${ranked[0].score.toLocaleString()}).`
+      allowSeed
+        ? `INFO: ${currentRegion.name} 정책 추천 도출 완료 — 1순위 '${ranked[0].name}' (점수 ${ranked[0].score.toLocaleString()}).`
+        : `WARN: ${currentRegion.name} 정책 추천 도출 — ${NO_DEMO_DATA}.`
     );
     // 결과는 STAGE ④에 렌더되므로 — 펼친 뒤 화면으로 이동해 즉시 보이게 한다
     setOpenStages((s) => ({ ...s, "stage-report": true }));
@@ -268,6 +279,42 @@ export default function SimulatorPage() {
     const gridLayer = L.layerGroup();
     const facilityLayer = L.layerGroup();
 
+    markerLayer.addTo(map);
+    gridLayer.addTo(map);
+    facilityLayer.addTo(map);
+    markerLayerRef.current = markerLayer;
+    gridLayerRef.current = gridLayer;
+    facilityLayerRef.current = facilityLayer;
+    mapRef.current = map;
+
+    setTimeout(() => map.invalidateSize(), 100);
+
+    return () => {
+      map.remove();
+      mapRef.current = null;
+      tileLayerRef.current = null;
+      markerLayerRef.current = null;
+      gridLayerRef.current = null;
+      facilityLayerRef.current = null;
+    };
+    // 지도 인스턴스는 마운트 1회만 만든다 — 피처는 아래 적재 effect가 따로 채운다.
+    // (지도를 다시 만들면 베이스 타일·레이어 토글 상태를 다시 맞춰야 해서 깨지기 쉽다.)
+  }, []);
+
+  // 오버레이 피처 적재 — 데모 OFF에서는 시드 마커·격자·시설물을 레이어에 **넣지 않는다**
+  // (예전엔 CSS로 leaflet pane을 통째로 가렸다 — 그러면 왜 비었는지 읽히지 않고 팝업까지 죽는다).
+  // 레이어 그룹과 지도 인스턴스는 그대로라 표시 레이어 토글·줌·테마는 계속 조작 가능하다.
+  useEffect(() => {
+    const markerLayer = markerLayerRef.current;
+    const gridLayer = gridLayerRef.current;
+    const facilityLayer = facilityLayerRef.current;
+    if (!markerLayer || !gridLayer || !facilityLayer) return;
+
+    markerLayer.clearLayers();
+    gridLayer.clearLayers();
+    facilityLayer.clearLayers();
+    if (!allowSeed) return;
+
     // 시설물 공간정보 표시 — 정주여건·스마트팜 시설의 위치와 데이터를 표출 (레이어 적층)
     const FACILITY_COLORS = {
       스마트팜: "#10b981",
@@ -333,25 +380,7 @@ export default function SimulatorPage() {
       });
     });
 
-    markerLayer.addTo(map);
-    gridLayer.addTo(map);
-    facilityLayer.addTo(map);
-    markerLayerRef.current = markerLayer;
-    gridLayerRef.current = gridLayer;
-    facilityLayerRef.current = facilityLayer;
-    mapRef.current = map;
-
-    setTimeout(() => map.invalidateSize(), 100);
-
-    return () => {
-      map.remove();
-      mapRef.current = null;
-      tileLayerRef.current = null;
-      markerLayerRef.current = null;
-      gridLayerRef.current = null;
-      facilityLayerRef.current = null;
-    };
-  }, [appData, setCurrentRegion]);
+  }, [appData, setCurrentRegion, allowSeed]);
 
   // 베이스 테마 전환 — 기존 타일 제거 후 신규 타일 추가(오버레이는 별도 pane이라 위 유지)
   useEffect(() => {
@@ -508,6 +537,8 @@ export default function SimulatorPage() {
   const sim = currentRegion.case.simulation;
   const analysisDone = analysisStatus === "done";
   const analysisRunning = analysisStatus === "running";
+  // 결과 표시 조건 — 실행 상태(조작)와 데이터 유무를 분리한다. 실행 버튼·단계 표시는 그대로 돈다.
+  const resultsReady = analysisDone && allowSeed;
 
   // 스텝퍼 완료 표시: ①② 요인분석 완료, ③④ 정책 추천 도출 완료 기준
   const doneStages = [
@@ -534,6 +565,7 @@ export default function SimulatorPage() {
         stepIndex={analysisStep}
         steps={ANALYSIS_STEPS}
         onRun={handleRunAnalysis}
+        unavailableText={allowSeed ? null : SEED_ONLY_NOTE}
       />
 
       {/* ── STAGE ② 요인분석 결과 ── */}
@@ -543,6 +575,7 @@ export default function SimulatorPage() {
         onToggle={() => toggleStage("stage-result")}
         locked={analysisStatus !== "done"}
         running={analysisStatus === "running"}
+        unavailableText={allowSeed ? null : SEED_ONLY_NOTE}
       />
 
       {/* ── STAGE ③ 시뮬레이션: 공간정보 탐색 + 강화학습 변수 + 인구 예측 ── */}
@@ -558,7 +591,7 @@ export default function SimulatorPage() {
         <div className="pl-sim-frame">
           <div className="pl-sim-cell pl-sim-obj">
             <span className="pl-sim-tag">목적함수</span>
-            <span className="mock-data-output">{sim.objective}</span>
+            <span className="mock-data-output">{allowSeed ? sim.objective : NO_DEMO_DATA}</span>
             {analysisDone && (
               <span className="pl-param-chip">
                 <i className="fa-solid fa-circle-check" aria-hidden="true"></i> STAGE ② 도출 파라미터 적용
@@ -568,20 +601,21 @@ export default function SimulatorPage() {
           <div className="pl-sim-vars">
             <div className="pl-sim-cell">
               <span className="pl-sim-tag">수요 (x)</span>
-              <span className="mock-data-output">{sim.factors.demand}</span>
+              <span className="mock-data-output">{allowSeed ? sim.factors.demand : NO_DEMO_DATA}</span>
             </div>
             <div className="pl-sim-cell">
               <span className="pl-sim-tag">공급 (y)</span>
-              <span className="mock-data-output">{sim.factors.supply}</span>
+              <span className="mock-data-output">{allowSeed ? sim.factors.supply : NO_DEMO_DATA}</span>
             </div>
             <div className="pl-sim-cell">
               <span className="pl-sim-tag">조절변수</span>
-              <span className="mock-data-output">{sim.factors.adjust}</span>
+              <span className="mock-data-output">{allowSeed ? sim.factors.adjust : NO_DEMO_DATA}</span>
             </div>
             <div className="pl-sim-cell pl-sim-constraint">
               <span className="pl-sim-tag">제약요소</span>
+              {/* 총 예산은 슬라이더 입력값이라 데모 토글과 무관하게 항상 실제 설정값을 보여준다. */}
               <span className="mock-data-output">
-                {sim.constraint} · {budgetTotal.toLocaleString()}억
+                {allowSeed ? sim.constraint : NO_DEMO_DATA} · {budgetTotal.toLocaleString()}억
               </span>
             </div>
           </div>
@@ -598,7 +632,9 @@ export default function SimulatorPage() {
             aria-describedby="map-accessible-summary"
           ></div>
           <p id="map-accessible-summary" className="sr-only mock-data-output">
-            현재 선택 지역은 {currentRegion.name}, 위험지수 {currentRegion.riskIndex}, {riskGrade(currentRegion.riskIndex).label}입니다.
+            {allowSeed
+              ? `현재 선택 지역은 ${currentRegion.name}, 위험지수 ${currentRegion.riskIndex}, ${riskGrade(currentRegion.riskIndex).label}입니다.`
+              : `선택 지역 정보는 ${NO_DEMO_DATA} 상태입니다.`}
             위험등급 마커 {layerVis.markers ? "표시" : "숨김"}, 인구밀도 격자 {layerVis.grid ? "표시" : "숨김"},
             시설물 {layerVis.facilities ? "표시" : "숨김"} 상태입니다. 지역은 오른쪽 지자체 목록에서 키보드로 선택할 수 있습니다.
           </p>
@@ -615,6 +651,11 @@ export default function SimulatorPage() {
               />
             </div>
             <div className="map-float-section-label">표시 레이어</div>
+            {!allowSeed && (
+              <p className="map-theme-note">
+                {NO_DEMO_DATA} — 표시할 공간 데이터가 없습니다.
+              </p>
+            )}
             <label className="map-float-toggle">
               <input
                 type="checkbox"
@@ -715,21 +756,29 @@ export default function SimulatorPage() {
                     onClick={() => setCurrentRegion(r)}
                     aria-pressed={active}
                   >
+                    {/* 지자체 이름·선택은 조작 컨트롤이라 데모 토글과 무관하게 남기고, 등급·인구·위험지수
+                        같은 시드 파생 값만 데이터 계층에서 비운다. */}
                     <div className="sim-region-head">
                       <strong>{r.name}</strong>
                       <span
                         className="grade-chip"
-                        style={{
-                          color: g.color,
-                          backgroundColor: `rgba(${g.rgb}, 0.12)`,
-                          borderColor: `rgba(${g.rgb}, 0.3)`
-                        }}
+                        style={
+                          allowSeed
+                            ? {
+                                color: g.color,
+                                backgroundColor: `rgba(${g.rgb}, 0.12)`,
+                                borderColor: `rgba(${g.rgb}, 0.3)`
+                              }
+                            : undefined
+                        }
                       >
-                        {g.label}
+                        {allowSeed ? g.label : "–"}
                       </span>
                     </div>
                     <div className="sim-region-meta">
-                      {r.theme} · {r.population.toLocaleString()}명 · 위험 {r.riskIndex}
+                      {allowSeed
+                        ? `${r.theme} · ${r.population.toLocaleString()}명 · 위험 ${r.riskIndex}`
+                        : NO_DEMO_DATA}
                     </div>
                   </button>
                 );
@@ -816,21 +865,29 @@ export default function SimulatorPage() {
         <div className="map-data-grid">
           <section>
             <h4>시설물</h4>
-            <ul>
-              {(appData.facilities ?? []).map((facility) => (
-                <li key={`${facility.name}-${facility.lat}-${facility.lng}`}>
-                  <strong>{facility.name}</strong> — {facility.type}, {facility.metric}, 운영 예산 {facility.operating_budget}억
-                </li>
-              ))}
-            </ul>
+            {allowSeed ? (
+              <ul>
+                {(appData.facilities ?? []).map((facility) => (
+                  <li key={`${facility.name}-${facility.lat}-${facility.lng}`}>
+                    <strong>{facility.name}</strong> — {facility.type}, {facility.metric}, 운영 예산 {facility.operating_budget}억
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <PendingData text={SEED_ONLY_NOTE} />
+            )}
           </section>
           <section>
             <h4>{currentRegion.name} 인구밀도 격자</h4>
-            <ul>
-              {buildRegionGrid(currentRegion).map((cell) => (
-                <li key={cell.gridId}>격자 {cell.gridId} — ㎢당 {cell.density}명</li>
-              ))}
-            </ul>
+            {allowSeed ? (
+              <ul>
+                {buildRegionGrid(currentRegion).map((cell) => (
+                  <li key={cell.gridId}>격자 {cell.gridId} — ㎢당 {cell.density}명</li>
+                ))}
+              </ul>
+            ) : (
+              <PendingData text={SEED_ONLY_NOTE} />
+            )}
           </section>
         </div>
       </details>
@@ -838,7 +895,7 @@ export default function SimulatorPage() {
       {/* ── 분석: 인구 예측 + 전 지자체 분포 ── */}
       <div className="grid-cols-2" style={{ marginTop: 24 }}>
         <Card title="10개년 인구 예측 시뮬레이션 결과" icon="fa-wand-magic-sparkles">
-          {analysisDone ? (
+          {resultsReady ? (
             <>
               <div style={{ position: "relative", height: 200, width: "100%" }}>
                 <Line data={chartData} options={chartOpts} />
@@ -864,12 +921,15 @@ export default function SimulatorPage() {
               </p>
             </>
           ) : (
-            <PendingData running={analysisRunning} text="[요인분석 실행] 후 인구 예측 결과가 표시됩니다." />
+            <PendingData
+              running={analysisRunning && allowSeed}
+              text={allowSeed ? "[요인분석 실행] 후 인구 예측 결과가 표시됩니다." : SEED_ONLY_NOTE}
+            />
           )}
         </Card>
 
         <Card title="전 지자체 위험지수 vs 인구 분포" icon="fa-braille">
-          {analysisDone ? (
+          {resultsReady ? (
             <>
               <p style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 12 }}>
                 전국 인구감소 지역(회색 점) 분포 속 시범 분석 대상 지자체의 상대 위치. 파란 점이 현재 선택
@@ -885,7 +945,10 @@ export default function SimulatorPage() {
               </p>
             </>
           ) : (
-            <PendingData running={analysisRunning} text="[요인분석 실행] 후 전 지자체 분포 분석이 표시됩니다." />
+            <PendingData
+              running={analysisRunning && allowSeed}
+              text={allowSeed ? "[요인분석 실행] 후 전 지자체 분포 분석이 표시됩니다." : SEED_ONLY_NOTE}
+            />
           )}
         </Card>
       </div>
@@ -893,6 +956,7 @@ export default function SimulatorPage() {
       {/* ── 시나리오 저장·비교 ── */}
       <ScenarioCompare
         region={currentRegion}
+        allowSeed={allowSeed}
         snapshot={{
           budgetTotal,
           welfareWeight,
@@ -916,12 +980,13 @@ export default function SimulatorPage() {
       <CollapsibleStage
         id="stage-report"
         no="STAGE ④"
+        // reportFocus 는 시드 케이스 정의의 문장이라 데모 OFF에서는 부제로 내보내지 않는다.
         title="추천"
-        sub={currentRegion.case.reportFocus}
+        sub={allowSeed ? currentRegion.case.reportFocus : null}
         open={openStages["stage-report"]}
         onToggle={() => toggleStage("stage-report")}
       >
-        {analysisDone && recommendation && !recoStale ? (
+        {resultsReady && recommendation && !recoStale ? (
           <PolicyRecommendation region={currentRegion} ranked={recommendation} />
         ) : (
           <Card title="맞춤 정책 추천" icon="fa-lightbulb">
@@ -930,8 +995,16 @@ export default function SimulatorPage() {
                 className="fa-solid fa-wand-magic-sparkles"
                 style={{ fontSize: 28, color: "var(--accent-blue)", marginBottom: 12, display: "block" }}
               ></i>
-              STAGE ③에서 정책 변수를 조정한 뒤 <strong>[정책 추천 도출]</strong> 버튼을 누르면, 시뮬레이션
-              결과에 맞는 맞춤 정책 추천이 생성됩니다.
+              {allowSeed ? (
+                <>
+                  STAGE ③에서 정책 변수를 조정한 뒤 <strong>[정책 추천 도출]</strong> 버튼을 누르면, 시뮬레이션
+                  결과에 맞는 맞춤 정책 추천이 생성됩니다.
+                </>
+              ) : (
+                <>
+                  {NO_DEMO_DATA}
+                </>
+              )}
             </div>
           </Card>
         )}
@@ -941,7 +1014,9 @@ export default function SimulatorPage() {
             <i className="fa-solid fa-file-invoice" aria-hidden="true"></i>
             <div>
               <strong>AI 정책 보고서 생성 및 평가</strong>
-              <p className="mock-data-output">{currentRegion.name} · {currentRegion.case.reportFocus}</p>
+              <p className="mock-data-output">
+                {allowSeed ? `${currentRegion.name} · ${currentRegion.case.reportFocus}` : `${currentRegion.name} · ${NO_DEMO_DATA}`}
+              </p>
             </div>
           </div>
           <button className="btn btn-primary" onClick={() => navigateToTab("tab-reporter")}>

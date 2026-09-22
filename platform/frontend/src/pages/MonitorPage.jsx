@@ -22,7 +22,8 @@ import { useRenderTiming } from "../lib/perf.js";
 import { MODEL_REGISTRY, RETRAIN_PIPELINES } from "../constants/models.js";
 import InfoTip from "../components/InfoTip.jsx";
 import RealdataEvaluationPanel from "../components/realdata/RealdataEvaluationPanel.jsx";
-import { apiGet } from "../lib/api.js";
+import { getRealdataToken } from "../components/realdata/realdataClient.jsx";
+import { apiGet, apiSend } from "../lib/api.js";
 
 // 드리프트 자동 재학습 대상 — 인구이동 예측 모델(백엔드 오케스트레이션 시드 id).
 // PSI·이상값·예측 지연 값 자체는 이 모델 하나만 관측한다(대상 모델 선택과 무관, 값 확장은 별도 결정 사항).
@@ -30,8 +31,25 @@ const DRIFT_MODEL_ID = "population-forecast";
 
 // 예측 지연 게이지 — 자동 롤백 임계(200ms) 대비 비율로 표시한다.
 const LATENCY_ROLLBACK_MS = 200;
-const LATENCY_NORMAL_MS = 120;
-const LATENCY_DRIFTED_MS = 178;
+// 데모 시드 지연. 실측(학습 시 측정한 1건 추론 지연)이 없고 데모 표시가 켜져 있을 때만 쓴다.
+const SEED_LATENCY_NORMAL_MS = 120;
+const SEED_LATENCY_DRIFTED_MS = 178;
+// 데모 시드 PSI — 위와 같은 조건에서만 쓴다.
+const SEED_PSI_DRIFTED = "0.384";
+const SEED_PSI_NORMAL = "0.045";
+
+// 값이 없을 때 쓰는 표기 — 요소를 감추지 않고 자리만 비운다(§10 UI-04).
+const NO_VALUE = "–";
+const EMPTY_HINT = "실데이터가 아직 없습니다";
+
+// 차트 자리를 비우되 캔버스는 그대로 둔다 — 요소를 숨기지 않고 "값이 없다"만 알린다(§10 UI-04).
+function ChartEmptyNote({ children }) {
+  return (
+    <p className="monitor-empty-note" role="status">
+      {children}
+    </p>
+  );
+}
 
 ChartJS.register(
   CategoryScale,
@@ -61,6 +79,33 @@ const METRIC_SERIES = {
   mae: true
 };
 
+// 실데이터(회귀) 계열 — 데모 표시 OFF에서 6대 분류 지표 자리에 이 계열이 들어간다.
+// 백엔드 realdata_bridge가 후보 버전별 검증 MAE·RMSE·WAPE와 기준선 MAE를 같은 스키마로 내려준다.
+const REALDATA_SERIES = {
+  mae: true,
+  rmse: true,
+  wape: true,
+  baseline_mae: true
+};
+
+// 추이 차트 데이터셋 정의 — 계열 키·라벨·선 스타일을 한 곳에 둔다(분류/회귀 두 벌).
+const CLASSIFICATION_DATASETS = [
+  { key: "accuracy", label: "Accuracy", borderColor: "rgba(16, 185, 129, 1)", backgroundColor: "rgba(16, 185, 129, 0.05)", fill: true, tension: 0.35, borderWidth: 2 },
+  { key: "f1", label: "F1-Score", borderColor: "rgba(59, 130, 246, 1)", borderWidth: 2, pointStyle: "circle", tension: 0.35 },
+  { key: "precision", label: "Precision", borderColor: "rgba(34, 211, 238, 1)", borderWidth: 1.5, pointStyle: "triangle", tension: 0.35 },
+  { key: "recall", label: "Recall", borderColor: "rgba(168, 85, 247, 1)", borderWidth: 1.5, pointStyle: "rect", tension: 0.35 },
+  { key: "mse", label: "MSE", borderColor: "rgba(239, 68, 68, 1)", borderWidth: 1.5, borderDash: [5, 5], tension: 0.35 },
+  { key: "mae", label: "MAE", borderColor: "rgba(251, 146, 60, 1)", borderWidth: 1.5, borderDash: [2, 3], tension: 0.35 }
+];
+
+// WAPE(비율)는 MAE·RMSE(원 단위)와 자릿수가 달라 같은 축에 두면 선이 바닥에 깔린다 — 오른쪽 축으로 분리.
+const REALDATA_DATASETS = [
+  { key: "mae", label: "검증 MAE", borderColor: "rgba(239, 68, 68, 1)", backgroundColor: "rgba(239, 68, 68, 0.05)", fill: true, tension: 0.35, borderWidth: 2 },
+  { key: "rmse", label: "검증 RMSE", borderColor: "rgba(59, 130, 246, 1)", borderWidth: 1.5, pointStyle: "circle", tension: 0.35 },
+  { key: "baseline_mae", label: "기준선 MAE", borderColor: "rgba(148, 163, 184, 1)", borderWidth: 1.5, borderDash: [5, 5], tension: 0.35 },
+  { key: "wape", label: "검증 WAPE (우축)", borderColor: "rgba(168, 85, 247, 1)", borderWidth: 1.5, pointStyle: "rect", tension: 0.35, yAxisID: "y1" }
+];
+
 // 모니터링 옵션 — 조회 구간 (대상 모델은 운영 모델 레지스트리에서 선택)
 const WINDOW_OPTIONS = [3, 6, 10];
 
@@ -78,9 +123,67 @@ export default function MonitorPage() {
     startPipeline,
     navigateToTab,
     addConsoleLog,
-    setMonitorCollectStatus
+    setMonitorCollectStatus,
+    modelCandidates,
+    mockDataVisible
   } = useAppState();
   const ct = useChartTheme();
+
+  // 데모 표시 토글은 화면 구조가 아니라 **데이터 유무**만 바꾼다. OFF에서는 시드(mock_data.json)
+  // 유래 값이 실값 자리에 들어가지 않도록 여기 데이터 계층에서 차단하고, 빈 자리는 "–"로 남긴다.
+  const allowSeed = mockDataVisible;
+
+  // 모니터링 옵션 — 운영 모델 레지스트리에서 대상 모델 선택 + 조회 구간. 지표 추이 차트에 반영된다.
+  // 대상 모델은 실측 지표 조회 키이기도 하므로 로더보다 먼저 선언한다.
+  const [modelTarget, setModelTarget] = useState(MODEL_REGISTRY[0].id);
+  const [windowHours, setWindowHours] = useState(10);
+
+  // 실데이터(rd_*) 접근 토큰 — 백엔드는 `data:read` 토큰이 있는 호출에만 실데이터를 싣는다.
+  // undefined = 아직 확인 전(요청을 보내지 않는다), null = 발급 실패, 문자열 = 발급 완료.
+  const [realdataToken, setRealdataToken] = useState(allowSeed ? null : undefined);
+  // 데모 OFF의 대상 모델 목록 — 백엔드가 확인해 준 실데이터 모델(이름·표시 버전)만 쓴다.
+  const [realdataModels, setRealdataModels] = useState([]);
+
+  useEffect(() => {
+    if (allowSeed) {
+      // 데모 ON은 시드 경로만 쓰므로 토큰이 필요 없다(있어도 서버가 시드를 내려준다).
+      setRealdataToken(null);
+      return undefined;
+    }
+    let alive = true;
+    setRealdataToken(undefined);
+    getRealdataToken()
+      .then((token) => alive && setRealdataToken(token))
+      .catch((err) => {
+        if (!alive) return;
+        setRealdataToken(null);
+        addConsoleLog(`WARN: 실데이터 토큰 발급 실패 — ${err?.message ?? "알 수 없는 오류"}`);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [allowSeed, addConsoleLog]);
+
+  useEffect(() => {
+    if (allowSeed || !realdataToken) {
+      setRealdataModels([]);
+      return undefined;
+    }
+    let alive = true;
+    apiGet("/api/v3/orchestration/models", { token: realdataToken, params: { include_seed: false } })
+      .then((rows) => {
+        if (!alive) return;
+        setRealdataModels(Array.isArray(rows) ? rows.filter((m) => m.metrics_source === "realdata") : []);
+      })
+      .catch((err) => {
+        if (!alive) return;
+        setRealdataModels([]);
+        addConsoleLog(`WARN: 실데이터 모델 목록 조회 실패 — ${err?.message ?? "알 수 없는 오류"}`);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [allowSeed, realdataToken, addConsoleLog]);
 
   // 백엔드(/api/v3/monitoring) 실데이터 — 없으면 mock으로 폴백해 로딩 중에도 렌더.
   const [metricsResp, setMetricsResp] = useState(null);
@@ -93,6 +196,9 @@ export default function MonitorPage() {
   // 아래 collectPhase에서 배너 1건으로 합친다(배너 2건은 예약 높이를 넘겨 아래 카드를 밀어냄).
   // 마운트 즉시 요청하므로 첫 렌더부터 "pending" — 한 프레임도 "정상 수신"을 주장하지 않는다.
   const [driftStatus, setDriftStatus] = useState("pending");
+  // 실측 지표 계열에 대한 백엔드 이상치 판정(POST /monitoring/outliers) — 실계산 API를 화면에 연결한다.
+  // { result, labels, values } 또는 null(실측 계열이 없거나 판정 실패).
+  const [outlierResp, setOutlierResp] = useState(null);
   // 마지막 수집 시각 — 성능·설명 API 수집에 성공한 시점에만 갱신한다(수집 사실과 표시를 일치시킴)
   const [lastCollected, setLastCollected] = useState(null);
   const [retrying, setRetrying] = useState(false);
@@ -107,7 +213,20 @@ export default function MonitorPage() {
     const requestId = ++monitoringRequestRef.current;
     setMonitoringLoading(true);
     setMonitoringError(null);
-    return Promise.all([apiGet("/api/v3/monitoring/metrics"), apiGet("/api/v3/monitoring/explain")])
+    // model_id 를 함께 보내 백엔드가 실측(SQLite 실행 이력·학습 아티팩트)을 먼저 찾게 한다.
+    // 실측이 없을 때의 시드 폴백은 데모 표시 ON 에서만 받는다 — OFF 에서는 시드 수치가
+    // 네트워크 응답에도 남지 않게 서버가 빈 응답(`source: null`)을 내려준다.
+    // include_seed 는 호출마다 적어 둔다(공유 변수로 감추면 새 호출에서 빠져도 드러나지 않는다).
+    return Promise.all([
+      apiGet("/api/v3/monitoring/metrics", {
+        token: realdataToken ?? undefined,
+        params: { model_id: modelTarget, include_seed: mockDataVisible }
+      }),
+      apiGet("/api/v3/monitoring/explain", {
+        token: realdataToken ?? undefined,
+        params: { model_id: modelTarget, include_seed: mockDataVisible }
+      })
+    ])
       .then(([m, s]) => {
         if (requestId !== monitoringRequestRef.current) return;
         setMetricsResp(m);
@@ -124,7 +243,7 @@ export default function MonitorPage() {
       .finally(() => {
         if (requestId === monitoringRequestRef.current) setMonitoringLoading(false);
       });
-  }, [addConsoleLog]);
+  }, [addConsoleLog, modelTarget, mockDataVisible, realdataToken]);
 
   // 백엔드 PSI/KL 판정 재조회(표시 전용) — driftInjected 변경 효과와 [다시 시도] 버튼이 같은 경로를 쓴다.
   // 재학습 발화는 injectDrift → 오케스트레이션 이벤트 경로가 단독 담당(중복 트리거 방지).
@@ -133,7 +252,14 @@ export default function MonitorPage() {
     setDriftResp(null);
     setDriftStatus("pending");
     return apiGet("/api/v3/monitoring/drift", {
-      params: { drifted: driftInjected, model_id: DRIFT_MODEL_ID }
+      // 시드 분포 판정은 데모 표시 ON 전용 — 실 추론 입력 수집 경로가 아직 없다.
+      // 데모 OFF에서는 선택한 실데이터 모델의 학습 구간 vs 검증/이후 구간 PSI를 받는다.
+      token: realdataToken ?? undefined,
+      params: {
+        drifted: driftInjected,
+        model_id: mockDataVisible ? DRIFT_MODEL_ID : modelTarget,
+        include_seed: mockDataVisible
+      }
     })
       .then((d) => {
         if (requestId !== driftRequestRef.current) return;
@@ -146,21 +272,26 @@ export default function MonitorPage() {
         setDriftStatus("error");
         addConsoleLog(`ERROR: 드리프트 조회 실패 — ${err.message}`);
       });
-  }, [driftInjected, addConsoleLog]);
+  }, [driftInjected, addConsoleLog, mockDataVisible, modelTarget, realdataToken]);
+
+  // 데모 OFF에서 토큰 확인 전에 보내면 서버가 (인증 없는) 빈 응답을 주고 곧바로 다시 그린다.
+  const monitoringReady = allowSeed || realdataToken !== undefined;
 
   useEffect(() => {
+    if (!monitoringReady) return undefined;
     loadMonitoringData();
     return () => {
       monitoringRequestRef.current += 1;
     };
-  }, [loadMonitoringData]);
+  }, [loadMonitoringData, monitoringReady]);
 
   useEffect(() => {
+    if (!monitoringReady) return undefined;
     loadDriftData();
     return () => {
       driftRequestRef.current += 1;
     };
-  }, [loadDriftData]);
+  }, [loadDriftData, monitoringReady]);
 
   // 재시도 버튼은 재시도 중에도 마운트를 유지해야 키보드 초점이 유지된다.
   // disabled를 걸면 브라우저가 초점을 body로 떨어뜨리므로 aria-disabled + 핸들러 가드로 잠근다.
@@ -193,14 +324,72 @@ export default function MonitorPage() {
     });
   }, []);
 
-  // 모니터링 옵션 — 운영 모델 레지스트리에서 대상 모델 선택 + 조회 구간. 지표 추이 차트에 반영된다.
-  const [modelTarget, setModelTarget] = useState(MODEL_REGISTRY[0].id);
-  const [windowHours, setWindowHours] = useState(10);
-  const targetModel = MODEL_REGISTRY.find((m) => m.id === modelTarget) ?? MODEL_REGISTRY[0];
-  // 표시 버전은 Model Store의 현재 운영 버전을 따른다(승급 후 레지스트리 상수와 어긋나지 않게).
+  const targetModel =
+    MODEL_REGISTRY.find((m) => m.id === modelTarget) ??
+    // 실데이터 모델은 시드 오프셋(accDelta/errRatio)이 없다 — 이름만 쓰고 보정은 적용하지 않는다.
+    { id: modelTarget, name: realdataModels.find((m) => m.model_id === modelTarget)?.name ?? modelTarget, accDelta: 0, errRatio: 1 };
+
+  // 데모 표시 OFF의 데이터 계층 차단 — 응답이 실측(source="measured")일 때만 값으로 받아들인다.
+  // 백엔드는 토글을 모르고 항상 같은 응답을 주므로, 시드 유래 응답을 걸러내는 곳은 여기 한 군데다.
+  const usable = (resp) =>
+    allowSeed || resp?.source === "measured" || resp?.source === "realdata" ? resp : null;
+  // 실데이터 응답 여부 — 계열 정의·카드 라벨·출처 표기가 모두 이 판정을 따른다.
+  const isRealdata = metricsResp?.source === "realdata";
+  const activeSeries = isRealdata ? REALDATA_SERIES : METRIC_SERIES;
+  const chartSeriesDefs = isRealdata ? REALDATA_DATASETS : CLASSIFICATION_DATASETS;
+  const metricsUsable = usable(metricsResp);
+  const shapUsable = usable(shapResp);
+  const driftUsable = usable(driftResp);
+  const metricsMeasured = metricsResp?.source === "measured";
+  const measuredLabels = Array.isArray(metricsResp?.labels) ? metricsResp.labels : [];
+  // 시드 계열은 데모 표시가 켜져 있을 때만 폴백으로 쓴다.
+  const seedSeries = (key) => (allowSeed ? appData.metrics_history?.[key] : null);
+
+  // 이상치 판정은 백엔드 실계산 API에 맡긴다 — 실측 Accuracy 계열이 2개 이상일 때만 의미가 있다.
+  // 시드 계열은 보내지 않는다(시드에 대한 실계산은 실측이 아니다).
+  const measuredAccuracy = metricsMeasured ? metricsResp?.history?.accuracy : null;
+  useEffect(() => {
+    const values = Array.isArray(measuredAccuracy) ? measuredAccuracy.filter(Number.isFinite) : [];
+    if (values.length < 2) {
+      setOutlierResp(null);
+      return undefined;
+    }
+    let alive = true;
+    apiSend("POST", "/api/v3/monitoring/outliers", { body: { values } })
+      .then((result) => {
+        if (alive) setOutlierResp({ result, labels: measuredLabels, values });
+      })
+      .catch((err) => {
+        if (!alive) return;
+        setOutlierResp(null);
+        addConsoleLog(`ERROR: 이상치 판정 실패 — ${err?.message ?? "알 수 없는 오류"}`);
+      });
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- measuredLabels는 같은 응답에서 온다
+  }, [measuredAccuracy, addConsoleLog]);
+  // 표시 버전은 백엔드 레지스트리의 현행 운영 버전을 따르고, 응답 전에만 Model Store·상수로 폴백한다
+  // (승급 후 프런트 상수와 어긋나지 않게).
   const servingVersionOf = (modelId, fallback) =>
-    modelStore?.find((m) => m.modelId === modelId && m.status === "운영")?.version ?? fallback;
-  const modelLabel = `${targetModel.name} ${servingVersionOf(targetModel.id, targetModel.version)}`;
+    realdataModels.find((m) => m.model_id === modelId)?.version ??
+    modelCandidates?.[modelId]?.version ??
+    modelStore?.find((m) => m.modelId === modelId && m.status === "운영")?.version ??
+    fallback;
+
+  // 대상 모델 선택지 — 데모 OFF에서는 백엔드가 내려준 모델(시드 지표 제외)만 남긴다.
+  // 상수 레지스트리(MODEL_REGISTRY)는 시드 모델명·버전이라 옵션 텍스트로도 내보내지 않는다.
+  const selectableModels = allowSeed
+    ? MODEL_REGISTRY
+    : realdataModels.map((m) => ({ id: m.model_id, name: m.name ?? m.model_id, version: m.version }));
+
+  // 선택 중인 모델이 목록에 없으면 첫 항목으로 되돌린다(데모 ON↔OFF 전환 직후).
+  useEffect(() => {
+    if (selectableModels.length === 0) return;
+    if (selectableModels.some((m) => m.id === modelTarget)) return;
+    setModelTarget(selectableModels[0].id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- selectableModels는 매 렌더 새 배열이라 id 목록으로 비교한다
+  }, [selectableModels.map((m) => m.id).join("|"), modelTarget]);
 
   const AXIS_OPTS = {
     responsive: true,
@@ -213,14 +402,15 @@ export default function MonitorPage() {
   };
 
   const driftData = useMemo(() => {
-    // 백엔드 응답(reference/current/buckets) 우선, 로딩 중엔 mock 폴백
-    const buckets = driftResp?.buckets ?? appData.drift_distribution.buckets;
-    const reference = driftResp?.reference ?? appData.drift_distribution.reference;
+    // 백엔드 응답(reference/current/buckets) 우선. 시드 폴백은 데모 표시가 켜져 있을 때만 쓰고,
+    // OFF에서 실측 분포가 없으면 빈 배열 → 축만 남은 빈 차트가 된다(요소는 감추지 않는다).
+    const seed = allowSeed ? appData.drift_distribution : null;
+    const buckets = driftUsable?.buckets ?? seed?.buckets ?? [];
+    const reference = driftUsable?.reference ?? seed?.reference ?? [];
     const current =
-      driftResp?.current ??
-      (driftInjected
-        ? appData.drift_distribution.current_drifted
-        : appData.drift_distribution.current_normal);
+      driftUsable?.current ??
+      (driftInjected ? seed?.current_drifted : seed?.current_normal) ??
+      [];
     return {
       labels: buckets,
       datasets: [
@@ -242,33 +432,42 @@ export default function MonitorPage() {
         }
       ]
     };
-  }, [appData, driftInjected, driftResp]);
+  }, [appData, allowSeed, driftInjected, driftUsable]);
 
   // 대상 모델 파생 지표 계열 — 요약 카드·게이지·6대 지표 추이가 모두 이 계열 하나에서 값을 읽는다.
   // 모델별 결정적 오프셋(accDelta/errRatio)을 새 배열로 만들어 원본(appData·API 응답)은 변경하지 않는다.
   const modelSeries = useMemo(() => {
-    const hist = metricsResp?.history ?? appData.metrics_history;
-    // 응답 계열이 없거나 비어 있으면 mock 시드로 폴백하고, 그것도 없으면 빈 배열로 둔다(NaN·undefined 방지).
+    // 응답 계열이 없거나 비어 있으면 시드로 폴백하되, 데모 표시 OFF에서는 폴백하지 않고
+    // 빈 배열로 둔다 — 없는 값을 시드로 메우면 시드가 실측치 자리를 차지한다.
     const source = (key) => {
-      const fromResp = hist?.[key];
+      const fromResp = metricsUsable?.history?.[key];
       if (Array.isArray(fromResp) && fromResp.length > 0) return fromResp;
-      const seed = appData.metrics_history?.[key];
+      const seed = seedSeries(key);
       return Array.isArray(seed) ? seed : [];
     };
+    // 모델별 오프셋(accDelta·errRatio)은 시드 한 벌로 세 모델을 구분해 보이려는 **데모 장치**다.
+    // 실측 계열(metricsUsable)에 적용하면 백엔드가 측정한 값이 시드 상수로 왜곡되므로 적용하지 않는다.
+    // 실데이터·실측 계열에는 데모 오프셋을 적용하지 않는다(측정값이 시드 상수로 왜곡된다).
+    const measured =
+      isRealdata || (Array.isArray(metricsUsable?.history?.accuracy) && metricsUsable.history.accuracy.length > 0);
     // 원시값을 그대로 검사한다 — Number(null)·Number("")·Number(false)는 0이라,
     // 강제 변환을 거치면 값이 없는 표본이 0.000짜리 실측치로 둔갑해 화면에 남는다.
-    const tune = (key, isError) =>
-      source(key)
-        .filter((v) => Number.isFinite(v))
-        .map((v) =>
-          isError
-            ? Number((v * targetModel.errRatio).toFixed(3))
-            : Math.min(0.99, Math.max(0, Number((v + targetModel.accDelta).toFixed(3))))
-        );
+    const tune = (key, isError) => {
+      const values = source(key).filter((v) => Number.isFinite(v));
+      // 실데이터 회귀 지표는 원 단위(수만~수억)라 소수 3자리로 깎으면 안 된다 — 원값 그대로 둔다.
+      if (isRealdata) return values;
+      if (measured) return values.map((v) => Number(v.toFixed(3)));
+      return values.map((v) =>
+        isError
+          ? Number((v * targetModel.errRatio).toFixed(3))
+          : Math.min(0.99, Math.max(0, Number((v + targetModel.accDelta).toFixed(3))))
+      );
+    };
     return Object.fromEntries(
-      Object.entries(METRIC_SERIES).map(([key, isError]) => [key, tune(key, isError)])
+      Object.entries(activeSeries).map(([key, isError]) => [key, tune(key, isError)])
     );
-  }, [appData, metricsResp, targetModel]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- seedSeries는 appData·allowSeed에서만 파생된다
+  }, [appData, allowSeed, metricsUsable, targetModel, activeSeries, isRealdata]);
 
   // 화면에 표시되는 조회 구간 — 추이 차트·요약 카드·게이지·요약 문장이 모두 이 슬라이스를 본다.
   const windowSeries = useMemo(
@@ -279,68 +478,48 @@ export default function MonitorPage() {
     [modelSeries, windowHours]
   );
 
-  const metricsData = useMemo(() => {
-    const series = (key) => windowSeries[key];
+  // 추이 x축 — 실측이면 백엔드가 준 실행 ID 라벨을 쓴다. 실측 지표는 학습 실행 단위로 생기므로
+  // 시각 라벨을 붙이면 없는 관측 주기를 있는 것처럼 보이게 한다.
+  const axisLabels = useMemo(() => {
+    const measured = metricsUsable?.labels;
+    if (Array.isArray(measured) && measured.length > 0) return measured.slice(-windowHours);
+    // 데모 OFF에는 그릴 계열이 없다 — 시각 라벨만 남기면 관측 주기가 있는 것처럼 보인다(빈 축).
+    if (!allowSeed) return [];
+    return hourlyLabels.slice(-windowHours);
+  }, [metricsUsable, hourlyLabels, windowHours, allowSeed]);
 
+  const metricsData = useMemo(
+    () => ({
+      labels: axisLabels,
+      datasets: chartSeriesDefs.map(({ key, ...style }) => ({ ...style, data: windowSeries[key] ?? [] }))
+    }),
+    [axisLabels, windowSeries, chartSeriesDefs]
+  );
+
+  // 실데이터 추이는 값의 자릿수가 달라 우축(WAPE)을 더한다. 분류 지표는 기존 축 그대로.
+  const metricsChartOpts = useMemo(() => {
+    if (!isRealdata) return AXIS_OPTS;
     return {
-      labels: hourlyLabels.slice(-windowHours),
-      datasets: [
-        {
-          label: "Accuracy",
-          data: series("accuracy"),
-          borderColor: "rgba(16, 185, 129, 1)",
-          backgroundColor: "rgba(16, 185, 129, 0.05)",
-          fill: true,
-          tension: 0.35,
-          borderWidth: 2
-        },
-        {
-          label: "F1-Score",
-          data: series("f1"),
-          borderColor: "rgba(59, 130, 246, 1)",
-          borderWidth: 2,
-          pointStyle: "circle",
-          tension: 0.35
-        },
-        {
-          label: "Precision",
-          data: series("precision"),
-          borderColor: "rgba(34, 211, 238, 1)",
-          borderWidth: 1.5,
-          pointStyle: "triangle",
-          tension: 0.35
-        },
-        {
-          label: "Recall",
-          data: series("recall"),
-          borderColor: "rgba(168, 85, 247, 1)",
-          borderWidth: 1.5,
-          pointStyle: "rect",
-          tension: 0.35
-        },
-        {
-          label: "MSE",
-          data: series("mse"),
-          borderColor: "rgba(239, 68, 68, 1)",
-          borderWidth: 1.5,
-          borderDash: [5, 5],
-          tension: 0.35
-        },
-        {
-          label: "MAE",
-          data: series("mae"),
-          borderColor: "rgba(251, 146, 60, 1)",
-          borderWidth: 1.5,
-          borderDash: [2, 3],
-          tension: 0.35
+      ...AXIS_OPTS,
+      scales: {
+        ...AXIS_OPTS.scales,
+        y1: {
+          position: "right",
+          grid: { display: false },
+          ticks: { color: ct.tick }
         }
-      ]
+      }
     };
-  }, [hourlyLabels, windowSeries, windowHours]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- AXIS_OPTS는 ct에서만 파생된다
+  }, [isRealdata, ct]);
 
   const shapData = useMemo(() => {
-    // features가 없거나 배열이 아니면 기존 계약대로 데모 시드로 폴백한다(map 호출 전에 형태부터 확인).
-    const source = Array.isArray(shapResp?.features) ? shapResp.features : appData.shap_features;
+    // features가 없거나 배열이 아니면 데모 시드로 폴백하되, 데모 표시 OFF에서는 폴백하지 않는다.
+    const source = Array.isArray(shapUsable?.features)
+      ? shapUsable.features
+      : allowSeed
+        ? appData.shap_features
+        : [];
     // 값이 유효한 수치인 특징만 남겨 라벨·값·색을 같은 배열에서 만든다 — 짝이 어긋나지 않고,
     // Number(null)·Number("0.3") 같은 강제 변환으로 없는 값이 0.000짜리 실측치로 둔갑하지 않는다.
     // 0과 음수는 실제 기여도이므로 그대로 남긴다.
@@ -360,7 +539,7 @@ export default function MonitorPage() {
         }
       ]
     };
-  }, [appData, shapResp]);
+  }, [appData, allowSeed, shapUsable]);
 
   const shapOpts = {
     indexAxis: "y",
@@ -375,33 +554,7 @@ export default function MonitorPage() {
 
   // 차트 대체 텍스트(§9 A11Y-07)의 수치는 상단 KPI·게이지와 같은 소수 3자리로 표기한다.
   const fmt3 = (value) => Number(value).toFixed(3);
-  // 라벨·참조·최근이 같은 지점에서 모두 유효한 수치일 때만 비교 대상으로 삼는다. 참조와 최근을
-  // 따로 거르면 라벨과 값의 짝이 어긋나고, Number(null)로 강제 변환하면 값이 없는 구간이
-  // 0.000%짜리 실측치로 둔갑한다(비중 0은 실측치이므로 그대로 남긴다).
-  const driftPoints = driftData.labels
-    .map((label, index) => ({
-      label,
-      reference: driftData.datasets[0].data[index],
-      recent: driftData.datasets[1].data[index]
-    }))
-    .filter((point) => Number.isFinite(point.reference) && Number.isFinite(point.recent));
-  const largestDriftPoint = driftPoints.reduce(
-    (best, point) =>
-      Math.abs(point.recent - point.reference) > Math.abs(best.recent - best.reference) ? point : best,
-    driftPoints[0]
-  );
-  // 유효한 구간이 하나도 없으면 아래 요약문 자체를 쓰지 않으므로 이 서술어는 읽히지 않는다.
-  const largestDriftVerb =
-    !largestDriftPoint || largestDriftPoint.recent === largestDriftPoint.reference
-      ? "변화가 없어"
-      : largestDriftPoint.recent > largestDriftPoint.reference
-        ? "증가해"
-        : "감소해";
-  // 분포 값은 구간별 비중(%)이므로 단위를 함께 적고, 두 비중의 차이는 %p로 표기한다.
-  // 백엔드가 빈 분포(buckets: [])를 돌려주면 요약할 값이 없다 — undefined·NaN을 문장에 노출하지 않는다.
-  const driftSummary = largestDriftPoint
-    ? `참조 분포와 최근 유입의 차이가 가장 큰 구간은 ${largestDriftPoint.label}이며, 참조 ${fmt3(largestDriftPoint.reference)}%에서 최근 ${fmt3(largestDriftPoint.recent)}%로 ${largestDriftVerb} 차이는 ${fmt3(Math.abs(largestDriftPoint.recent - largestDriftPoint.reference))}%p입니다.`
-    : "표시할 분포 데이터가 없어 구간별 변화를 요약할 수 없습니다.";
+  // 분포 변화 요약문(driftSummary)과 그 파생 계산은 UI 피드백 #7로 화면에서 제거했다.
   const latestMetrics = metricsData.datasets
     .map((dataset) => {
       const first = dataset.data[0];
@@ -419,8 +572,12 @@ export default function MonitorPage() {
   const topShapValue = shapData.datasets[0].data[topShapIndex];
   // 유효한 특징이 하나도 없으면 요약할 값이 없다(빈·전부 무효 features 응답) — 라벨·값 자리에
   // undefined를 넣지 않고, 강제 변환으로 없는 값을 0.000처럼 단정하지도 않는다.
+  // 실데이터(선형 SHAP)는 타깃이 방문객·소비액이라 부호 의미가 다르다 — 유출/완화로 읽지 않는다.
+  const shapSignNote = isRealdata
+    ? "양수는 예측값을 기준값보다 끌어올린 기여, 음수는 끌어내린 기여를 뜻합니다."
+    : "양수는 인구 유출 완화 기여, 음수는 인구 유출 기여를 뜻합니다.";
   const shapSummary = Number.isFinite(topShapValue)
-    ? `절대 기여도가 가장 큰 특징은 ${shapData.labels[topShapIndex]}이며 SHAP 값은 ${fmt3(topShapValue)}입니다. 양수는 인구 유출 완화 기여, 음수는 인구 유출 기여를 뜻합니다. 전체 값: ${shapData.labels
+    ? `절대 기여도가 가장 큰 특징은 ${shapData.labels[topShapIndex]}이며 SHAP 값은 ${fmt3(topShapValue)}입니다. ${shapSignNote} 전체 값: ${shapData.labels
         .map((label, index) => `${label} ${fmt3(shapData.datasets[0].data[index])}`)
         .join(", ")}.`
     : "표시할 특징 기여도 데이터가 없어 요약할 수 없습니다.";
@@ -437,17 +594,44 @@ export default function MonitorPage() {
     const latest = values.length > 0 ? values[values.length - 1] : null;
     return Number.isFinite(latest) ? latest : null;
   };
-  const fmtMetric = (value) => (value === null ? "–" : fmt3(value));
-  const accVal = fmtMetric(metricValue("accuracy"));
-  const f1Val = fmtMetric(metricValue("f1"));
+  const fmtMetric = (value) => (value === null ? NO_VALUE : fmt3(value));
+  // 실데이터 회귀 지표는 원 단위(수만~수억)라 소수 3자리 대신 천단위 구분으로 읽는다.
+  const fmtAmount = (value) =>
+    value === null ? NO_VALUE : Number(value).toLocaleString(undefined, { maximumFractionDigits: 1 });
+  const accVal = isRealdata ? fmtAmount(metricValue("mae")) : fmtMetric(metricValue("accuracy"));
+  const f1Val = isRealdata ? fmtAmount(metricValue("baseline_mae")) : fmtMetric(metricValue("f1"));
+  // 카드 수·배치는 그대로 두고 라벨·설명만 회귀 지표에 맞춘다.
+  const primaryCard = isRealdata
+    ? {
+        label: "Model MAE / 기준선 MAE",
+        tip: `선택한 실데이터 모델의 검증 MAE와 같은 구간 기준선(${metricsUsable?.baseline?.name ?? "yoy_or_prev_month"}) MAE입니다. MAE가 기준선보다 낮아야 학습 모델이 이긴 것입니다.`,
+        trailing: `기준선: ${f1Val}`
+      }
+    : {
+        label: "Model Accuracy / F1-Score",
+        tip: "운영 중인 모델의 정확도(Accuracy)와 정밀도·재현율의 조화평균(F1-Score). 재학습 승급 시 두 값이 함께 갱신됩니다.",
+        trailing: `F1: ${f1Val}`
+      };
 
   // PSI·드리프트 판정은 백엔드 실계산값(driftResp) 사용.
   // psi 필드가 빠진 200 응답에도 화면이 깨지지 않도록 유한수일 때만 사용한다.
-  const drifted = driftResp?.drifted ?? driftInjected;
-  const psiUsable = Number.isFinite(driftResp?.psi);
-  const psiVal = psiUsable ? driftResp.psi.toFixed(3) : driftInjected ? "0.384" : "0.045";
-  const psiColor = drifted ? "var(--accent-red)" : "var(--accent-teal)";
-  const driftLabel = drifted ? "위험 (Drift)" : "정상";
+  const psiUsable = Number.isFinite(driftUsable?.psi);
+  // 판정할 값 자체가 없으면(데모 OFF · 실 추론 입력 수집 경로 없음) 정상이라고 단정하지 않는다.
+  const driftKnown = psiUsable || allowSeed;
+  const drifted = driftKnown && (driftUsable?.drifted ?? driftInjected);
+  const psiVal = psiUsable
+    ? driftUsable.psi.toFixed(3)
+    : allowSeed
+      ? driftInjected
+        ? SEED_PSI_DRIFTED
+        : SEED_PSI_NORMAL
+      : NO_VALUE;
+  const psiColor = !driftKnown
+    ? "var(--text-muted)"
+    : drifted
+      ? "var(--accent-red)"
+      : "var(--accent-teal)";
+  const driftLabel = !driftKnown ? "판정 없음" : drifted ? "위험 (Drift)" : "정상";
   // 정상(teal)은 .system-status 기본 스타일과 같으므로 위험 상태만 덮어쓴다.
   const driftLabelStyle = drifted
     ? { backgroundColor: "rgba(var(--accent-red-rgb), 0.02)", color: "var(--accent-red)" }
@@ -455,7 +639,7 @@ export default function MonitorPage() {
 
   // 이상값 로그 시각 — 현재 시각 기준 상대 시각으로 산출(정적 mock 노출 방지)
   const ago = (minutes) => fmtHM(new Date(Date.now() - minutes * 60000));
-  const outlierRows = driftInjected
+  const seedOutlierRows = driftInjected
     ? [
         { time: ago(1), target: "남원시 데이터 (스마트팜 소득)", z: "3.45", outlier: true },
         { time: ago(2), target: "신안군 데이터 (임대주택 활용도)", z: "2.89", outlier: true },
@@ -467,12 +651,42 @@ export default function MonitorPage() {
         { time: ago(175), target: "남원시 데이터", z: "1.67", outlier: false }
       ];
 
-  const outlierCount = driftInjected ? "3건" : "0건";
-  const outlierCountColor = driftInjected ? "var(--accent-red)" : "var(--text-primary)";
-  // 지연 게이지는 대상 모델 선택을 따른다. 드리프트는 인구이동 예측에만 주입되므로
-  // 다른 모델을 보는 동안 드리프트 지연(178ms)을 그 모델의 값처럼 표시하면 안 된다.
-  const latencyMs =
-    driftInjected && modelTarget === DRIFT_MODEL_ID ? LATENCY_DRIFTED_MS : LATENCY_NORMAL_MS;
+  // 실측 이상치 — 백엔드 실계산 API(POST /monitoring/outliers)가 돌려준 결과만 쓴다.
+  const measuredOutlierRows = outlierResp?.result?.outliers?.map((o) => ({
+    time: outlierResp.labels[o.index] ?? `#${o.index + 1}`,
+    target: `${targetModel.name} 학습 실행 Accuracy ${fmt3(outlierResp.values[o.index])}`,
+    z: Number.isFinite(o.z) ? Number(o.z).toFixed(2) : NO_VALUE,
+    outlier: true
+  }));
+  const outlierRows = measuredOutlierRows ?? (allowSeed ? seedOutlierRows : []);
+  const outlierMeasured = measuredOutlierRows != null;
+  const outlierCount = outlierMeasured
+    ? `${measuredOutlierRows.length}건`
+    : isRealdata
+      ? // 실데이터 계열에는 Z-score 판정 입력(학습 실행 Accuracy 계열)이 없다. "값 없음"이 아니라
+        // 실측 계열에서 검출된 이상값이 0건이라는 뜻이므로 0건으로 적고 근거를 배지로 밝힌다.
+        "0건"
+      : allowSeed
+        ? driftInjected
+          ? "3건"
+          : "0건"
+        : NO_VALUE;
+  const outlierAlerting = outlierMeasured ? measuredOutlierRows.length > 0 : allowSeed && driftInjected;
+  const outlierCountColor = outlierAlerting ? "var(--accent-red)" : "var(--text-primary)";
+  // 예측 지연 — 학습 시 실측한 1건 추론 지연(백엔드 training.latency_ms)을 우선한다.
+  // 실측이 없고 데모 표시가 켜져 있을 때만 시드 상수로 내려가고, OFF에서는 "측정 없음"으로 둔다.
+  // 드리프트는 인구이동 예측에만 주입되므로 다른 모델에 드리프트 지연을 붙이지 않는다.
+  const measuredLatency = metricsMeasured ? metricsResp?.latency_ms : null;
+  const latencyMs = Number.isFinite(measuredLatency)
+    ? measuredLatency
+    : allowSeed
+      ? driftInjected && modelTarget === DRIFT_MODEL_ID
+        ? SEED_LATENCY_DRIFTED_MS
+        : SEED_LATENCY_NORMAL_MS
+      : null;
+  // 실측 지연은 1ms 미만이라 정수로 반올림하면 전부 0ms가 된다.
+  const latencyText =
+    latencyMs === null ? "측정 없음" : `${latencyMs >= 1 ? latencyMs.toFixed(0) : fmt3(latencyMs)}ms`;
 
   // 수집 상태 — 성능·설명 API 결과와 문구를 일치시킨다(실패 시 데이터 소스 정상 수신을 주장하지 않음).
   // 색상 외 아이콘 형태로도 상태를 구분한다(§9 A11Y-06 · §10 UI-01).
@@ -504,7 +718,11 @@ export default function MonitorPage() {
   // 승급 후에는 운영 버전이 등록 후보와 같아져 재학습이 시작되지 않는다(startPipeline 조기 반환).
   // 이 경우 실행되지 않을 버튼 대신 사유와 다음 행동(오케스트레이터의 후보 등록)을 안내한다(§10 UI-04).
   const driftServingVersion = servingVersionOf(DRIFT_MODEL_ID, driftPipeline.baseVersion);
-  const candidateAvailable = driftServingVersion !== driftPipeline.candidateVersion;
+  // 후보 버전은 백엔드 레지스트리(next_version)가 정한다. 프런트 상수(candidateVersion)는 승급
+  // 한 번이면 운영 버전과 같아져 버튼이 영구 비활성으로 굳는다 — 응답 전에만 상수로 폴백한다.
+  const driftCandidateVersion =
+    modelCandidates?.[DRIFT_MODEL_ID]?.nextVersion ?? driftPipeline.candidateVersion;
+  const candidateAvailable = driftServingVersion !== driftCandidateVersion;
   // 재학습 이력의 트리거는 실제 사유와 일치해야 한다. 드리프트 미감지 상태의 재시도까지
   // 드리프트/PSI로 기록하면 백엔드 트리거 분류(drift/manual)와 콘솔 로그가 모두 거짓이 된다.
   const retryLabel = driftInjected ? "드리프트 대응 재학습 재시도" : "수동 재학습 재시도";
@@ -514,6 +732,18 @@ export default function MonitorPage() {
       driftPipeline
     );
   const buildDriftAction = () => {
+    // 드리프트 시뮬레이션은 시드 분포(PSI 0.384)·시드 파이프라인을 재현하는 **데모 장치**다.
+    // 데모 표시 OFF에서 눌리면 PSI 카드는 "판정 없음"인데 배너·로그·벨 알림만 드리프트를
+    // 단언하는 모순이 생기므로 잠근다. 실데이터 드리프트는 아래 실데이터 평가 패널이 담당한다.
+    if (!allowSeed) {
+      return {
+        icon: "fa-vial-circle-check",
+        label: "이상 시나리오 재현 (데모 전용)",
+        locked: true,
+        run: undefined,
+        title: "설정에서 데모 데이터 표시를 켜면 실행할 수 있습니다."
+      };
+    }
     if (driftInFlight) {
       return {
         icon: "fa-hourglass-half",
@@ -539,7 +769,7 @@ export default function MonitorPage() {
         label: "오케스트레이터에서 후보 확인",
         locked: false,
         run: () => navigateToTab("tab-mlops-orch"),
-        title: `${driftPipeline.name}은 현재 운영 버전(${driftServingVersion})보다 새로운 후보가 없어 실행할 수 없습니다. 다음 후보 버전은 백엔드 모델 레지스트리에 등록되어야 하며 이 화면에서는 등록할 수 없습니다. 오케스트레이터 탭으로 이동해 파이프라인·Model Store 상태를 확인합니다.`
+        title: `${driftPipeline.name}은 현재 운영 버전(${driftServingVersion})과 백엔드 후보 버전(${driftCandidateVersion})이 같아 실행할 수 없습니다. 오케스트레이터 탭으로 이동해 파이프라인·Model Store 상태를 확인합니다.`
       };
     }
     if (terminalState || driftInjected) {
@@ -580,20 +810,29 @@ export default function MonitorPage() {
   // 성능 계열은 6대 지표가 모두 있어야 통과시킨다(일부만 온 응답은 나머지가 데모 시드로 채워짐).
   // 실제 백엔드 계약(history 6계열·features 배열·필수 psi float)은 그대로 통과한다.
   // modelSeries가 계열 단위로 폴백하므로(위 source(key)) 판정도 계열 단위로 둔다.
+  // 판정은 데이터 계층이 실제로 받아들인 응답(metricsUsable)을 본다 — 데모 표시 OFF에서 시드
+  // 응답을 차단했는데 여기서는 "정상 수신"이라고 하면 화면의 빈 자리와 문구가 어긋난다.
   const seriesUsable = (key) => {
-    const values = metricsResp?.history?.[key];
+    const values = metricsUsable?.history?.[key];
     return Array.isArray(values) && values.some((v) => Number.isFinite(v));
   };
-  const emptySeries = Object.keys(METRIC_SERIES).filter((key) => !seriesUsable(key));
+  const emptySeries = Object.keys(activeSeries).filter((key) => !seriesUsable(key));
   const allSeriesUsable = emptySeries.length === 0;
   const hasUsableFeatures = (resp) =>
     Array.isArray(resp?.features) && resp.features.some((f) => Number.isFinite(f?.value));
+  const featuresUsable = hasUsableFeatures(shapUsable);
+  const PSI_EMPTY_SOURCE = "드리프트 판정(PSI)";
   const emptySources = [
     // 6계열 중 일부만 비어도 "성능 지표 전체가 데모"로 읽히지 않게 결손 계열을 밝힌다.
     lastCollected && !allSeriesUsable ? `성능 지표(${emptySeries.join("·")})` : null,
-    lastCollected && !hasUsableFeatures(shapResp) ? "특징 기여도" : null,
-    driftStatus === "ok" && !psiUsable ? "드리프트 판정(PSI)" : null
+    lastCollected && !featuresUsable ? "특징 기여도" : null,
+    driftStatus === "ok" && !psiUsable ? PSI_EMPTY_SOURCE : null
   ].filter(Boolean);
+  // PSI만 비어 있는 상태는 상단 배너로 계속 띄우지 않는다 — 값이 없다는 사실은 드리프트 카드
+  // 안의 한 줄 안내와 배지("판정 없음")·분포 차트 빈 상태 문구가 이미 같은 자리에서 알린다.
+  // 수집 판정(툴바 문구·헤더 칩)에서는 빼지 않는다: 빠뜨리면 값이 없는데 "정상 수신"이 된다.
+  const psiEmptyOnly = driftStatus === "ok" && !psiUsable;
+  const bannerEmptySources = emptySources.filter((source) => source !== PSI_EMPTY_SOURCE);
   const failedSources = [
     monitoringError ? "실시간 성능·설명" : null,
     driftStatus === "error" ? "드리프트 판정" : null
@@ -620,13 +859,15 @@ export default function MonitorPage() {
     );
   }, [collectPhase, setMonitorCollectStatus]);
 
-  const collectedAt = lastCollected ? fmtTime(lastCollected) : "–";
+  const collectedAt = lastCollected ? fmtTime(lastCollected) : NO_VALUE;
+  // 데모 표시 OFF에서는 시드로 메우지 않으므로 "대체 값 표시 중"이라고 말하면 안 된다.
+  const fallbackPhrase = allowSeed ? "대체 값 표시 중" : "표시할 값 없음";
   const collectStatus =
     collectPhase === "failed"
       ? {
           icon: "fa-triangle-exclamation",
           color: "var(--accent-red)",
-          text: `수집 검증 실패 — 대체 값 표시 중 · 마지막 수집 성공: ${collectedAt}`
+          text: `수집 검증 실패 — ${fallbackPhrase} · 마지막 수집 성공: ${collectedAt}`
         }
       : collectPhase === "pending"
         ? {
@@ -640,7 +881,7 @@ export default function MonitorPage() {
               // 한 줄을 유지한다(길어지면 툴바가 줄바꿈되며 아래 콘텐츠가 밀린다).
               icon: "fa-circle-exclamation",
               color: "var(--accent-orange)",
-              text: `수집 응답에 값 없음 — 대체 값 표시 중 · 마지막 응답: ${collectedAt}`
+              text: `수집 응답에 값 없음 — ${fallbackPhrase} · 마지막 응답: ${collectedAt}`
             }
           : {
               icon: "fa-satellite-dish",
@@ -654,17 +895,17 @@ export default function MonitorPage() {
     collectPhase === "failed"
       ? {
           tone: "error",
-          message: `${failedSources.join("·")} 수집에 실패해 대체 값을 표시합니다.${monitoringError ? ` ${monitoringError}` : ""}`
+          message: `${failedSources.join("·")} 수집에 실패했습니다. ${allowSeed ? "대체 값을 표시합니다." : "실데이터가 없어 해당 값은 비워 둡니다."}${monitoringError ? ` ${monitoringError}` : ""}`
         }
       : collectPhase === "pending"
         ? {
             tone: "pending",
-            message: "실시간 성능·설명 API와 드리프트 판정을 확인하는 동안 대체 값을 표시합니다."
+            message: `실시간 성능·설명 API와 드리프트 판정을 확인하는 동안 ${allowSeed ? "대체 값을 표시합니다." : "값을 비워 둡니다."}`
           }
-        : collectPhase === "empty"
+        : collectPhase === "empty" && bannerEmptySources.length > 0
           ? {
               tone: "warn",
-              message: `${emptySources.join("·")} 응답에 사용할 값이 없어 대체 값을 표시합니다. 수집 상태를 확인하세요.`
+              message: `${bannerEmptySources.join("·")}에 사용할 실측 값이 없습니다. ${allowSeed ? "대체 값을 표시합니다." : "해당 값은 비워 두며, 재학습을 실행하면 실측 지표가 쌓입니다."}`
             }
           : null;
 
@@ -675,21 +916,28 @@ export default function MonitorPage() {
   // 채워진 KPI 카드·게이지까지 함께 가려진다. metricValue가 조회 계열보다 먼저 쓰는 승급 오버라이드
   // (백엔드 응답 PipelineRun.candidate_metrics)도 응답 유래이므로 같이 본다.
   // 6대 지표 추이 차트만 전 계열을 요구한다 — 값 하나가 아니라 계열 전체를 그리기 때문이다.
-  const srcOf = (fromApi) => (fromApi ? "api" : "mock");
+  // 실데이터 응답으로 채운 자리는 "api"가 아니라 "realdata"로 표기한다 — 전달 경로가 아니라
+  // 어느 저장소에서 온 값인지를 화면에서 구분할 수 있어야 한다.
+  const srcOf = (fromApi, resp = metricsResp) =>
+    !fromApi ? "mock" : resp?.source === "realdata" ? "realdata" : "api";
   const metricFromApi = (key) => seriesUsable(key) || Number.isFinite(selectedMetricOverride[key]);
-  const accF1Src = srcOf(metricFromApi("accuracy") && metricFromApi("f1"));
+  const primaryMetricKeys = isRealdata ? ["mae", "baseline_mae"] : ["accuracy", "f1"];
+  const accF1Src = srcOf(primaryMetricKeys.every(metricFromApi));
   const precisionSrc = srcOf(metricFromApi("precision"));
   const recallSrc = srcOf(metricFromApi("recall"));
   const metricsChartSrc = srcOf(allSeriesUsable);
-  const shapSrc = srcOf(hasUsableFeatures(shapResp));
+  // 소비자가 실제로 읽는 값(shapUsable) 기준이어야 한다 — 원본 응답(shapResp)으로 판정하면
+  // 시드 응답이 왔을 때 빈 카드에 "api" 표기가 붙는다.
+  const shapSrc = srcOf(hasUsableFeatures(shapUsable), shapResp);
   // 분포 차트는 buckets·reference·current를 한 응답에서 모두 받아야 실측이다(일부만 오면 mock 폴백이 섞인다).
   const driftChartSrc = srcOf(
-    Array.isArray(driftResp?.buckets) &&
-      driftResp.buckets.length > 0 &&
-      Array.isArray(driftResp?.reference) &&
-      Array.isArray(driftResp?.current)
+    Array.isArray(driftUsable?.buckets) &&
+      driftUsable.buckets.length > 0 &&
+      Array.isArray(driftUsable?.reference) &&
+      Array.isArray(driftUsable?.current),
+    driftResp
   );
-  const psiSrc = srcOf(psiUsable);
+  const psiSrc = srcOf(psiUsable, driftResp);
 
   return (
     <>
@@ -703,13 +951,20 @@ export default function MonitorPage() {
           ></i>{" "}
           {collectStatus.text}
         </span>
+        <div className="monitor-actions">
         <div className="monitor-options">
           <label className="compact-select-field">
             <span>대상 모델</span>
             <select className="select-control mock-data-output" value={modelTarget} onChange={(e) => setModelTarget(e.target.value)}>
-              {MODEL_REGISTRY.map((m) => (
-                <option key={m.id} value={m.id}>{m.name} {servingVersionOf(m.id, m.version)}</option>
-              ))}
+              {/* 데모 OFF에서는 백엔드가 확인해 준 모델(실측 지표 보유)만 고를 수 있다. 상수 레지스트리
+                  이름·버전은 시드라 옵션 텍스트로도 내보내지 않는다. */}
+              {selectableModels.length === 0 ? (
+                <option value={modelTarget}>운영 모델 없음</option>
+              ) : (
+                selectableModels.map((m) => (
+                  <option key={m.id} value={m.id}>{m.name} {servingVersionOf(m.id, m.version)}</option>
+                ))
+              )}
             </select>
           </label>
           <label className="compact-select-field">
@@ -721,9 +976,10 @@ export default function MonitorPage() {
             </select>
           </label>
         </div>
+        {/* 조작 버튼이라 데모 OFF에서도 눌러야 한다 — mock-data-output(가림 대상)에서 제외한다. */}
         <button
           type="button"
-          className="btn btn-secondary mock-data-output"
+          className="btn btn-secondary"
           style={{ padding: "6px 14px", fontSize: 12 }}
           onClick={handleDriftAction}
           aria-disabled={driftAction.locked}
@@ -732,6 +988,7 @@ export default function MonitorPage() {
         >
           <i className={`fa-solid ${driftAction.icon}`} aria-hidden="true"></i> {driftAction.label}
         </button>
+        </div>
       </div>
       {/* 상태 안내 슬롯 — 배너가 붙고 떨어져도 아래 지표 카드가 위아래로 밀리지 않도록 높이를 예약한다(§11 상태 전환) */}
       <div className="monitor-state-slot">
@@ -748,13 +1005,8 @@ export default function MonitorPage() {
               : `드리프트가 감지되지 않은 실행이므로 상단 [${retryLabel}] 버튼은 수동 실행으로 기록됩니다.`}
           </p>
         )}
-        {!candidateAvailable && (
-          <p className="async-feedback is-pending" role="status" aria-live="polite">
-            {driftPipeline.name}은 현재 운영 버전({driftServingVersion})이 등록된 후보({driftPipeline.candidateVersion})와
-            같아 재학습을 실행할 수 없습니다. 다음 후보 버전은 백엔드 모델 레지스트리에 등록되어야 하며 이 화면에서는
-            등록할 수 없습니다. 상단 [오케스트레이터에서 후보 확인] 버튼으로 파이프라인·Model Store 상태를 확인할 수 있습니다.
-          </p>
-        )}
+        {/* 후보 부재 안내문은 화면에서 제거했다(UI 피드백 #1). 같은 내용은 상단 실행 버튼의 title에
+            남아 있고, 이 슬롯의 종료 안내·liveStatus가 role=status/alert 알림 자리를 계속 맡는다. */}
         {liveStatus && (
           <div
             className={`async-feedback is-${liveStatus.tone}`}
@@ -801,8 +1053,8 @@ export default function MonitorPage() {
       <div className="grid-cols-3">
         <div className="card" style={{ padding: "var(--space-xl)" }} data-values-source={accF1Src}>
           <div className="stat-label">
-            Model Accuracy / F1-Score
-            <InfoTip text="운영 중인 모델의 정확도(Accuracy)와 정밀도·재현율의 조화평균(F1-Score). 재학습 승급 시 두 값이 함께 갱신됩니다." />
+            {primaryCard.label}
+            <InfoTip text={primaryCard.tip} />
           </div>
           <div
             style={{
@@ -815,11 +1067,8 @@ export default function MonitorPage() {
             <span className="stat-value" style={{ fontSize: 32 }}>
               {accVal}
             </span>
-            <span className="trend-up">F1: {f1Val}</span>
+            <span className="trend-up">{primaryCard.trailing}</span>
           </div>
-          <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8 }}>
-            <span className="mock-data-output">{modelLabel} 기준 · </span>분산 지표 통합 관리로 사일로(Silo) 제거 — 6대 평가지표 실시간 자동 집계
-          </p>
         </div>
 
         <div
@@ -829,7 +1078,13 @@ export default function MonitorPage() {
         >
           <div className="stat-label">
             Data Drift Status (PSI)
-            <InfoTip text="PSI(Population Stability Index)는 원본 학습 분포와 실시간 유입 분포의 차이를 측정합니다. 0.2를 초과하면 데이터 드리프트로 판정해 자동 재학습을 트리거합니다." />
+            <InfoTip
+              text={
+                driftUsable?.source === "realdata"
+                  ? `실데이터 대표 피처 ${driftUsable.feature}의 학습 구간 대비 ${driftUsable.kind === "operational" ? "학습 이후 관측" : "검증"} 구간 PSI입니다. 0.2를 초과하면 분포 변화로 판정합니다.`
+                  : "PSI(Population Stability Index)는 원본 학습 분포와 실시간 유입 분포의 차이를 측정합니다. 0.2를 초과하면 데이터 드리프트로 판정해 자동 재학습을 트리거합니다."
+              }
+            />
           </div>
           <div
             style={{
@@ -849,18 +1104,29 @@ export default function MonitorPage() {
               {driftLabel}
             </span>
           </div>
-          <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8 }}>
-            <span className="mock-data-output">{targetModel.name} 모델 유입 분포 기준 · </span>임계치 PSI {">"} 0.2 초과 시 자동 Alert 트리거
-          </p>
-          <p className="mock-data-output" style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>
-            표시 값: 인구이동 예측 모델 기준
-          </p>
+          {psiEmptyOnly && (
+            <p className="monitor-card-note" role="status">
+              드리프트 판정에 사용할 실측 분포가 없습니다 — 재학습을 실행하면 판정 값이 쌓입니다.
+            </p>
+          )}
         </div>
 
-        <div className="card" style={{ padding: "var(--space-xl)" }}>
+        <div
+          className="card"
+          style={{ padding: "var(--space-xl)" }}
+          data-values-source={srcOf(outlierMeasured)}
+        >
           <div className="stat-label">
             Outlier Detection (Z-Score)
-            <InfoTip text="유입 데이터의 Z-score(평균 대비 표준편차 거리)가 임계치를 넘는 이상치 건수입니다. 학습데이터 품질 저하를 사전에 차단합니다." />
+            <InfoTip
+              text={
+                outlierMeasured
+                  ? `백엔드 이상치 판정 API가 실측 학습 실행 ${measuredLabels.length}건의 Accuracy 계열에서 Z-score 임계를 넘는 실행을 센 값입니다.`
+                  : isRealdata
+                    ? "실데이터 실측 계열(후보 버전별 검증 지표)에서 Z-score 임계를 넘는 값이 없습니다. 이상값 로그는 학습 실행이 더 쌓이면 표시됩니다."
+                    : "Z-score(평균 대비 표준편차 거리)가 임계치를 넘는 이상치 건수입니다. 실측 지표 계열이 2건 이상 쌓이면 백엔드 판정 결과로 바뀝니다."
+              }
+            />
           </div>
           <div
             style={{
@@ -879,20 +1145,22 @@ export default function MonitorPage() {
                 padding: "2px 8px",
                 fontSize: 11,
                 // 정상(teal)은 .system-status 기본값과 같으므로 경고 상태만 덮어쓴다.
-                ...(driftInjected
+                ...(outlierAlerting
                   ? { backgroundColor: "rgba(var(--accent-red-rgb), 0.02)", color: "var(--accent-red)" }
-                  : null)
+                  : outlierCount === NO_VALUE
+                    ? { color: "var(--text-muted)" }
+                    : null)
               }}
             >
-              {driftInjected ? "경고" : "정상"}
+              {outlierCount === NO_VALUE
+                ? "판정 없음"
+                : isRealdata && !outlierMeasured
+                  ? "실측 계열"
+                  : outlierAlerting
+                    ? "경고"
+                    : "정상"}
             </span>
           </div>
-          <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8 }}>
-            <span className="mock-data-output">{targetModel.name} 모델 유입 데이터 기준 · </span>IQR 및 Z-score 기반 다차원 이상치 필터링
-          </p>
-          <p className="mock-data-output" style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>
-            표시 값: 인구이동 예측 모델 기준
-          </p>
         </div>
       </div>
 
@@ -905,8 +1173,13 @@ export default function MonitorPage() {
         >
           <div style={{ position: "relative", height: 320, width: "100%" }}>
             <Bar data={driftData} options={AXIS_OPTS} />
+            {driftData.labels.length === 0 && (
+              <ChartEmptyNote>
+                {EMPTY_HINT} — 실 추론 입력 분포 수집 경로가 아직 없어 분포 비교를 표시할 수 없습니다.
+                아래 실데이터 연계 패널의 드리프트 판정을 사용하세요.
+              </ChartEmptyNote>
+            )}
           </div>
-          <p className="chart-summary">{driftSummary}</p>
         </Card>
 
         <Card title="이상값 검출 로그" icon="fa-filter">
@@ -922,6 +1195,15 @@ export default function MonitorPage() {
                 </tr>
               </thead>
               <tbody>
+                {outlierRows.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="monitor-empty-cell">
+                      {outlierMeasured || isRealdata
+                        ? "실측 계열에서 이상치가 검출되지 않았습니다."
+                        : `${EMPTY_HINT} — 재학습을 실행하면 실측 지표 계열에 대한 이상치 판정이 표시됩니다.`}
+                    </td>
+                  </tr>
+                )}
                 {outlierRows.map((row, idx) => (
                   <tr key={idx}>
                     <td
@@ -954,31 +1236,61 @@ export default function MonitorPage() {
       </div>
 
       <div className="grid-cols-2">
+        {/* 차트 요약문은 카드 제목의 InfoTip으로 옮겼다(UI 피드백 #9·#10). 값은 현재 로드된
+            데이터(실데이터 또는 데모 시드)에서 읽고, 값이 없으면 '요약할 수 없습니다'로 표기한다.
+            데모 토글은 데이터 유무만 바꾸므로 트리거 자체는 토글과 무관하게 항상 렌더한다. */}
         <Card
-          title="MLOps 6대 핵심 평가지표 실시간 모니터링"
-          icon="fa-chart-column"
-          headerRight={
-            <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
-              {modelLabel} · 최근 {windowHours}시간
-            </span>
+          title={
+            <>
+              MLOps AI 평가지표 실시간 모니터링
+              <InfoTip
+                text={
+                  latestMetrics
+                    ? `조회 구간 첫 값에서 최근 값까지의 변화: ${latestMetrics}.`
+                    : "표시할 지표 데이터가 없어 구간 변화를 요약할 수 없습니다."
+                }
+                label="지표 변화 요약 보기"
+              />
+            </>
           }
+          icon="fa-chart-column"
           data-values-source={metricsChartSrc}
         >
           <div style={{ position: "relative", height: 280, width: "100%" }}>
-            <Line data={metricsData} options={AXIS_OPTS} />
+            <Line data={metricsData} options={metricsChartOpts} />
+            {!allSeriesUsable && (
+              <ChartEmptyNote>
+                {EMPTY_HINT} — 재학습을 실행하면 학습 실행별 실측 6대 지표가 이 자리에 쌓입니다.
+              </ChartEmptyNote>
+            )}
           </div>
-          <p className="chart-summary">조회 구간 첫 값에서 최근 값까지의 변화: {latestMetrics}.</p>
         </Card>
 
         <Card
-          title="SHAP 기반 인구 유출 기여 특징 중요도 분석"
+          title={
+            <>
+              SHAP 기반 인구 유출 기여 특징 중요도 분석
+              <InfoTip
+                text={
+                  shapUsable?.basis
+                    ? `산출 근거: ${shapUsable.basis}${shapUsable.version ? ` · 버전 ${shapUsable.version}` : ""}. ${shapSummary}`
+                    : shapSummary
+                }
+                label="특징 기여도 요약 보기"
+              />
+            </>
+          }
           icon="fa-brain"
           data-values-source={shapSrc}
         >
           <div style={{ position: "relative", height: 280, width: "100%" }}>
             <Bar data={shapData} options={shapOpts} />
+            {!featuresUsable && (
+              <ChartEmptyNote>
+                {EMPTY_HINT} — 승급된 학습 아티팩트가 있어야 학습된 모델의 특징 기여도를 읽을 수 있습니다.
+              </ChartEmptyNote>
+            )}
           </div>
-          <p className="chart-summary">{shapSummary}</p>
         </Card>
       </div>
 
@@ -987,37 +1299,27 @@ export default function MonitorPage() {
         title={
           <>
             모델 신뢰도 게이지 (실시간)
-            <InfoTip text="운영 모델의 Precision·Recall과 예측 지연(latency)을 표시합니다. 예측 지연이 자동 롤백 임계 200ms를 초과하면 직전 버전으로 자동 롤백됩니다." />
+            {/* 카드마다 제목 옆 트리거 1개만 둔다 — 기존 설명 툴팁에 표시 값 기준(피드백 #11)을 덧붙인다.
+                데모 토글은 값의 유무만 바꾸므로 툴팁 자체는 토글과 무관하게 항상 같은 내용을 낸다. */}
+            <InfoTip text="운영 모델의 Precision·Recall과 예측 지연(latency)을 표시합니다. 예측 지연이 자동 롤백 임계 200ms를 초과하면 직전 버전으로 자동 롤백됩니다. 표시 값: 인구이동 예측 모델 기준(예측 지연)." />
           </>
         }
         icon="fa-gauge-high"
-        headerRight={<span style={{ fontSize: 11, color: "var(--text-muted)" }}>{modelLabel}</span>}
       >
         <div className="grid-cols-3" style={{ marginBottom: 0 }}>
+          {/* 값이 없으면 null 을 그대로 넘긴다 — 0으로 바꿔 넘기면 게이지가 "위험"/"정상"을 단정한다. */}
+          <GaugeChart value={metricValue("precision")} label="Precision" data-values-source={precisionSrc} />
+          <GaugeChart value={metricValue("recall")} label="Recall" data-values-source={recallSrc} />
+          {/* 실측 지연(학습 시 측정한 1건 추론 지연)이 있으면 api, 없으면 시드 상수 또는 '측정 없음'. */}
           <GaugeChart
-            value={metricValue("precision") ?? 0}
-            displayText={metricValue("precision") === null ? "–" : undefined}
-            label="Precision"
-            data-values-source={precisionSrc}
-          />
-          <GaugeChart
-            value={metricValue("recall") ?? 0}
-            displayText={metricValue("recall") === null ? "–" : undefined}
-            label="Recall"
-            data-values-source={recallSrc}
-          />
-          {/* 예측 지연은 아직 데모 상수(LATENCY_*)다 — 실측 게이지처럼 남기면 안 되므로 표기하지 않는다. */}
-          <GaugeChart
-            value={latencyMs / LATENCY_ROLLBACK_MS}
-            displayText={`${latencyMs}ms`}
+            value={latencyMs === null ? null : latencyMs / LATENCY_ROLLBACK_MS}
+            displayText={latencyText}
             label="예측 지연"
             goodThreshold={0.75}
             lowerIsBetter
+            data-values-source={srcOf(Number.isFinite(measuredLatency))}
           />
         </div>
-        <p className="mock-data-output" style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 8 }}>
-          표시 값: 인구이동 예측 모델 기준(예측 지연)
-        </p>
       </Card>
 
       {/* 실데이터 연계(R4) — 남원 모델 검증/운영 평가·선형 SHAP·드리프트. 위 데모 지표와는 별개 경로. */}

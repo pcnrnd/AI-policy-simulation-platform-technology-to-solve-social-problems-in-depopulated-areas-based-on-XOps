@@ -12,13 +12,15 @@ provider seam으로 갈아끼울 수 있다.
 from __future__ import annotations
 
 import re
+import threading
 from copy import deepcopy
 from dataclasses import asdict
+from datetime import datetime, timezone
 from functools import lru_cache
 from typing import Any
 
 from src.core import db
-from src.core.exceptions import SourceNotFoundError
+from src.core.exceptions import SourceNotFoundError, XopsError
 from src.core.logger import get_logger
 from src.core.settings import get_settings
 from src.mlops.orchestration.events import RetrainEvent
@@ -26,6 +28,44 @@ from src.mlops.orchestration.orchestrator import Orchestrator, PipelineRun
 
 _logger = get_logger("xops.orchestration")
 _VERSION_PATTERN = re.compile(r"^v(\d+)\.(\d+)")
+
+
+class DuplicatePipelineError(XopsError):
+    """이미 존재하는 파이프라인 id로 등록 시도."""
+
+    status_code = 409
+
+
+class RunConflict(XopsError):
+    """같은 모델에 이미 실행 중인 재학습이 있음 — API는 409로 변환한다."""
+
+    status_code = 409
+
+
+# 접수만 하고 아직 끝나지 않은 실행의 상태. 종결 상태(succeeded/rejected/rolled_back/debounced/failed)와 구분한다.
+RUNNING_STATE = "running"
+
+# 모델별 실행 락 — jobs.py와 같은 방식(프로세스 국소, non-blocking 취득).
+_locks_guard = threading.Lock()
+_model_locks: dict[str, threading.Lock] = {}
+
+
+def _lock_for(model_id: str) -> threading.Lock:
+    with _locks_guard:
+        lock = _model_locks.get(model_id)
+        if lock is None:
+            lock = threading.Lock()
+            _model_locks[model_id] = lock
+        return lock
+
+
+def recover_stale_runs() -> int:
+    """기동 시 진행 중으로 남은 실행을 failed(reason="restart")로 마감한다. 반환값은 마감 건수."""
+    stale = [run for run in db.list_runs() if run.get("state") == RUNNING_STATE]
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    for run in stale:
+        db.upsert_run({**run, "state": "failed", "reason": "restart", "finished_at": now})
+    return len(stale)
 
 # 프론트 레지스트리 3종 대응 시드.
 # horizon(예측 지평, 기간)은 학습 문제의 난이도를 정한다 — 지평이 길수록 어려워 지표가 낮다.
@@ -96,13 +136,19 @@ class ModelRegistry:
         metrics, source = found
         return metrics if source == "trained" else None
 
-    def models(self) -> list[dict[str, Any]]:
-        """등록된 운영 모델과 현재 버전/지표. 승급 이력이 있으면 실측 지표를 노출한다."""
+    def models(self, include_seed: bool = True) -> list[dict[str, Any]]:
+        """등록된 운영 모델과 현재 버전/지표. 승급 이력이 있으면 실측 지표를 노출한다.
+
+        `include_seed=False` 면 아직 학습 아티팩트가 없어 지표가 시드인 모델(`metrics_source="seed"`)을
+        뺀다 — 데모 표시 OFF 화면이 시드 버전·지표를 실측처럼 읽지 않게 하기 위한 것이다.
+        """
         out: list[dict[str, Any]] = []
         for model_id, info in self._store.items():
             version = self._version(model_id, info["version"])
             found = self._artifact_metrics(model_id, version)
             metrics, source = found if found is not None else (info["metrics"], "seed")
+            if not include_seed and source == "seed":
+                continue
             out.append(
                 {
                     **info,
@@ -115,8 +161,146 @@ class ModelRegistry:
             )
         return out
 
-    def runs(self) -> list[dict[str, Any]]:
-        return db.list_runs()
+    def runs(self, pipeline_id: str | None = None, include_seed: bool = True) -> list[dict[str, Any]]:
+        """실행 이력. `include_seed=False` 면 시드 파이프라인이 만든 실행을 뺀다.
+
+        실행 행 자체는 실제 산출물이지만 학습 입력이 시드 시계열(`mlops/training/dataset.py`)이라
+        데모 표시 OFF 화면에서는 실측으로 읽히면 안 된다. 파이프라인에 매이지 않은 실행
+        (`/events` 발화)도 같은 시드 입력이라 함께 뺀다.
+        """
+        runs = db.list_runs()
+        if pipeline_id:
+            return [r for r in runs if r.get("pipeline_id") == pipeline_id]
+        if include_seed:
+            return runs
+        return [r for r in runs if r.get("pipeline_id") and r["pipeline_id"] not in db.SEED_PIPELINE_IDS]
+
+    # ── 파이프라인 등록 ─────────────────────────────────────
+    def pipelines(self, include_seed: bool = True) -> list[dict[str, Any]]:
+        """등록된 파이프라인 + 대상 모델의 현행/다음 후보 버전.
+
+        후보 버전은 저장하지 않고 매번 현행 버전에서 파생한다 — 고정 상수로 두면 한 번
+        승급한 뒤 현행과 같아져 실행이 영구히 잠긴다.
+
+        `include_seed=False` 면 부트스트랩 시드 파이프라인(`db.SEED_PIPELINE_IDS`)을 뺀다.
+        기준 모델·후보 버전은 그대로 시드 레지스트리에서 읽는다 — 사용자가 등록한 파이프라인도
+        같은 모델을 대상으로 할 수 있어서 여기서 모델까지 걸러 내면 버전 칸이 빈다.
+        """
+        models = {m["model_id"]: m for m in self.models()}
+        out: list[dict[str, Any]] = []
+        for pipeline in db.list_pipelines():
+            if not include_seed and pipeline["id"] in db.SEED_PIPELINE_IDS:
+                continue
+            model = models.get(pipeline["model_id"])
+            out.append(
+                {
+                    **pipeline,
+                    "base_version": model["version"] if model else None,
+                    "candidate_version": model["next_version"] if model else None,
+                }
+            )
+        return out
+
+    def register_pipeline(self, definition: dict[str, Any]) -> dict[str, Any]:
+        """파이프라인 등록 — 대상 모델 존재 검증 + id 중복 거부 (SQLite 영속화)."""
+        pipeline_id = definition["id"]
+        if definition["model_id"] not in self._store:
+            raise SourceNotFoundError(f"등록된 모델이 아닙니다: {definition['model_id']}")
+        if db.get_pipeline(pipeline_id) is not None:
+            raise DuplicatePipelineError(f"이미 존재하는 파이프라인 id입니다: {pipeline_id}")
+        db.add_pipeline(definition)
+        _logger.info(f"pipeline registered id={pipeline_id} model={definition['model_id']}")
+        return definition
+
+    def delete_pipeline(self, pipeline_id: str) -> None:
+        if not db.delete_pipeline(pipeline_id):
+            raise SourceNotFoundError(f"파이프라인을 찾을 수 없습니다: {pipeline_id}")
+
+    def get_pipeline(self, pipeline_id: str) -> dict[str, Any]:
+        pipeline = db.get_pipeline(pipeline_id)
+        if pipeline is None:
+            raise SourceNotFoundError(f"파이프라인을 찾을 수 없습니다: {pipeline_id}")
+        return pipeline
+
+    def start_trigger(
+        self,
+        *,
+        model_id: str,
+        trigger: str = "manual",
+        candidate_metrics: dict[str, float] | None = None,
+        candidate_latency_ms: float | None = None,
+        pipeline_id: str | None = None,
+    ) -> str:
+        """비동기 접수(202) — 진행 중 실행을 먼저 영속화하고 백그라운드 스레드에서 상태머신을 돌린다.
+
+        학습 job(`src.realdata.jobs`)과 같은 방식이다: 모델별 non-blocking 락으로 중복 실행을
+        막고(실패 시 `RunConflict` → 409), 상태는 SQLite에 남으며(프로세스가 죽어도 흔적이 남는다),
+        락은 `finally`에서 풀고, 기동 시 `recover_stale_runs`가 남은 진행 중 실행을 마감한다.
+        """
+        if model_id not in self._store:
+            raise SourceNotFoundError(f"등록된 모델이 아닙니다: {model_id}")
+
+        lock = _lock_for(model_id)
+        if not lock.acquire(blocking=False):
+            raise RunConflict(f"{model_id}에 이미 실행 중인 재학습이 있습니다.")
+        try:
+            run_id = self._orchestrator.next_run_id()
+            db.append_run(
+                {
+                    "run_id": run_id,
+                    "model_id": model_id,
+                    "trigger": trigger,
+                    "state": RUNNING_STATE,
+                    "pipeline_id": pipeline_id,
+                    "started_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                    "stages": [],
+                    "logs": [],
+                }
+            )
+        except Exception:
+            lock.release()
+            raise
+
+        thread = threading.Thread(
+            target=self._run_trigger,
+            args=(run_id, model_id, trigger, candidate_metrics, candidate_latency_ms, pipeline_id, lock),
+            daemon=True,
+        )
+        thread.start()
+        return run_id
+
+    def _run_trigger(
+        self,
+        run_id: str,
+        model_id: str,
+        trigger: str,
+        candidate_metrics: dict[str, float] | None,
+        candidate_latency_ms: float | None,
+        pipeline_id: str | None,
+        lock: threading.Lock,
+    ) -> None:
+        try:
+            self.trigger(
+                model_id=model_id,
+                trigger=trigger,
+                candidate_metrics=candidate_metrics,
+                candidate_latency_ms=candidate_latency_ms,
+                pipeline_id=pipeline_id,
+                run_id=run_id,
+            )
+        except Exception as exc:  # pragma: no cover — 상태 고착 방지 안전망
+            _logger.warning(f"retrain failed model={model_id} run={run_id} reason={exc}")
+            run = db.get_run(run_id) or {"run_id": run_id, "model_id": model_id}
+            db.upsert_run(
+                {
+                    **run,
+                    "state": "failed",
+                    "reason": str(exc),
+                    "finished_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                }
+            )
+        finally:
+            lock.release()
 
     def trigger(
         self,
@@ -125,6 +309,8 @@ class ModelRegistry:
         trigger: str = "manual",
         candidate_metrics: dict[str, float] | None = None,
         candidate_latency_ms: float | None = None,
+        pipeline_id: str | None = None,
+        run_id: str | None = None,
     ) -> PipelineRun:
         """재학습 이벤트를 상태머신에 태우고 승급 성공 시 버전·아티팩트를 갱신(SQLite 영속화)."""
         model = self._store.get(model_id)
@@ -145,8 +331,11 @@ class ModelRegistry:
             current_version=current_version,
             candidate_version=next_version(current_version),
             horizon=model.get("horizon", get_settings().train_default_horizon),
+            pipeline_id=pipeline_id,
+            run_id=run_id,
         )
-        db.append_run(asdict(run))
+        # 접수 시점에 남긴 진행 중 실행이 있으면 같은 run_id 행을 종료 상태로 바꿔 쓴다.
+        db.upsert_run(asdict(run))
         if run.state == "succeeded":
             self._promote(model_id, run)
         _logger.info(f"retrain model={model_id} trigger={trigger} run={run.run_id} state={run.state}")

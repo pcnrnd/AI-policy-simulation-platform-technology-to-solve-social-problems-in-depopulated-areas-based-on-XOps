@@ -1,14 +1,53 @@
 // 보고서 콘텐츠 빌더 — 지자체/템플릿/드리프트 상태로부터 포맷 중립 블록 모델과
 // Excel 표·Markdown 문자열을 생성한다. 템플릿 종류에 따라 본문 구성을 분기.
 
-const SHAP_TOP = [
-  { rank: "1순위 기여", factor: "청년 복지 예산 가중치", shap: "+0.354" },
-  { rank: "2순위 기여", factor: "제조업 공장 일자리 유치", shap: "+0.281" },
-  { rank: "3순위 위험", factor: "평균 연령 증가", shap: "-0.152" }
-];
+/**
+ * 기준 시점·행정동 표기 — 어느 스냅샷의 어느 행정동 기여도인지 본문에서 드러나야 한다.
+ * 대응표에 없는 코드면 코드를 그대로 쓴다(이름을 지어내지 않는다).
+ */
+function explainBasis(explain) {
+  return `${explain.baseYm} · ${explain.dongName ?? explain.dongCode}`;
+}
 
-function psiText(driftInjected) {
-  return driftInjected ? "0.384 (드리프트 위험 감지)" : "0.045 (안정)";
+/**
+ * SHAP 기여도 블록 — explain 실측값만 싣는다. 바인딩이 없으면 섹션 자체를 비운다.
+ * 표기명(label)은 dataopsApi 의 featureLabel 이 붙여 둔 값을 그대로 쓴다 — 본문·엑셀 공통.
+ */
+function shapBlocks(explain) {
+  if (!explain) return [];
+  return [
+    { type: "heading", level: 2, text: `3. SHAP 특징 중요도 기여 요인 분석 (${explainBasis(explain)})` },
+    {
+      type: "list",
+      items: explain.contributions.map((c, i) => `${i + 1}순위: ${c.label} (기여도 ${formatMetric(c.phi, 4)})`)
+    }
+  ];
+}
+
+/** 실측 지표 표시 — 값이 없으면 숫자를 만들지 않고 대시로 둔다. */
+export function formatMetric(value, digits = 3) {
+  return typeof value === "number" ? value.toFixed(digits) : "–";
+}
+
+/**
+ * 모델 검증지표 블록 — evaluation(WAPE·MAE)·drift(PSI) 실측값만 싣는다.
+ * 바인딩이 없으면(활성 모델 없음·조회 실패) 섹션 자체를 비운다.
+ */
+function modelMetricBlocks(live) {
+  if (!live) return [];
+  return [
+    { type: "heading", level: 2, text: "2. MLOps AI 모델 검증지표" },
+    {
+      type: "list",
+      items: [
+        `예측 오차 (WAPE): ${formatMetric(live.wape)}`,
+        `예측 오차 (MAE): ${formatMetric(live.mae)} (기준선 MAE ${formatMetric(live.baselineMae)})`,
+        ...(live.psi ?? []).map(
+          (entry) => `입력 데이터 분산 안정성 (PSI): ${entry.label} ${formatMetric(entry.psi, 4)}`
+        )
+      ]
+    }
+  ];
 }
 
 // 정책 품의·기안 공통양식 머리말 (제목·기안자·일시·결재).
@@ -111,12 +150,9 @@ function vitalPopulationBlocks(region, vital) {
   ];
 }
 
-function analysisBlocks(region, driftInjected, populationChange, live) {
+function analysisBlocks(region, populationChange, live, explain) {
   const tenYearBase = Math.round(region.population * 0.81).toLocaleString();
   const tenYearPolicy = Math.round(region.population * 0.95).toLocaleString();
-  // 라이브 바인딩 지표가 있으면 우선 사용(API 자동 갱신 반영), 없으면 정적 기본값.
-  const accuracy = live ? live.accuracy : 0.892;
-  const outliers = live ? live.outliers : driftInjected ? 3 : 0;
   return [
     { type: "heading", level: 2, text: "1. 분석 개요 및 대상 지자체 기본 현황" },
     {
@@ -136,17 +172,8 @@ function analysisBlocks(region, driftInjected, populationChange, live) {
       ]
     },
     ...populationTrendBlock(populationChange),
-    { type: "heading", level: 2, text: "2. MLOps AI 모델 검증지표" },
-    {
-      type: "list",
-      items: [
-        `예측 모델 정확도 (Accuracy): ${accuracy}`,
-        `데이터 분산 안정성 (PSI): ${psiText(driftInjected)}`,
-        `검출된 이상치 (Outliers): ${outliers}건`
-      ]
-    },
-    { type: "heading", level: 2, text: "3. SHAP 특징 중요도 기여 요인 분석" },
-    { type: "list", items: SHAP_TOP.map((s) => `${s.rank}: ${s.factor} (SHAP ${s.shap})`) },
+    ...modelMetricBlocks(live),
+    ...shapBlocks(explain),
     { type: "heading", level: 2, text: "4. 정책 효과 시뮬레이션 예측" },
     {
       type: "list",
@@ -199,7 +226,7 @@ function caseBlocks(region) {
 }
 
 /** 포맷 중립 블록 모델 (docx/hwp/markdown 공통 소스). */
-export function buildReportBlocks(region, template, driftInjected, extra = {}) {
+export function buildReportBlocks(region, template, extra = {}) {
   const header = approvalHeader(region);
   if (template.id === "template_task_order") {
     return [...header, ...taskOrderBlocks(region)];
@@ -210,11 +237,13 @@ export function buildReportBlocks(region, template, driftInjected, extra = {}) {
   if (template.id === "template_smartfarm" || template.id === "template_settlement") {
     return [...header, ...caseBlocks(region)];
   }
-  return [...header, ...analysisBlocks(region, driftInjected, extra.populationChange, extra.live)];
+  return [...header, ...analysisBlocks(region, extra.populationChange, extra.live, extra.explain)];
 }
 
 /** Excel(.xlsx) 용 2차원 표 — 지표 요약. */
-export function buildReportRows(region, template, driftInjected, extra = {}) {
+export function buildReportRows(region, template, extra = {}) {
+  const live = extra.live;
+  const explain = extra.explain;
   const rows = [
     ["인구감소 대응 R&D 지표 요약", template.title],
     ["보고서 번호", `RD-POP-2026-${region.id.toUpperCase()}`],
@@ -227,12 +256,19 @@ export function buildReportRows(region, template, driftInjected, extra = {}) {
     ["기본 현황", "출산율(명)", region.birthRate],
     ["기본 현황", "고령화지수(%)", region.agingIndex],
     ["기본 현황", "인구소멸 위험지수", region.riskIndex],
-    ["모델 검증", "Accuracy", extra.live ? extra.live.accuracy : 0.892],
-    ["모델 검증", "PSI", driftInjected ? 0.384 : 0.045],
-    ["모델 검증", "이상치 검출(건)", extra.live ? extra.live.outliers : driftInjected ? 3 : 0],
-    ["SHAP 기여", "청년 복지 예산", 0.354],
-    ["SHAP 기여", "제조업 일자리", 0.281],
-    ["SHAP 위험", "평균 연령 증가", -0.152],
+    // 모델 검증 행은 실측 바인딩이 있을 때만 싣는다 — 없으면 값을 만들지 않고 행을 비운다.
+    ...(live
+      ? [
+          ["모델 검증", "WAPE", live.wape],
+          ["모델 검증", "MAE", live.mae],
+          ["모델 검증", "기준선 MAE", live.baselineMae],
+          ...(live.psi ?? []).map((entry) => ["모델 검증", `PSI (${entry.label})`, entry.psi])
+        ]
+      : []),
+    // SHAP 행도 explain 실측 바인딩이 있을 때만 싣는다 — 기여도를 만들지 않는다.
+    ...(explain
+      ? explain.contributions.map((c) => [`SHAP 기여 (${explainBasis(explain)})`, c.label, c.phi])
+      : []),
     ["시뮬레이션", "10년 후 인구(현행)", Math.round(region.population * 0.81)],
     ["시뮬레이션", "10년 후 인구(정책적용)", Math.round(region.population * 0.95)]
   ];
@@ -262,4 +298,17 @@ export function blocksToMarkdown(title, blocks) {
   });
   lines.push("", "---", "© 2026 국토인구소멸대응 공동 R&D 통합 플랫폼 R-Center.");
   return lines.join("\n");
+}
+
+/**
+ * 리포트 표시 판정 — 기준은 데모 토글이 아니라 **실데이터 바인딩 유무**다.
+ * 바인딩이 있으면 데모 OFF 에서도 실데이터를 그대로 표시한다(데모 OFF 는 가림이 아니라
+ * 데이터 계층 차단이라는 원칙). 바인딩이 없을 때만 데모 토글이 시드 폴백 여부를 정한다.
+ * 내보내기 차단도 같은 기준이다 — "시드로 가득 찬 파일 생성 방지"는 바인딩이 없을 때만 필요하다.
+ * @param {{binding: unknown, allowSeed: boolean}} state
+ * @returns {"live"|"seed"|"empty"} live=실데이터 표시, seed=시드 폴백, empty=빈 상태(사유 문구 없음)
+ */
+export function reportGateMode({ binding, allowSeed }) {
+  if (binding) return "live";
+  return allowSeed ? "seed" : "empty";
 }

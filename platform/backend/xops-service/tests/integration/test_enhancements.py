@@ -17,7 +17,8 @@ def test_drift_breach_triggers_retrain(client: TestClient, reset_model: Callable
     reset_model("population-forecast")
     r = client.get(
         "/api/v3/monitoring/drift",
-        params={"drifted": "true", "model_id": "population-forecast", "auto_retrain": "true"},
+        # 시드 분포 판정은 데모 표시 ON 경로다(기본값은 판정 없음).
+        params={"include_seed": "true", "drifted": "true", "model_id": "population-forecast", "auto_retrain": "true"},
     ).json()
     assert r["drifted"] is True
     assert r["retrain"] is not None
@@ -28,14 +29,14 @@ def test_drift_breach_triggers_retrain(client: TestClient, reset_model: Callable
 def test_no_drift_no_retrain(client: TestClient) -> None:
     r = client.get(
         "/api/v3/monitoring/drift",
-        params={"drifted": "false", "model_id": "population-forecast", "auto_retrain": "true"},
+        params={"include_seed": "true", "drifted": "false", "model_id": "population-forecast", "auto_retrain": "true"},
     ).json()
     assert r["drifted"] is False
     assert r["retrain"] is None
 
 
 def test_drift_without_auto_retrain_flag(client: TestClient) -> None:
-    r = client.get("/api/v3/monitoring/drift", params={"drifted": "true"}).json()
+    r = client.get("/api/v3/monitoring/drift", params={"include_seed": "true", "drifted": "true"}).json()
     assert r["retrain"] is None
 
 
@@ -66,7 +67,10 @@ def test_prod_default_secret_rejected() -> None:
 
 
 def test_prod_custom_secret_ok() -> None:
-    Settings(environment="prod", jwt_secret="a-real-secret").validate_runtime()
+    # prod 기동에는 시크릿과 함께 토큰 발급 게이트 자격증명도 필요하다.
+    Settings(
+        environment="prod", jwt_secret="a-real-secret", client_id="cid", client_secret="csec"
+    ).validate_runtime()
 
 
 def test_dev_default_secret_ok() -> None:
