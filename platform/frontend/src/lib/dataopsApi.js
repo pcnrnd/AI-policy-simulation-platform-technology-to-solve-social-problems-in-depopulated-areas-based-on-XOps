@@ -322,12 +322,23 @@ export function toExplainBinding(explainResponse, target, dongMapResponse, model
   };
 }
 
-/** drift 응답 → `[{ label, psi }]`. 집계하지 않고 피처·타깃 실측값을 그대로 옮긴다. */
-function psiEntries(driftResponse) {
+/**
+ * drift 응답 → `[{ feature, label, psi }]`. 집계하지 않고 피처·타깃 실측값을 그대로 옮긴다.
+ * 표기명은 SHAP 기여도와 같은 `featureLabel` 을 쓴다 — 한 리포트에 내부 피처명이 섞이지 않게.
+ * dong-map 은 이 경로에서 받지 않으므로(추가 호출 금지) `dong_{code}` 는 원본 그대로 남는다.
+ */
+function psiEntries(driftResponse, modelTarget) {
   const data = driftResponse?.status === "ok" ? driftResponse.data : null;
   if (!data || data.status !== "ok") return [];
-  const entries = (data.features ?? []).map((f) => ({ label: f.feature, psi: f.psi }));
-  if (data.target) entries.push({ label: "타깃(y)", psi: data.target.psi });
+  const entries = (data.features ?? []).map((f) => ({
+    feature: f.feature,
+    label: featureLabel(f.feature, modelTarget, []),
+    psi: f.psi
+  }));
+  // 타깃 행은 내부 기호 `y` 를 노출하지 않는다 — 타깃 표기명, 없으면 타깃 문자열, 그마저 없으면 "타깃".
+  if (data.target) {
+    entries.push({ feature: "y", label: TARGET_LABELS[modelTarget] ?? modelTarget ?? "타깃", psi: data.target.psi });
+  }
   return entries;
 }
 
@@ -349,7 +360,7 @@ export function toReportIndicators(region, model, evaluationResponse, driftRespo
       wape: validation.metrics?.wape ?? null,
       mae: validation.metrics?.mae ?? null,
       baselineMae: validation.baseline?.mae ?? null,
-      psi: psiEntries(driftResponse),
+      psi: psiEntries(driftResponse, model.target),
       population: region.population,
       birthRate: region.birthRate
     }
