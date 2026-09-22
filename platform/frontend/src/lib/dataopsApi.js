@@ -262,11 +262,49 @@ export function pickExplainTarget(datasetResponse, observedTo) {
   return { baseYm: observedTo, dongCode: top.dong_code };
 }
 
+/** 모델 타깃 컬럼 → 리포트 표기명. 매핑에 없으면 타깃 문자열 그대로 쓴다(이름을 지어내지 않는다). */
+const TARGET_LABELS = {
+  nonlocal_visitors: "외지인 방문객",
+  observed_sales_krw: "소비 매출 추정액"
+};
+
+// 피처명 → 리포트 표기명. `y_*` 는 모델 타깃의 랙이라 타깃에 따라 문구가 달라진다(생활인구가 아니다).
+// has_yoy 는 전년동월 결측 여부를 가르는 0/1 플래그다(features.py 의 y_yoy 대체 규칙).
+// month_sin/month_cos 는 항상 함께 상위에 올 수 있어 사인·코사인을 구분해 둔다.
+const FEATURE_LABELS = {
+  y_lag1: (y) => y && `직전월 ${y}`,
+  y_lag2: (y) => y && `2개월 전 ${y}`,
+  y_lag3: (y) => y && `3개월 전 ${y}`,
+  y_yoy: (y) => y && `전년 동월 ${y}`,
+  has_yoy: () => "전년 동월 값 유무",
+  month_sin: () => "계절성(월, 사인)",
+  month_cos: () => "계절성(월, 코사인)"
+};
+
+/**
+ * 모델 피처명 → 지자체 담당자가 읽는 리포트 표기명. 리포트 본문·표·엑셀이 이 한 함수만 쓴다.
+ * 매핑에 없는 피처, 대응표에 없는 행정동 코드, 타깃을 모르는 `y_*` 는 원본 피처명 그대로 둔다.
+ * @param {string} feature 모델 피처명
+ * @param {string|null|undefined} modelTarget `/realdata/models` 의 모델 `target` 컬럼명
+ * @param {Array<{dong_code?: string, dong_name?: string}>} dongEntries `/realdata/dong-map` 의 entries
+ */
+export function featureLabel(feature, modelTarget, dongEntries = []) {
+  const build = FEATURE_LABELS[feature];
+  if (build) return build(TARGET_LABELS[modelTarget] ?? modelTarget) || feature;
+  if (typeof feature === "string" && feature.startsWith("dong_")) {
+    const code = feature.slice("dong_".length);
+    const name = dongEntries.find((e) => e?.dong_code === code)?.dong_name;
+    return name ? `행정동: ${name}` : feature;
+  }
+  return feature;
+}
+
 /**
  * explain 응답 → `{ baseYm, dongCode, dongName, contributions }`. `ok` 가 아니면 null(빈 상태).
  * 기여도는 `|phi|` 내림차순으로 정렬한다. `note` 는 내부 설명 문구라 옮기지 않는다.
+ * 각 기여도에는 표기명 `label` 을 함께 싣고 원본 `feature` 도 추적용으로 남긴다.
  */
-export function toExplainBinding(explainResponse, target, dongMapResponse) {
+export function toExplainBinding(explainResponse, target, dongMapResponse, modelTarget) {
   const data = explainResponse?.status === "ok" ? explainResponse.data : null;
   const raw = data?.contributions;
   if (!target || !Array.isArray(raw) || raw.length === 0) return null;
@@ -279,7 +317,7 @@ export function toExplainBinding(explainResponse, target, dongMapResponse) {
     dongCode: target.dongCode,
     dongName: match?.dong_name ?? null,
     contributions: [...raw]
-      .map((c) => ({ feature: c.feature, value: c.value, phi: c.phi }))
+      .map((c) => ({ feature: c.feature, label: featureLabel(c.feature, modelTarget, entries), value: c.value, phi: c.phi }))
       .sort((a, b) => Math.abs(b.phi) - Math.abs(a.phi))
   };
 }
@@ -363,7 +401,7 @@ async function fetchExplainBinding(token, model, { getDatasets, getExplain, apiG
       getExplain(token, model.model_id, model.active_version, target.baseYm, target.dongCode),
       apiGet(`${REALDATA_BASE}/dong-map`, { token })
     ]);
-    return toExplainBinding(explain, target, dongMap);
+    return toExplainBinding(explain, target, dongMap, model.target);
   } catch {
     // 조회 실패도 빈 상태 — 평가·드리프트 바인딩까지 같이 버리지 않는다.
     return null;

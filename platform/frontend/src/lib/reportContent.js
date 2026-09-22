@@ -11,7 +11,7 @@ function explainBasis(explain) {
 
 /**
  * SHAP 기여도 블록 — explain 실측값만 싣는다. 바인딩이 없으면 섹션 자체를 비운다.
- * feature 는 모델 피처명 그대로 쓴다(한국어 라벨 매핑은 제품 판단이라 만들지 않는다).
+ * 표기명(label)은 dataopsApi 의 featureLabel 이 붙여 둔 값을 그대로 쓴다 — 본문·엑셀 공통.
  */
 function shapBlocks(explain) {
   if (!explain) return [];
@@ -19,7 +19,7 @@ function shapBlocks(explain) {
     { type: "heading", level: 2, text: `3. SHAP 특징 중요도 기여 요인 분석 (${explainBasis(explain)})` },
     {
       type: "list",
-      items: explain.contributions.map((c, i) => `${i + 1}순위: ${c.feature} (기여도 ${formatMetric(c.phi, 4)})`)
+      items: explain.contributions.map((c, i) => `${i + 1}순위: ${c.label} (기여도 ${formatMetric(c.phi, 4)})`)
     }
   ];
 }
@@ -267,7 +267,7 @@ export function buildReportRows(region, template, extra = {}) {
       : []),
     // SHAP 행도 explain 실측 바인딩이 있을 때만 싣는다 — 기여도를 만들지 않는다.
     ...(explain
-      ? explain.contributions.map((c) => [`SHAP 기여 (${explainBasis(explain)})`, c.feature, c.phi])
+      ? explain.contributions.map((c) => [`SHAP 기여 (${explainBasis(explain)})`, c.label, c.phi])
       : []),
     ["시뮬레이션", "10년 후 인구(현행)", Math.round(region.population * 0.81)],
     ["시뮬레이션", "10년 후 인구(정책적용)", Math.round(region.population * 0.95)]
