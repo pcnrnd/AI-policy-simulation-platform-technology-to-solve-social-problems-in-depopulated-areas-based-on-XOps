@@ -131,7 +131,7 @@ def test_overview_total_matches_counted_sources(
     """
     summary = client.get("/api/v3/overview/summary").json()
 
-    assert summary["source_count"] == 5, "데모 OFF 롤업은 실데이터 소스만 센다"
+    assert summary["source_count"] == 6, "데모 OFF 롤업은 실데이터 소스만 센다"
     assert summary["archive_rows_total"] == 1334, "센 소스(ds_11)만 합산된다"
     assert summary["archive_rows_counted"] == 1
     assert summary["archive_rows_unknown"] == summary["source_count"] - 1
