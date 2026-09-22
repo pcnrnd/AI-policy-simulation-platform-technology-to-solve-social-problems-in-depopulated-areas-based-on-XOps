@@ -111,7 +111,8 @@ def list_models(_: dict[str, Any] = Depends(require_auth("data:read"))) -> dict[
                 "active_version": active["version"] if active else None,
                 "applied_at": active["applied_at"] if active else None,
                 "previous_version": active["previous_version"] if active else None,
-                "retrain_needed": candidates.retrain_needed(model_id) if active else False,
+                # 캐시판 — 목록은 화면 마운트마다 불리는데 판정 한 번이 스냅샷 재생성을 부른다.
+                "retrain_needed": candidates.retrain_needed_cached(model_id) if active else False,
             }
         )
     return _envelope("ok", data=entries)

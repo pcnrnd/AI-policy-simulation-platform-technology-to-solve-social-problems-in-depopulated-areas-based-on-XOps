@@ -334,81 +334,19 @@ body.drawer-open {
   margin-bottom: var(--space-xxl);
 }
 
-/* 데모 표시 OFF: API 응답·로컬 시드 구분 없이 모든 데이터 출력을 가린다.
-   화면 구조는 유지하고 원본·입력 상태는 보존해 ON으로 돌아오면 그대로 복원한다.
+/* 데모 표시 OFF의 가림 규칙은 `.content-body` 안에서 전부 제거했다.
+   원칙은 "토글은 UI를 바꾸지 않고 데이터 유무만 바꾼다" 이고, 이제 여섯 탭 전부가 데이터 계층에서
+   시드를 차단한다 — 카탈로그·오케스트레이션·롤업·모니터링 GET 은 `include_seed`(기본 false)로
+   서버가 시드를 빼고 내려주고, 시드 전용 항목(지역·요인분석 케이스·보고서 본문)은 화면이
+   `allowSeed` 로 끊고 빈 상태 문구를 남긴다.
+
+   가림 방식으로 되돌리지 않는다. 요소 종류(tbody·canvas·.stat-value…)로 거는 규칙이라
+   같은 표 안의 실데이터 행과 "왜 비었는지"를 말하는 빈 상태 문구까지 함께 지웠고, 표를 가리면
+   그 안의 선택 버튼이 클릭·포커스에서 막혔다(오케스트레이터 Model Store 가 그 사례).
    data-values-source는 전달 경로일 뿐 실제/데모 데이터 구분이나 표시 예외가 아니다. */
-.mock-values-hidden .content-body :where(
-  canvas,
-  tbody,
-  .stat-value,
-  .stat-unit,
-  .stat-footer,
-  .chart-summary,
-  .trend-up,
-  .trend-down,
-  .system-status,
-  .monitor-collected,
-  .outlier-tag,
-  .gauge-status,
-  .run-meta,
-  .node-status,
-  .promotion-criteria,
-  .workflow-statusbar,
-  .schema-meta-line,
-  .catalog-selected-chip,
-  .token-line,
-  .sql-preview,
-  .api-response,
-  .built-resp-head,
-  .mock-data-output,
-  .gauge-value,
-  .table-pager,
-  .catalog-result-status,
-  .console-log,
-  .async-feedback,
-  .monitor-state-slot,
-  .xops-next-step,
-  .routing-flow,
-  .query-lang-chip,
-  .resp-origin-chip,
-  .card-title-area > :not(.card-title),
-  .pl-factor-list,
-  .pl-stat-baseline,
-  .pl-corr-grid,
-  .pl-diag-list,
-  .sim-dock-count,
-  .sim-region-item strong,
-  .sim-region-meta,
-  .grade-chip,
-  .slider-val,
-  .map-float-legend,
-  .map-data-details,
-  .reco-rank,
-  .reco-name,
-  .reco-cat,
-  .reco-score,
-  .report-preview-panel
-) {
-  visibility: hidden !important;
-  /* 입력·버튼의 transition: all 때문에 OFF 직후 값이 잠시 남지 않도록 한다. */
-  transition: none !important;
-}
 
-/* 인증 상태 안내(#catalog-auth-hint)는 데이터 출력이 아니라 조작 안내이므로
-   .catalog-result-status가 숨겨져도 예외로 노출한다(visibility는 자식에서 재정의 가능). */
-.mock-values-hidden .content-body #catalog-auth-hint {
-  visibility: visible !important;
-}
-
-/* 베이스 지도와 조작 패널은 남기고, 목업 위치·격자·시설 레이어만 숨긴다. */
-.mock-values-hidden .content-body :where(
-  .leaflet-overlay-pane,
-  .leaflet-marker-pane,
-  .leaflet-tooltip-pane,
-  .leaflet-popup-pane
-) {
-  visibility: hidden !important;
-}
+/* 지도 오버레이(마커·격자·시설·팝업)는 CSS로 가리지 않는다 — SimulatorPage가 데모 OFF에서
+   레이어에 시드 피처를 아예 올리지 않는다(레이어 그룹은 남아 토글은 계속 조작 가능). */
 
 /* 팝업 껍데기는 마운트 상태로 두되 목업 경보 값은 노출하지 않는다. */
 .mock-values-hidden .alert-popup {
@@ -494,6 +432,7 @@ body.drawer-open {
   .content-body {
     --content-pad: var(--space-l);
   }
+  .monitor-actions,
   .monitor-options {
     width: 100%;
   }

@@ -193,7 +193,17 @@ def _psi_for_field(reference_rows: list[dict[str, Any]], current_rows: list[dict
     ref_hist = _histogram(ref_values, _DRIFT_BINS)
     cur_hist = _histogram(cur_values, _DRIFT_BINS, edges=ref_hist["edges"])
     psi = population_stability_index(ref_hist["counts"], cur_hist["counts"])
-    return {"feature": field, "psi": round(psi, 6), "n_reference": len(ref_values), "n_current": len(cur_values)}
+    # edges/counts는 PSI 계산에 이미 쓰인 값 그대로다. 모니터 화면의 분포 비교 차트가 같은
+    # 구간·같은 도수를 그려야 표의 PSI와 어긋나지 않아 응답에 함께 싣는다(기존 키는 불변).
+    return {
+        "feature": field,
+        "psi": round(psi, 6),
+        "n_reference": len(ref_values),
+        "n_current": len(cur_values),
+        "edges": ref_hist["edges"],
+        "reference_counts": ref_hist["counts"],
+        "current_counts": cur_hist["counts"],
+    }
 
 
 def drift(model_id: str, version: str) -> dict[str, Any]:

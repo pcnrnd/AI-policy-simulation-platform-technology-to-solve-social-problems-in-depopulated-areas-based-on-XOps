@@ -18,10 +18,20 @@ def test_dev_open(monkeypatch: pytest.MonkeyPatch) -> None:
     dependencies.require_client(None, None)  # 개방 — 예외 없음
 
 
-def test_prod_without_configured_creds_open(monkeypatch: pytest.MonkeyPatch) -> None:
-    # prod이지만 client_id 미설정이면 게이트 비활성(개방)
+def test_prod_without_configured_creds_rejects(monkeypatch: pytest.MonkeyPatch) -> None:
+    # prod에서 자격증명 미설정은 "개방"이 아니라 거절이다. 정상 운영이면 기동 단계에서 이미 막힌다.
     _use_settings(monkeypatch, Settings(environment="prod"))
-    dependencies.require_client(None, None)
+    with pytest.raises(AuthError):
+        dependencies.require_client(None, None)
+
+
+def test_prod_without_configured_creds_refuses_startup() -> None:
+    with pytest.raises(RuntimeError):
+        Settings(environment="prod", jwt_secret="a-real-secret").validate_runtime()
+    # 둘 다 설정하면 기동 가능
+    Settings(
+        environment="prod", jwt_secret="a-real-secret", client_id="cid", client_secret="csec"
+    ).validate_runtime()
 
 
 def test_prod_requires_valid_creds(monkeypatch: pytest.MonkeyPatch) -> None:

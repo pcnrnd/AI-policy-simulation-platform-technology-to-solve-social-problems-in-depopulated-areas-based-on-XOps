@@ -137,3 +137,32 @@ def test_build_write_sql_returns_none_without_values() -> None:
         build_write_sql(method="PUT", table="tb_x", range_=None, filter_expr=None, values={"a": 1})
         is None
     )
+
+
+def test_and_filter_builds_every_condition() -> None:
+    """` AND ` 결합 조건이 SQL WHERE·MQL match·pymongo dict·바인딩 SQL 모두에 반영된다."""
+    expr = "in_flow_count > 100 AND reg_date = '20260101'"
+    safety.assert_safe_filter(expr, {c["name"] for c in _SQL_SCHEMA["columns"]})
+
+    sql = build_query(method="GET", schema=_SQL_SCHEMA, filter_expr=expr, sort=None, page=1, page_size=10).text
+    assert "in_flow_count > 100 AND reg_date = '20260101'" in sql
+
+    mql = build_query(method="GET", schema=_MONGO_SCHEMA, filter_expr=expr, sort=None, page=1, page_size=10).text
+    assert "in_flow_count: { $gt: 100 }" in mql and 'reg_date: "20260101"' in mql
+
+    assert query_builder.build_mongo_query(range_=None, filter_expr=expr) == {
+        "in_flow_count": {"$gt": 100},
+        "reg_date": "20260101",
+    }
+
+    written = query_builder.build_write_sql(
+        method="DELETE", table="tb_x", range_=None, filter_expr=expr, values=None
+    )
+    assert written == ("DELETE FROM tb_x WHERE in_flow_count > %s AND reg_date = %s;", [100, "20260101"])
+
+
+def test_and_filter_merges_two_bounds_on_same_column() -> None:
+    """같은 컬럼의 상·하한이 덮어써지지 않고 합쳐진다."""
+    assert query_builder.build_mongo_query(range_=None, filter_expr="age > 20 AND age < 40") == {
+        "age": {"$gt": 20, "$lt": 40}
+    }

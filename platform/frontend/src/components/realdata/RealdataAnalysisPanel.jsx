@@ -4,7 +4,7 @@
 import { useEffect, useState } from "react";
 import Card from "../Card.jsx";
 import { apiGet } from "../../lib/api.js";
-import { issueRealdataToken } from "./realdataClient.jsx";
+import { getRealdataToken } from "./realdataClient.jsx";
 
 const MODEL_LABELS = {
   "namwon-nonlocal-visitors-next-month": "남원 타지역 방문객 (익월)",
@@ -109,7 +109,7 @@ export default function RealdataAnalysisPanel() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    issueRealdataToken()
+    getRealdataToken()
       .then(setToken)
       .catch((err) => setAuthError(err.message || "인증 토큰 발급에 실패했습니다."));
   }, []);

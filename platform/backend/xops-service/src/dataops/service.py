@@ -81,6 +81,7 @@ def _get_extras(
         ),
         "sample": {c["name"]: f"<{c['type']}>" for c in schema["columns"]},
         "source_kind": "database" if result.executed else "in-memory",
+        "source_kind_reason": result.reason or None,
     }
     if result.executed:
         extras["rows"] = result.rows  # 실 저장소에서 읽은 행 (미연결 시에는 키 자체가 없다)
@@ -103,6 +104,7 @@ def _write_extras(method: str, filter_expr: str | None, result: ExecutionResult)
         "affected_rows": affected,
         "message": message,
         "source_kind": "database" if result.executed else "in-memory",
+        "source_kind_reason": result.reason or None,
     }
 
 
@@ -192,4 +194,7 @@ class DataService:
         except Exception as exc:  # noqa: BLE001 - 드라이버 예외 계층이 다양해 경계에서 일괄 degrade
             source_id = schema.get("id")
             _logger.warning(f"adapter 실행 실패 source={source_id} reason={exc} — In-Memory 응답 유지")
-            return ExecutionResult.not_executed(f"실행 실패: {exc}")
+            # 사유를 응답의 source_kind_reason 으로도 내보낸다 — 로그에만 남기면 화면에서는
+            # 스텁 값이 실조회처럼 보인다(조용한 degrade). 드라이버 메시지는 접속정보를 담지
+            # 않는 예외 문자열만 그대로 쓴다.
+            return ExecutionResult.not_executed(f"저장소 실행 실패: {type(exc).__name__}: {exc}")

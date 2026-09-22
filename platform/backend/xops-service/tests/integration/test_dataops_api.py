@@ -4,16 +4,65 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
+# 카탈로그 기대 구성 — 건수를 세 곳에 리터럴로 박으면 소스 1건 추가마다 세 군데가 같이 깨진다.
+# ID 목록을 정본으로 두고 건수는 거기서 파생시킨다(목록 자체가 회귀를 잡는다).
+_SEED_IDS = [
+    "ds_01_resident_registry",
+    "ds_02_local_welfare",
+    "ds_03_industrial_factories",
+    "ds_04_spatial_geojson",
+    "ds_05_smartfarm",
+    "ds_06_settlement_facility",
+    "ds_07_civil_complaints",
+]
+# 실데이터 2종(ds_08·ds_09) + 외부데이터 4종(ds_10~13)
+_REAL_IDS = [
+    "ds_08_admin_boundary",
+    "ds_09_welfare_facility",
+    "ds_10_bccard_dong_industry_sales",
+    "ds_11_kt_namwon_monthly_dong_visitors",
+    "ds_12_kt_namwon_visitors_by_sex_age",
+    "ds_13_gwto_tourism_indicators",
+]
+_ALL_COUNT = len(_SEED_IDS) + len(_REAL_IDS)
+
 
 def test_health(client: TestClient) -> None:
     assert client.get("/").json() == {"xops": "connected"}
 
 
 def test_catalog_list_and_search(client: TestClient) -> None:
-    all_sources = client.get("/api/v3/dataops/catalog").json()
-    assert len(all_sources) == 12  # 시드 7종 + 실데이터 2종(ds_08·ds_09) + 외부데이터 3종(ds_10~12)
-    filtered = client.get("/api/v3/dataops/catalog", params={"q": "MongoDB"}).json()
+    # 데모 표시 ON 경로 — 시드 7종 + 실데이터 2종(ds_08·ds_09) + 외부데이터 4종(ds_10~13)
+    all_sources = client.get("/api/v3/dataops/catalog", params={"include_seed": "true"}).json()
+    assert len(all_sources) == _ALL_COUNT
+    filtered = client.get(
+        "/api/v3/dataops/catalog", params={"q": "MongoDB", "include_seed": "true"}
+    ).json()
     assert all("MongoDB" in (s.get("source") or "") for s in filtered)
+
+
+def test_catalog_default_excludes_demo_seed(client: TestClient) -> None:
+    """목록 기본값 = 데모 표시 OFF — 실데이터(ds_08~13)만 남는다."""
+    body = client.get("/api/v3/dataops/catalog").json()
+
+    assert [s["id"] for s in body] == _REAL_IDS
+    assert all(not s["is_seed"] for s in body)
+    # 검색도 같은 목록 위에서 돈다 — 시드 태그로는 아무것도 걸리지 않는다.
+    assert client.get("/api/v3/dataops/catalog", params={"q": "인구이동"}).json() == []
+
+
+def test_catalog_include_seed_restores_full_list(client: TestClient) -> None:
+    """데모 표시 ON — 시드 7종이 되돌아온다. 목록에서 빠졌을 뿐 지워지지 않았다는 확인."""
+    body = client.get("/api/v3/dataops/catalog", params={"include_seed": "true"}).json()
+
+    assert len(body) == _ALL_COUNT
+    assert [s["id"] for s in body if s["is_seed"]] == _SEED_IDS
+
+
+def test_seed_source_stays_reachable_when_hidden_from_listing(client: TestClient) -> None:
+    """목록 필터는 단건 조회·토큰 발급에 걸리지 않는다 — 데모 ON에서 고른 소스가 404가 되면 안 된다."""
+    assert client.get("/api/v3/dataops/catalog/ds_01_resident_registry").status_code == 200
+    assert client.post("/api/v3/dataops/token/ds_01_resident_registry").status_code == 200
 
 
 def test_unknown_source_404(client: TestClient, auth_headers: dict[str, str]) -> None:
@@ -99,3 +148,19 @@ def test_oauth2_issue_validates_catalog_like_token(client: TestClient) -> None:
     ok = client.post("/api/v3/dataops/oauth2/ds_01_resident_registry")
     assert ok.status_code == 200
     assert "access_token" in ok.json()
+
+
+def test_degrade_surfaces_reason_in_response(client, auth_headers, monkeypatch) -> None:
+    """저장소 왕복이 실패하면 사유를 응답에 싣는다 — 로그에만 남기면 스텁이 실조회로 보인다."""
+    from src.dataops import service as service_module
+
+    def _boom(_schema):
+        raise RuntimeError("connection refused")
+
+    monkeypatch.setattr(service_module, "get_adapter", _boom)
+    body = client.get("/api/v3/dataops/ds_01_resident_registry", headers=auth_headers).json()
+    assert body["source_kind"] == "in-memory"
+    assert "connection refused" in body["source_kind_reason"]
+
+    written = client.post("/api/v3/dataops/ds_01_resident_registry", json={"data": {}}, headers=auth_headers).json()
+    assert written["source_kind_reason"]

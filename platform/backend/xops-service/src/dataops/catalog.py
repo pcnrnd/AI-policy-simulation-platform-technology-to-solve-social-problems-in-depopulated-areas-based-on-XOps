@@ -39,8 +39,15 @@ class MetadataCatalog:
         data = json.loads(path.read_text(encoding="utf-8"))
         return cls(data.get("metadata_schemas", []))
 
-    def list_sources(self) -> list[dict[str, Any]]:
-        return [*self._seed.values(), *db.list_user_sources()]
+    def list_sources(self, include_seed: bool = True) -> list[dict[str, Any]]:
+        """카탈로그 전체 목록. `include_seed=False` 면 데모 시드(`is_seed`)를 뺀다.
+
+        데모 표시 OFF에서 "실제로 적재된 데이터만" 보이려면 시드와 실데이터를 구분해야 하는데,
+        적재 행수로 추정하면 DB 장애가 '데이터 없음'처럼 보인다. 그래서 시드 파일의 `is_seed`
+        표식으로만 가른다. 사용자 등록 소스는 시드가 아니므로 항상 남는다.
+        """
+        seeds = self._seed.values() if include_seed else [s for s in self._seed.values() if not s.get("is_seed")]
+        return [*seeds, *db.list_user_sources()]
 
     def get(self, source_id: str) -> dict[str, Any]:
         schema = self._seed.get(source_id) or db.get_user_source(source_id)
@@ -48,10 +55,10 @@ class MetadataCatalog:
             raise SourceNotFoundError(f"데이터 소스를 찾을 수 없습니다: {source_id}")
         return schema
 
-    def search(self, query: str) -> list[dict[str, Any]]:
+    def search(self, query: str, include_seed: bool = True) -> list[dict[str, Any]]:
         """소스명·태그·설명·객체명 부분 일치 검색."""
         q = query.strip().lower()
-        sources = self.list_sources()
+        sources = self.list_sources(include_seed=include_seed)
         return sources if not q else [s for s in sources if _matches(s, q)]
 
     def add(self, schema: dict[str, Any]) -> dict[str, Any]:

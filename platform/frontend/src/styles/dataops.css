@@ -252,22 +252,6 @@
   vertical-align: middle;
 }
 
-/* 스키마 리니지 + 데이터 버전 — 한 줄 메타 */
-.schema-meta-line {
-  margin: 0 0 12px;
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-.schema-meta-line i {
-  color: var(--accent-blue);
-  font-size: 11px;
-  margin-right: 2px;
-}
-.schema-meta-line code {
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
 /* 데이터 라이프사이클 칩 라인 — 수집→적재(아카이빙)→메타데이터 등록→API 제공 */
 .lifecycle-line {
   display: flex;
@@ -611,4 +595,118 @@
 :root[data-theme="light"] .sql-preview,
 :root[data-theme="light"] .api-response {
   border: 1px solid var(--border-color);
+}
+
+/* 카탈로그 행 전체가 소스 선택 영역 — 이름 텍스트만 눌리면 행을 눌러도 반응이 없어
+   "선택이 안 된다"로 읽힌다. 행 안의 삭제 버튼은 onClick 에서 전파를 막는다. */
+.catalog-row-select {
+  cursor: pointer;
+}
+
+.catalog-row-select:hover td {
+  background-color: rgba(var(--accent-blue-rgb), 0.05);
+}
+
+/* 저장소 왕복이 실패해 스텁으로 내려간 응답의 사유 — 값이 실조회처럼 보이지 않게 명시한다. */
+.dataops-degrade-note {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border: 1px solid var(--accent-orange);
+  border-radius: 6px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--accent-orange);
+  background-color: rgba(var(--accent-orange-rgb), 0.06);
+}
+
+/* ── STEP③ 필터 조건 편집기 ────────────────────────────────────────────
+   백엔드 문법(`컬럼 연산자 값` 을 AND 로 결합, 최대 5개)을 한 행 = 한 조건으로 나타낸다.
+   행 앞의 WHERE·AND 표기는 생성 SQL과 같은 순서로 읽히게 하는 안내 표시다. */
+.filter-builder {
+  margin-bottom: var(--space-s);
+}
+.filter-builder-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-s);
+  margin-bottom: var(--space-xs);
+}
+.filter-builder-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+.filter-mode-toggle {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  font-size: 11px;
+}
+.filter-mode-toggle[aria-pressed="true"] {
+  background: var(--surface-hover);
+  text-decoration: underline;
+}
+.filter-row-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.filter-row {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1.2fr) 88px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-xs);
+}
+/* 결합 표기는 읽기 전용 라벨 — 값 입력과 혼동되지 않게 코드체·저채도로 둔다. */
+.filter-row-join {
+  color: var(--text-muted);
+  font-family: "Courier New", monospace;
+  font-size: 11px;
+  text-align: right;
+}
+.filter-row-op {
+  font-family: "Courier New", monospace;
+}
+.filter-row-del {
+  padding: 4px 10px;
+  font-size: 11px;
+}
+.filter-builder-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-s);
+  margin-top: var(--space-xs);
+}
+.filter-row-add {
+  padding: 4px 12px;
+  font-size: 11px;
+}
+.filter-limit-note,
+.filter-empty-note {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+@media (max-width: 600px) {
+  /* 좁은 폭에서는 결합 표기를 행 위로 올리고 컬럼·연산자·값을 세로로 쌓는다. */
+  .filter-row {
+    grid-template-columns: 1fr auto;
+  }
+  .filter-row-join {
+    grid-column: 1 / -1;
+    text-align: left;
+  }
+  .filter-row .select-control,
+  .filter-row .input-control {
+    grid-column: 1 / -1;
+  }
+  .filter-row-del {
+    grid-column: 1 / -1;
+  }
 }

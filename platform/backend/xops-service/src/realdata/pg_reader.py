@@ -1,4 +1,4 @@
-"""읽기 전용 실데이터 PG 리더 — public.ext_* 중 허용된 3개 테이블만 조회한다.
+"""읽기 전용 실데이터 PG 리더 — public.ext_* 중 `ALLOWED_TABLES`에 열거된 테이블만 조회한다.
 
 `db_max_rows`(dataops의 표시용 상한)를 적용하지 않고 `fetchmany`로 전량 스트리밍한다
 (계약 R1). 쓰기 경로는 없다 — 이 모듈은 SELECT만 만든다. 테이블·컬럼명은 파라미터
@@ -13,14 +13,47 @@ from typing import Any, Sequence
 from src.core.settings import get_settings
 from src.dataops.safety import assert_safe_identifier
 
-# 고정 allowlist — 계약(G0 §1) 밖 ext_* 테이블(예: ext_gwto_*, ext_kt_nowon_*)은 대상이 아니다.
+# 고정 allowlist — 적재된 ext_* 중에서도 여기 열거된 것만 조회할 수 있다(ext_kt_nowon_*은 아직 대상이 아니다).
+# 와일드카드·접두어 매칭으로 바꾸지 않는다 — 임의 테이블 접근을 막는 안전장치라 열거 형태를 유지한다.
 ALLOWED_TABLES = {
+    # 남원
     "ext_kt_namwon_monthly_dong_visitors",
     "ext_bccard_dong_industry_sales",
     "ext_kt_namwon_visitors_by_sex_age",
+    # 강원 18시군구 관광·소비
+    "ext_gwto_s1_1_nonlocal_monthly",
+    "ext_gwto_s1_2_total_tourists_monthly",
+    "ext_gwto_s1_3_tourists_age",
+    "ext_gwto_s1_4_tourists_sex",
+    "ext_gwto_s1_5_foreigners",
+    "ext_gwto_datalab_foreigners",
+    "ext_gwto_s1_6_lodging",
+    "ext_gwto_s1_7_residence_region",
+    "ext_gwto_s1_8_residence_city",
+    "ext_gwto_s2_1_consumption_monthly",
+    "ext_gwto_s2_2_consumption_age",
+    "ext_gwto_s2_3_consumption_sex",
+    "ext_gwto_s2_4_consumption_industry",
+    "ext_gwto_s2_5_consumption_hour",
+    "ext_gwto_s2_6_tourist_spending_power",
+    "ext_gwto_s3_1_city_tourists",
+    "ext_gwto_s3_2_city_age",
+    "ext_gwto_s3_3_city_sex",
+    "ext_gwto_s3_4_city_hour",
+    "ext_gwto_s3_5_city_lodging",
+    "ext_gwto_s3_6_city_region",
+    "ext_gwto_s3_7_city_consumption",
+    "ext_gwto_s4_1_navi_top500_prev_month",
+    "ext_gwto_s4_2_navi_top500_prev_year",
+    "ext_gwto_s4_3_navi_summary_500",
+    "ext_gwto_daily_trend",
 }
 
 _FETCH_BATCH = 1000
+
+# 쿼리 상한 — ext_* 조회는 LIMIT이 없어(계약 R1 전량 스트리밍) 한 건이 서버 스레드를 무한정 잡을 수 있다.
+# settings.db_timeout_seconds는 연결 수립용이라 그대로 두고, 실행 시간은 여기서 끊는다.
+_STATEMENT_TIMEOUT_MS = 30_000
 
 
 class RealdataUnavailable(RuntimeError):
@@ -40,7 +73,11 @@ def _connect() -> Any:
         import psycopg  # type: ignore[import-not-found]  # ponytail: 지연 import, 선택 의존성
     except ImportError as exc:
         raise RealdataUnavailable("psycopg 미설치 — pip install psycopg[binary]") from exc
-    return psycopg.connect(settings.pg_dsn, connect_timeout=int(settings.db_timeout_seconds))
+    return psycopg.connect(
+        settings.pg_dsn,
+        connect_timeout=int(settings.db_timeout_seconds),
+        options=f"-c statement_timeout={_STATEMENT_TIMEOUT_MS}",
+    )
 
 
 def _jsonable(value: Any) -> Any:
@@ -97,14 +134,25 @@ def fetch_all(
     return _fetch_streaming(sql, params, columns)
 
 
-def fetch_count(table: str) -> int:
-    """`SELECT COUNT(*)` — health 체크 등 존재 확인에 쓴다."""
-    _assert_allowed_table(table)
-    with _connect() as conn:
-        with conn.cursor() as cur:
-            cur.execute(f"SELECT COUNT(*) FROM {table}")
-            row = cur.fetchone()
-            return int(row[0]) if row else 0
+def fetch_table_existence(tables: Sequence[str]) -> dict[str, bool]:
+    """`tables` 존재 여부를 카탈로그 조회 한 번으로 확인한다(health 체크용).
+
+    `COUNT(*)`는 테이블마다 전량 스캔이라 allowlist 29개를 돌면 최악 29×statement_timeout이다.
+    `to_regclass`는 카탈로그만 보므로 테이블 크기와 무관하고, 테이블명을 식별자가 아니라
+    `text[]` 값으로 바인딩해 주입 여지도 없다.
+    """
+    names = sorted(tables)
+    for table in names:
+        _assert_allowed_table(table)
+    if not names:
+        return {}
+
+    sql = (
+        "SELECT c.t, to_regclass('public.' || c.t) IS NOT NULL AS present "
+        "FROM unnest(%s::text[]) AS c(t)"
+    )
+    rows = _fetch_streaming(sql, [names], ["t", "present"])
+    return {row["t"]: bool(row["present"]) for row in rows}
 
 
 def fetch_aggregate(

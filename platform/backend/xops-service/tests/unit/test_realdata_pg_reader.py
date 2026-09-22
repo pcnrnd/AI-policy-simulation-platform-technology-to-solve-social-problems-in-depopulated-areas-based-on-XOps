@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import sys
 from typing import Any
 
 import pytest
@@ -54,8 +55,15 @@ class _FakeConn:
 
 
 def test_fetch_all_rejects_table_outside_allowlist() -> None:
+    # 적재는 되어 있지만 등록하지 않은 노원 축제 테이블 — allowlist가 적재 목록과 별개임을 고정한다.
     with pytest.raises(RealdataUnavailable):
-        pg_reader.fetch_all("ext_gwto_daily_trend", ["base_ym"])
+        pg_reader.fetch_all("ext_kt_nowon_daily_visitors", ["base_ym"])
+
+
+def test_allowlist_covers_namwon_and_gwto_only() -> None:
+    assert len(pg_reader.ALLOWED_TABLES) == 29
+    assert len([t for t in pg_reader.ALLOWED_TABLES if t.startswith("ext_gwto_")]) == 26
+    assert not [t for t in pg_reader.ALLOWED_TABLES if t.startswith("ext_kt_nowon_")]
 
 
 def test_fetch_all_rejects_unsafe_column_identifier() -> None:
@@ -78,6 +86,23 @@ def test_connect_raises_when_dsn_missing(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setattr(pg_reader, "get_settings", lambda: Settings(pg_dsn=""))
     with pytest.raises(RealdataUnavailable):
         pg_reader.fetch_all("ext_kt_namwon_monthly_dong_visitors", ["base_ym"])
+
+
+def test_connect_applies_statement_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    """전량 조회에 LIMIT이 없으므로 실행 시간 상한은 연결 옵션으로만 걸린다."""
+    captured: dict[str, Any] = {}
+
+    class _FakePsycopg:
+        @staticmethod
+        def connect(dsn: str, **kwargs: Any) -> str:
+            captured.update({"dsn": dsn, **kwargs})
+            return "conn"
+
+    monkeypatch.setattr(pg_reader, "get_settings", lambda: Settings(pg_dsn="postgresql://x/y"))
+    monkeypatch.setitem(sys.modules, "psycopg", _FakePsycopg)
+
+    assert pg_reader._connect() == "conn"
+    assert captured["options"] == f"-c statement_timeout={pg_reader._STATEMENT_TIMEOUT_MS}"
 
 
 def test_fetch_all_streams_all_batches_and_binds_where(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -120,8 +145,24 @@ def test_fetch_aggregate_groups_and_sums(monkeypatch: pytest.MonkeyPatch) -> Non
     assert "GROUP BY base_ym, dong_name" in sql
 
 
-def test_fetch_count_returns_int(monkeypatch: pytest.MonkeyPatch) -> None:
-    cursor = _FakeCursor([[(1334,)]])
+def test_fetch_table_existence_binds_names_as_values(monkeypatch: pytest.MonkeyPatch) -> None:
+    batch = [("ext_bccard_dong_industry_sales", True), ("ext_kt_namwon_monthly_dong_visitors", False)]
+    cursor = _FakeCursor([batch])
     monkeypatch.setattr(pg_reader, "_connect", lambda: _FakeConn(cursor))
 
-    assert pg_reader.fetch_count("ext_kt_namwon_monthly_dong_visitors") == 1334
+    present = pg_reader.fetch_table_existence(
+        ["ext_kt_namwon_monthly_dong_visitors", "ext_bccard_dong_industry_sales"]
+    )
+
+    assert present == {
+        "ext_bccard_dong_industry_sales": True,
+        "ext_kt_namwon_monthly_dong_visitors": False,
+    }
+    sql, params = cursor.executed[0]
+    assert "to_regclass" in sql and "COUNT(" not in sql  # 카탈로그 조회 1회, 전량 스캔 없음
+    assert params == [["ext_bccard_dong_industry_sales", "ext_kt_namwon_monthly_dong_visitors"]]
+
+
+def test_fetch_table_existence_rejects_table_outside_allowlist() -> None:
+    with pytest.raises(RealdataUnavailable):
+        pg_reader.fetch_table_existence(["ext_kt_nowon_daily_visitors"])

@@ -86,10 +86,18 @@ class Settings(BaseSettings):
     realdata_dong_map_path: Path = Path(__file__).resolve().parents[1] / "realdata" / "namwon_dong_map.json"
 
     def validate_runtime(self) -> None:
-        """기동 시 정합성 검증 — prod에서 기본 JWT 시크릿이면 거부."""
-        if self.environment == "prod" and self.jwt_secret == _DEFAULT_JWT_SECRET:
+        """기동 시 정합성 검증 — prod에서 기본 JWT 시크릿이거나 클라이언트 자격증명이 없으면 거부."""
+        if self.environment != "prod":
+            return
+        if self.jwt_secret == _DEFAULT_JWT_SECRET:
             raise RuntimeError(
                 "XOPS_ENVIRONMENT=prod에서는 XOPS_JWT_SECRET을 반드시 설정해야 합니다 (기본 시크릿 사용 불가)."
+            )
+        # 미설정을 "게이트 개방"으로 풀면 누구나 data:read/write 토큰을 받는다 — 기동을 막는다.
+        if not self.client_id or not self.client_secret:
+            raise RuntimeError(
+                "XOPS_ENVIRONMENT=prod에서는 XOPS_CLIENT_ID/XOPS_CLIENT_SECRET을 반드시 설정해야 합니다 "
+                "(토큰 발급 게이트를 비워 둘 수 없습니다)."
             )
 
 

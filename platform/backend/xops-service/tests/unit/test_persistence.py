@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import threading
 from copy import deepcopy
 from typing import Callable
 
 import pytest
 
+from src.core import db
 from src.core.exceptions import SourceNotFoundError
 from src.dataops.catalog import MetadataCatalog
 from src.mlops.orchestration.registry import ModelRegistry, _SEED_STORE, next_version
@@ -78,3 +80,28 @@ def test_repeated_promotion_keeps_advancing_versions(reset_model: Callable[[str]
         assert run.state == "succeeded"
         versions.append(run.active_version)
     assert versions == ["v1.8", "v1.9", "v1.10"]
+
+
+def test_conn_is_per_thread() -> None:
+    """스레드마다 커넥션이 따로다 — 커넥션을 공유하면 트랜잭션도 공유된다."""
+    main_conn = db._conn()
+    from_thread: list[object] = []
+    worker = threading.Thread(target=lambda: from_thread.append(db._conn()))
+    worker.start()
+    worker.join()
+
+    assert from_thread[0] is not main_conn
+
+
+def test_commit_in_other_thread_does_not_commit_pending_write() -> None:
+    """다른 스레드의 commit이 이 스레드의 미완 쓰기를 함께 커밋하지 않는다."""
+    db._conn().execute(
+        "INSERT INTO user_sources (id, schema_json) VALUES (?, ?)", ("ds_thread_iso", "{}")
+    )  # commit 하지 않는다
+
+    worker = threading.Thread(target=lambda: db._conn().commit())
+    worker.start()
+    worker.join()
+
+    db._conn().rollback()
+    assert db.get_user_source("ds_thread_iso") is None
