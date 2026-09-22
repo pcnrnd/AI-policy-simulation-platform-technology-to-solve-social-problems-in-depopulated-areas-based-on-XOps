@@ -345,7 +345,7 @@ export default function OrchestratorPage() {
     if (realdataRunBusyRef.current || !realdataToken) return;
     if (!pipeline.dataset_id) {
       addConsoleLog(
-        `WARN: ${pipeline.name} 실행 불가 — 사용할 스냅샷이 없습니다. 아래 [실데이터 학습] 패널에서 스냅샷을 먼저 생성하세요.`,
+        `WARN: ${pipeline.name} 실행 불가 — 사용할 스냅샷이 없습니다. [실데이터 학습] 패널에서 스냅샷을 먼저 생성하세요.`,
         false,
         true
       );
@@ -493,10 +493,10 @@ export default function OrchestratorPage() {
                 // 버튼 title = 잠금 사유(또는 실행 안내). 잠긴 클릭의 콘솔 로그도 같은 문구를 쓴다.
                 const runTitle = isRealdata
                   ? !p.dataset_id
-                    ? "사용할 스냅샷이 없습니다. 아래 [실데이터 학습] 패널에서 스냅샷을 먼저 생성하세요."
+                    ? "사용할 스냅샷이 없습니다. [실데이터 학습] 패널에서 스냅샷을 먼저 생성하세요."
                     : isRunning
                       ? "이 모델의 실데이터 학습이 실행 중입니다."
-                      : `최신 스냅샷(${p.dataset_id})으로 실데이터 학습을 실행합니다 — 아래 [실데이터 학습] 패널의 [학습 실행]과 같은 동작입니다.`
+                      : `최신 스냅샷(${p.dataset_id})으로 실데이터 학습을 실행합니다 — [실데이터 학습] 패널의 [학습 실행]과 같은 동작입니다.`
                   : !candidateAvailable
                     ? "대상 모델의 다음 후보 버전을 확인할 수 없습니다."
                     : pipelineBusy
@@ -607,6 +607,10 @@ export default function OrchestratorPage() {
           onChange={setPlPage}
         />
       </Card>
+
+      {/* 실데이터 연계(R3) — 남원 실데이터 학습·후보·반영. 위 데모 파이프라인과는 별개 경로. */}
+      {/* 선행 조작(스냅샷 생성)이므로 실행 상태·결과 카드보다 위에 둔다. */}
+      <RealdataTrainingPanel />
 
       {/* ② 실행 상태 — 상시 표시(레이아웃 고정). 유휴 시 대기 상태, 실행 시 같은 자리에 내용만 채움 */}
       {/* tabIndex=-1: [실행] 직후 결과 영역으로 초점을 옮기기 위한 프로그램 초점 대상 (초점이 body로 떨어지지 않게) */}
@@ -998,9 +1002,6 @@ export default function OrchestratorPage() {
       <Card title="UI 활동 로그" icon="fa-list">
         <ConsoleLog logs={consoleLogs} />
       </Card>
-
-      {/* 실데이터 연계(R3) — 남원 실데이터 학습·후보·반영. 위 데모 파이프라인과는 별개 경로. */}
-      <RealdataTrainingPanel />
     </>
   );
 }
