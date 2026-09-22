@@ -31,6 +31,7 @@ function regionShortName(region) {
 function buildPreview(region, template, live) {
   const tenYearPop = Math.round(region.population * 0.81).toLocaleString();
   const indicators = live?.indicators ?? null;
+  const explain = live?.explain ?? null;
 
   return (
     <>
@@ -70,14 +71,21 @@ function buildPreview(region, template, live) {
         </>
       )}
 
-      <h3>3. SHAP 중요 기여 특성에 따른 최적 맞춤 대책</h3>
-      <p>
-        인구소멸을 지연시키는 데 가장 큰 양의 기여를 하는 인자는{" "}
-        <strong>청년층 복지 재정 (+0.354)</strong> 및{" "}
-        <strong>제조업 일자리 수 (+0.281)</strong>이며, 평균 연령 (-0.152)의 증가는 인구 감소를
-        가속화하는 핵심 위험 요인으로 파악되었습니다. 따라서 본 지자체는 청년 유입을 극대화할 수 있는
-        다음과 같은 특화 예산 배정을 제안합니다.
-      </p>
+      {/* SHAP 기여도는 explain 실호출 결과만 싣는다 — 없으면 섹션 자체를 비운다(사유 문구 없음). */}
+      {explain && (
+        <>
+          <h3>
+            3. SHAP 중요 기여 특성 ({explain.baseYm} · {explain.dongName ?? explain.dongCode} 기준)
+          </h3>
+          <ul>
+            {explain.contributions.map((c) => (
+              <li key={c.feature}>
+                {c.feature}: 기여도 {formatMetric(c.phi, 4)}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
 
       <h3>4. 제언 및 최종 권고 요약</h3>
       <ol>
@@ -242,7 +250,8 @@ export default function ReporterPage() {
     const extra = {
       populationChange: appData.population_change,
       vitalPopulation: appData.vital_population,
-      live: binding ? binding.indicators : null
+      live: binding ? binding.indicators : null,
+      explain: binding ? binding.explain : null
     };
 
     try {
