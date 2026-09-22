@@ -62,10 +62,9 @@ check("evaluation·drift 실측값이 그대로 지표로 실린다", () => {
   assert.deepEqual(bound.indicators.mae, 812.5);
   assert.deepEqual(bound.indicators.baselineMae, 1010.0);
   // 표기명은 SHAP 기여도와 같은 매핑을 타고, 원본 피처명도 함께 남는다.
-  // dong-map 을 받지 않는 경로라 `dong_*` 는 원본 그대로다(이름을 지어내지 않는다).
+  // 행정동 원핫은 PSI 목록에서 빠진다(아래 전용 검사 참고).
   assert.deepEqual(bound.indicators.psi, [
     { feature: "y_lag1", label: "직전월 외지인 방문객", psi: 0.0731 },
-    { feature: "dong_45190250", label: "dong_45190250", psi: 0.0102 },
     { feature: "y", label: "외지인 방문객", psi: 0.1902 }
   ]);
   // 대응 엔드포인트가 없는 지표는 만들지 않는다.
@@ -95,8 +94,30 @@ check("본문·표에 실측 WAPE·MAE·PSI 가 들어가고 합성 상수는 �
   assert.deepEqual(rows.find((r) => r[1] === "기준선 MAE"), ["모델 검증", "기준선 MAE", 1010.0]);
   assert.deepEqual(rows.find((r) => r[1] === "PSI (외지인 방문객)"), ["모델 검증", "PSI (외지인 방문객)", 0.1902]);
   assert.equal(rows.some((r) => String(r[1]).includes("y_lag1")), false);
-  // dong-map 없는 경로의 폴백 — 코드가 그대로 남는다(본문·엑셀 공통).
-  assert.deepEqual(rows.find((r) => r[1] === "PSI (dong_45190250)"), ["모델 검증", "PSI (dong_45190250)", 0.0102]);
+  // 행정동 원핫은 본문·엑셀 어디에도 남지 않는다.
+  assert.doesNotMatch(text, /dong_/);
+  assert.equal(rows.some((r) => String(r[1]).includes("dong_")), false);
+});
+
+check("PSI 목록은 행정동 원핫을 피처명 접두사로 제외한다", () => {
+  // 값(psi === 0)이 아니라 접두사를 기준으로 한다 — 0 이 아닌 원핫이 들어와도 제외되고,
+  // psi 가 0 인 의미 있는 피처는 남아야 한다.
+  const drift = {
+    status: "ok",
+    data: {
+      status: "ok",
+      kind: "validation",
+      features: [
+        { feature: "dong_45190250", psi: 0 },
+        { feature: "dong_45190310", psi: 0.42 },
+        { feature: "month_sin", psi: 0 },
+        { feature: "y_lag1", psi: 0.0731 }
+      ],
+      target: { psi: 0.1902 }
+    }
+  };
+  const psi = toReportIndicators(REGION, MODEL, EVALUATION_OK, drift).indicators.psi;
+  assert.deepEqual(psi.map((e) => e.feature), ["month_sin", "y_lag1", "y"]);
 });
 
 // ── 2. 빈 상태 ───────────────────────────────────────────────

@@ -325,12 +325,18 @@ export function toExplainBinding(explainResponse, target, dongMapResponse, model
 /**
  * drift 응답 → `[{ feature, label, psi }]`. 집계하지 않고 피처·타깃 실측값을 그대로 옮긴다.
  * 표기명은 SHAP 기여도와 같은 `featureLabel` 을 쓴다 — 한 리포트에 내부 피처명이 섞이지 않게.
- * dong-map 은 이 경로에서 받지 않으므로(추가 호출 금지) `dong_{code}` 는 원본 그대로 남는다.
+ *
+ * 행정동 원핫(`dong_*`)은 PSI 목록에서 제외한다. dong-map 을 이 경로에서 받지 않아(추가 호출 금지)
+ * 코드가 그대로 노출되는 데다, 행정동 수만큼 줄이 늘어 담당자가 읽을 지표가 묻힌다.
+ * 기준을 값(`psi === 0`)이 아니라 피처명 접두사로 둔 이유: 값 기준은 0 이 아닌 원핫이 하나만 생겨도
+ * 다시 노이즈가 들어오고, 의미 있는 피처가 우연히 0 일 때 사라진다. 접두사 기준은 "행정동 원핫은
+ * 리포트 지표가 아니다"는 의도를 직접 표현하고 값 분포에 의존하지 않는다.
+ * SHAP 기여도(`toExplainBinding`)의 `dong_*` 는 dong-map 으로 행정동명이 붙어 의미가 있으므로 남긴다.
  */
 function psiEntries(driftResponse, modelTarget) {
   const data = driftResponse?.status === "ok" ? driftResponse.data : null;
   if (!data || data.status !== "ok") return [];
-  const entries = (data.features ?? []).map((f) => ({
+  const entries = (data.features ?? []).filter((f) => !String(f?.feature).startsWith("dong_")).map((f) => ({
     feature: f.feature,
     label: featureLabel(f.feature, modelTarget, []),
     psi: f.psi
