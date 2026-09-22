@@ -299,3 +299,16 @@ export function blocksToMarkdown(title, blocks) {
   lines.push("", "---", "© 2026 국토인구소멸대응 공동 R&D 통합 플랫폼 R-Center.");
   return lines.join("\n");
 }
+
+/**
+ * 리포트 표시 판정 — 기준은 데모 토글이 아니라 **실데이터 바인딩 유무**다.
+ * 바인딩이 있으면 데모 OFF 에서도 실데이터를 그대로 표시한다(데모 OFF 는 가림이 아니라
+ * 데이터 계층 차단이라는 원칙). 바인딩이 없을 때만 데모 토글이 시드 폴백 여부를 정한다.
+ * 내보내기 차단도 같은 기준이다 — "시드로 가득 찬 파일 생성 방지"는 바인딩이 없을 때만 필요하다.
+ * @param {{binding: unknown, allowSeed: boolean}} state
+ * @returns {"live"|"seed"|"empty"} live=실데이터 표시, seed=시드 폴백, empty=빈 상태(사유 문구 없음)
+ */
+export function reportGateMode({ binding, allowSeed }) {
+  if (binding) return "live";
+  return allowSeed ? "seed" : "empty";
+}

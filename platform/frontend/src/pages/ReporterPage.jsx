@@ -1,12 +1,12 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import Card from "../components/Card.jsx";
-import { NO_DEMO_DATA } from "../components/PendingData.jsx";
 import { useAppState } from "../context/AppStateContext.jsx";
 import {
   buildReportBlocks,
   buildReportRows,
   blocksToMarkdown,
-  formatMetric
+  formatMetric,
+  reportGateMode
 } from "../lib/reportContent.js";
 import {
   buildDocx,
@@ -115,9 +115,9 @@ export default function ReporterPage() {
   const templates = appData.report_templates;
   const regions = appData.regions;
 
-  // 데모 표시 토글은 화면 구조가 아니라 **데이터 유무**만 바꾼다. 보고서 본문은 시드 지자체 지표와
-  // 로컬 생성 바인딩 값으로 채워지므로, OFF에서는 미리보기·바인딩 값 자리에 사유만 남기고
-  // 템플릿·지자체·형식 선택과 갱신 버튼은 그대로 조작 가능하게 둔다.
+  // 데모 표시 토글은 화면 구조가 아니라 **데이터 유무**만 바꾼다. 실데이터 바인딩이 있으면
+  // OFF 에서도 그 값을 표시하고(데모 OFF = 데이터 계층 차단), 바인딩이 없을 때만 시드 폴백 여부를
+  // 정한다. 템플릿·지자체·형식 선택과 갱신 버튼은 어느 경우에도 그대로 조작 가능하게 둔다.
   const allowSeed = mockDataVisible;
 
   const [templateId, setTemplateId] = useState(templates[0].id);
@@ -143,6 +143,9 @@ export default function ReporterPage() {
     [templates, templateId]
   );
 
+  // 표시 판정은 순수 함수 한 곳에서만 한다(회귀 테스트 대상).
+  const gateMode = reportGateMode({ binding, allowSeed });
+
   // 양식에 연결된 실데이터 API(평가·드리프트)를 호출해 지표를 자동 갱신.
   const refreshBinding = useCallback(
     async () => {
@@ -164,15 +167,10 @@ export default function ReporterPage() {
         }
         setBinding(result);
         setLastUpdated(new Date().toLocaleTimeString("ko-KR"));
-        setBindingFeedback(
-          allowSeed
-            ? { tone: "success", message: `${region.name} 데이터를 갱신했습니다.` }
-            : { tone: "info", message: NO_DEMO_DATA }
-        );
+        // 여기까지 왔으면 바인딩이 있다 — 데모 토글과 무관하게 실데이터 기준 성공 문구를 쓴다.
+        setBindingFeedback({ tone: "success", message: `${region.name} 데이터를 갱신했습니다.` });
         addConsoleLog(
-          allowSeed
-            ? `INFO: 리포트 지표 API 자동 갱신 (${result.source}) - WAPE ${result.indicators.wape}`
-            : "INFO: 리포트 지표 바인딩 갱신 — 표시할 실데이터 없음"
+          `INFO: 리포트 지표 API 자동 갱신 (${result.source}) - WAPE ${result.indicators.wape}`
         );
       } catch (err) {
         if (requestId !== refreshRequestRef.current) return;
@@ -183,7 +181,7 @@ export default function ReporterPage() {
         if (requestId === refreshRequestRef.current) setRefreshing(false);
       }
     },
-    [region, allowSeed, addConsoleLog]
+    [region, addConsoleLog]
   );
 
   // 지자체 변경 시 자동 재바인딩(드리프트 토글은 실측 지표에 영향을 주지 않는다).
@@ -207,13 +205,10 @@ export default function ReporterPage() {
   };
 
   const handleGenerate = () => {
-    // 생성 로직은 그대로 두고, 데모 OFF에서는 시드 본문을 미리보기 자리에 넣지 않는다.
-    if (!allowSeed) {
+    // 생성 로직은 그대로 두고, 바인딩도 시드 폴백도 없을 때만 본문을 만들지 않는다(사유 문구 없음).
+    if (gateMode === "empty") {
       setPreview(null);
-      setReportFeedback({
-        tone: "error",
-        message: NO_DEMO_DATA
-      });
+      setReportFeedback(null);
       addConsoleLog(`WARN: 보고서 미리보기 생성 중단 - ${region.name} 실데이터 없음`);
       return;
     }
@@ -235,15 +230,9 @@ export default function ReporterPage() {
   };
 
   const handleDownload = () => {
-    // 미리보기는 데이터 계층에서 막혀 있지만 내보내기 경로에는 가드가 없었다 — 화면은 비었는데
-    // 시드로 가득 찬 docx/xlsx/hwp/md 가 생성됐다. 데모 OFF에서는 파일을 만들지 않는다.
-    if (!allowSeed) {
-      setReportFeedback({
-        tone: "info",
-        message: `${NO_DEMO_DATA} — 설정에서 데모 데이터 표시를 켜면 생성할 수 있습니다.`
-      });
-      return;
-    }
+    // 시드로 가득 찬 docx/xlsx/hwp/md 가 생성되는 것을 막는 가드 — 실데이터 바인딩이 있으면
+    // 그 걱정이 없으므로 데모 OFF 에서도 내보낸다. 차단 시 사유 문구는 만들지 않는다.
+    if (gateMode === "empty") return;
     const fmt = EXPORT_FORMATS.find((f) => f.id === format) ?? EXPORT_FORMATS[0];
     const baseName = `R_D_인구소멸대응보고서_${regionShortName(region)}`;
     const filename = dedupeFilename(baseName, fmt.ext);
@@ -319,10 +308,10 @@ export default function ReporterPage() {
             <div>
               엔드포인트:{" "}
               <code style={{ color: "var(--accent-blue)" }}>
-                {allowSeed ? binding?.source ?? "—" : NO_DEMO_DATA}
+                {binding?.source ?? "—"}
               </code>
             </div>
-            <div>마지막 갱신: {allowSeed ? lastUpdated ?? "—" : "—"}</div>
+            <div>마지막 갱신: {lastUpdated ?? "—"}</div>
           </div>
           <button
             className="btn btn-secondary"
@@ -437,15 +426,10 @@ export default function ReporterPage() {
 
       <Card title="보고서 미리보기 (A4 레이아웃)" icon="fa-eye">
         {/* 미리보기 패널은 데모 토글과 무관하게 같은 자리에 남긴다 — 예전엔 CSS로 패널을 통째로
-            가려서 "왜 비었는지"를 읽을 수 없었다. OFF에서는 본문 대신 사유만 채운다. */}
+            가려서 "왜 비었는지"를 읽을 수 없었다. 표시할 데이터가 없으면 제목만 남긴다. */}
         <div className="report-preview-panel">
-          {!allowSeed ? (
-            <>
-              <h2>인구감소 대응 R&D 분석 리포트 요약서</h2>
-              <p style={{ textAlign: "center", color: "#4b5563", fontSize: 12, marginBottom: 30 }}>
-                {NO_DEMO_DATA}
-              </p>
-            </>
+          {gateMode === "empty" ? (
+            <h2>인구감소 대응 R&D 분석 리포트 요약서</h2>
           ) : (
             preview ?? (
               <>
