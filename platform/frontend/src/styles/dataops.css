@@ -349,6 +349,9 @@
   height: auto;
   min-height: 120px;
   max-height: 300px;
+  max-width: 100%;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 /* 응답 출처 칩 — 빌더 전송 / 발급 API 호출 구분 */
