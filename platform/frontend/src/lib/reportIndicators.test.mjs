@@ -4,6 +4,7 @@
 //   1. 지표 매핑 — evaluation 의 WAPE·MAE·기준선 MAE, drift 의 실측 PSI 가 그대로 실린다.
 //   2. 빈 상태 — 활성 모델 없음 / model_required / 오류면 null 이고, 본문·표에 모델 검증 항목이 없다.
 //   3. 피처 표기명 — 내부 피처명(y_lag1·month_sin·dong_*)이 리포트에 그대로 나가지 않는다.
+//   4. 표시 판정 — 데모 OFF 라도 실데이터 바인딩이 있으면 표시한다(토글이 아니라 바인딩이 기준).
 import assert from "node:assert/strict";
 import {
   pickActiveModel,
@@ -13,7 +14,7 @@ import {
   toExplainBinding,
   toReportIndicators
 } from "./dataopsApi.js";
-import { buildReportBlocks, buildReportRows } from "./reportContent.js";
+import { buildReportBlocks, buildReportRows, reportGateMode } from "./reportContent.js";
 
 let passed = 0;
 const check = (name, fn) => {
@@ -271,6 +272,24 @@ check("PSI 타깃 행은 타깃을 모르면 내부 기호 대신 폴백 문구�
   assert.equal(bare.at(-1).label, "타깃");
   // 타깃을 모르면 y_* 도 원본을 유지한다 — 내부 기호 y 는 어디에도 남지 않는다.
   assert.equal(bare[0].label, "y_lag1");
+});
+
+// ── 4. 표시 판정 ─────────────────────────────
+const BINDING = toReportIndicators(REGION, MODEL, EVALUATION_OK, DRIFT_OK);
+
+check("데모 OFF 라도 실데이터 바인딩이 있으면 표시한다", () => {
+  assert.ok(BINDING, "전제: 바인딩이 만들어져야 한다");
+  assert.equal(reportGateMode({ binding: BINDING, allowSeed: false }), "live");
+  // 데모 ON 이어도 판정은 같다 — 토글은 바인딩이 없을 때만 의미가 있다.
+  assert.equal(reportGateMode({ binding: BINDING, allowSeed: true }), "live");
+});
+
+check("데모 OFF + 바인딩 없음은 빈 상태다", () => {
+  assert.equal(reportGateMode({ binding: null, allowSeed: false }), "empty");
+});
+
+check("데모 ON + 바인딩 없음은 시드 폴백이다", () => {
+  assert.equal(reportGateMode({ binding: null, allowSeed: true }), "seed");
 });
 
 console.log(`\n${passed} passed`);
