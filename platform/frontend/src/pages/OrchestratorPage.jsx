@@ -840,12 +840,13 @@ export default function OrchestratorPage() {
                     <td>
                       <code style={{ fontSize: 12, fontWeight: 600 }}>{orDash(m.version)}</code>
                     </td>
-                    {/* 학습데이터·하이퍼파라미터·등록일은 응답에 없는 프런트 합성값이라 api 행 안에서도 mock */}
+                    {/* 학습데이터·하이퍼파라미터·등록일은 응답에 없는 프런트 합성값이다.
+                        데모 OFF에서는 seedOr가 null을 넘겨 orDash가 "–"를 표시한다. */}
                     <td style={{ fontSize: 12, color: "var(--text-secondary)" }} data-values-source="mock">
-                      {orDash(m.dataVersion)}
+                      {orDash(seedOr(m.dataVersion))}
                     </td>
                     <td style={{ fontSize: 11, color: "var(--text-secondary)" }} data-values-source="mock">
-                      {orDash(m.params)}
+                      {orDash(seedOr(m.params))}
                     </td>
                     <td
                       className="cell-num"
@@ -863,7 +864,7 @@ export default function OrchestratorPage() {
                       </span>
                     </td>
                     <td style={{ fontSize: 11, color: "var(--text-muted)" }} data-values-source="mock">
-                      {orDash(m.registeredAt)}
+                      {orDash(seedOr(m.registeredAt))}
                     </td>
                   </tr>
                 );
