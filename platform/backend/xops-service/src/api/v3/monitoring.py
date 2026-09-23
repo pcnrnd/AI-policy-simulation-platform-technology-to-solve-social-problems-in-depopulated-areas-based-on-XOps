@@ -46,6 +46,35 @@ def _realdata_allowed(model_id: str | None, include_seed: bool, auth: dict[str, 
     return not include_seed and auth is not None and realdata_bridge.is_realdata_model(model_id)
 
 
+def _tail(payload: dict[str, Any], window: int | None) -> dict[str, Any]:
+    """조회 구간. 계열·라벨·실행 목록을 마지막 `window`개 관측으로 자른다.
+
+    화면의 조회 구간 선택이 요청까지 내려오게 한다. 관측이 구간보다 적으면 있는 만큼만
+    돌려주고 빈 자리는 만들지 않는다. `applied_window`로 실제 적용값을 알린다.
+    `window`가 없으면 payload를 그대로 돌려 기존 응답 계약을 유지한다.
+    """
+    if window is None:
+        return payload
+    history_in = payload.get("history") or {}
+    history = {
+        key: values[-window:] if isinstance(values, list) else values
+        for key, values in history_in.items()
+    }
+    out = {**payload, "history": history, "applied_window": window}
+    for key in ("labels", "runs"):
+        series = payload.get(key)
+        if isinstance(series, list):
+            out[key] = series[-window:]
+    latest = payload.get("latest")
+    if isinstance(latest, dict):
+        out["latest"] = {
+            key: history[key][-1]
+            for key in latest
+            if isinstance(history.get(key), list) and history[key]
+        }
+    return out
+
+
 def _maybe_retrain(result: DriftResult, model_id: str | None, auto_retrain: bool) -> dict[str, Any] | None:
     """드리프트가 임계를 넘고 auto_retrain이면 해당 모델의 재학습을 자동 발화."""
     if not (result.drifted and auto_retrain and model_id):
@@ -59,25 +88,31 @@ def _maybe_retrain(result: DriftResult, model_id: str | None, auto_retrain: bool
 def metrics_history(
     model_id: str | None = Query(None, description="실측 지표를 읽을 모델. 생략하면 시드"),
     include_seed: bool = _INCLUDE_SEED,
+    window: int | None = Query(None, ge=1, le=1000, description="조회 구간 — 마지막 N개 관측만"),
     auth: dict[str, Any] | None = _OPTIONAL_AUTH,
 ) -> dict[str, Any]:
     """6대 지표 시계열 + 최신 스냅샷.
 
     `model_id` 의 실측 학습 실행이 있으면 그 지표 추이(`source="measured"`)를, 없으면
     시드 시계열(`source="seed"`)을 돌려준다. `include_seed=false` 면 시드 대신 빈 시계열이다.
+    `window` 를 주면 마지막 N개 관측만 남긴다.
     """
     if _realdata_allowed(model_id, include_seed, auth):
         realdata = realdata_bridge.metrics(model_id)  # type: ignore[arg-type]
         if realdata is not None:
-            return realdata
+            return _tail(realdata, window)
     measured = sources.measured_metrics(model_id) if model_id else None
     if measured is not None:
-        return {**measured, "source": "measured", "model_id": model_id}
+        return _tail({**measured, "source": "measured", "model_id": model_id}, window)
     if not include_seed:
-        return {"history": {}, "latest": {}, "labels": None, "latency_ms": None, "source": None}
+        return _tail(
+            {"history": {}, "latest": {}, "labels": None, "latency_ms": None, "source": None}, window
+        )
     hist = get_seed()["metrics_history"]
     latest = {k: hist[k][-1] for k in _SERIES if k in hist}
-    return {"history": hist, "latest": latest, "labels": None, "latency_ms": None, "source": "seed"}
+    return _tail(
+        {"history": hist, "latest": latest, "labels": None, "latency_ms": None, "source": "seed"}, window
+    )
 
 
 @router.post("/metrics/regression")

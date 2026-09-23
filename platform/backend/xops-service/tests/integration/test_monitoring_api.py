@@ -133,3 +133,35 @@ def test_explain_becomes_measured_after_promotion(client: TestClient, reset_mode
 def test_drift_is_labelled_seed(client: TestClient) -> None:
     """PSI 계산은 실계산이지만 입력 분포가 시드라 measured로 표기하지 않는다."""
     assert client.get("/api/v3/monitoring/drift", params=_DEMO_ON).json()["source"] == "seed"
+
+
+def test_metrics_window_truncates_series_and_latest(client: TestClient) -> None:
+    """window=N 이면 6대 지표 계열이 마지막 N개로 잘리고 latest 도 그 마지막 값을 본다."""
+    full = client.get("/api/v3/monitoring/metrics", params=_DEMO_ON).json()
+    windowed = client.get("/api/v3/monitoring/metrics", params={**_DEMO_ON, "window": 3}).json()
+
+    assert windowed["applied_window"] == 3
+    assert "applied_window" not in full
+    for key in ("accuracy", "f1", "precision", "recall", "mse", "mae"):
+        assert windowed["history"][key] == full["history"][key][-3:]
+        assert windowed["latest"][key] == windowed["history"][key][-1]
+
+
+def test_metrics_window_larger_than_history_keeps_all(client: TestClient) -> None:
+    """관측이 구간보다 적으면 있는 만큼만 돌려주고 빈 자리는 만들지 않는다."""
+    full = client.get("/api/v3/monitoring/metrics", params=_DEMO_ON).json()
+    windowed = client.get("/api/v3/monitoring/metrics", params={**_DEMO_ON, "window": 1000}).json()
+    assert windowed["history"] == full["history"]
+
+
+def test_metrics_window_rejects_zero(client: TestClient) -> None:
+    """0·음수 구간은 빈 계열을 만들므로 422로 막는다."""
+    assert client.get("/api/v3/monitoring/metrics", params={"window": 0}).status_code == 422
+
+
+def test_demo_off_window_does_not_fill_seed(client: TestClient) -> None:
+    """데모 OFF에서 구간을 줘도 시드 수치를 채우지 않는다."""
+    j = client.get("/api/v3/monitoring/metrics", params={"window": 3}).json()
+    assert j["source"] is None
+    assert j["history"] == {}
+    assert j["applied_window"] == 3
