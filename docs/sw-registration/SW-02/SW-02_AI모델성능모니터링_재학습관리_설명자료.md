@@ -82,12 +82,17 @@ curl "http://localhost:8002/api/v3/orchestration/models?include_seed=true"
 | 학습 모듈 | `src/mlops/training/{dataset,model,trainer}.py` |
 | API 라우터 | `src/api/v3/{monitoring,orchestration}.py` |
 | 요청/응답 스키마 | `src/schemas/{monitoring,orchestration}.py` |
-| 공유 기반(SW-01과 공통) | `src/core/*`, `src/auth/jwt.py`, `src/api/dependencies.py` |
-| 의존 모듈(동반 제출) | `src/realdata/{candidates,jobs,monitoring,snapshot,pg_reader,errors}.py`와 그 하위 import, `src/dataops/safety.py`(식별자 검증 1개 함수) |
+위 표가 등록 범위다(모두 `src/mlops/{monitoring,orchestration,training}/*`·라우터·스키마). 아래는 **등록 범위 밖 공용 의존**으로, 기동에 필요하지만 SW-02 등록 범위에 넣지 않는다(루트 결정 2026-09-23).
+
+| 공용 의존 | 경로 |
+|---|---|
+| 공통 기반(SW-01과 공유) | `src/core/*`, `src/auth/jwt.py`, `src/api/dependencies.py` |
+| 실데이터 모듈(`realdata_bridge` 경유) | `src/realdata/{candidates,jobs,monitoring,snapshot,pg_reader,errors,models,evaluate,features}.py`, `namwon_dong_map.json` |
+| SW-01 모듈 1개 | `src/dataops/safety.py`(`pg_reader`가 쓰는 식별자 검증 함수 `assert_safe_identifier`) |
+
+`src/realdata/`의 기능과 `/api/v3/realdata/*` 라우터, 분석·규칙(`analysis.py`·`rules.py`)은 SW-02 기능으로 서술하지 않는다. SW-02 기능 서술은 브리지를 거친 조회까지다.
 
 `f81df7a` 대비 범위 내 변경: `realdata_bridge.py`·`sources.py` 신규, `orchestrator.py`·`registry.py`·`training/model.py` 수정, `api/v3/monitoring.py`·`orchestration.py`(실데이터 브리지·`window`·202 접수), `schemas/orchestration.py`.
-
-**`src/realdata/` 포함 여부 (미결)** — 2026-09-11 초안은 독립 검토 대기를 이유로 코드 범위에서 뺐다. `6bb75bd` 이후 SW-02 라우터가 `realdata_bridge`를 통해 위 모듈을 import하므로, 소스코드 제출물에서 빼면 SW-02가 기동되지 않는다. 이 개정은 **의존 모듈로 동반 제출하되 SW-02의 기능 서술은 브리지 경유 조회로 한정**하는 안으로 적었다. `/api/v3/realdata/*` 라우터와 분석·규칙(`analysis.py`·`rules.py`)의 기능은 SW-02 기능으로 서술하지 않는다. 확정은 루트 결정 사항이다.
 
 ## 7. 2025년 등록 「데이터 워크플로우 관리 프로그램」과의 차별점
 

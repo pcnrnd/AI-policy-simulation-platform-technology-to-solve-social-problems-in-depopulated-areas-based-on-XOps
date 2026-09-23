@@ -14,21 +14,32 @@
 
 ## 기능 경계
 
-코드 기준 경계이며 `tests/integration/test_sw_entrypoints.py`가 import 방향을 검사한다.
+등록 범위는 루트 결정(2026-09-23)을 따른다. import 방향은 `tests/integration/test_sw_entrypoints.py`가 검사한다.
 
 | 구분 | SW-01 (DataOps) | SW-02 (MLOps) |
 |---|---|---|
 | API | `/api/v3/dataops/*` | `/api/v3/monitoring/*`, `/api/v3/orchestration/*` |
-| 고유 모듈 | `src/dataops/{catalog,adapters,backends,query_builder,safety,results,service,liveness}.py`, `src/schemas/dataops.py` | `src/mlops/{monitoring,orchestration,training}/*`, `src/schemas/{monitoring,orchestration}.py` |
+| 등록 범위 파일 | `src/dataops/*`, `src/api/v3/dataops.py`, `src/schemas/dataops.py`, `platform/scripts/load_real_data.py`, `platform/scripts/load_external_data.py` | `src/mlops/{monitoring,orchestration,training}/*`(`realdata_bridge`·`sources` 포함), `src/api/v3/{monitoring,orchestration}.py`, `src/schemas/{monitoring,orchestration}.py` |
 | 단독 진입점 | `sw_main:create_sw01_app` | `sw_main:create_sw02_app` |
 
-**공유 기반(두 SW 공통, 어느 한쪽 고유 기능이 아님)** — `src/core/*`(설정·SQLite·시드·로그·예외), `src/auth/jwt.py`, `src/api/dependencies.py`.
+파일별 목록은 각 설명자료 §6에 있다. `sw_main.py`는 두 SW가 함께 쓰는 시연용 진입점이다.
 
-**SW 간 의존 1건** — SW-02 → `src/mlops/monitoring/realdata_bridge.py` → `src/realdata/{candidates,jobs,monitoring,snapshot}.py` → `src/realdata/pg_reader.py` → `src/dataops/safety.py`(`assert_safe_identifier`, 식별자 검증 함수 1개). SW-02가 SW-01의 CRUD·카탈로그 경로를 쓰는 것은 아니다. 반대 방향(SW-01 → SW-02)은 없다.
+**등록 범위 밖 공용 의존** — 두 SW가 기동에 필요로 하지만 어느 SW의 등록 범위에도 넣지 않는다.
 
-**두 SW 모두에서 제외** — `src/api/v3/overview.py`와 `src/dataops/summary.py`(Overview 대시보드 롤업, `mlops.registry`를 읽음), `/api/v3/realdata/*` 라우터 4종, `report-service`·`dashboard-service`, 프런트엔드 화면.
+| 모듈 | 쓰는 쪽 | 용도 |
+|---|---|---|
+| `src/core/*` | 양쪽 | 설정·SQLite(`db.py`)·시드·로그·예외 |
+| `src/auth/jwt.py`, `src/api/dependencies.py` | 양쪽 | JWT 발급·검증, scope 검사 |
+| `src/realdata/{candidates,jobs,monitoring,snapshot,pg_reader,errors,models,evaluate,features}.py`, `namwon_dong_map.json` | SW-02(`realdata_bridge` 경유, 뒤 3개는 호출 시점 import) | 실데이터 모델 평가·학습 job 조회. 이 모듈의 기능은 SW-02 기능으로 서술하지 않는다 |
 
-**`src/realdata/` 포함 여부 (미결)** — 2026-09-11 초안은 독립 검토 대기를 이유로 SW-02 범위에서 뺐다. 그 뒤 `6bb75bd`에서 SW-02 라우터가 브리지를 통해 위 realdata 모듈을 import하므로, 소스코드 제출 시 이 모듈들이 없으면 SW-02가 기동되지 않는다. 설명자료에는 "의존 모듈로 동반 제출, 기능 서술은 브리지 경유 조회만"으로 적었다. 확정은 루트 결정 사항이다.
+**하나의 FastAPI 프로세스 공유** — 통합 플랫폼(`main:app`, Compose)은 두 SW와 Overview·realdata 라우터를 한 프로세스로 띄우고 `init_db()`로 같은 SQLite를 초기화한다. 단독 진입점을 따로 띄워도 같은 `XOPS_DB_PATH`를 가리키면 SQLite 파일을 공유한다.
+
+**SW 간 교차 import** (반대 방향 SW-01 → SW-02 기능 경로는 없음)
+
+- SW-02 → `realdata/pg_reader.py` → `src/dataops/safety.py`(`assert_safe_identifier`, 식별자 검증 함수 1개). SW-01의 카탈로그·CRUD 경로는 쓰지 않는다.
+- `src/dataops/summary.py`(SW-01 등록 범위 안)는 Overview 대시보드 롤업 전용으로 `src.mlops.orchestration.registry`를 읽는다. `/api/v3/overview`에서만 쓰이며 SW-01 라우터·단독 진입점은 이 파일을 import하지 않는다.
+
+**두 SW 모두에서 제외** — `src/api/v3/overview.py`, `/api/v3/realdata/*` 라우터 4종과 `src/realdata/{analysis,rules}.py`, `src/schemas/realdata.py`, `report-service`·`dashboard-service`, 프런트엔드 화면.
 
 ## 전체 플랫폼 실행과의 관계
 
