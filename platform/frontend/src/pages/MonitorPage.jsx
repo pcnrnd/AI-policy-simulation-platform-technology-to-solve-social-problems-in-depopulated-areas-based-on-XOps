@@ -106,8 +106,23 @@ const REALDATA_DATASETS = [
   { key: "wape", label: "검증 WAPE (우축)", borderColor: "rgba(168, 85, 247, 1)", borderWidth: 1.5, pointStyle: "rect", tension: 0.35, yAxisID: "y1" }
 ];
 
-// 모니터링 옵션 — 조회 구간 (대상 모델은 운영 모델 레지스트리에서 선택)
+// 모니터링 옵션 — 조회 구간 (대상 모델은 운영 모델 레지스트리에서 선택).
+// 단위는 관측 개수다. 실측 지표는 학습 실행 단위로 생기므로 시간 라벨을 붙이지 않는다.
 const WINDOW_OPTIONS = [3, 6, 10];
+
+/**
+ * 학습 시 측정한 1건 추론 지연을 표시 문자열로 바꾼다.
+ * 1ms 이상은 ms 정수, 1ms 미만은 μs다. 같은 프로세스 안 1행 predict는 보통 1ms 미만이라
+ * "0.001ms"로 적으면 값이 잘린 것처럼 읽힌다.
+ * @param {number|null} latencyMs 밀리초. 측정이 없으면 null.
+ * @returns {string}
+ */
+function formatLatency(latencyMs) {
+  if (latencyMs === null) return "측정 없음";
+  if (latencyMs >= 1) return `${latencyMs.toFixed(0)}ms`;
+  const microseconds = latencyMs * 1000;
+  return `${microseconds.toFixed(microseconds >= 10 ? 0 : 1)}μs`;
+}
 
 export default function MonitorPage() {
   const {
@@ -220,7 +235,7 @@ export default function MonitorPage() {
     return Promise.all([
       apiGet("/api/v3/monitoring/metrics", {
         token: realdataToken ?? undefined,
-        params: { model_id: modelTarget, include_seed: mockDataVisible }
+        params: { model_id: modelTarget, include_seed: mockDataVisible, window: windowHours }
       }),
       apiGet("/api/v3/monitoring/explain", {
         token: realdataToken ?? undefined,
@@ -243,7 +258,7 @@ export default function MonitorPage() {
       .finally(() => {
         if (requestId === monitoringRequestRef.current) setMonitoringLoading(false);
       });
-  }, [addConsoleLog, modelTarget, mockDataVisible, realdataToken]);
+  }, [addConsoleLog, modelTarget, mockDataVisible, realdataToken, windowHours]);
 
   // 백엔드 PSI/KL 판정 재조회(표시 전용) — driftInjected 변경 효과와 [다시 시도] 버튼이 같은 경로를 쓴다.
   // 재학습 발화는 injectDrift → 오케스트레이션 이벤트 경로가 단독 담당(중복 트리거 방지).
@@ -477,6 +492,8 @@ export default function MonitorPage() {
       ),
     [modelSeries, windowHours]
   );
+  // 실제로 그려진 관측 수. 구간보다 관측이 적으면 화면이 그대로라, 그 사실을 카드에 적는다.
+  const plottedCount = Math.max(0, ...Object.values(windowSeries).map((values) => values.length));
 
   // 추이 x축 — 실측이면 백엔드가 준 실행 ID 라벨을 쓴다. 실측 지표는 학습 실행 단위로 생기므로
   // 시각 라벨을 붙이면 없는 관측 주기를 있는 것처럼 보이게 한다.
@@ -684,9 +701,7 @@ export default function MonitorPage() {
         ? SEED_LATENCY_DRIFTED_MS
         : SEED_LATENCY_NORMAL_MS
       : null;
-  // 실측 지연은 1ms 미만이라 정수로 반올림하면 전부 0ms가 된다.
-  const latencyText =
-    latencyMs === null ? "측정 없음" : `${latencyMs >= 1 ? latencyMs.toFixed(0) : fmt3(latencyMs)}ms`;
+  const latencyText = formatLatency(latencyMs);
 
   // 수집 상태 — 성능·설명 API 결과와 문구를 일치시킨다(실패 시 데이터 소스 정상 수신을 주장하지 않음).
   // 색상 외 아이콘 형태로도 상태를 구분한다(§9 A11Y-06 · §10 UI-01).
@@ -971,7 +986,7 @@ export default function MonitorPage() {
             <span>조회 구간</span>
             <select className="select-control" value={windowHours} onChange={(e) => setWindowHours(Number(e.target.value))}>
               {WINDOW_OPTIONS.map((h) => (
-                <option key={h} value={h}>최근 {h}시간</option>
+                <option key={h} value={h}>최근 {h}개 관측</option>
               ))}
             </select>
           </label>
@@ -1255,6 +1270,14 @@ export default function MonitorPage() {
           }
           icon="fa-chart-column"
           data-values-source={metricsChartSrc}
+          headerRight={
+            <span
+              style={{ fontSize: 11, color: "var(--text-muted)", whiteSpace: "nowrap" }}
+              title={`요청 구간 최근 ${windowHours}개 중 ${plottedCount}개 관측 표시`}
+            >
+              관측 {plottedCount}/{windowHours}개
+            </span>
+          }
         >
           <div style={{ position: "relative", height: 280, width: "100%" }}>
             <Line data={metricsData} options={metricsChartOpts} />
@@ -1301,7 +1324,7 @@ export default function MonitorPage() {
             모델 신뢰도 게이지 (실시간)
             {/* 카드마다 제목 옆 트리거 1개만 둔다 — 기존 설명 툴팁에 표시 값 기준(피드백 #11)을 덧붙인다.
                 데모 토글은 값의 유무만 바꾸므로 툴팁 자체는 토글과 무관하게 항상 같은 내용을 낸다. */}
-            <InfoTip text="운영 모델의 Precision·Recall과 예측 지연(latency)을 표시합니다. 예측 지연이 자동 롤백 임계 200ms를 초과하면 직전 버전으로 자동 롤백됩니다. 표시 값: 인구이동 예측 모델 기준(예측 지연)." />
+            <InfoTip text="운영 모델의 Precision·Recall과 예측 지연을 표시합니다. 예측 지연이 자동 롤백 임계 200ms를 초과하면 직전 버전으로 자동 롤백됩니다. 1ms 미만은 μs로 표시하며, 학습 시 측정한 1건 추론 시간입니다." />
           </>
         }
         icon="fa-gauge-high"
