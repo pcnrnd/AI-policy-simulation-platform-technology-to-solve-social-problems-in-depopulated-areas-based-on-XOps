@@ -1,0 +1,9 @@
+# Authelia 파일 기반 사용자 목록 형식 예시. 실제 파일은 같은 폴더의 users.yml이며 커밋하지 않는다.
+# 비밀번호 해시 생성·계정 만료 방법은 docs/deploy/ec2-login-gate.md '계정 관리' 참고.
+users:
+  hong:                    # 로그인 ID
+    disabled: false        # true로 바꾸면 로그인 불가(계정 만료)
+    displayname: '홍길동'
+    password: '<authelia crypto hash generate argon2 출력의 $argon2id$... 문자열>'
+    email: 'hong@example.com'
+    groups: []
