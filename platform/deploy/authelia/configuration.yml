@@ -1,0 +1,50 @@
+# yaml-language-server: $schema=https://www.authelia.com/schemas/v4.39/json-schema/configuration.json
+# 인구감소 플랫폼 로그인 포털(Authelia 4.39). 런북: docs/deploy/ec2-login-gate.md
+# {{ mustEnv "SITE_DOMAIN" }}은 X_AUTHELIA_CONFIG_FILTERS=template(compose.ec2.yaml)로 치환된다.
+# 비밀값(session.secret, storage.encryption_key)은 *_FILE 환경변수로 /config/secrets/에서 읽는다.
+
+server:
+  # Caddy가 같은 도메인의 /authelia 하위 경로로 넘긴다.
+  address: 'tcp://:9091/authelia'
+
+authentication_backend:
+  # 메일 없이 운영하므로 웹에서 비밀번호 재설정·변경은 막고, 관리자가 users.yml로 발급한다.
+  password_reset:
+    disable: true
+  password_change:
+    disable: true
+  file:
+    path: '/config/users.yml'
+    watch: true
+    password:
+      algorithm: 'argon2'
+      argon2:
+        variant: 'argon2id'
+
+access_control:
+  default_policy: 'deny'
+  rules:
+    - domain: '{{ mustEnv "SITE_DOMAIN" }}'
+      policy: 'one_factor'
+
+regulation:
+  modes:
+    - 'ip'
+  max_retries: 5
+  find_time: '10m'
+  ban_time: '30m'
+
+session:
+  cookies:
+    - domain: '{{ mustEnv "SITE_DOMAIN" }}'
+      authelia_url: 'https://{{ mustEnv "SITE_DOMAIN" }}/authelia'
+      default_redirection_url: 'https://{{ mustEnv "SITE_DOMAIN" }}/'
+
+storage:
+  local:
+    path: '/var/lib/authelia/db.sqlite3'
+
+notifier:
+  # 공식 문서상 테스트용이다. 재설정·변경을 막아 두었으므로 운영 흐름에서는 쓰이지 않는다.
+  filesystem:
+    filename: '/var/lib/authelia/notification.txt'

@@ -1,0 +1,73 @@
+# EC2 공개용 덮어쓰기 — compose.xops.yaml 위에 겹쳐 앞단에 로그인 게이트(Caddy + Authelia)를 붙인다.
+# 기동: docker compose --env-file platform/deploy/.env -f platform/compose.xops.yaml -f platform/compose.ec2.yaml up -d --build
+# 런북: docs/deploy/ec2-login-gate.md
+# !override/!reset 태그를 쓰므로 Docker Compose 2.24 이상이 필요하다.
+#
+# 호스트에 포트를 여는 것은 Caddy(80·443)뿐이다. xops-service·frontend는 내부 네트워크로만 닿고,
+# DB 포트는 서버 안에서 점검·적재할 때만 쓰도록 127.0.0.1에 묶는다.
+services:
+  caddy:
+    image: caddy:2.11.7-alpine
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN:?deploy/.env에 SITE_DOMAIN 필요}
+      CADDY_TLS: ${CADDY_TLS:?deploy/.env에 CADDY_TLS 필요}
+    ports:
+      # 80은 인증서 발급(HTTP-01)과 HTTPS 리다이렉트용이라 보안그룹에서 전체 공개해야 한다.
+      # 로컬 검증에서 호스트 80/443이 점유돼 있을 때만 CADDY_HTTP_PORT/CADDY_HTTPS_PORT로 바꾼다.
+      - "${CADDY_HTTP_PORT:-80}:80"
+      - "${CADDY_HTTPS_PORT:-443}:443"
+    volumes:
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data # 인증서·ACME 계정 — 지우면 재발급된다(발급 횟수 제한 주의)
+    depends_on:
+      - authelia
+      - frontend
+    restart: unless-stopped
+
+  authelia:
+    image: authelia/authelia:4.39.28
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN:?deploy/.env에 SITE_DOMAIN 필요}
+      X_AUTHELIA_CONFIG_FILTERS: template # configuration.yml의 {{ mustEnv "SITE_DOMAIN" }} 치환
+      AUTHELIA_SESSION_SECRET_FILE: /config/secrets/session_secret
+      AUTHELIA_STORAGE_ENCRYPTION_KEY_FILE: /config/secrets/storage_encryption_key
+    volumes:
+      # configuration.yml + users.yml + secrets/ — users.yml·secrets/는 서버에서 만들고 커밋하지 않는다.
+      - ./deploy/authelia:/config:ro
+      - authelia-data:/var/lib/authelia # SQLite(로그인 이력·차단 목록)와 filesystem 알림 파일
+    restart: unless-stopped
+
+  xops-service:
+    environment:
+      # 앱은 dev 모드 그대로 둔다 — 토큰 발급은 열려 있지만 Caddy 앞단 로그인을 통과해야 닿는다.
+      XOPS_JWT_SECRET: ${XOPS_JWT_SECRET:?deploy/.env에 XOPS_JWT_SECRET 필요}
+      XOPS_PG_DSN: postgresql://xops:${DB_PASSWORD:?deploy/.env에 DB_PASSWORD 필요}@pg:5432/xops_dataops
+      XOPS_TIMESCALE_DSN: postgresql://xops:${DB_PASSWORD}@timescale:5432/xops_timeseries
+      XOPS_MONGO_URI: mongodb://xops:${DB_PASSWORD}@mongo:27017/xops_documents?authSource=admin
+    ports: !reset []
+
+  frontend:
+    ports: !reset []
+
+  # DB 비밀번호는 볼륨을 처음 만들 때만 적용된다 — 기존 볼륨이 있으면 바꿔도 반영되지 않는다.
+  pg:
+    environment:
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports: !override
+      - "127.0.0.1:5433:5432"
+
+  timescale:
+    environment:
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports: !override
+      - "127.0.0.1:5434:5432"
+
+  mongo:
+    environment:
+      MONGO_INITDB_ROOT_PASSWORD: ${DB_PASSWORD}
+    ports: !override
+      - "127.0.0.1:27017:27017"
+
+volumes:
+  caddy-data:
+  authelia-data:

@@ -20,6 +20,10 @@ venv
 
 # === Secrets / env ===
 .env
+# EC2 로그인 게이트 — 실제 계정 목록과 Authelia 비밀값 (예시는 users.example.yml, deploy/.env.example)
+platform/deploy/.env
+platform/deploy/authelia/users.yml
+platform/deploy/authelia/secrets/
 
 *.db
 

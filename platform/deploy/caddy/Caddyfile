@@ -1,0 +1,23 @@
+# 인구감소 플랫폼 앞단 — HTTPS 종단 + Authelia 로그인 게이트.
+# SITE_DOMAIN·CADDY_TLS는 compose.ec2.yaml이 deploy/.env에서 넘긴다.
+# CADDY_TLS: 운영은 인증서 알림 이메일(Let's Encrypt ACME), 로컬 검증은 internal(Caddy 자체 CA).
+# 참고: https://www.authelia.com/integration/proxies/caddy/ (Subpath 예시)
+{$SITE_DOMAIN} {
+	tls {$CADDY_TLS}
+
+	# 로그인 포털 — 인증 없이 열려야 하므로 forward_auth 밖에 둔다.
+	@authelia path /authelia /authelia/*
+	handle @authelia {
+		reverse_proxy authelia:9091
+	}
+
+	# 나머지 전부(화면과 /api) — 로그인 세션이 없으면 Authelia가 포털로 돌려보내거나 401을 준다.
+	handle {
+		forward_auth authelia:9091 {
+			uri /api/authz/forward-auth?authelia_url=https://{$SITE_DOMAIN}/authelia/
+			copy_headers Remote-User Remote-Groups Remote-Email Remote-Name
+		}
+		encode gzip
+		reverse_proxy frontend:80
+	}
+}
