@@ -74,13 +74,25 @@ def test_openapi_documents_the_three_payloads(client: TestClient) -> None:
         assert {"status", "message", "data", "provenance"} <= set(envelope["properties"])
 
 
+# FastAPI가 소유하는 422 스키마 — 설치 버전마다 선택 필드가 다르다(0.142는 input·ctx를 더한다).
+# requirements가 하한만 고정해 배포 이미지와 테스트 환경의 버전이 다를 수 있어 비교에서 뺀다.
+_FRAMEWORK_SCHEMAS = ("ValidationError", "HTTPValidationError")
+
+
+def _without_framework_schemas(spec: dict[str, Any]) -> dict[str, Any]:
+    schemas = {k: v for k, v in spec["components"]["schemas"].items() if k not in _FRAMEWORK_SCHEMAS}
+    return {**spec, "components": {**spec["components"], "schemas": schemas}}
+
+
 def test_openapi_snapshot_is_current(client: TestClient) -> None:
     """타 부서에 넘기는 docs/xops-openapi.json 이 앱의 OpenAPI와 같다 — API를 바꾸면 다시 만든다.
 
     다시 만드는 명령은 docs/xops-department-integration.md 9절에 있다.
     """
-    snapshot = Path(__file__).resolve().parents[5] / "docs" / "xops-openapi.json"
-    assert json.loads(snapshot.read_text(encoding="utf-8")) == client.get("/openapi.json").json()
+    snapshot = json.loads((Path(__file__).resolve().parents[5] / "docs" / "xops-openapi.json").read_text(encoding="utf-8"))
+    live = client.get("/openapi.json").json()
+    assert set(_FRAMEWORK_SCHEMAS) <= set(snapshot["components"]["schemas"])
+    assert _without_framework_schemas(snapshot) == _without_framework_schemas(live)
 
 
 def test_wape_description_does_not_claim_upper_bound(client: TestClient) -> None:

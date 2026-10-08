@@ -219,7 +219,7 @@ HTTP 코드는 요청·인증·서버 오류에만 쓴다. 데이터가 없거�
 3. 조회 전용 토큰은 `GET /realdata/*`에서 200, `POST /realdata/training-runs`에서 401이다. 토큰 없는 `POST /orchestration/events`는 401이다.
 4. 타 부서 컨테이너(같은 Docker 네트워크)에서 `http://xops-service:8000/api/v3/realdata/health`가 HTTP 200이다. PG 상태는 HTTP 코드가 아니라 `status`로 판정한다.
 5. `include_seed`를 생략한 6절 목록 호출에 시드 항목이 없다(`is_seed:true`, `source:"seed"`, `metrics_source:"seed"` 없음).
-6. `GET /api/v3/openapi.json`(도메인 경유)이 이 커밋의 `docs/xops-openapi.json`과 같다.
+6. `GET /api/v3/openapi.json`(도메인 경유)이 이 커밋의 `docs/xops-openapi.json`과 같다. 단 FastAPI가 소유하는 422 스키마(`ValidationError`·`HTTPValidationError`)는 설치된 FastAPI 버전에 따라 선택 필드가 다를 수 있다(2026-10-08 dts 이미지의 0.142.4는 `input`·`ctx`를 더한다). `requirements.txt`가 하한만 고정하기 때문이며, 우리 경로·스키마는 같아야 한다.
 
 `docs/xops-openapi.json` 다시 만들기(API를 바꾼 커밋마다 — `test_response_contracts.py::test_openapi_snapshot_is_current`가 어긋나면 실패한다). 앱이 기동 로그를 표준출력에 쓰므로 리다이렉트하지 않고 파일에 직접 쓴다.
 
