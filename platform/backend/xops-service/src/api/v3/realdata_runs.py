@@ -15,7 +15,14 @@ from src.api.dependencies import require_auth
 from src.realdata import candidates, jobs, monitoring
 from src.realdata.candidates import ApplyRejected, CandidateNotFound
 from src.realdata.jobs import JobConflict
-from src.schemas.realdata import Envelope, Provenance, RestoreRequest, TrainingRunRequest
+from src.schemas.realdata import (
+    Envelope,
+    Provenance,
+    RealdataEvaluation,
+    RealdataModelEntry,
+    RestoreRequest,
+    TrainingRunRequest,
+)
 
 router = APIRouter(prefix="/realdata", tags=["realdata"])
 
@@ -99,7 +106,8 @@ def list_training_runs(
 
 
 # ── 모델·후보 조회 ────────────────────────────────────────
-@router.get("/models")
+# 응답 구조는 OpenAPI `responses`로만 싣는다 — response_model로 거르면 응답 JSON이 바뀔 수 있다.
+@router.get("/models", response_model=None, responses={200: {"model": Envelope[list[RealdataModelEntry]]}})
 def list_models(_: dict[str, Any] = Depends(require_auth("data:read"))) -> dict[str, Any]:
     entries = []
     for model_id, target in MODEL_TARGETS.items():
@@ -170,7 +178,11 @@ def _resolve_version(model_id: str, version: str | None) -> str | None:
     return active["version"] if active else None
 
 
-@router.get("/models/{model_id}/evaluation")
+@router.get(
+    "/models/{model_id}/evaluation",
+    response_model=None,
+    responses={200: {"model": Envelope[RealdataEvaluation]}},
+)
 def get_evaluation(
     model_id: str,
     version: str | None = Query(None),
