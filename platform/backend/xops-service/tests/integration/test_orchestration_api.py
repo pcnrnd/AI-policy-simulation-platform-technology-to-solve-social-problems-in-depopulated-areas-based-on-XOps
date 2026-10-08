@@ -36,9 +36,11 @@ def test_demo_off_hides_seed_models_and_pipelines(client: TestClient) -> None:
     assert {"PL-POP-RETRAIN-01", "PL-VITAL-RETRAIN-02", "PL-SETTLE-RETRAIN-03"} <= {p["id"] for p in on_pipelines}
 
 
-def test_demo_off_hides_runs_from_seed_pipelines(client: TestClient) -> None:
+def test_demo_off_hides_runs_from_seed_pipelines(client: TestClient, auth_headers: dict[str, str]) -> None:
     """시드 파이프라인 실행은 행 자체는 실행 산출물이지만 학습 입력이 시드라 목록에서 뺀다."""
-    client.post("/api/v3/orchestration/pipelines/PL-POP-RETRAIN-01/run", json={"trigger": "manual"})
+    client.post(
+        "/api/v3/orchestration/pipelines/PL-POP-RETRAIN-01/run", json={"trigger": "manual"}, headers=auth_headers
+    )
 
     off = client.get("/api/v3/orchestration/runs").json()
     on = client.get("/api/v3/orchestration/runs", params={"include_seed": "true"}).json()
@@ -47,19 +49,25 @@ def test_demo_off_hides_runs_from_seed_pipelines(client: TestClient) -> None:
     assert any(r.get("pipeline_id") == "PL-POP-RETRAIN-01" for r in on)
 
 
-def test_unknown_model_404(client: TestClient) -> None:
-    r = client.post("/api/v3/orchestration/events", json={"model_id": "ghost", "trigger": "manual"})
+def test_unknown_model_404(client: TestClient, auth_headers: dict[str, str]) -> None:
+    r = client.post(
+        "/api/v3/orchestration/events", json={"model_id": "ghost", "trigger": "manual"}, headers=auth_headers
+    )
     assert r.status_code == 404
 
 
 def test_manual_event_promotes(
-    client: TestClient, reset_model: Callable[[str], None], await_run: Callable[..., dict]
+    client: TestClient,
+    reset_model: Callable[[str], None],
+    await_run: Callable[..., dict],
+    auth_headers: dict[str, str],
 ) -> None:
     # 최초 재학습 상태로 고정 — 승급 후에는 아티팩트 실측치가 현행 기준이 되어 동점 반려된다.
     reset_model("population-forecast")
     accepted = client.post(
         "/api/v3/orchestration/events",
         json={"model_id": "population-forecast", "trigger": "manual", "candidate_latency_ms": 120},
+        headers=auth_headers,
     )
     assert accepted.status_code == 202
     r = await_run(client, accepted.json())
@@ -77,7 +85,10 @@ def test_manual_event_promotes(
 
 
 def test_high_latency_rolls_back(
-    client: TestClient, reset_model: Callable[[str], None], await_run: Callable[..., dict]
+    client: TestClient,
+    reset_model: Callable[[str], None],
+    await_run: Callable[..., dict],
+    auth_headers: dict[str, str],
 ) -> None:
     # 이 테스트의 대상은 지연 초과 롤백이다. 후보 지표를 명시해 승급 경로를 결정적으로 만들어
     # 학습 결과와 무관하게 지연 판정에 도달시킨다.
@@ -92,6 +103,7 @@ def test_high_latency_rolls_back(
                 "candidate_metrics": {"f1": 0.99},
                 "candidate_latency_ms": 250,
             },
+            headers=auth_headers,
         ).json(),
     )
     assert r["state"] == "rolled_back"
@@ -99,7 +111,9 @@ def test_high_latency_rolls_back(
     assert r["deploy"]["rolled_back"] is True
 
 
-def test_rejected_when_candidate_worse(client: TestClient, await_run: Callable[..., dict]) -> None:
+def test_rejected_when_candidate_worse(
+    client: TestClient, await_run: Callable[..., dict], auth_headers: dict[str, str]
+) -> None:
     r = await_run(
         client,
         client.post(
@@ -109,16 +123,19 @@ def test_rejected_when_candidate_worse(client: TestClient, await_run: Callable[.
                 "trigger": "manual",
                 "candidate_metrics": {"f1": 0.10},
             },
+            headers=auth_headers,
         ).json(),
     )
     assert r["state"] == "rejected"
 
 
-def test_runs_recorded(client: TestClient, await_run: Callable[..., dict]) -> None:
+def test_runs_recorded(client: TestClient, await_run: Callable[..., dict], auth_headers: dict[str, str]) -> None:
     await_run(
         client,
         client.post(
-            "/api/v3/orchestration/events", json={"model_id": "population-forecast", "trigger": "manual"}
+            "/api/v3/orchestration/events",
+            json={"model_id": "population-forecast", "trigger": "manual"},
+            headers=auth_headers,
         ).json(),
     )
     # /events 발화는 파이프라인에 매이지 않은 실행이라 데모 ON 경로에서 조회한다.
@@ -131,7 +148,10 @@ def test_runs_recorded(client: TestClient, await_run: Callable[..., dict]) -> No
 
 
 def test_pipeline_register_run_logs_roundtrip(
-    client: TestClient, reset_model: Callable[[str], None], await_run: Callable[..., dict]
+    client: TestClient,
+    reset_model: Callable[[str], None],
+    await_run: Callable[..., dict],
+    auth_headers: dict[str, str],
 ) -> None:
     """등록한 파이프라인으로 실행하면 실행 레코드·단계·로그가 저장소에 남고 조회된다."""
     reset_model("settlement-demand")
@@ -142,9 +162,10 @@ def test_pipeline_register_run_logs_roundtrip(
         "trigger_policy": "수동",
         "experiment": "EXP-RT-001",
     }
-    client.delete(f"/api/v3/orchestration/pipelines/{definition['id']}")
+    write = {"headers": auth_headers}  # 등록·삭제·실행은 data:write 필요
+    client.delete(f"/api/v3/orchestration/pipelines/{definition['id']}", **write)
 
-    created = client.post("/api/v3/orchestration/pipelines", json=definition)
+    created = client.post("/api/v3/orchestration/pipelines", json=definition, **write)
     assert created.status_code == 201
     assert created.json()["model_id"] == "settlement-demand"
 
@@ -154,13 +175,13 @@ def test_pipeline_register_run_logs_roundtrip(
     assert listed[definition["id"]]["candidate_version"] != listed[definition["id"]]["base_version"]
 
     # id 중복 등록 거부 · 없는 모델 거부
-    assert client.post("/api/v3/orchestration/pipelines", json=definition).status_code == 409
+    assert client.post("/api/v3/orchestration/pipelines", json=definition, **write).status_code == 409
     assert client.post(
-        "/api/v3/orchestration/pipelines", json={**definition, "id": "PL-TEST-GHOST", "model_id": "ghost"}
+        "/api/v3/orchestration/pipelines", json={**definition, "id": "PL-TEST-GHOST", "model_id": "ghost"}, **write
     ).status_code == 404
 
     accepted = client.post(
-        f"/api/v3/orchestration/pipelines/{definition['id']}/run", json={"trigger": "manual"}
+        f"/api/v3/orchestration/pipelines/{definition['id']}/run", json={"trigger": "manual"}, **write
     )
     assert accepted.status_code == 202
     run = await_run(client, accepted.json())
@@ -182,8 +203,8 @@ def test_pipeline_register_run_logs_roundtrip(
     assert any("[deploying]" in m for m in messages)
 
     assert client.get("/api/v3/orchestration/runs/RUN-NONE/logs").status_code == 404
-    assert client.delete(f"/api/v3/orchestration/pipelines/{definition['id']}").status_code == 200
-    assert client.post(f"/api/v3/orchestration/pipelines/{definition['id']}/run").status_code == 404
+    assert client.delete(f"/api/v3/orchestration/pipelines/{definition['id']}", **write).status_code == 200
+    assert client.post(f"/api/v3/orchestration/pipelines/{definition['id']}/run", **write).status_code == 404
     # 파이프라인을 지워도 실행 이력은 남는다.
     assert client.get("/api/v3/orchestration/runs", params={"pipeline_id": definition["id"]}).json()
 
@@ -192,11 +213,13 @@ def test_pipeline_register_run_logs_roundtrip(
 
 
 def test_event_is_accepted_and_persisted_before_completion(
-    client: TestClient, await_run: Callable[..., dict]
+    client: TestClient, await_run: Callable[..., dict], auth_headers: dict[str, str]
 ) -> None:
     """접수 즉시 진행 중 실행이 저장된다 — 프로세스가 중간에 죽어도 흔적이 남는다."""
     accepted = client.post(
-        "/api/v3/orchestration/events", json={"model_id": "population-forecast", "trigger": "manual"}
+        "/api/v3/orchestration/events",
+        json={"model_id": "population-forecast", "trigger": "manual"},
+        headers=auth_headers,
     )
     assert accepted.status_code == 202
     run_id = accepted.json()["run_id"]
@@ -208,7 +231,7 @@ def test_event_is_accepted_and_persisted_before_completion(
 
 
 def test_second_event_on_same_model_conflicts_while_running(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, auth_headers: dict[str, str]
 ) -> None:
     """모델별 락 — 실행이 끝나기 전 같은 모델을 다시 부르면 409."""
     started = threading.Event()
@@ -221,13 +244,17 @@ def test_second_event_on_same_model_conflicts_while_running(
 
     monkeypatch.setattr(registry_module.ModelRegistry, "trigger", _slow_trigger)
     first = client.post(
-        "/api/v3/orchestration/events", json={"model_id": "vital-population", "trigger": "manual"}
+        "/api/v3/orchestration/events",
+        json={"model_id": "vital-population", "trigger": "manual"},
+        headers=auth_headers,
     )
     assert first.status_code == 202
     assert started.wait(10.0)
 
     second = client.post(
-        "/api/v3/orchestration/events", json={"model_id": "vital-population", "trigger": "manual"}
+        "/api/v3/orchestration/events",
+        json={"model_id": "vital-population", "trigger": "manual"},
+        headers=auth_headers,
     )
     assert second.status_code == 409
 

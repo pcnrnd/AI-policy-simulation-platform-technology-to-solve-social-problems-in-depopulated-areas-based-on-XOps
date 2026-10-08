@@ -34,19 +34,20 @@ def _sign(signing_input: bytes) -> str:
     return _b64url_encode(sig)
 
 
-def issue_jwt(source_id: str | None = None) -> str:
+def issue_jwt(source_id: str | None = None, scope: str | None = None) -> str:
     """소스 접근용 HS256 토큰 발급.
 
     `source_id=None` 은 특정 소스에 매이지 않은 토큰이다 — 카탈로그 등록처럼
     "아직 존재하지 않는 소스"를 만드는 요청에 쓴다. 권한 판정은 어차피 scope 로만
     하므로(require_scope) payload 의 source 는 감사용 표기다.
+    `scope` 를 생략하면 설정 기본값(`data:read data:write`)이다 — 발급 게이트가 정한 값을 넘긴다.
     """
     settings = get_settings()
     header = {"alg": settings.jwt_algorithm, "typ": "JWT"}
     now = int(time.time())
     payload = {
         "sub": _CLIENT_SUB,
-        "scope": settings.jwt_scope,
+        "scope": scope or settings.jwt_scope,
         "source": source_id,
         "iat": now,
         "exp": now + settings.jwt_expiry_seconds,
@@ -60,7 +61,7 @@ def issue_jwt(source_id: str | None = None) -> str:
     return ".".join(segments)
 
 
-def issue_oauth2(source_id: str | None = None) -> dict[str, Any]:
+def issue_oauth2(source_id: str | None = None, scope: str | None = None) -> dict[str, Any]:
     """OAuth2 Authorization Code Grant 흐름(access_token은 JWT 형식)."""
     settings = get_settings()
     now = int(time.time())
@@ -70,8 +71,8 @@ def issue_oauth2(source_id: str | None = None) -> dict[str, Any]:
         "authorization_code": code,
         "token_type": "Bearer",
         "expires_in": settings.jwt_expiry_seconds,
-        "scope": settings.jwt_scope,
-        "access_token": issue_jwt(source_id),
+        "scope": scope or settings.jwt_scope,
+        "access_token": issue_jwt(source_id, scope),
     }
 
 

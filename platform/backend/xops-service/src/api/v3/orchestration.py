@@ -10,7 +10,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 
-from src.api.dependencies import optional_auth
+from src.api.dependencies import optional_auth, require_auth
 from src.core import db
 from src.core.exceptions import SourceNotFoundError
 from src.mlops.monitoring import realdata_bridge
@@ -34,6 +34,10 @@ _INCLUDE_SEED = Query(False, description="데모 시드(기본 파이프라인·
 # 데모 표시 OFF에서 실데이터 학습 job·모델을 같은 스키마로 함께 내려준다. 실데이터는
 # `data:read` 토큰이 있는 호출에만 싣는다 — 토큰 없는 기존 공개 GET은 계약이 그대로다.
 _OPTIONAL_AUTH = Depends(optional_auth("data:read"))
+
+# 쓰기 4개(파이프라인 등록·삭제·실행, 재학습 이벤트)는 재학습을 일으키거나 정의를 지운다 —
+# 같은 도메인의 다른 코드나 조회 전용 토큰이 실행하지 못하게 `data:write`를 요구한다.
+_WRITE_AUTH = Depends(require_auth("data:write"))
 
 
 def _with_realdata(include_seed: bool, auth: dict[str, Any] | None) -> bool:
@@ -66,7 +70,7 @@ def list_pipelines(
 
 
 @router.post("/pipelines", status_code=201)
-def register_pipeline(body: PipelineCreateRequest) -> dict[str, Any]:
+def register_pipeline(body: PipelineCreateRequest, _: dict[str, Any] = _WRITE_AUTH) -> dict[str, Any]:
     """재학습 파이프라인 등록 → SQLite 영속화."""
     return get_registry().register_pipeline(
         {**body.model_dump(), "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
@@ -74,14 +78,16 @@ def register_pipeline(body: PipelineCreateRequest) -> dict[str, Any]:
 
 
 @router.delete("/pipelines/{pipeline_id}")
-def delete_pipeline(pipeline_id: str) -> dict[str, str]:
+def delete_pipeline(pipeline_id: str, _: dict[str, Any] = _WRITE_AUTH) -> dict[str, str]:
     """등록 파이프라인 삭제. 실행 이력은 보존한다."""
     get_registry().delete_pipeline(pipeline_id)
     return {"deleted": pipeline_id}
 
 
 @router.post("/pipelines/{pipeline_id}/run", status_code=202)
-def run_pipeline(pipeline_id: str, body: PipelineRunRequest | None = None) -> dict[str, Any]:
+def run_pipeline(
+    pipeline_id: str, body: PipelineRunRequest | None = None, _: dict[str, Any] = _WRITE_AUTH
+) -> dict[str, Any]:
     """등록 파이프라인 실행 접수 — `/events` 와 같은 백그라운드 경로(모델별 락을 함께 쓴다)."""
     registry = get_registry()
     pipeline = registry.get_pipeline(pipeline_id)
@@ -132,7 +138,7 @@ def get_run_logs(run_id: str, auth: dict[str, Any] | None = _OPTIONAL_AUTH) -> d
 
 
 @router.post("/events", status_code=202)
-def trigger_event(body: EventRequest) -> dict[str, Any]:
+def trigger_event(body: EventRequest, _: dict[str, Any] = _WRITE_AUTH) -> dict[str, Any]:
     """재학습 이벤트 접수 → 백그라운드 실행. 결과는 `GET /runs/{run_id}` 로 확인한다.
 
     학습·평가·배포가 요청 스레드를 붙잡지 않고, 진행 중 상태가 저장돼 프로세스가 죽어도

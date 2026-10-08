@@ -89,14 +89,14 @@ def test_demo_off_explain_returns_no_seed_features(client: TestClient) -> None:
     assert j["source"] is None and j["features"] == []
 
 
-def test_metrics_become_measured_after_retrain(client: TestClient, reset_model, await_run) -> None:
+def test_metrics_become_measured_after_retrain(client: TestClient, reset_model, await_run, auth_headers) -> None:
     """재학습 1회로 실측 지표 추이가 생기고, 학습 시 실측한 추론 지연이 함께 온다."""
     model_id = "settlement-demand"
     reset_model(model_id)
     await_run(
         client,
         client.post(
-            "/api/v3/orchestration/events", json={"model_id": model_id, "trigger": "manual"}
+            "/api/v3/orchestration/events", json={"model_id": model_id, "trigger": "manual"}, headers=auth_headers
         ).json(),
     )
 
@@ -110,14 +110,14 @@ def test_metrics_become_measured_after_retrain(client: TestClient, reset_model, 
     assert j["latency_ms"] is None or j["latency_ms"] > 0
 
 
-def test_explain_becomes_measured_after_promotion(client: TestClient, reset_model, await_run) -> None:
+def test_explain_becomes_measured_after_promotion(client: TestClient, reset_model, await_run, auth_headers) -> None:
     """승급된 버전의 아티팩트가 있으면 기여도는 학습된 계수에서 나온다(시드 아님)."""
     model_id = "vital-population"
     reset_model(model_id)
     run = await_run(
         client,
         client.post(
-            "/api/v3/orchestration/events", json={"model_id": model_id, "trigger": "manual"}
+            "/api/v3/orchestration/events", json={"model_id": model_id, "trigger": "manual"}, headers=auth_headers
         ).json(),
     )
 

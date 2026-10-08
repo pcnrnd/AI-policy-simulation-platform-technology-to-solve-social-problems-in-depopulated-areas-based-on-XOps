@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     # 토큰 발급 클라이언트 자격증명 — prod에서 설정 시 발급 요청에 요구(dev는 개방)
     client_id: str = ""
     client_secret: str = ""
+    # 조회 전용 클라이언트(타 부서 서버 보관) — 이 자격증명으로 받은 토큰은 `data:read`만 담는다.
+    # dev·prod 공통으로 검사한다. 비우면(기본) 조회 전용 발급 경로가 없다.
+    readonly_client_id: str = ""
+    readonly_client_secret: str = ""
 
     # DataOps 기본 페이징
     default_page_size: int = 20
@@ -87,6 +91,11 @@ class Settings(BaseSettings):
 
     def validate_runtime(self) -> None:
         """기동 시 정합성 검증 — prod에서 기본 JWT 시크릿이거나 클라이언트 자격증명이 없으면 거부."""
+        # 조회 전용 id만 있고 secret이 비면 id만 아는 호출자가 토큰을 받는다 — 환경과 무관하게 막는다.
+        if bool(self.readonly_client_id) != bool(self.readonly_client_secret):
+            raise RuntimeError(
+                "XOPS_READONLY_CLIENT_ID/XOPS_READONLY_CLIENT_SECRET은 함께 설정하거나 함께 비워야 합니다."
+            )
         if self.environment != "prod":
             return
         if self.jwt_secret == _DEFAULT_JWT_SECRET:

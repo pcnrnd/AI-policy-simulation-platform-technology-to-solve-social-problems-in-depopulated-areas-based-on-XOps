@@ -3,6 +3,7 @@ import mockData from "../assets/mock_data.json";
 import { PIPELINE_STEPS } from "../constants/pipeline.js";
 import { RETRAIN_PIPELINES, MODEL_STORE } from "../constants/models.js";
 import { apiGet, apiSend } from "../lib/api.js";
+import { getRealdataToken } from "../components/realdata/realdataClient.jsx";
 
 const AppStateContext = createContext(null);
 
@@ -353,7 +354,10 @@ export function AppStateProvider({ children }) {
 
       // 백엔드 오케스트레이션 이벤트 발생 — 실제 승급/롤백 결정을 수신 (애니메이션은 UX)
       try {
+        // 재학습 이벤트는 data:write 토큰이 필요하다 — 실데이터 패널과 같은 발급 캐시를 쓴다.
+        const token = await getRealdataToken();
         const accepted = await apiSend("POST", "/api/v3/orchestration/events", {
+          token,
           body: { model_id: pl.model, trigger: backendTrigger, candidate_latency_ms: 120 }
         });
         if (requestId !== pipelineRequestRef.current) return;

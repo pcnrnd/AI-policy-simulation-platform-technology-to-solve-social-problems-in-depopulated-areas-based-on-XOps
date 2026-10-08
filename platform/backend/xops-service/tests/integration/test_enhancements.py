@@ -11,14 +11,17 @@ from src.core.settings import Settings
 
 
 # ── ⑤ 드리프트 → 재학습 자동 연결 ──
-def test_drift_breach_triggers_retrain(client: TestClient, reset_model: Callable[[str], None]) -> None:
+def test_drift_breach_triggers_retrain(
+    client: TestClient, reset_model: Callable[[str], None], auth_headers: dict[str, str]
+) -> None:
     # 실측 학습에서는 승급이 보장되지 않는다 — 승급 이력이 남으면 같은 시드 재학습은 반려된다.
     # 다른 테스트의 승급 여부에 결과가 좌우되지 않도록 시작 상태를 고정한다.
     reset_model("population-forecast")
     r = client.get(
         "/api/v3/monitoring/drift",
-        # 시드 분포 판정은 데모 표시 ON 경로다(기본값은 판정 없음).
+        # 시드 분포 판정은 데모 표시 ON 경로다(기본값은 판정 없음). 자동 재학습은 data:write 필요.
         params={"include_seed": "true", "drifted": "true", "model_id": "population-forecast", "auto_retrain": "true"},
+        headers=auth_headers,
     ).json()
     assert r["drifted"] is True
     assert r["retrain"] is not None
@@ -26,10 +29,11 @@ def test_drift_breach_triggers_retrain(client: TestClient, reset_model: Callable
     assert r["retrain"]["state"] in ("succeeded", "rolled_back", "debounced")
 
 
-def test_no_drift_no_retrain(client: TestClient) -> None:
+def test_no_drift_no_retrain(client: TestClient, auth_headers: dict[str, str]) -> None:
     r = client.get(
         "/api/v3/monitoring/drift",
         params={"include_seed": "true", "drifted": "false", "model_id": "population-forecast", "auto_retrain": "true"},
+        headers=auth_headers,
     ).json()
     assert r["drifted"] is False
     assert r["retrain"] is None

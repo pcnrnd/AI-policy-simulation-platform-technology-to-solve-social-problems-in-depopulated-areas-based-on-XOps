@@ -290,7 +290,8 @@ export default function OrchestratorPage() {
   const handleDeletePipeline = async (pipelineId) => {
     if (pipelineRunning || pipelineScheduled) return;
     try {
-      await apiSend("DELETE", `/api/v3/orchestration/pipelines/${encodeURIComponent(pipelineId)}`);
+      const token = await getRealdataToken(); // 파이프라인 삭제는 data:write 필요
+      await apiSend("DELETE", `/api/v3/orchestration/pipelines/${encodeURIComponent(pipelineId)}`, { token });
       addConsoleLog(`INFO: 재학습 파이프라인 등록 해제 — ${pipelineId} (실행 이력은 보존됩니다)`);
       await reloadCatalog();
     } catch (err) {
