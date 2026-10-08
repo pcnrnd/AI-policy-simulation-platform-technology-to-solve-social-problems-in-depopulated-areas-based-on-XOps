@@ -96,6 +96,9 @@ class Settings(BaseSettings):
             raise RuntimeError(
                 "XOPS_READONLY_CLIENT_ID/XOPS_READONLY_CLIENT_SECRET은 함께 설정하거나 함께 비워야 합니다."
             )
+        # 같은 id면 발급 게이트가 조회 전용으로 먼저 판정해 정상 기본 자격증명을 거절한다.
+        if self.readonly_client_id and self.readonly_client_id == self.client_id:
+            raise RuntimeError("XOPS_READONLY_CLIENT_ID는 XOPS_CLIENT_ID와 달라야 합니다.")
         if self.environment != "prod":
             return
         if self.jwt_secret == _DEFAULT_JWT_SECRET:
