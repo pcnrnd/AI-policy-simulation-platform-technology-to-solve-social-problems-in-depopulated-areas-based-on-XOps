@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -71,6 +72,15 @@ def test_openapi_documents_the_three_payloads(client: TestClient) -> None:
     assert _response_schema_name(spec, _OVERVIEW) == "OverviewSummary"
     for envelope in (models_schema, evaluation_schema):
         assert {"status", "message", "data", "provenance"} <= set(envelope["properties"])
+
+
+def test_openapi_snapshot_is_current(client: TestClient) -> None:
+    """타 부서에 넘기는 docs/xops-openapi.json 이 앱의 OpenAPI와 같다 — API를 바꾸면 다시 만든다.
+
+    다시 만드는 명령은 docs/xops-department-integration.md 9절에 있다.
+    """
+    snapshot = Path(__file__).resolve().parents[5] / "docs" / "xops-openapi.json"
+    assert json.loads(snapshot.read_text(encoding="utf-8")) == client.get("/openapi.json").json()
 
 
 def test_wape_description_does_not_claim_upper_bound(client: TestClient) -> None:
