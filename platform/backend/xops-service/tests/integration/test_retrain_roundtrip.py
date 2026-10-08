@@ -27,7 +27,8 @@ _TERMINAL_STATES = ("succeeded", "rejected", "rolled_back", "debounced", "failed
 def _trigger(client: TestClient, **payload: Any) -> dict[str, Any]:
     """이벤트 접수(202) 후 실행이 끝날 때까지 기다린 결과를 돌려준다."""
     body = {"model_id": _MODEL, "trigger": "manual", **payload}
-    response = client.post(_EVENTS, json=body)
+    token = client.post("/api/v3/dataops/token").json()["access_token"]  # 이벤트는 data:write 필요
+    response = client.post(_EVENTS, json=body, headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 202, response.text
     run_id = response.json()["run_id"]
     deadline = time.monotonic() + 60.0
