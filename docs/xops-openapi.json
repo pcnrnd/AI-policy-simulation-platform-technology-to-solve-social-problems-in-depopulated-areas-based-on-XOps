@@ -1,0 +1,4611 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "xops-service",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/v3/dataops/token": {
+      "post": {
+        "tags": [
+          "dataops"
+        ],
+        "summary": "Issue Catalog Token",
+        "description": "소스에 매이지 않은 JWT 발급.\n\n`/token/{source_id}` 는 미존재 소스에 유효 토큰을 내주지 않도록 카탈로그 존재를 검사한다(P-D2).\n그런데 카탈로그 등록은 \"아직 없는 소스\"를 만드는 요청이라 그 검사와 태생적으로 충돌해,\n소스를 고르지 않은 상태에서는 등록용 토큰을 받을 수 없었다. 권한은 scope 로만 판정하므로\n소스 표기가 없는 토큰을 따로 내준다 — 기존 경로와 검증 규칙은 그대로다.",
+        "operationId": "issue_catalog_token_api_v3_dataops_token_post",
+        "parameters": [
+          {
+            "name": "x-client-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Client-Id"
+            }
+          },
+          {
+            "name": "x-client-secret",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Client-Secret"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v3/dataops/token/{source_id}": {
+      "post": {
+        "tags": [
+          "dataops"
+        ],
+        "summary": "Issue Token",
+        "description": "소스 접근용 JWT 발급 (HS256, scope data:read data:write — 조회 전용 클라이언트는 data:read).",
+        "operationId": "issue_token_api_v3_dataops_token__source_id__post",
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Source Id"
+            }
+          },
+          {
+            "name": "x-client-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Client-Id"
+            }
+          },
+          {
+            "name": "x-client-secret",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Client-Secret"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v3/dataops/oauth2": {
+      "post": {
+        "tags": [
+          "dataops"
+        ],
+        "summary": "Issue Catalog Oauth2",
+        "description": "소스에 매이지 않은 OAuth2 발급 — 위 `/token` 과 같은 이유.",
+        "operationId": "issue_catalog_oauth2_api_v3_dataops_oauth2_post",
+        "parameters": [
+          {
+            "name": "x-client-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Client-Id"
+            }
+          },
+          {
+            "name": "x-client-secret",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Client-Secret"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Issue Catalog Oauth2 Api V3 Dataops Oauth2 Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v3/dataops/oauth2/{source_id}": {
+      "post": {
+        "tags": [
+          "dataops"
+        ],
+        "summary": "Issue Oauth2 Token",
+        "description": "OAuth2 Authorization Code Grant 흐름 발급.",
+        "operationId": "issue_oauth2_token_api_v3_dataops_oauth2__source_id__post",
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Source Id"
+            }
+          },
+          {
+            "name": "x-client-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Client-Id"
+            }
+          },
+          {
+            "name": "x-client-secret",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Client-Secret"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Issue Oauth2 Token Api V3 Dataops Oauth2  Source Id  Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v3/dataops/catalog": {
+      "get": {
+        "tags": [
+          "dataops"
+        ],
+        "summary": "List Catalog",
+        "description": "메타데이터 카탈로그 목록/검색.\n\n`live=true` 면 소스별로 저장소를 읽어 `live_rows` 를 덧붙인다. 등록만 되어 있고 실제로는\n적재되지 않은 소스를 가려내기 위한 것이다. 기본값이 false 이므로 기존 응답은 그대로다.\n확인하지 못한 소스(DSN 부재·드라이버 미설치·연결 실패)는 0이 아니라 null 이 된다.\n\n`include_seed` 의 기본값은 false — 목록의 기본은 실데이터(+사용자 등록분)다. 데모 표시 ON\n화면만 `include_seed=true` 로 시드까지 받는다. 단건 조회·토큰 발급·CRUD 는 이 필터와\n무관하다(데모 ON에서 고른 시드 소스가 곧바로 404가 되면 안 된다).",
+        "operationId": "list_catalog_api_v3_dataops_catalog_get",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "소스명·태그·설명·객체명 부분 일치 검색",
+              "default": "",
+              "title": "Q"
+            },
+            "description": "소스명·태그·설명·객체명 부분 일치 검색"
+          },
+          {
+            "name": "live",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "각 소스의 실적재 행수(live_rows)를 함께 조회",
+              "default": false,
+              "title": "Live"
+            },
+            "description": "각 소스의 실적재 행수(live_rows)를 함께 조회"
+          },
+          {
+            "name": "include_seed",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "데모 시드 소스(is_seed)까지 포함 — 데모 표시 ON 전용",
+              "default": false,
+              "title": "Include Seed"
+            },
+            "description": "데모 시드 소스(is_seed)까지 포함 — 데모 표시 ON 전용"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SourceSummary"
+                  },
+                  "title": "Response List Catalog Api V3 Dataops Catalog Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "dataops"
+        ],
+        "summary": "Register Source",
+        "description": "신규 아카이브(사용자 소스) 등록 → 카탈로그 병합. 등록 즉시 가상화 API 대상이 됨.",
+        "operationId": "register_source_api_v3_dataops_catalog_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArchiveRegisterRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceSummary"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v3/dataops/catalog/{source_id}": {
+      "get": {
+        "tags": [
+          "dataops"
+        ],
+        "summary": "Get Source",
+        "description": "단일 소스 메타데이터 조회.",
+        "operationId": "get_source_api_v3_dataops_catalog__source_id__get",
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Source Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceSummary"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "dataops"
+        ],
+        "summary": "Delete Source",
+        "description": "사용자 등록 소스 삭제 (기본 시드 소스는 보호).",
+        "operationId": "delete_source_api_v3_dataops_catalog__source_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Source Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Delete Source Api V3 Dataops Catalog  Source Id  Delete"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v3/dataops/apis": {
+      "get": {
+        "tags": [
+          "dataops"
+        ],
+        "summary": "List Built Apis",
+        "description": "빌드·등록된 API 목록 (최근 순). 소스 id·필터·스키마 힌트가 실리므로 `data:read`를 요구한다.",
+        "operationId": "list_built_apis_api_v3_dataops_apis_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/BuiltApiSummary"
+                  },
+                  "type": "array",
+                  "title": "Response List Built Apis Api V3 Dataops Apis Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "dataops"
+        ],
+        "summary": "Register Built Api",
+        "description": "API 구성 등록 — 같은 id 재등록은 덮어쓴다. 대상 소스가 없으면 404.",
+        "operationId": "register_built_api_api_v3_dataops_apis_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BuiltApiRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuiltApiSummary"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v3/dataops/apis/{api_id}": {
+      "delete": {
+        "tags": [
+          "dataops"
+        ],
+        "summary": "Delete Built Api",
+        "description": "발급 API 제거.",
+        "operationId": "delete_built_api_api_v3_dataops_apis__api_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "api_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Api Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Delete Built Api Api V3 Dataops Apis  Api Id  Delete"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v3/dataops/{source_id}": {
+      "get": {
+        "tags": [
+          "dataops"
+        ],
+        "summary": "Read",
+        "description": "GET — 필터/정렬/페이징으로 조회.",
+        "operationId": "read_api_v3_dataops__source_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Source Id"
+            }
+          },
+          {
+            "name": "filter",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "단일 조건 `col op value`",
+              "title": "Filter"
+            },
+            "description": "단일 조건 `col op value`"
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sort"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 200,
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Page Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Read Api V3 Dataops  Source Id  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "dataops"
+        ],
+        "summary": "Create",
+        "description": "POST — 신규 행 생성. body.data 가 있으면 실 저장소에 파라미터 바인딩으로 INSERT 된다.",
+        "operationId": "create_api_v3_dataops__source_id__post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Source Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/WriteBody"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Create Api V3 Dataops  Source Id  Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "dataops"
+        ],
+        "summary": "Replace",
+        "description": "PUT — 조건에 맞는 행 치환. filter + body.data 가 있으면 실 저장소에 UPDATE 된다.",
+        "operationId": "replace_api_v3_dataops__source_id__put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Source Id"
+            }
+          },
+          {
+            "name": "filter",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Filter"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/WriteBody"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Replace Api V3 Dataops  Source Id  Put"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "dataops"
+        ],
+        "summary": "Modify",
+        "description": "PATCH — 부분 수정. filter + body.data 가 있으면 실 저장소에 UPDATE 된다.",
+        "operationId": "modify_api_v3_dataops__source_id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Source Id"
+            }
+          },
+          {
+            "name": "filter",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Filter"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/WriteBody"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Modify Api V3 Dataops  Source Id  Patch"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "dataops"
+        ],
+        "summary": "Remove",
+        "description": "DELETE — 조건에 맞는 행 삭제.",
+        "operationId": "remove_api_v3_dataops__source_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Source Id"
+            }
+          },
+          {
+            "name": "filter",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Filter"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Remove Api V3 Dataops  Source Id  Delete"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v3/monitoring/metrics": {
+      "get": {
+        "tags": [
+          "monitoring"
+        ],
+        "summary": "Metrics History",
+        "description": "6대 지표 시계열 + 최신 스냅샷.\n\n`model_id` 의 실측 학습 실행이 있으면 그 지표 추이(`source=\"measured\"`)를, 없으면\n시드 시계열(`source=\"seed\"`)을 돌려준다. `include_seed=false` 면 시드 대신 빈 시계열이다.\n`window` 를 주면 마지막 N개 관측만 남긴다.",
+        "operationId": "metrics_history_api_v3_monitoring_metrics_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "model_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "실측 지표를 읽을 모델. 생략하면 시드",
+              "title": "Model Id"
+            },
+            "description": "실측 지표를 읽을 모델. 생략하면 시드"
+          },
+          {
+            "name": "include_seed",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "실측이 없을 때 시드 값으로 폴백 — 데모 표시 ON 전용",
+              "default": false,
+              "title": "Include Seed"
+            },
+            "description": "실측이 없을 때 시드 값으로 폴백 — 데모 표시 ON 전용"
+          },
+          {
+            "name": "window",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 1000,
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "조회 구간 — 마지막 N개 관측만",
+              "title": "Window"
+            },
+            "description": "조회 구간 — 마지막 N개 관측만"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Metrics History Api V3 Monitoring Metrics Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v3/monitoring/metrics/regression": {
+      "post": {
+        "tags": [
+          "monitoring"
+        ],
+        "summary": "Compute Regression",
+        "description": "MSE·MAE 실제 계산.",
+        "operationId": "compute_regression_api_v3_monitoring_metrics_regression_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegressionInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "number"
+                  },
+                  "type": "object",
+                  "title": "Response Compute Regression Api V3 Monitoring Metrics Regression Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v3/monitoring/metrics/classification": {
+      "post": {
+        "tags": [
+          "monitoring"
+        ],
+        "summary": "Compute Classification",
+        "description": "Accuracy·Precision·Recall·F1 실제 계산.",
+        "operationId": "compute_classification_api_v3_monitoring_metrics_classification_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClassificationInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "number"
+                  },
+                  "type": "object",
+                  "title": "Response Compute Classification Api V3 Monitoring Metrics Classification Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v3/monitoring/drift": {
+      "get": {
+        "tags": [
+          "monitoring"
+        ],
+        "summary": "Drift From Seed",
+        "description": "시드 분포(reference vs current_normal|current_drifted)로 PSI/KL 판정.\n\nPSI/KL 계산은 실계산이지만 **입력 분포가 시드**다. 실 추론 입력 수집 경로가 아직 없으므로\n`include_seed=false`(데모 표시 OFF)에서는 판정 자체를 내지 않고 빈 분포를 돌려준다.\n실데이터 드리프트는 `GET /realdata/models/{model_id}/drift` 가 따로 담당한다.",
+        "operationId": "drift_from_seed_api_v3_monitoring_drift_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "drifted",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "true면 드리프트 주입 분포 사용",
+              "default": false,
+              "title": "Drifted"
+            },
+            "description": "true면 드리프트 주입 분포 사용"
+          },
+          {
+            "name": "model_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "드리프트 감지 시 재학습 대상 모델",
+              "title": "Model Id"
+            },
+            "description": "드리프트 감지 시 재학습 대상 모델"
+          },
+          {
+            "name": "auto_retrain",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "드리프트 임계 초과 시 재학습 자동 발화",
+              "default": false,
+              "title": "Auto Retrain"
+            },
+            "description": "드리프트 임계 초과 시 재학습 자동 발화"
+          },
+          {
+            "name": "include_seed",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "실측이 없을 때 시드 값으로 폴백 — 데모 표시 ON 전용",
+              "default": false,
+              "title": "Include Seed"
+            },
+            "description": "실측이 없을 때 시드 값으로 폴백 — 데모 표시 ON 전용"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Drift From Seed Api V3 Monitoring Drift Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "monitoring"
+        ],
+        "summary": "Compute Drift",
+        "description": "임의 분포로 PSI/KL 판정.",
+        "operationId": "compute_drift_api_v3_monitoring_drift_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "model_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "드리프트 감지 시 재학습 대상 모델",
+              "title": "Model Id"
+            },
+            "description": "드리프트 감지 시 재학습 대상 모델"
+          },
+          {
+            "name": "auto_retrain",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "드리프트 임계 초과 시 재학습 자동 발화(data:write 필요)",
+              "default": false,
+              "title": "Auto Retrain"
+            },
+            "description": "드리프트 임계 초과 시 재학습 자동 발화(data:write 필요)"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DriftInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Compute Drift Api V3 Monitoring Drift Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v3/monitoring/outliers": {
+      "post": {
+        "tags": [
+          "monitoring"
+        ],
+        "summary": "Detect Outliers",
+        "description": "Z-score(기본) 또는 IQR 이상치 탐지.",
+        "operationId": "detect_outliers_api_v3_monitoring_outliers_post",
+        "parameters": [
+          {
+            "name": "method",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(zscore|iqr)$",
+              "default": "zscore",
+              "title": "Method"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OutlierInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Detect Outliers Api V3 Monitoring Outliers Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v3/monitoring/explain": {
+      "get": {
+        "tags": [
+          "monitoring"
+        ],
+        "summary": "Explain From Seed",
+        "description": "특징 중요도 + 사용 backend 표기.\n\n`model_id` 의 현행 운영 버전에 학습 아티팩트가 있으면 그 표준화 계수를 기여도로 쓴다\n(`source=\"measured\"`). 없으면 시드 `shap_features`(`source=\"seed\"`).",
+        "operationId": "explain_from_seed_api_v3_monitoring_explain_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "model_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "실측 기여도를 읽을 모델. 생략하면 시드",
+              "title": "Model Id"
+            },
+            "description": "실측 기여도를 읽을 모델. 생략하면 시드"
+          },
+          {
+            "name": "include_seed",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "실측이 없을 때 시드 값으로 폴백 — 데모 표시 ON 전용",
+              "default": false,
+              "title": "Include Seed"
+            },
+            "description": "실측이 없을 때 시드 값으로 폴백 — 데모 표시 ON 전용"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Explain From Seed Api V3 Monitoring Explain Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "monitoring"
+        ],
+        "summary": "Rank Features",
+        "description": "feature 기여도 → 중요도 정렬.",
+        "operationId": "rank_features_api_v3_monitoring_explain_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExplainInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Rank Features Api V3 Monitoring Explain Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v3/orchestration/models": {
+      "get": {
+        "tags": [
+          "orchestration"
+        ],
+        "summary": "List Models",
+        "description": "등록된 운영 모델과 현재 버전/지표.",
+        "operationId": "list_models_api_v3_orchestration_models_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "include_seed",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "데모 시드(기본 파이프라인·시드 지표 모델)까지 포함 — 데모 표시 ON 전용",
+              "default": false,
+              "title": "Include Seed"
+            },
+            "description": "데모 시드(기본 파이프라인·시드 지표 모델)까지 포함 — 데모 표시 ON 전용"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "title": "Response List Models Api V3 Orchestration Models Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v3/orchestration/pipelines": {
+      "get": {
+        "tags": [
+          "orchestration"
+        ],
+        "summary": "List Pipelines",
+        "description": "등록된 재학습 파이프라인 (등록이 없으면 빈 목록).",
+        "operationId": "list_pipelines_api_v3_orchestration_pipelines_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "include_seed",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "데모 시드(기본 파이프라인·시드 지표 모델)까지 포함 — 데모 표시 ON 전용",
+              "default": false,
+              "title": "Include Seed"
+            },
+            "description": "데모 시드(기본 파이프라인·시드 지표 모델)까지 포함 — 데모 표시 ON 전용"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "title": "Response List Pipelines Api V3 Orchestration Pipelines Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "orchestration"
+        ],
+        "summary": "Register Pipeline",
+        "description": "재학습 파이프라인 등록 → SQLite 영속화.",
+        "operationId": "register_pipeline_api_v3_orchestration_pipelines_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PipelineCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Register Pipeline Api V3 Orchestration Pipelines Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v3/orchestration/pipelines/{pipeline_id}": {
+      "delete": {
+        "tags": [
+          "orchestration"
+        ],
+        "summary": "Delete Pipeline",
+        "description": "등록 파이프라인 삭제. 실행 이력은 보존한다.",
+        "operationId": "delete_pipeline_api_v3_orchestration_pipelines__pipeline_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pipeline_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Pipeline Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Delete Pipeline Api V3 Orchestration Pipelines  Pipeline Id  Delete"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v3/orchestration/pipelines/{pipeline_id}/run": {
+      "post": {
+        "tags": [
+          "orchestration"
+        ],
+        "summary": "Run Pipeline",
+        "description": "등록 파이프라인 실행 접수 — `/events` 와 같은 백그라운드 경로(모델별 락을 함께 쓴다).",
+        "operationId": "run_pipeline_api_v3_orchestration_pipelines__pipeline_id__run_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pipeline_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Pipeline Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/PipelineRunRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Run Pipeline Api V3 Orchestration Pipelines  Pipeline Id  Run Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v3/orchestration/runs": {
+      "get": {
+        "tags": [
+          "orchestration"
+        ],
+        "summary": "List Runs",
+        "description": "파이프라인 실행 이력 (최신 우선).",
+        "operationId": "list_runs_api_v3_orchestration_runs_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pipeline_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "파이프라인별 이력만",
+              "title": "Pipeline Id"
+            },
+            "description": "파이프라인별 이력만"
+          },
+          {
+            "name": "include_seed",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "데모 시드(기본 파이프라인·시드 지표 모델)까지 포함 — 데모 표시 ON 전용",
+              "default": false,
+              "title": "Include Seed"
+            },
+            "description": "데모 시드(기본 파이프라인·시드 지표 모델)까지 포함 — 데모 표시 ON 전용"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "title": "Response List Runs Api V3 Orchestration Runs Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v3/orchestration/runs/{run_id}": {
+      "get": {
+        "tags": [
+          "orchestration"
+        ],
+        "summary": "Get Run",
+        "description": "실행 하나의 현재 상태 — 접수(202) 뒤 종결까지 폴링하는 경로.",
+        "operationId": "get_run_api_v3_orchestration_runs__run_id__get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Run Api V3 Orchestration Runs  Run Id  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v3/orchestration/runs/{run_id}/logs": {
+      "get": {
+        "tags": [
+          "orchestration"
+        ],
+        "summary": "Get Run Logs",
+        "description": "실행 하나의 저장된 로그 라인. 실데이터 job은 job 레코드의 상태 전이를 라인으로 만든다.",
+        "operationId": "get_run_logs_api_v3_orchestration_runs__run_id__logs_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Run Logs Api V3 Orchestration Runs  Run Id  Logs Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v3/orchestration/events": {
+      "post": {
+        "tags": [
+          "orchestration"
+        ],
+        "summary": "Trigger Event",
+        "description": "재학습 이벤트 접수 → 백그라운드 실행. 결과는 `GET /runs/{run_id}` 로 확인한다.\n\n학습·평가·배포가 요청 스레드를 붙잡지 않고, 진행 중 상태가 저장돼 프로세스가 죽어도\n실행 흔적이 남는다(기동 시 `recover_stale_runs`가 마감).",
+        "operationId": "trigger_event_api_v3_orchestration_events_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Trigger Event Api V3 Orchestration Events Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v3/overview/summary": {
+      "get": {
+        "tags": [
+          "overview"
+        ],
+        "summary": "Overview Summary",
+        "description": "Overview 지표 카드·아카이브 도넛이 쓰는 롤업.\n\n기본값은 데모 표시 OFF(`include_seed=false`) — 카탈로그 목록과 같은 규칙이다.",
+        "operationId": "overview_summary_api_v3_overview_summary_get",
+        "parameters": [
+          {
+            "name": "include_seed",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "데모 시드 소스·시드 지표 모델까지 포함 — 데모 표시 ON 전용",
+              "default": false,
+              "title": "Include Seed"
+            },
+            "description": "데모 시드 소스·시드 지표 모델까지 포함 — 데모 표시 ON 전용"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OverviewSummary"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v3/realdata/health": {
+      "get": {
+        "tags": [
+          "realdata"
+        ],
+        "summary": "Health",
+        "description": "PG DSN 유무·허용 테이블 전체의 존재 여부 — 인증 없음(조회 전용 상태 확인).",
+        "operationId": "health_api_v3_realdata_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Health Api V3 Realdata Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v3/realdata/dong-map": {
+      "get": {
+        "tags": [
+          "realdata"
+        ],
+        "summary": "Dong Map",
+        "description": "남원 행정동 대응표(KT dong_code ↔ dong_name, 23건) — `data:read`.",
+        "operationId": "dong_map_api_v3_realdata_dong_map_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Dong Map Api V3 Realdata Dong Map Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v3/realdata/datasets": {
+      "get": {
+        "tags": [
+          "realdata-datasets"
+        ],
+        "summary": "List Datasets Route",
+        "description": "생성된 스냅샷 목록(요약, rows 제외).",
+        "operationId": "list_datasets_route_api_v3_realdata_datasets_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response List Datasets Route Api V3 Realdata Datasets Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "realdata-datasets"
+        ],
+        "summary": "Create Dataset Route",
+        "description": "스냅샷 생성(R1-6). 매핑 실패·PG 장애는 status=error(시드 폴백 없음).",
+        "operationId": "create_dataset_route_api_v3_realdata_datasets_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DatasetCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Create Dataset Route Api V3 Realdata Datasets Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v3/realdata/datasets/{dataset_id}": {
+      "get": {
+        "tags": [
+          "realdata-datasets"
+        ],
+        "summary": "Get Dataset Route",
+        "description": "스냅샷 요약+quality. `include_rows=true`면 rows 포함(최대 5,000행, 초과 시 절단 표시).",
+        "operationId": "get_dataset_route_api_v3_realdata_datasets__dataset_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "dataset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Dataset Id"
+            }
+          },
+          {
+            "name": "include_rows",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Rows"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Dataset Route Api V3 Realdata Datasets  Dataset Id  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v3/realdata/training-runs": {
+      "post": {
+        "tags": [
+          "realdata"
+        ],
+        "summary": "Create Training Run",
+        "operationId": "create_training_run_api_v3_realdata_training_runs_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrainingRunRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Create Training Run Api V3 Realdata Training Runs Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "realdata"
+        ],
+        "summary": "List Training Runs",
+        "operationId": "list_training_runs_api_v3_realdata_training_runs_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "model_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Model Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response List Training Runs Api V3 Realdata Training Runs Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v3/realdata/training-runs/{job_id}": {
+      "get": {
+        "tags": [
+          "realdata"
+        ],
+        "summary": "Get Training Run",
+        "operationId": "get_training_run_api_v3_realdata_training_runs__job_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Training Run Api V3 Realdata Training Runs  Job Id  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v3/realdata/models": {
+      "get": {
+        "tags": [
+          "realdata"
+        ],
+        "summary": "List Models",
+        "operationId": "list_models_api_v3_realdata_models_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_list_RealdataModelEntry__"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v3/realdata/models/{model_id}/candidates": {
+      "get": {
+        "tags": [
+          "realdata"
+        ],
+        "summary": "List Candidates",
+        "operationId": "list_candidates_api_v3_realdata_models__model_id__candidates_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "model_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Model Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response List Candidates Api V3 Realdata Models  Model Id  Candidates Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v3/realdata/models/{model_id}/candidates/{version}/apply": {
+      "post": {
+        "tags": [
+          "realdata"
+        ],
+        "summary": "Apply Candidate",
+        "operationId": "apply_candidate_api_v3_realdata_models__model_id__candidates__version__apply_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "model_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Model Id"
+            }
+          },
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Apply Candidate Api V3 Realdata Models  Model Id  Candidates  Version  Apply Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v3/realdata/models/{model_id}/restore/{version}": {
+      "post": {
+        "tags": [
+          "realdata"
+        ],
+        "summary": "Restore Candidate",
+        "operationId": "restore_candidate_api_v3_realdata_models__model_id__restore__version__post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "model_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Model Id"
+            }
+          },
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/RestoreRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Restore Candidate Api V3 Realdata Models  Model Id  Restore  Version  Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v3/realdata/models/{model_id}/evaluation": {
+      "get": {
+        "tags": [
+          "realdata"
+        ],
+        "summary": "Get Evaluation",
+        "operationId": "get_evaluation_api_v3_realdata_models__model_id__evaluation_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "model_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Model Id"
+            }
+          },
+          {
+            "name": "version",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_RealdataEvaluation_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v3/realdata/models/{model_id}/explain": {
+      "get": {
+        "tags": [
+          "realdata"
+        ],
+        "summary": "Get Explain",
+        "operationId": "get_explain_api_v3_realdata_models__model_id__explain_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "model_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Model Id"
+            }
+          },
+          {
+            "name": "base_ym",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Base Ym"
+            }
+          },
+          {
+            "name": "dong_code",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Dong Code"
+            }
+          },
+          {
+            "name": "version",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Explain Api V3 Realdata Models  Model Id  Explain Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v3/realdata/models/{model_id}/drift": {
+      "get": {
+        "tags": [
+          "realdata"
+        ],
+        "summary": "Get Drift",
+        "operationId": "get_drift_api_v3_realdata_models__model_id__drift_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "model_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Model Id"
+            }
+          },
+          {
+            "name": "version",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Drift Api V3 Realdata Models  Model Id  Drift Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v3/realdata/analysis": {
+      "get": {
+        "tags": [
+          "realdata-analysis"
+        ],
+        "summary": "Get Analysis",
+        "description": "`GET /realdata/analysis`(R5) — 현황·진단·예측·대응 후보를 한 번에 반환한다.",
+        "operationId": "get_analysis_api_v3_realdata_analysis_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "region",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "namwon",
+              "title": "Region"
+            }
+          },
+          {
+            "name": "dong_code",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^(all|\\d{8})$",
+              "title": "Dong Code"
+            }
+          },
+          {
+            "name": "base_ym",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 999912,
+              "minimum": 190001,
+              "title": "Base Ym"
+            }
+          },
+          {
+            "name": "model_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Model Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Analysis Api V3 Realdata Analysis Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/": {
+      "get": {
+        "summary": "Read Root",
+        "description": "헬스체크 (스캐폴드 계약 유지).",
+        "operationId": "read_root__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Read Root  Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ArchiveRegisterRequest": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_\\-]+$",
+            "title": "Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label",
+            "default": ""
+          },
+          "source": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Source",
+            "description": "저장소 유형 문자열 (예: 'RDB · PostgreSQL')"
+          },
+          "object": {
+            "type": "string",
+            "maxLength": 63,
+            "minLength": 1,
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+            "title": "Object",
+            "description": "테이블/컬렉션명 (영문·숫자·밑줄, 숫자 시작 불가)"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "default": ""
+          },
+          "tier": {
+            "type": "string",
+            "pattern": "^(Hot|Warm|Cold)$",
+            "title": "Tier",
+            "default": "Warm"
+          },
+          "retention": {
+            "type": "string",
+            "title": "Retention",
+            "default": ""
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags"
+          },
+          "columns": {
+            "items": {
+              "$ref": "#/components/schemas/ColumnDef"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Columns"
+          },
+          "range": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RangeDef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "source",
+          "object",
+          "columns"
+        ],
+        "title": "ArchiveRegisterRequest",
+        "description": "신규 아카이브 등록 요청 — metadata_schema 형태로 정규화된다."
+      },
+      "BaselineMetrics": {
+        "properties": {
+          "mae": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mae"
+          },
+          "rmse": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rmse"
+          },
+          "wape": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wape",
+            "description": "가중 절대 오차율 = Σ|오차| / Σ|관측|. 비율값이며 1을 넘을 수 있다(백분율 표시는 ×100)"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "기준선 이름. 현행 `yoy_or_prev_month`"
+          }
+        },
+        "type": "object",
+        "required": [
+          "mae",
+          "rmse",
+          "wape",
+          "name"
+        ],
+        "title": "BaselineMetrics",
+        "description": "같은 평가 구간에서 단순 기준선(전년 동월, 없으면 전월)의 오차."
+      },
+      "BuiltApiRequest": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_\\-]+$",
+            "title": "Id"
+          },
+          "method": {
+            "type": "string",
+            "pattern": "^(GET|POST|PUT|PATCH|DELETE)$",
+            "title": "Method"
+          },
+          "source_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Source Id"
+          },
+          "source_label": {
+            "type": "string",
+            "title": "Source Label",
+            "default": ""
+          },
+          "filter": {
+            "type": "string",
+            "maxLength": 256,
+            "title": "Filter",
+            "default": ""
+          },
+          "sort": {
+            "type": "string",
+            "maxLength": 63,
+            "title": "Sort",
+            "default": ""
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Page",
+            "default": 1
+          },
+          "page_size": {
+            "type": "integer",
+            "maximum": 200.0,
+            "minimum": 1.0,
+            "title": "Page Size",
+            "default": 20
+          },
+          "auth_method": {
+            "type": "string",
+            "pattern": "^(JWT|OAuth2)$",
+            "title": "Auth Method",
+            "default": "JWT"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "method",
+          "source_id"
+        ],
+        "title": "BuiltApiRequest",
+        "description": "`API 빌드·등록` 으로 발급한 API 구성 — 호출에 필요한 요청 파라미터만 담는다.\n\n실행 자체는 기존 `/{source_id}` 계약을 그대로 쓰므로 여기서는 저장·목록·삭제만 한다."
+      },
+      "BuiltApiSummary": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_\\-]+$",
+            "title": "Id"
+          },
+          "method": {
+            "type": "string",
+            "pattern": "^(GET|POST|PUT|PATCH|DELETE)$",
+            "title": "Method"
+          },
+          "source_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Source Id"
+          },
+          "source_label": {
+            "type": "string",
+            "title": "Source Label",
+            "default": ""
+          },
+          "filter": {
+            "type": "string",
+            "maxLength": 256,
+            "title": "Filter",
+            "default": ""
+          },
+          "sort": {
+            "type": "string",
+            "maxLength": 63,
+            "title": "Sort",
+            "default": ""
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Page",
+            "default": 1
+          },
+          "page_size": {
+            "type": "integer",
+            "maximum": 200.0,
+            "minimum": 1.0,
+            "title": "Page Size",
+            "default": 20
+          },
+          "auth_method": {
+            "type": "string",
+            "pattern": "^(JWT|OAuth2)$",
+            "title": "Auth Method",
+            "default": "JWT"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "endpoint": {
+            "type": "string",
+            "title": "Endpoint"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "method",
+          "source_id",
+          "created_at",
+          "endpoint"
+        ],
+        "title": "BuiltApiSummary",
+        "description": "목록 응답 — 저장 시각(UTC ISO8601)이 추가된다."
+      },
+      "ClassificationInput": {
+        "properties": {
+          "y_true": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Y True"
+          },
+          "y_pred": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Y Pred"
+          },
+          "positive": {
+            "type": "integer",
+            "title": "Positive",
+            "default": 1
+          }
+        },
+        "type": "object",
+        "required": [
+          "y_true",
+          "y_pred"
+        ],
+        "title": "ClassificationInput",
+        "description": "분류 지표 계산 입력."
+      },
+      "ColumnDef": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 63,
+            "minLength": 1,
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+            "title": "Name"
+          },
+          "type": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Type"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "type"
+        ],
+        "title": "ColumnDef",
+        "description": "컬럼 정의. name 은 생성 SQL에 식별자로 조립되므로 allowlist 패턴을 강제한다."
+      },
+      "DatasetCreateRequest": {
+        "properties": {
+          "model_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9_\\-]+$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Id"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "nonlocal_visitors",
+                  "observed_sales_krw"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target"
+          },
+          "spec_version": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_.\\-]+$",
+            "title": "Spec Version",
+            "default": "v1"
+          }
+        },
+        "type": "object",
+        "title": "DatasetCreateRequest",
+        "description": "POST /realdata/datasets 요청 골격 — model_id 또는 target으로 스펙을 고른다(R1-6)."
+      },
+      "DriftInput": {
+        "properties": {
+          "reference": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Reference"
+          },
+          "current": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Current"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reference",
+          "current"
+        ],
+        "title": "DriftInput",
+        "description": "드리프트 판정 입력 — 참조/현재 분포."
+      },
+      "Envelope_RealdataEvaluation_": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "insufficient_data",
+              "empty",
+              "model_required",
+              "pending",
+              "error"
+            ],
+            "title": "Status"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RealdataEvaluation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "provenance": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Provenance"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "Envelope[RealdataEvaluation]"
+      },
+      "Envelope_list_RealdataModelEntry__": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "insufficient_data",
+              "empty",
+              "model_required",
+              "pending",
+              "error"
+            ],
+            "title": "Status"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/RealdataModelEntry"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "provenance": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Provenance"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "Envelope[list[RealdataModelEntry]]"
+      },
+      "EvalPeriod": {
+        "properties": {
+          "from": {
+            "type": "integer",
+            "title": "From",
+            "description": "평가 시작 월(YYYYMM)"
+          },
+          "to": {
+            "type": "integer",
+            "title": "To",
+            "description": "평가 끝 월(YYYYMM)"
+          },
+          "n": {
+            "type": "integer",
+            "title": "N",
+            "description": "평가 행 수"
+          }
+        },
+        "type": "object",
+        "required": [
+          "from",
+          "to",
+          "n"
+        ],
+        "title": "EvalPeriod",
+        "description": "학습 시 순차 평가 구간."
+      },
+      "EventRequest": {
+        "properties": {
+          "model_id": {
+            "type": "string",
+            "title": "Model Id"
+          },
+          "trigger": {
+            "type": "string",
+            "pattern": "^(manual|drift|performance)$",
+            "title": "Trigger",
+            "default": "manual"
+          },
+          "candidate_metrics": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Candidate Metrics"
+          },
+          "candidate_latency_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Latency Ms"
+          },
+          "pipeline_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pipeline Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "model_id"
+        ],
+        "title": "EventRequest",
+        "description": "재학습 이벤트 트리거 요청."
+      },
+      "ExplainInput": {
+        "properties": {
+          "contributions": {
+            "additionalProperties": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Contributions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "contributions"
+        ],
+        "title": "ExplainInput",
+        "description": "설명가능성 입력 — feature별 기여도 시퀀스."
+      },
+      "ForecastErrorMetrics": {
+        "properties": {
+          "mae": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mae"
+          },
+          "rmse": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rmse"
+          },
+          "wape": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wape",
+            "description": "가중 절대 오차율 = Σ|오차| / Σ|관측|. 비율값이며 1을 넘을 수 있다(백분율 표시는 ×100)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "mae",
+          "rmse",
+          "wape"
+        ],
+        "title": "ForecastErrorMetrics",
+        "description": "예측 오차 지표 — 값이 작을수록 좋다. 계산하지 못한 값은 null."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "OperationalError": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "error",
+            "title": "Kind"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "message"
+        ],
+        "title": "OperationalError",
+        "description": "아티팩트·데이터셋을 읽지 못해 운영 평가를 계산하지 못한 상태(HTTP는 200)."
+      },
+      "OperationalPending": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "pending",
+            "title": "Kind"
+          },
+          "pending_months": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Pending Months",
+            "description": "관측을 기다리는 월(YYYYMM)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "pending_months"
+        ],
+        "title": "OperationalPending",
+        "description": "예측 대상 월의 관측이 아직 없어 운영 평가를 기다리는 상태."
+      },
+      "OperationalScored": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "operational",
+            "title": "Kind"
+          },
+          "base_ym": {
+            "type": "integer",
+            "title": "Base Ym",
+            "description": "예측 대상 월(YYYYMM)"
+          },
+          "n": {
+            "type": "integer",
+            "title": "N",
+            "description": "채점한 행(행정동) 수"
+          },
+          "metrics": {
+            "$ref": "#/components/schemas/ForecastErrorMetrics"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "base_ym",
+          "n",
+          "metrics"
+        ],
+        "title": "OperationalScored",
+        "description": "반영 후 예측 대상 월의 관측이 도착해 계산한 운영 평가."
+      },
+      "OutlierInput": {
+        "properties": {
+          "values": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "minItems": 2,
+            "title": "Values"
+          }
+        },
+        "type": "object",
+        "required": [
+          "values"
+        ],
+        "title": "OutlierInput",
+        "description": "이상치 탐지 입력."
+      },
+      "OverviewModelSnapshot": {
+        "properties": {
+          "model_id": {
+            "type": "string",
+            "title": "Model Id"
+          },
+          "serving_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serving Version"
+          },
+          "f1": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "F1"
+          },
+          "metrics_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metrics Source",
+            "description": "지표 출처 — seed(시드)·trained(학습 실측) 등"
+          }
+        },
+        "type": "object",
+        "required": [
+          "model_id",
+          "serving_version",
+          "f1",
+          "metrics_source"
+        ],
+        "title": "OverviewModelSnapshot",
+        "description": "Overview F1 카드가 보는 운영 모델(`population-forecast`)의 현행 버전과 지표."
+      },
+      "OverviewSourceRollup": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "db_adapter": {
+            "type": "string",
+            "title": "Db Adapter"
+          },
+          "archive_rows": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archive Rows",
+            "description": "저장소에서 직접 센 행수(60초 캐시). 확인하지 못하면 null(0과 구분)"
+          },
+          "storage_tier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage Tier"
+          },
+          "loaded_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Loaded At"
+          },
+          "source_kind": {
+            "type": "string",
+            "enum": [
+              "database",
+              "in-memory"
+            ],
+            "title": "Source Kind",
+            "description": "행수를 실제로 셌으면 database, 못 셌으면 in-memory"
+          },
+          "user_registered": {
+            "type": "boolean",
+            "title": "User Registered"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "source",
+          "db_adapter",
+          "archive_rows",
+          "storage_tier",
+          "loaded_at",
+          "source_kind",
+          "user_registered"
+        ],
+        "title": "OverviewSourceRollup",
+        "description": "소스 1건 — 실제로 센 적재 행수와 출처 표기."
+      },
+      "OverviewSummary": {
+        "properties": {
+          "status": {
+            "type": "integer",
+            "title": "Status",
+            "description": "스캐폴드 호환 표기(항상 200). 판정에 쓰지 않는다"
+          },
+          "method": {
+            "type": "string",
+            "title": "Method"
+          },
+          "endpoint": {
+            "type": "string",
+            "title": "Endpoint"
+          },
+          "dataops_version": {
+            "type": "string",
+            "title": "Dataops Version"
+          },
+          "source_kind": {
+            "type": "string",
+            "enum": [
+              "database",
+              "in-memory"
+            ],
+            "title": "Source Kind",
+            "description": "한 소스라도 실제로 셌으면 database"
+          },
+          "source_count": {
+            "type": "integer",
+            "title": "Source Count"
+          },
+          "archive_rows_total": {
+            "type": "integer",
+            "title": "Archive Rows Total",
+            "description": "확인한 소스의 행수 합계(확인 못 한 소스는 빠진다)"
+          },
+          "archive_rows_counted": {
+            "type": "integer",
+            "title": "Archive Rows Counted"
+          },
+          "archive_rows_unknown": {
+            "type": "integer",
+            "title": "Archive Rows Unknown",
+            "description": "행수를 확인하지 못한 소스 수"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/OverviewSourceRollup"
+            },
+            "type": "array",
+            "title": "Sources"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OverviewModelSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "데모 표시 OFF에서 지표가 시드뿐이면 null"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "method",
+          "endpoint",
+          "dataops_version",
+          "source_kind",
+          "source_count",
+          "archive_rows_total",
+          "archive_rows_counted",
+          "archive_rows_unknown",
+          "sources",
+          "model"
+        ],
+        "title": "OverviewSummary",
+        "description": "카탈로그 롤업(소스 수·적재 행수) + 현행 모델 지표. 공개 조회.",
+        "examples": [
+          {
+            "archive_rows_counted": 1,
+            "archive_rows_total": 2496,
+            "archive_rows_unknown": 0,
+            "dataops_version": "3.0.0-R3",
+            "endpoint": "/api/v3/overview/summary",
+            "method": "GET",
+            "model": {
+              "f1": 0.8421,
+              "metrics_source": "trained",
+              "model_id": "population-forecast",
+              "serving_version": "v3.1"
+            },
+            "source_count": 1,
+            "source_kind": "database",
+            "sources": [
+              {
+                "archive_rows": 2496,
+                "db_adapter": "PostgreSQLAdapter",
+                "id": "ds_11_kt_namwon_monthly_dong_visitors",
+                "label": "KT 남원시 행정동별 월별 방문자",
+                "loaded_at": "2026-09-11",
+                "source": "PostgreSQL",
+                "source_kind": "database",
+                "storage_tier": "hot",
+                "user_registered": false
+              }
+            ],
+            "status": 200
+          }
+        ]
+      },
+      "PipelineCreateRequest": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 3,
+            "pattern": "^[A-Za-z0-9._-]+$",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "model_id": {
+            "type": "string",
+            "title": "Model Id"
+          },
+          "trigger_policy": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Trigger Policy",
+            "default": "수동"
+          },
+          "experiment": {
+            "type": "string",
+            "maxLength": 80,
+            "title": "Experiment",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "model_id"
+        ],
+        "title": "PipelineCreateRequest",
+        "description": "ML 재학습 파이프라인 등록 요청."
+      },
+      "PipelineRunRequest": {
+        "properties": {
+          "trigger": {
+            "type": "string",
+            "pattern": "^(manual|drift|performance)$",
+            "title": "Trigger",
+            "default": "manual"
+          },
+          "candidate_latency_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Latency Ms"
+          }
+        },
+        "type": "object",
+        "title": "PipelineRunRequest",
+        "description": "등록 파이프라인 실행 요청 — 트리거만 받고 대상 모델은 등록 정의를 따른다."
+      },
+      "Provenance": {
+        "properties": {
+          "dataset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dataset Id"
+          },
+          "model_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Id"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          },
+          "observed_end_month": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed End Month"
+          },
+          "rules_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rules Version"
+          },
+          "computed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Computed At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "computed_at"
+        ],
+        "title": "Provenance",
+        "description": "응답 값의 출처 — 데이터셋·모델 버전·규칙 버전과 계산 시각(R6)."
+      },
+      "RangeDef": {
+        "properties": {
+          "column": {
+            "type": "string",
+            "maxLength": 63,
+            "minLength": 1,
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+            "title": "Column"
+          },
+          "from": {
+            "title": "From"
+          },
+          "to": {
+            "title": "To"
+          }
+        },
+        "type": "object",
+        "required": [
+          "column",
+          "from",
+          "to"
+        ],
+        "title": "RangeDef",
+        "description": "메타데이터 적재 범위. column 은 식별자, from/to 는 SQL 리터럴로 들어간다."
+      },
+      "RealdataEvaluation": {
+        "properties": {
+          "validation": {
+            "$ref": "#/components/schemas/ValidationEvaluation"
+          },
+          "operational": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/OperationalScored"
+              },
+              {
+                "$ref": "#/components/schemas/OperationalPending"
+              },
+              {
+                "$ref": "#/components/schemas/OperationalError"
+              }
+            ],
+            "title": "Operational",
+            "discriminator": {
+              "propertyName": "kind",
+              "mapping": {
+                "error": "#/components/schemas/OperationalError",
+                "operational": "#/components/schemas/OperationalScored",
+                "pending": "#/components/schemas/OperationalPending"
+              }
+            }
+          }
+        },
+        "type": "object",
+        "required": [
+          "validation",
+          "operational"
+        ],
+        "title": "RealdataEvaluation",
+        "description": "`GET /realdata/models/{model_id}/evaluation` 의 `data` — 검증 평가와 운영 평가.",
+        "examples": [
+          {
+            "operational": {
+              "kind": "pending",
+              "pending_months": [
+                202510
+              ]
+            },
+            "validation": {
+              "baseline": {
+                "mae": 1890312.5,
+                "name": "yoy_or_prev_month",
+                "rmse": 2604410.3,
+                "wape": 0.147
+              },
+              "eval_period": {
+                "from": 202506,
+                "n": 69,
+                "to": 202508
+              },
+              "kind": "validation",
+              "metrics": {
+                "mae": 1520433.2,
+                "rmse": 2210871.9,
+                "wape": 0.118
+              }
+            }
+          }
+        ]
+      },
+      "RealdataModelEntry": {
+        "properties": {
+          "model_id": {
+            "type": "string",
+            "title": "Model Id"
+          },
+          "target": {
+            "type": "string",
+            "enum": [
+              "nonlocal_visitors",
+              "observed_sales_krw"
+            ],
+            "title": "Target"
+          },
+          "active_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Version",
+            "description": "활성(반영) 버전. 반영 전이면 null"
+          },
+          "applied_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applied At",
+            "description": "반영 시각(ISO 8601, UTC). 반영 전이면 null"
+          },
+          "previous_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Version",
+            "description": "직전 활성 버전(복원 대상). 없으면 null"
+          },
+          "retrain_needed": {
+            "type": "boolean",
+            "title": "Retrain Needed",
+            "description": "재학습 필요 판정(캐시). 활성 모델이 없으면 false"
+          }
+        },
+        "type": "object",
+        "required": [
+          "model_id",
+          "target",
+          "active_version",
+          "applied_at",
+          "previous_version",
+          "retrain_needed"
+        ],
+        "title": "RealdataModelEntry",
+        "description": "`GET /realdata/models` 의 `data[]` 항목 — 계약 고정 모델 2종의 활성 버전 상태.",
+        "examples": [
+          {
+            "active_version": "v20260918-3f9a2c",
+            "applied_at": "2026-09-18T07:12:44.120931+00:00",
+            "model_id": "namwon-observed-sales-next-month",
+            "previous_version": "v20260911-8d1e04",
+            "retrain_needed": false,
+            "target": "observed_sales_krw"
+          }
+        ]
+      },
+      "RegressionInput": {
+        "properties": {
+          "y_true": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Y True"
+          },
+          "y_pred": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Y Pred"
+          }
+        },
+        "type": "object",
+        "required": [
+          "y_true",
+          "y_pred"
+        ],
+        "title": "RegressionInput",
+        "description": "회귀 지표 계산 입력."
+      },
+      "RestoreRequest": {
+        "properties": {
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "title": "RestoreRequest",
+        "description": "POST /realdata/models/{model_id}/restore/{version} 요청 본문(R3-4) — 사유는 선택."
+      },
+      "SourceSummary": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "object": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags"
+          },
+          "archive": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archive"
+          },
+          "lineage": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lineage"
+          },
+          "range": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Range"
+          },
+          "columns": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Columns"
+          },
+          "user_registered": {
+            "type": "boolean",
+            "title": "User Registered",
+            "default": false
+          },
+          "is_seed": {
+            "type": "boolean",
+            "title": "Is Seed",
+            "default": false
+          },
+          "live_rows": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Live Rows"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "title": "SourceSummary",
+        "description": "카탈로그 목록 항목."
+      },
+      "TokenResponse": {
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "title": "Access Token"
+          },
+          "token_type": {
+            "type": "string",
+            "title": "Token Type",
+            "default": "Bearer"
+          },
+          "scope": {
+            "type": "string",
+            "title": "Scope"
+          }
+        },
+        "type": "object",
+        "required": [
+          "access_token",
+          "scope"
+        ],
+        "title": "TokenResponse",
+        "description": "JWT 발급 응답."
+      },
+      "TrainingRunRequest": {
+        "properties": {
+          "model_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_\\-]+$",
+            "title": "Model Id"
+          },
+          "dataset_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^ds-[0-9a-f]{12}$",
+            "title": "Dataset Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "model_id",
+          "dataset_id"
+        ],
+        "title": "TrainingRunRequest",
+        "description": "POST /realdata/training-runs 요청 골격(R3-1)."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "ValidationEvaluation": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "validation",
+            "title": "Kind"
+          },
+          "metrics": {
+            "$ref": "#/components/schemas/ForecastErrorMetrics"
+          },
+          "baseline": {
+            "$ref": "#/components/schemas/BaselineMetrics"
+          },
+          "eval_period": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EvalPeriod"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "metrics",
+          "baseline",
+          "eval_period"
+        ],
+        "title": "ValidationEvaluation",
+        "description": "학습 시 검증 평가(후보에 저장된 값)."
+      },
+      "WriteBody": {
+        "properties": {
+          "data": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Data"
+          }
+        },
+        "type": "object",
+        "title": "WriteBody",
+        "description": "POST/PUT/PATCH 본문 — 컬럼 값(가상화 API라 저장소 추상화, 응답엔 미반영)."
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  }
+}

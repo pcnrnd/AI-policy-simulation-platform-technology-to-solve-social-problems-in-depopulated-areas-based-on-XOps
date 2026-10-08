@@ -1,7 +1,8 @@
 # xops-service 기술문서
 
 > 인구감소 R&D 플랫폼 — DataOps + MLOps 운영 평면 백엔드
-> 경로: `platform/backend/xops-service/` · FastAPI (Python 3.10+) · 최종 갱신 2026-09-01
+> 경로: `platform/backend/xops-service/` · FastAPI (Python 3.10+) · 최종 갱신 2026-10-08(인증표)
+> 타 부서 연동(경로·인증·API 예제·상태 매핑): [`xops-department-integration.md`](xops-department-integration.md)
 
 ---
 
@@ -159,20 +160,49 @@ python -m pytest tests/ --cov=src --cov-report=term-missing   # 80% 게이트
 | POST | `/monitoring/explain` | 기여도 → 중요도 정렬 |
 
 ### MLOps 오케스트레이션
-| 메서드 | 경로 | 설명 |
-|---|---|---|
-| GET | `/orchestration/models` | 등록 모델·현재 버전·지표 |
-| GET | `/orchestration/runs` | 실행 이력(최신 우선) |
-| POST | `/orchestration/events` | 재학습 이벤트 → 상태머신 실행 |
+| 메서드 | 경로 | 설명 | 인증 |
+|---|---|---|---|
+| GET | `/orchestration/models` | 등록 모델·현재 버전·지표 | — |
+| GET | `/orchestration/pipelines` | 등록 재학습 파이프라인 | — |
+| POST | `/orchestration/pipelines` | 파이프라인 등록 | `data:write` |
+| DELETE | `/orchestration/pipelines/{pipeline_id}` | 파이프라인 삭제(실행 이력 보존) | `data:write` |
+| POST | `/orchestration/pipelines/{pipeline_id}/run` | 파이프라인 실행 접수(202) | `data:write` |
+| GET | `/orchestration/runs` | 실행 이력(최신 우선) | — |
+| POST | `/orchestration/events` | 재학습 이벤트 접수(202) → 상태머신 실행 | `data:write` |
+
+실데이터(`/realdata/*`)·Overview(`/overview/summary`) API와 응답 구조는 [`xops-department-integration.md`](xops-department-integration.md) 5절과 `docs/xops-openapi.json`에 있다.
 
 ---
 
 ## 6. 인증
 
-- **HS256 JWT**(stdlib `hmac`/`hashlib`, pyjwt 미사용). payload: `{sub, scope:"data:read data:write", source, iat, exp(1h)}`.
+- **HS256 JWT**(stdlib `hmac`/`hashlib`, pyjwt 미사용). payload: `{sub, scope, source, iat, exp(1h)}`. scope는 발급 자격증명이 정한다(아래 표).
 - **OAuth2**: Authorization Code Grant 흐름(access_token은 JWT 형식).
-- `/dataops/{source_id}` 접근은 `Authorization: Bearer <token>` 필수, 미인증 시 401.
-- **토큰 발급 prod 게이트**(`require_client`): `XOPS_ENVIRONMENT=prod`이고 `client_id`가 설정된 경우에만 `X-Client-Id`/`X-Client-Secret` 검증. dev는 개방(데모 편의).
+- 미인증·서명 불일치·만료·scope 부족은 모두 **401**(`{"status":401,"error":"AuthError","message":...}`)이다. 403은 쓰지 않는다.
+
+### 토큰 발급(`require_client`)
+
+| 요청 헤더(`X-Client-Id`/`X-Client-Secret`) | dev | prod | 발급 scope |
+|---|---|---|---|
+| 조회 전용 자격증명(`XOPS_READONLY_CLIENT_ID/SECRET`) | 발급 | 발급 | `data:read` |
+| 조회 전용 id + 틀린 secret | 401 | 401 | — |
+| 기본 자격증명(`XOPS_CLIENT_ID/SECRET`) | 발급 | 발급 | `data:read data:write` |
+| 없음·그 밖의 값 | 발급(개방) | 401 | `data:read data:write` |
+
+- prod는 `XOPS_JWT_SECRET`(기본값 금지)과 `XOPS_CLIENT_ID/SECRET`이 없으면 기동을 거부한다. 조회 전용 id·secret은 함께 설정하거나 함께 비우고, id는 `XOPS_CLIENT_ID`와 달라야 한다(어기면 dev·prod 모두 기동 거부).
+
+### 경로별 인증
+
+| 경로 | 인증 |
+|---|---|
+| `GET /dataops/catalog`, `/dataops/catalog/{id}`, `/overview/summary`, `/realdata/health` | 없음 |
+| `GET /orchestration/models·pipelines·runs·runs/{id}/logs`, `GET /monitoring/metrics·drift·explain` | 없음. `data:read` 토큰을 보내면 실데이터 모델·실행을 덧붙인다(틀린 토큰은 401) |
+| `GET /orchestration/runs/{id}` | 없음 |
+| `POST /monitoring/metrics/*·drift·outliers·explain` | 없음. 단 `drift?auto_retrain=true&model_id=`(GET·POST)는 재학습을 일으키므로 `data:write` |
+| `GET /dataops/{source_id}`, `GET /dataops/apis`, `GET /realdata/*`(health 제외) | `data:read` |
+| `POST/PUT/PATCH/DELETE /dataops/{source_id}`, `POST·DELETE /dataops/catalog`, `POST·DELETE /dataops/apis` | `data:write` |
+| `POST /orchestration/events`, `POST·DELETE /orchestration/pipelines`, `POST /orchestration/pipelines/{id}/run` | `data:write` |
+| `POST /realdata/datasets`, `POST /realdata/training-runs`, `POST /realdata/models/{id}/candidates/{v}/apply`, `POST /realdata/models/{id}/restore/{v}` | `data:write` |
 
 ---
 
@@ -199,6 +229,7 @@ python -m pytest tests/ --cov=src --cov-report=term-missing   # 80% 게이트
 | `XOPS_ENVIRONMENT` | `dev` | `prod`면 기본 JWT 시크릿 사용 시 기동 거부 + 토큰 게이트 활성 |
 | `XOPS_JWT_SECRET` | (dev 기본값) | **prod 필수 교체** |
 | `XOPS_CLIENT_ID` / `XOPS_CLIENT_SECRET` | 빈값 | prod 토큰 발급 자격증명 |
+| `XOPS_READONLY_CLIENT_ID` / `XOPS_READONLY_CLIENT_SECRET` | 빈값 | 조회 전용(`data:read`) 발급 자격증명 — 타 부서 서버 보관 |
 | `XOPS_CORS_ORIGINS` | `localhost:5173` | 허용 오리진 |
 | `XOPS_DB_PATH` | `data/xops.db` | SQLite 경로 |
 | `XOPS_PSI_THRESHOLD` / `XOPS_KL_THRESHOLD` | 0.2 / 0.1 | 드리프트 임계 |
