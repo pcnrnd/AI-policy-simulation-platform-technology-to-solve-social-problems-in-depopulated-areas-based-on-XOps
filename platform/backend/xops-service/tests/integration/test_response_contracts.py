@@ -73,6 +73,16 @@ def test_openapi_documents_the_three_payloads(client: TestClient) -> None:
         assert {"status", "message", "data", "provenance"} <= set(envelope["properties"])
 
 
+def test_wape_description_does_not_claim_upper_bound(client: TestClient) -> None:
+    """WAPE = Σ|오차| / Σ|관측|이라 1을 넘을 수 있다(예: 관측 1, 예측 3 → 2.0)."""
+    from src.realdata.evaluate import wape
+
+    assert wape([1.0], [3.0]) == 2.0
+    spec = client.get("/openapi.json").json()
+    description = spec["components"]["schemas"]["ForecastErrorMetrics"]["properties"]["wape"]["description"]
+    assert "0~1" not in description and "1을 넘을 수 있다" in description
+
+
 @pytest.mark.parametrize(
     ("name", "model"),
     [

@@ -92,7 +92,9 @@ class ForecastErrorMetrics(BaseModel):
 
     mae: float | None
     rmse: float | None
-    wape: float | None = Field(description="가중 절대 백분율 오차(0~1 비율)")
+    wape: float | None = Field(
+        description="가중 절대 오차율 = Σ|오차| / Σ|관측|. 비율값이며 1을 넘을 수 있다(백분율 표시는 ×100)"
+    )
 
 
 class BaselineMetrics(ForecastErrorMetrics):
