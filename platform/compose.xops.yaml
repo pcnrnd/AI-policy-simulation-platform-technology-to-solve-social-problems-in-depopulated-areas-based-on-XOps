@@ -19,6 +19,17 @@ services:
       - XOPS_PG_DSN=postgresql://xops:xops@pg:5432/xops_dataops
       - XOPS_TIMESCALE_DSN=postgresql://xops:xops@timescale:5432/xops_timeseries
       - XOPS_MONGO_URI=mongodb://xops:xops@mongo:27017/xops_documents?authSource=admin
+      # 조회 전용 클라이언트(타 부서 서버 보관) — 값은 기동 환경(.env)에서 주입, 미설정이면 비활성.
+      - XOPS_READONLY_CLIENT_ID=${XOPS_READONLY_CLIENT_ID:-}
+      - XOPS_READONLY_CLIENT_SECRET=${XOPS_READONLY_CLIENT_SECRET:-}
+    healthcheck:
+      # 생존 확인(liveness) — 프로세스가 GET /에 응답하는지만 본다. DB 준비(readiness)가 아니다.
+      # slim 이미지에 curl이 없어 python urllib을 쓴다(비-2xx·연결 실패는 예외 → 종료코드 1).
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     volumes:
       - xops-data:/app/data # SQLite 영속화 (사용자 소스·모델 버전·실행 이력)
       # Dockerfile이 main.py·src만 COPY해 이미지에 시드가 없다 → 프론트와 같은 파일을 읽기전용 마운트.

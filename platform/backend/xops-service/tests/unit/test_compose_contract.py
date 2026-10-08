@@ -6,6 +6,7 @@ pyyaml 은 선언된 테스트 의존성이 아니므로 없으면 건너뛴다.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -77,6 +78,38 @@ def test_dsn_env_names_match_settings_fields(compose: dict[str, Any]) -> None:
     assert "@pg:5432/" in env["XOPS_PG_DSN"]
     assert "@timescale:5432/" in env["XOPS_TIMESCALE_DSN"]
     assert "@mongo:27017/" in env["XOPS_MONGO_URI"]
+
+
+def test_xops_service_liveness_healthcheck(compose: dict[str, Any]) -> None:
+    """생존 확인은 `GET /`를 python urllib으로 부른다(slim 이미지에 curl이 없다). DB 준비 판정이 아니다."""
+    check = compose["services"]["xops-service"]["healthcheck"]
+    command = " ".join(check["test"])
+    assert check["test"][0] == "CMD"
+    assert "urllib.request" in command and "http://127.0.0.1:8000/" in command
+
+
+def test_readonly_client_env_is_passed_through(compose: dict[str, Any]) -> None:
+    """조회 전용 자격증명은 저장소에 두지 않고 기동 환경(.env)에서 주입한다 — 미설정이면 빈 값."""
+    env = dict(item.split("=", 1) for item in compose["services"]["xops-service"]["environment"])
+    prefix = Settings.model_config["env_prefix"]
+    for key in ("XOPS_READONLY_CLIENT_ID", "XOPS_READONLY_CLIENT_SECRET"):
+        assert env.get(key) == "${%s:-}" % key, f"{key} 전달 누락"
+        assert key.removeprefix(prefix).lower() in Settings.model_fields
+
+
+def test_nginx_serves_openapi_and_keeps_api_block() -> None:
+    """같은 도메인 연동 — `/api/v3/openapi.json` 정확 일치를 두고 기존 `/api/` 블록은 그대로 둔다."""
+    conf = (_PLATFORM / "frontend" / "nginx.conf").read_text(encoding="utf-8")
+    assert re.search(
+        r"location = /api/v3/openapi\.json \{[^}]*proxy_pass http://xops-service:8000/openapi\.json;", conf
+    )
+    api_block = re.search(r"location /api/ \{([^}]*)\}", conf)
+    assert api_block is not None
+    # URI 없는 proxy_pass — `/api/v3/...` 경로가 그대로 전달된다(슬래시를 붙이면 경로가 잘린다).
+    assert "proxy_pass http://xops-service:8000;" in api_block.group(1)
+    # 타 부서 경로는 이름·upstream 확정 전까지 주석 자리표시로만 둔다(활성 location 금지).
+    assert re.search(r"^\s*#\s*location /department/ \{", conf, re.MULTILINE)
+    assert not re.search(r"^\s*location /department/", conf, re.MULTILINE)
 
 
 def test_driver_requirements_are_installed_in_image() -> None:
