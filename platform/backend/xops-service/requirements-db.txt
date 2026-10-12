@@ -2,4 +2,4 @@
 # 미설치 시 InMemoryAdapter 로 degrade하므로 기본 이미지에는 넣지 않는다.
 # 설치: pip install -r requirements.txt -r requirements-db.txt
 psycopg[binary]==3.3.5
-pymongo==4.17.0
+pymongo==4.18.2
