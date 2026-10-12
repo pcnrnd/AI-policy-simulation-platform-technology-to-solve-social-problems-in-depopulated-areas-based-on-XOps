@@ -61,9 +61,9 @@ def resolve_version(model_id: str) -> str | None:
     """표시 기준 버전 — 반영된 활성 버전이 있으면 그것, 없으면 최신 후보."""
     active = candidates_mod.get_active(model_id)
     if active:
-        return active["version"]
+        return str(active["version"])  # rd_model_candidates.version 은 TEXT NOT NULL
     rows = _candidates_oldest_first(model_id)
-    return rows[-1]["version"] if rows else None
+    return str(rows[-1]["version"]) if rows else None
 
 
 # ── /monitoring/metrics ─────────────────────────────────────
@@ -243,7 +243,7 @@ def _latest_dataset_id(model_id: str) -> str | None:
     """
     for ds in snapshot_mod.list_datasets():
         if ds.get("spec", {}).get("model_id") == model_id:
-            return ds["dataset_id"]
+            return str(ds["dataset_id"])  # rd_datasets.dataset_id 는 TEXT PRIMARY KEY
     return None
 
 

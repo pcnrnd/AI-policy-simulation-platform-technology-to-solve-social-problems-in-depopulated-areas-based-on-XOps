@@ -51,7 +51,7 @@ class SqlAdapter:
 
     def _connect(self) -> Any:
         try:
-            import psycopg  # type: ignore[import-not-found]
+            import psycopg
         except ImportError as exc:
             raise DriverUnavailableError("psycopg 미설치 — pip install -e .[db]") from exc
         # ponytail: 요청당 단발 연결. 동시성이 문제되면 psycopg_pool 로 교체(인터페이스 불변).
@@ -119,7 +119,7 @@ class MongoAdapter:
 
     def _client(self) -> Any:
         try:
-            from pymongo import MongoClient  # type: ignore[import-not-found]
+            from pymongo import MongoClient
         except ImportError as exc:
             raise DriverUnavailableError("pymongo 미설치 — pip install -e .[db]") from exc
         return MongoClient(self._uri, serverSelectionTimeoutMS=int(self._timeout * 1000))
