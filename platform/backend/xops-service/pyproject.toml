@@ -40,3 +40,10 @@ line-length = 100
 
 [tool.mypy]
 strict = true
+
+# 선택 의존성(db·ml extra). 설치 환경에서는 패키지 자체의 타입 정보를 쓰고, 미설치 환경에서만
+# import 해석 실패를 무시한다 — 코드의 `# type: ignore[import-not-found]` 는 설치 환경에서
+# unused-ignore 로 뒤집히므로 쓰지 않는다.
+[[tool.mypy.overrides]]
+module = ["psycopg", "psycopg.*", "pymongo", "pymongo.*", "shap", "shap.*"]
+ignore_missing_imports = true

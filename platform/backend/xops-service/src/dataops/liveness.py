@@ -73,8 +73,8 @@ def _count(schema: dict[str, Any]) -> int | None:
 
 def _count_sql(dsn: str, table: str) -> int:
     """PostgreSQL 계열 — 테이블이 없으면 0, 있으면 count(*)."""
-    import psycopg  # type: ignore[import-not-found]
-    from psycopg import sql  # type: ignore[import-not-found]
+    import psycopg
+    from psycopg import sql
 
     timeout = get_settings().db_timeout_seconds
     # 큰 테이블에서 카탈로그 응답이 늘어지지 않게 서버 쪽에서도 끊는다.
@@ -93,10 +93,13 @@ def _count_sql(dsn: str, table: str) -> int:
 
 def _count_mongo(uri: str, collection: str) -> int:
     """MongoDB — 컬렉션이 없으면 0."""
-    from pymongo import MongoClient  # type: ignore[import-not-found]
+    from pymongo import MongoClient
 
     timeout = get_settings().db_timeout_seconds
-    client = MongoClient(uri, serverSelectionTimeoutMS=int(timeout * 1000))
+    # MongoClient 는 제네릭이라 문서 타입을 적어야 한다 — 여기선 count 만 하므로 임의 dict 로 둔다.
+    client: MongoClient[dict[str, Any]] = MongoClient(
+        uri, serverSelectionTimeoutMS=int(timeout * 1000)
+    )
     try:
         database = client.get_default_database()
         if collection not in database.list_collection_names():

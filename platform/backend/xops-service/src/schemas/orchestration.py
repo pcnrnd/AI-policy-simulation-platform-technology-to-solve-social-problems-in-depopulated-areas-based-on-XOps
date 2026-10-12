@@ -30,5 +30,7 @@ class PipelineCreateRequest(BaseModel):
 class PipelineRunRequest(BaseModel):
     """등록 파이프라인 실행 요청 — 트리거만 받고 대상 모델은 등록 정의를 따른다."""
 
-    trigger: str = Field("manual", pattern="^(manual|drift|performance)$")
+    # default= 를 키워드로 적어야 mypy(dataclass_transform)가 기본값으로 인식해
+    # 본문 없는 `PipelineRunRequest()` 생성을 허용한다. 검증 동작은 위치 인자와 같다.
+    trigger: str = Field(default="manual", pattern="^(manual|drift|performance)$")
     candidate_latency_ms: float | None = None

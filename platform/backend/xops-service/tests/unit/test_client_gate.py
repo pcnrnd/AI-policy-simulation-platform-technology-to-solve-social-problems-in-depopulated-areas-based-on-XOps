@@ -41,3 +41,45 @@ def test_prod_requires_valid_creds(monkeypatch: pytest.MonkeyPatch) -> None:
     with pytest.raises(AuthError):
         dependencies.require_client("cid", "wrong")
     dependencies.require_client("cid", "csec")  # 일치 — 통과
+
+
+def test_issued_scope_by_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
+    # 주 자격증명은 읽기·쓰기, 조회 전용 자격증명은 data:read만 받는다(prod·dev 공통).
+    for env in ("prod", "dev"):
+        _use_settings(
+            monkeypatch,
+            Settings(
+                environment=env,
+                client_id="cid",
+                client_secret="csec",
+                readonly_client_id="rid",
+                readonly_client_secret="rsec",
+            ),
+        )
+        assert dependencies.require_client("cid", "csec") == "data:read data:write"
+        assert dependencies.require_client("rid", "rsec") == "data:read"
+        with pytest.raises(AuthError):
+            dependencies.require_client("rid", "wrong")
+
+
+def test_readonly_creds_must_be_set_together() -> None:
+    base = {"environment": "prod", "jwt_secret": "a-real-secret", "client_id": "cid", "client_secret": "csec"}
+    with pytest.raises(RuntimeError):
+        Settings(**base, readonly_client_id="rid").validate_runtime()
+    with pytest.raises(RuntimeError):
+        Settings(**base, readonly_client_secret="rsec").validate_runtime()
+    Settings(**base, readonly_client_id="rid", readonly_client_secret="rsec").validate_runtime()
+
+
+def test_readonly_id_must_differ_from_client_id() -> None:
+    # 같은 id면 발급 게이트가 조회 전용으로 먼저 판정해 정상 기본 자격증명을 거절한다 — 기동에서 막는다.
+    for env in ("prod", "dev"):
+        with pytest.raises(RuntimeError, match="달라야"):
+            Settings(
+                environment=env,
+                jwt_secret="a-real-secret",
+                client_id="same",
+                client_secret="csec",
+                readonly_client_id="same",
+                readonly_client_secret="rsec",
+            ).validate_runtime()

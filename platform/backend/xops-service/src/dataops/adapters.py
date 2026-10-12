@@ -99,7 +99,8 @@ def get_adapter(schema: dict[str, Any]) -> QueryAdapter:
         _logger.warning(f"backends import 실패 — In-Memory 로 degrade: {exc}")
         return InMemoryAdapter(name, f"백엔드 모듈을 불러올 수 없습니다: {exc}")
 
-    kwargs = {"timeout": settings.db_timeout_seconds, "max_rows": settings.db_max_rows}
+    # dict 로 묶으면 값 타입이 float 로 합쳐져 max_rows(int) 인자와 어긋난다 — 키워드로 직접 넘긴다.
+    timeout, max_rows = settings.db_timeout_seconds, settings.db_max_rows
     if "MongoDB" in str(schema.get("source", "")):
-        return MongoAdapter(name, dsn, **kwargs)
-    return SqlAdapter(name, dsn, **kwargs)
+        return MongoAdapter(name, dsn, timeout=timeout, max_rows=max_rows)
+    return SqlAdapter(name, dsn, timeout=timeout, max_rows=max_rows)

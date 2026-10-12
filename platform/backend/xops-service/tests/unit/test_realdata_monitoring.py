@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 
 from src.realdata import monitoring
+from src.schemas.realdata import RealdataEvaluation
 
 _MODEL_ID = "namwon-nonlocal-visitors-next-month"
 _VERSION = "v1"
@@ -118,6 +119,29 @@ def test_evaluation_operational_when_forecast_month_observed(monkeypatch: pytest
     assert op["kind"] == "operational"
     assert op["n"] == 2
     assert op["metrics"]["mae"] == pytest.approx(1.0, abs=1e-6)
+
+
+def test_evaluation_payload_matches_documented_type(monkeypatch: pytest.MonkeyPatch) -> None:
+    """operational 3종(측정·대기·오류) 모두 OpenAPI의 RealdataEvaluation 구조와 필드 단위로 같다."""
+
+    def _conforms(data: dict[str, Any]) -> None:
+        assert RealdataEvaluation.model_validate(data).model_dump(mode="json", by_alias=True) == data
+
+    period = {"from": 202307, "to": 202309, "n": 6}
+    observed = [{"base_ym": _FORECAST_MONTH, "dong_code": "45190250", "y_lag1": 110.0, "y_lag2": 95.0, "y": 300.0}]
+    for rows, kind in ((observed, "operational"), ([], "pending")):
+        _patch(monkeypatch, rows=rows, candidate=_candidate(period))
+        data = monitoring.evaluation(_MODEL_ID, _VERSION)["data"]
+        assert data["operational"]["kind"] == kind
+        _conforms(data)
+
+    def _missing(self: FakeModels, model_id: str, version: str) -> dict[str, Any]:
+        raise FakeRealdataError("아티팩트 없음")
+
+    monkeypatch.setattr(FakeModels, "load_artifact", _missing)
+    data = monitoring.evaluation(_MODEL_ID, _VERSION)["data"]
+    assert data["operational"]["kind"] == "error"
+    _conforms(data)
 
 
 # ── explain ──────────────────────────────────────────────────
