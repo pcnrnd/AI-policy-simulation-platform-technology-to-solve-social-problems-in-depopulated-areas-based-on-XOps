@@ -3,29 +3,32 @@ name = "xops-service"
 version = "0.1.0"
 description = "DataOps + MLOps 운영 평면 서비스 (인구감소 R&D platform)"
 requires-python = ">=3.10"
+# 버전 고정(2026-10-12): requirements*.txt 와 같은 값. fastapi·pydantic 은 dts 배포 이미지 실측값,
+# 나머지는 로컬 검증 환경 pip freeze 값.
 dependencies = [
-    "fastapi>=0.115",
-    "uvicorn[standard]>=0.30",
-    "pydantic>=2.6",
-    "pydantic-settings>=2.2",
+    "fastapi==0.142.4",
+    "uvicorn[standard]==0.34.0",
+    "pydantic==2.13.5",
+    "pydantic-settings==2.10.1",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.0",
-    "pytest-cov>=5.0",
-    "httpx>=0.27",
+    "pytest==9.0.2",
+    "pytest-cov==7.1.0",
+    "httpx==0.28.1",
 ]
 # 선택: 설치 시 실제 SHAP 사용, 없으면 순수 Python fallback
+# shap 은 검증 환경에 설치된 적이 없어 실측 버전이 없으므로 하한만 둔다.
 ml = [
-    "numpy>=1.26",
+    "numpy==1.26.4",
     "shap>=0.44",
 ]
 # 선택: 실 저장소 연결 드라이버. 미설치 시 InMemoryAdapter 로 degrade한다.
 # PostgreSQL·PostGIS·TimescaleDB 는 psycopg 하나로 처리한다(모두 Postgres 프로토콜).
 db = [
-    "psycopg[binary]>=3.1",
-    "pymongo>=4.6",
+    "psycopg[binary]==3.3.5",
+    "pymongo==4.17.0",
 ]
 
 [tool.pytest.ini_options]
