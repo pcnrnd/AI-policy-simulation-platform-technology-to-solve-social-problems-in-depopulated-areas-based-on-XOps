@@ -70,7 +70,7 @@ def _connect() -> Any:
     if not settings.pg_dsn:
         raise RealdataUnavailable("XOPS_PG_DSN이 설정되지 않았습니다.")
     try:
-        import psycopg  # type: ignore[import-not-found]  # ponytail: 지연 import, 선택 의존성
+        import psycopg  # ponytail: 지연 import, 선택 의존성
     except ImportError as exc:
         raise RealdataUnavailable("psycopg 미설치 — pip install psycopg[binary]") from exc
     return psycopg.connect(
