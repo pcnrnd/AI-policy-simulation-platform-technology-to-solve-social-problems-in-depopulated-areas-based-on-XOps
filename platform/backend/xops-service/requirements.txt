@@ -1,5 +1,6 @@
 # Docker/CI용 런타임 의존성 (pyproject.toml과 동기화)
-fastapi>=0.115
-uvicorn[standard]>=0.30
-pydantic>=2.6
-pydantic-settings>=2.2
+# 버전 고정(2026-10-12): fastapi·pydantic 은 dts 배포 이미지 실측값, 나머지는 로컬 검증 환경 pip freeze 값.
+fastapi==0.142.4
+uvicorn[standard]==0.34.0
+pydantic==2.13.5
+pydantic-settings==2.10.1
