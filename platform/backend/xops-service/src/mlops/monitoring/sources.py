@@ -111,7 +111,8 @@ def measured_features(model_id: str, version: str) -> list[dict[str, Any]] | Non
     coefficients = model.get("coefficients")
     if not isinstance(names, list) or not isinstance(coefficients, list):
         return None
-    ranked = [
+    # 반환 타입과 같은 원소 타입을 명시한다 — 추론에 맡기면 dict[str, object] 가 돼 abs() 가 막힌다.
+    ranked: list[dict[str, Any]] = [
         {"feature": str(name), "value": round(value, 6)}
         for name, raw in zip(names, coefficients)
         if (value := _finite(raw)) is not None

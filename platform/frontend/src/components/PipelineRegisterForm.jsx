@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { apiSend } from "../lib/api.js";
+import { getRealdataToken } from "./realdata/realdataClient.jsx";
 
 // 백엔드 PipelineCreateRequest.id 패턴과 같은 규칙 — 서버 422를 받기 전에 같은 문구로 막는다.
 const ID_PATTERN = /^[A-Za-z0-9._-]{3,64}$/;
@@ -35,7 +36,9 @@ export default function PipelineRegisterForm({ models, onRegistered, onCancel })
     setSubmitting(true);
     setError(null);
     try {
+      const token = await getRealdataToken(); // 파이프라인 등록은 data:write 필요
       const created = await apiSend("POST", "/api/v3/orchestration/pipelines", {
+        token,
         body: {
           id: form.id.trim(),
           name: form.name.trim(),

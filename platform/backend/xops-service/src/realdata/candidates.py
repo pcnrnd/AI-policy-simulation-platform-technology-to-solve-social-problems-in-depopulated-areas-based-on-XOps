@@ -82,6 +82,9 @@ def register_candidate(model_id: str, dataset_id: str, outcome: Any) -> str:
     함께 저장한다(apply 조건④가 "같은 평가 구간"을 비교해야 하는데 rd_model_candidates
     테이블에는 별도 eval_period 컬럼이 없어, metrics_json 내부 키로 보존하는 방식을 택했다)."""
     version = _field(outcome, "version")
+    if not isinstance(version, str) or not version:
+        # 컬럼은 TEXT NOT NULL 이다 — str() 로 뭉개면 "None" 이 저장되므로 여기서 거른다.
+        raise ValueError(f"TrainOutcome.version 이 비어 있거나 문자열이 아닙니다: {version!r}")
     artifact_path = str(_field(outcome, "artifact_path", ""))
     metrics = _as_dict(_field(outcome, "metrics"))
     metrics = {**metrics, "eval_period": _as_dict(_field(outcome, "eval_period"))}

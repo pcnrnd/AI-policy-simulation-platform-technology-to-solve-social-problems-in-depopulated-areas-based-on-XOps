@@ -14,6 +14,8 @@ from typing import Any
 from fastapi import APIRouter, Depends, Query
 
 from src.api.dependencies import optional_auth
+from src.auth.jwt import require_scope
+from src.core.exceptions import AuthError
 from src.core.seed import get_seed
 from src.mlops.monitoring.drift import DriftDetector, DriftResult
 from src.mlops.monitoring.explain import ExplainabilityModule
@@ -75,9 +77,20 @@ def _tail(payload: dict[str, Any], window: int | None) -> dict[str, Any]:
     return out
 
 
-def _maybe_retrain(result: DriftResult, model_id: str | None, auto_retrain: bool) -> dict[str, Any] | None:
-    """드리프트가 임계를 넘고 auto_retrain이면 해당 모델의 재학습을 자동 발화."""
-    if not (result.drifted and auto_retrain and model_id):
+def _maybe_retrain(
+    result: DriftResult, model_id: str | None, auto_retrain: bool, auth: dict[str, Any] | None
+) -> dict[str, Any] | None:
+    """드리프트가 임계를 넘고 auto_retrain이면 해당 모델의 재학습을 자동 발화.
+
+    재학습은 쓰기라 이 실행 분기에서만 `data:write`를 요구한다 — 판정 조회는 공개 그대로다.
+    검사는 드리프트 여부보다 먼저 한다. 권한 응답이 분포 결과에 따라 달라지지 않게 하기 위해서다.
+    """
+    if not (auto_retrain and model_id):
+        return None
+    if auth is None:
+        raise AuthError("자동 재학습(auto_retrain=true)은 data:write 토큰이 필요합니다.")
+    require_scope(auth, "data:write")
+    if not result.drifted:
         return None
     from dataclasses import asdict as _asdict
 
@@ -158,7 +171,7 @@ def drift_from_seed(
         # PSI/KL 계산 자체는 실계산이지만 **입력 분포가 시드**다. 실 추론 입력 수집 경로가
         # 없는 동안은 실측이라고 표기하지 않는다(화면은 이 표기로 빈 상태를 고른다).
         "source": "seed",
-        "retrain": _maybe_retrain(result, model_id, auto_retrain),
+        "retrain": _maybe_retrain(result, model_id, auto_retrain, auth),
     }
 
 
@@ -166,11 +179,12 @@ def drift_from_seed(
 def compute_drift(
     body: DriftInput,
     model_id: str | None = Query(None, description="드리프트 감지 시 재학습 대상 모델"),
-    auto_retrain: bool = Query(False, description="드리프트 임계 초과 시 재학습 자동 발화"),
+    auto_retrain: bool = Query(False, description="드리프트 임계 초과 시 재학습 자동 발화(data:write 필요)"),
+    auth: dict[str, Any] | None = _OPTIONAL_AUTH,
 ) -> dict[str, Any]:
     """임의 분포로 PSI/KL 판정."""
     result = _drift.detect(body.reference, body.current)
-    return {**asdict(result), "retrain": _maybe_retrain(result, model_id, auto_retrain)}
+    return {**asdict(result), "retrain": _maybe_retrain(result, model_id, auto_retrain, auth)}
 
 
 @router.post("/outliers")

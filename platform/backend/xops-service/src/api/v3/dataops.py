@@ -32,8 +32,9 @@ _service = DataService()
 
 
 # ── 인증 발급 ──────────────────────────────────────────────
+# 발급 게이트(require_client)가 자격증명에 맞는 scope를 정한다 — 조회 전용 클라이언트는 `data:read`.
 @router.post("/token", response_model=TokenResponse)
-def issue_catalog_token(_: None = Depends(require_client)) -> TokenResponse:
+def issue_catalog_token(scope: str = Depends(require_client)) -> TokenResponse:
     """소스에 매이지 않은 JWT 발급.
 
     `/token/{source_id}` 는 미존재 소스에 유효 토큰을 내주지 않도록 카탈로그 존재를 검사한다(P-D2).
@@ -41,29 +42,29 @@ def issue_catalog_token(_: None = Depends(require_client)) -> TokenResponse:
     소스를 고르지 않은 상태에서는 등록용 토큰을 받을 수 없었다. 권한은 scope 로만 판정하므로
     소스 표기가 없는 토큰을 따로 내준다 — 기존 경로와 검증 규칙은 그대로다.
     """
-    return TokenResponse(access_token=issue_jwt(), scope=get_settings().jwt_scope)
+    return TokenResponse(access_token=issue_jwt(scope=scope), scope=scope)
 
 
 @router.post("/token/{source_id}", response_model=TokenResponse)
-def issue_token(source_id: str, _: None = Depends(require_client)) -> TokenResponse:
-    """소스 접근용 JWT 발급 (HS256, scope data:read data:write)."""
+def issue_token(source_id: str, scope: str = Depends(require_client)) -> TokenResponse:
+    """소스 접근용 JWT 발급 (HS256, scope data:read data:write — 조회 전용 클라이언트는 data:read)."""
     get_catalog().get(source_id)  # 카탈로그에 없으면 SourceNotFoundError(404) — 미존재 소스에 유효 토큰 발급 방지
-    return TokenResponse(access_token=issue_jwt(source_id), scope=get_settings().jwt_scope)
+    return TokenResponse(access_token=issue_jwt(source_id, scope), scope=scope)
 
 
 @router.post("/oauth2")
-def issue_catalog_oauth2(_: None = Depends(require_client)) -> dict[str, Any]:
+def issue_catalog_oauth2(scope: str = Depends(require_client)) -> dict[str, Any]:
     """소스에 매이지 않은 OAuth2 발급 — 위 `/token` 과 같은 이유."""
-    return issue_oauth2()
+    return issue_oauth2(scope=scope)
 
 
 @router.post("/oauth2/{source_id}")
-def issue_oauth2_token(source_id: str, _: None = Depends(require_client)) -> dict[str, Any]:
+def issue_oauth2_token(source_id: str, scope: str = Depends(require_client)) -> dict[str, Any]:
     """OAuth2 Authorization Code Grant 흐름 발급."""
     # 위 /token 경로와 같은 검증 — 두 경로가 같은 access_token을 내주므로 카탈로그 존재 검사도
     # 같아야 한다. 이 가드가 없으면 미존재 source_id로도 유효 토큰이 발급됐다(P-D2).
     get_catalog().get(source_id)  # 카탈로그에 없으면 SourceNotFoundError(404)
-    return issue_oauth2(source_id)
+    return issue_oauth2(source_id, scope)
 
 
 # ── 카탈로그 ───────────────────────────────────────────────

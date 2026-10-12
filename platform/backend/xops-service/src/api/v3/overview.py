@@ -10,11 +10,13 @@ from typing import Any
 from fastapi import APIRouter, Query
 
 from src.dataops.summary import build_overview_summary
+from src.schemas.overview import OverviewSummary
 
 router = APIRouter(prefix="/overview", tags=["overview"])
 
 
-@router.get("/summary")
+# 응답 구조는 OpenAPI `responses`로만 싣는다 — response_model로 거르면 응답 JSON이 바뀔 수 있다.
+@router.get("/summary", response_model=None, responses={200: {"model": OverviewSummary}})
 def overview_summary(
     include_seed: bool = Query(False, description="데모 시드 소스·시드 지표 모델까지 포함 — 데모 표시 ON 전용"),
 ) -> dict[str, Any]:
