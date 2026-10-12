@@ -17,6 +17,8 @@ dev = [
     "pytest==9.0.2",
     "pytest-cov==7.1.0",
     "httpx==0.28.1",
+    "ruff==0.12.10",
+    "mypy==2.3.1",
 ]
 # 선택: 설치 시 실제 SHAP 사용, 없으면 순수 Python fallback
 # shap 은 검증 환경에 설치된 적이 없어 실측 버전이 없으므로 하한만 둔다.
