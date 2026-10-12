@@ -3,13 +3,13 @@ import mockData from "../assets/mock_data.json";
 import { PIPELINE_STEPS } from "../constants/pipeline.js";
 import { RETRAIN_PIPELINES, MODEL_STORE } from "../constants/models.js";
 import { apiGet, apiSend } from "../lib/api.js";
+import { MOCK_DATA_STORAGE_KEY, readMockDataVisible } from "../lib/demoVisibility.js";
 import { getRealdataToken } from "../components/realdata/realdataClient.jsx";
 
 const AppStateContext = createContext(null);
 
 const STEP_DELAY_MS = 2500;
 const ALERT_AUTO_DISMISS_MS = 5000;
-const MOCK_DATA_STORAGE_KEY = "decline-poc-mock-data";
 
 // 오케스트레이션 실행은 접수(202) 후 백그라운드에서 돈다 — 실데이터 학습 job과 같은 방식으로 폴링한다.
 const RUN_POLL_MS = 700;
@@ -23,15 +23,6 @@ async function awaitRunResult(runId) {
     await new Promise((resolve) => setTimeout(resolve, RUN_POLL_MS));
   }
   throw new Error("실행 결과를 확인하지 못했습니다.");
-}
-
-// 목업 데이터 전역 표시 여부. 저장값이 없거나 손상됐거나 스토리지를 못 쓰면 기본 노출(true).
-function readMockDataVisible() {
-  try {
-    return localStorage.getItem(MOCK_DATA_STORAGE_KEY) !== "false";
-  } catch {
-    return true;
-  }
 }
 
 const LOG_LEVEL_CLASS = {
@@ -105,8 +96,8 @@ export function AppStateProvider({ children }) {
   const [ready] = useState(true);
   const [appData] = useState(mockData);
 
-  // 목업 데이터 노출 스위치 — 끄면 화면에서 숨기기만 하고 mock_data.json 원본은 그대로 둔다.
-  const [mockDataVisible, setMockDataVisible] = useState(readMockDataVisible);
+  // 목업 데이터 노출 스위치 — 기본 OFF(범위 문서), 끄면 화면에서 숨기기만 하고 mock_data.json 원본은 그대로 둔다.
+  const [mockDataVisible, setMockDataVisible] = useState(() => readMockDataVisible());
 
   const [activeTab, setActiveTab] = useState("tab-overview");
   const [tabFocusRequest, setTabFocusRequest] = useState(0);
