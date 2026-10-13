@@ -179,8 +179,10 @@ $DC down               # 중지(볼륨 유지)
 ### 세션 정책·화면 변경 반영
 
 ```sh
-$DC up -d --force-recreate authelia   # 세션 정책(configuration.yml) 반영. 세션 저장소가 메모리라 전원 로그아웃된다
-$DC up -d --build frontend            # 화면 변경 반영
+$DC up -d --no-deps --force-recreate authelia   # 세션 정책(configuration.yml) 반영. 세션 저장소가 메모리라 전원 로그아웃된다
+$DC up -d --no-deps --build frontend            # 화면 변경 반영
 ```
+
+- `--no-deps`가 없으면 depends_on 때문에 xops-service까지 재빌드·재생성된다.
 
 - 세션이 끊기면 화면이 로그인 화면으로 보내고, 로그인 뒤 원래 화면으로 돌아와 "다시 로그인했습니다" 안내가 뜬다.
