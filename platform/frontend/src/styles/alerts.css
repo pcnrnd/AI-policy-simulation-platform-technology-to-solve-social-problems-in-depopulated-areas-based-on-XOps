@@ -99,6 +99,12 @@ body.drawer-open #popup-container {
   max-width: calc(100vw - 24px);
 }
 
+/* 시스템 안내(세션 복귀 등)는 경보가 아니므로 빨간 테두리·광채 대신 파랑. */
+.alert-popup--system {
+  border-color: var(--accent-blue);
+  box-shadow: var(--popup-shadow);
+}
+
 @media (max-width: 480px) {
   .notif-dropdown {
     max-height: calc(100dvh - 118px);

@@ -273,7 +273,7 @@ export function AppStateProvider({ children }) {
       setAlerts((prev) => [...prev, entry]);
       setTimeout(() => dismissAlert(id), ALERT_AUTO_DISMISS_MS);
       // 팝업으로 띄운 경보는 벨 알림 이력에도 적재
-      pushNotification({ severity: "warn", title: alert.title, message: alert.message });
+      pushNotification({ severity: alert.system ? "info" : "warn", title: alert.title, message: alert.message });
     },
     [dismissAlert, pushNotification]
   );
@@ -283,7 +283,8 @@ export function AppStateProvider({ children }) {
     if (consumeSessionExpired(window.sessionStorage)) {
       showAlert({
         title: "다시 로그인했습니다",
-        message: "세션이 만료되어 로그인 화면을 거쳤습니다. 이어서 작업하세요."
+        message: "세션이 만료되어 로그인 화면을 거쳤습니다. 이어서 작업하세요.",
+        system: true
       });
     }
   }, [showAlert]); // showAlert 는 안정 참조라 마운트 때 1회 실행된다.
