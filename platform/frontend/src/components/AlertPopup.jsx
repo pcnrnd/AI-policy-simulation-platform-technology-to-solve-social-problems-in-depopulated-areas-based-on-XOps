@@ -6,10 +6,10 @@ export default function AlertPopupContainer() {
   return (
     <div id="popup-container">
       {alerts.map((alert) => (
-        <div className="alert-popup" key={alert.id} role="alert">
+        <div className={alert.system ? "alert-popup alert-popup--system" : "alert-popup"} key={alert.id} role="alert">
           <i
-            className="fa-solid fa-triangle-exclamation"
-            style={{ fontSize: 24, color: "var(--accent-red)" }}
+            className={alert.system ? "fa-solid fa-circle-info" : "fa-solid fa-triangle-exclamation"}
+            style={{ fontSize: 24, color: alert.system ? "var(--accent-blue)" : "var(--accent-red)" }}
             aria-hidden="true"
           ></i>
           <div>

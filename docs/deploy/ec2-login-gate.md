@@ -135,6 +135,7 @@ Caddy는 `tls internal`(자체 CA)로 인증서를 만든다.
    B=https://pop.localtest.me
    curl -sk -o /dev/null -D - $B/                          # 302, location: $B/authelia/?rd=...
    curl -sk -o /dev/null -D - $B/api/v3/realdata/health    # 302 또는 401, 데이터 없음
+   curl -sk -o /dev/null -w '%{http_code}\n' -H 'Accept: application/json' $B/api/v3/realdata/health   # 401
    # 로그인 → 세션 쿠키 저장
    curl -sk -c jar -H 'Content-Type: application/json' \
         -d '{"username":"<ID>","password":"<PW>","keepMeLoggedIn":false}' $B/authelia/api/firstfactor
@@ -171,6 +172,17 @@ $DC down               # 중지(볼륨 유지)
 - **알림(notifier)은 filesystem이다.** 공식 문서상 이 방식은 테스트용이며 운영에서는 권장하지 않는다.
   메일 없이 운영하려고 택했고, 비밀번호 재설정·변경을 막아 두어 운영 흐름에서는 알림이 쓰이지 않는다.
   사용자 셀프 재설정이 필요해지면 SMTP notifier로 바꾼다.
-- 세션은 Authelia 기본값(만료 1시간, 무활동 5분)을 쓴다. 로그인 화면의 "Remember me"를 고르면 더 길게 유지된다.
+- 세션은 무활동 1시간, 절대 12시간(`configuration.yml`의 `session.inactivity`·`expiration`)이다. 로그인 화면의 "Remember me"를 고르면 더 길게 유지된다.
 - 인증은 1단계(비밀번호)다. 2단계(TOTP 등)가 필요하면 `access_control`의 `one_factor`를 `two_factor`로 바꾸고 SMTP를 붙인다.
 - Authelia 기동 로그의 `chown: /config...: Read-only file system`은 설정 폴더를 읽기 전용으로 마운트해서 나는 경고다. 동작에는 영향이 없다.
+
+### 세션 정책·화면 변경 반영
+
+```sh
+$DC up -d --no-deps --force-recreate authelia   # 세션 정책(configuration.yml) 반영. 세션 저장소가 메모리라 전원 로그아웃된다
+$DC up -d --no-deps --build frontend            # 화면 변경 반영
+```
+
+- `--no-deps`가 없으면 depends_on 때문에 xops-service까지 재빌드·재생성된다.
+
+- 세션이 끊기면 화면이 로그인 화면으로 보내고, 로그인 뒤 원래 화면으로 돌아와 "다시 로그인했습니다" 안내가 뜬다.

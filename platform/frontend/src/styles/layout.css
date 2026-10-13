@@ -348,8 +348,9 @@ body.drawer-open {
 /* 지도 오버레이(마커·격자·시설·팝업)는 CSS로 가리지 않는다 — SimulatorPage가 데모 OFF에서
    레이어에 시드 피처를 아예 올리지 않는다(레이어 그룹은 남아 토글은 계속 조작 가능). */
 
-/* 팝업 껍데기는 마운트 상태로 두되 목업 경보 값은 노출하지 않는다. */
-.mock-values-hidden .alert-popup {
+/* 팝업 껍데기는 마운트 상태로 두되 목업 경보 값은 가린다.
+   세션 안내처럼 목업이 아닌 시스템 안내(.alert-popup--system)는 보인다. */
+.mock-values-hidden .alert-popup:not(.alert-popup--system) {
   visibility: hidden !important;
 }
 

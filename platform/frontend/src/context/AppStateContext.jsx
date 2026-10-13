@@ -4,6 +4,7 @@ import { PIPELINE_STEPS } from "../constants/pipeline.js";
 import { RETRAIN_PIPELINES, MODEL_STORE } from "../constants/models.js";
 import { apiGet, apiSend } from "../lib/api.js";
 import { MOCK_DATA_STORAGE_KEY, readMockDataVisible } from "../lib/demoVisibility.js";
+import { consumeSessionExpired } from "../lib/sessionGate.js";
 import { getRealdataToken } from "../components/realdata/realdataClient.jsx";
 
 const AppStateContext = createContext(null);
@@ -272,10 +273,21 @@ export function AppStateProvider({ children }) {
       setAlerts((prev) => [...prev, entry]);
       setTimeout(() => dismissAlert(id), ALERT_AUTO_DISMISS_MS);
       // 팝업으로 띄운 경보는 벨 알림 이력에도 적재
-      pushNotification({ severity: "warn", title: alert.title, message: alert.message });
+      pushNotification({ severity: alert.system ? "info" : "warn", title: alert.title, message: alert.message });
     },
     [dismissAlert, pushNotification]
   );
+
+  // 세션 만료로 로그인을 거쳐 돌아왔으면 한 번 안내한다. 표식은 소비형이라 StrictMode 이중 실행에도 1회만 뜬다.
+  useEffect(() => {
+    if (consumeSessionExpired(window.sessionStorage)) {
+      showAlert({
+        title: "다시 로그인했습니다",
+        message: "세션이 만료되어 로그인 화면을 거쳤습니다. 이어서 작업하세요.",
+        system: true
+      });
+    }
+  }, [showAlert]); // showAlert 는 안정 참조라 마운트 때 1회 실행된다.
 
   const resetPipeline = useCallback(() => {
     // 이전 실행의 늦은 API 응답이 새 실행/초기화 상태를 덮어쓰지 못하게 무효화한다.
