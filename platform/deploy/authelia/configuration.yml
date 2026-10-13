@@ -35,6 +35,10 @@ regulation:
   ban_time: '30m'
 
 session:
+  # 기본값(무활동 5분·만료 1시간)은 화면을 잠시 보다가도 끊긴다.
+  # 일상 작업 중 끊기지 않게 무활동 1시간, 하루 1회 재로그인하도록 만료 12시간으로 둔다.
+  inactivity: '1h'
+  expiration: '12h'
   cookies:
     - domain: '{{ mustEnv "SITE_DOMAIN" }}'
       authelia_url: 'https://{{ mustEnv "SITE_DOMAIN" }}/authelia'
