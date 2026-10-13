@@ -15,7 +15,9 @@ _SERVICE_DIR = Path(__file__).resolve().parents[2]
 
 
 def _api_prefixes(app) -> set[str]:
-    return {r.path.split("/")[3] for r in app.routes if r.path.startswith("/api/v3/")}
+    # fastapi 0.142+는 include_router 경로를 _IncludedRouter로 감싸 app.routes에 path가 없다.
+    # 공개 API인 OpenAPI 스키마의 경로로 수집한다.
+    return {p.split("/")[3] for p in app.openapi()["paths"] if p.startswith("/api/v3/")}
 
 
 def test_sw01_registers_only_dataops() -> None:
