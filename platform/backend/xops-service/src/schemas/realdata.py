@@ -70,6 +70,7 @@ class RealdataModelEntry(BaseModel):
                 {
                     "model_id": "namwon-observed-sales-next-month",
                     "target": "observed_sales_krw",
+                    "region_id": "namwon",
                     "active_version": "v20260918-3f9a2c",
                     "applied_at": "2026-09-18T07:12:44.120931+00:00",
                     "previous_version": "v20260911-8d1e04",
@@ -81,6 +82,7 @@ class RealdataModelEntry(BaseModel):
 
     model_id: str
     target: Literal["nonlocal_visitors", "observed_sales_krw"]
+    region_id: str = Field(description="모델의 실측 데이터 대상 지자체")
     active_version: str | None = Field(description="활성(반영) 버전. 반영 전이면 null")
     applied_at: str | None = Field(description="반영 시각(ISO 8601, UTC). 반영 전이면 null")
     previous_version: str | None = Field(description="직전 활성 버전(복원 대상). 없으면 null")

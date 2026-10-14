@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Doughnut, Radar } from "react-chartjs-2";
 import { useAppState } from "../context/AppStateContext.jsx";
 import { useTheme } from "../context/ThemeContext.jsx";
@@ -35,14 +35,8 @@ export default function Overview() {
   } = useAppState();
   const ct = useChartTheme();
   const { isDark } = useTheme();
-  const [compactChart, setCompactChart] = useState(() => window.matchMedia("(max-width: 768px)").matches);
-
-  useEffect(() => {
-    const media = window.matchMedia("(max-width: 768px)");
-    const onChange = (event) => setCompactChart(event.matches);
-    media.addEventListener("change", onChange);
-    return () => media.removeEventListener("change", onChange);
-  }, []);
+  const archiveChartRef = useRef(null);
+  const [hiddenSources, setHiddenSources] = useState(() => new Set());
 
   // 데모 표시 토글은 화면 구조가 아니라 **데이터 유무**만 바꾼다. OFF에서는 시드(mock_data.json)
   // 유래 값이 실값 자리에 들어가지 않도록 여기 데이터 계층에서 차단하고, 빈 자리는 "–"와 사유 문구로 남긴다.
@@ -105,6 +99,27 @@ export default function Overview() {
   );
   // 도넛에 그릴 값이 하나도 없을 때 — 캔버스는 그대로 두고 그 위에 사유만 얹는다.
   const sourceRowsEmpty = sourceRows.length === 0;
+  useEffect(() => {
+    setHiddenSources(new Set());
+    const chart = archiveChartRef.current;
+    sourceRows.forEach((_, index) => {
+      if (chart && !chart.getDataVisibility(index)) chart.toggleDataVisibility(index);
+    });
+    chart?.update();
+  }, [sourceRows]);
+
+  const toggleSource = (index) => {
+    const chart = archiveChartRef.current;
+    if (!chart) return;
+    chart.toggleDataVisibility(index);
+    chart.update();
+    setHiddenSources((previous) => {
+      const next = new Set(previous);
+      if (chart.getDataVisibility(index)) next.delete(index);
+      else next.add(index);
+      return next;
+    });
+  };
   const unknownSources = liveSources ? overviewSummary.archive_rows_unknown ?? 0 : 0;
 
   const sourceData = useMemo(
@@ -134,7 +149,7 @@ export default function Overview() {
     maintainAspectRatio: false,
     cutout: "60%",
     plugins: {
-      legend: { position: compactChart ? "bottom" : "right", labels: { color: ct.legend, boxWidth: 12, font: { size: 11 } } },
+      legend: { display: false },
       tooltip: {
         callbacks: {
           label: (cx) => ` ${cx.label}: ${cx.parsed.toLocaleString()}행 적재`
@@ -274,13 +289,23 @@ export default function Overview() {
           dataSource={catalogOrigin}
         >
           <div style={{ position: "relative", height: 240, width: "100%" }}>
-            <Doughnut data={sourceData} options={doughnutOpts} />
+            <Doughnut ref={archiveChartRef} data={sourceData} options={doughnutOpts} />
             {sourceRowsEmpty && (
               <ChartEmptyNote>
                 {NO_DEMO_DATA}
               </ChartEmptyNote>
             )}
           </div>
+          <ul className="archive-source-legend" aria-label="아카이브 데이터 소스 범례">
+            {sourceRows.map((source, index) => (
+              <li key={`${index}-${source.label}`}>
+                <button type="button" onClick={() => toggleSource(index)} aria-pressed={!hiddenSources.has(index)}>
+                  <span className="archive-source-color" style={{ backgroundColor: SOURCE_PALETTE[index % SOURCE_PALETTE.length] }} aria-hidden="true" />
+                  <span>{source.label}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
           <p className="chart-summary">
             {sourceRowsEmpty ? (
               `${NO_DEMO_DATA} — 표시할 적재량이 없습니다.`

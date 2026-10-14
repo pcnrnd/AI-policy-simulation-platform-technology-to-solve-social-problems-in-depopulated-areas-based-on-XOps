@@ -2,6 +2,7 @@
 // R3: 스냅샷 생성 → 학습 실행(job 폴링) → 후보 표 → 반영/복원.
 import { useCallback, useEffect, useRef, useState } from "react";
 import Card from "../Card.jsx";
+import { datasetMatchesModel, mergeDatasets } from "../../lib/trainingDatasets.js";
 import {
   applyCandidate,
   createDataset,
@@ -78,7 +79,7 @@ export default function RealdataTrainingPanel() {
     getDatasets(token)
       .then((res) => {
         const list = res.data?.datasets ?? [];
-        setDatasets(list);
+        setDatasets(mergeDatasets(list));
         setDatasetsError(res.status !== "ok" ? res.message ?? "등록된 데이터셋이 없습니다." : null);
       })
       .catch((err) => setDatasetsError(err.message || "데이터셋 조회 라우트를 사용할 수 없습니다 (작성자 A 담당)."));
@@ -142,7 +143,7 @@ export default function RealdataTrainingPanel() {
           setDatasetsError(res.message ?? "스냅샷 생성에 실패했습니다.");
           return;
         }
-        setDatasets((prev) => [res.data, ...prev]);
+        setDatasets((prev) => mergeDatasets([res.data], prev));
         setSelectedDatasetId(res.data?.dataset_id ?? "");
       })
       .catch((err) => setDatasetsError(err.message || "스냅샷 생성 라우트를 사용할 수 없습니다 (작성자 A 담당)."))
@@ -151,6 +152,10 @@ export default function RealdataTrainingPanel() {
 
   const handleStartTraining = () => {
     if (!token || !selectedModelId || !selectedDatasetId) return;
+    if (!datasetMatchesModel(datasets.find((d) => d.dataset_id === selectedDatasetId), models.find((m) => m.model_id === selectedModelId))) {
+      setJobError("대상 모델에 맞는 데이터셋을 선택하세요.");
+      return;
+    }
     setJobError(null);
     setJob(null);
     startTrainingRun(token, selectedModelId, selectedDatasetId)
@@ -191,6 +196,8 @@ export default function RealdataTrainingPanel() {
   };
 
   const selectedModel = models.find((m) => m.model_id === selectedModelId);
+  const matchingDatasets = datasets.filter((d) => datasetMatchesModel(d, selectedModel));
+  const datasetReady = matchingDatasets.some((d) => d.dataset_id === selectedDatasetId);
   const jobDone = !job || TERMINAL_STATES.has(job.state);
 
   return (
@@ -210,7 +217,7 @@ export default function RealdataTrainingPanel() {
       <div className="realdata-controls">
         <label className="realdata-field">
           <span>대상 모델</span>
-          <select value={selectedModelId} onChange={(e) => setSelectedModelId(e.target.value)}>
+          <select value={selectedModelId} onChange={(e) => { setSelectedModelId(e.target.value); setSelectedDatasetId(""); }}>
             {models.map((m) => (
               <option key={m.model_id} value={m.model_id}>
                 {MODEL_LABELS[m.model_id] ?? m.model_id}
@@ -224,10 +231,10 @@ export default function RealdataTrainingPanel() {
           <select
             value={selectedDatasetId}
             onChange={(e) => setSelectedDatasetId(e.target.value)}
-            disabled={datasets.length === 0}
+            disabled={matchingDatasets.length === 0}
           >
             <option value="">선택하세요</option>
-            {datasets.map((d) => (
+            {matchingDatasets.map((d) => (
               <option key={d.dataset_id} value={d.dataset_id}>
                 {d.dataset_id} ({orDash(d.observed_from)}~{orDash(d.observed_to)})
               </option>
@@ -241,8 +248,8 @@ export default function RealdataTrainingPanel() {
         <button
           className="btn btn-primary"
           onClick={handleStartTraining}
-          aria-disabled={!token || !selectedModelId || !selectedDatasetId || !jobDone}
-          title={!jobDone ? "현재 실행 중인 학습이 끝난 뒤 실행할 수 있습니다" : "선택한 데이터셋으로 학습을 실행합니다"}
+          aria-disabled={!token || !selectedModelId || !datasetReady || !jobDone}
+          title={!datasetReady ? "대상 모델에 맞는 스냅샷을 생성하거나 데이터셋을 선택하세요." : !jobDone ? "현재 실행 중인 학습이 끝난 뒤 실행할 수 있습니다" : "선택한 데이터셋으로 학습을 실행합니다"}
         >
           <i className="fa-solid fa-play"></i> 학습 실행
         </button>

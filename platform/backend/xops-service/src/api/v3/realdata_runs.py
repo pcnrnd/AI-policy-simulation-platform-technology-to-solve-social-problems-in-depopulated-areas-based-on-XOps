@@ -12,7 +12,8 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from src.api.dependencies import require_auth
-from src.realdata import candidates, jobs, monitoring
+from src.realdata import candidates, jobs, monitoring, snapshot
+from src.realdata.binding import MODEL_REGIONS, dataset_matches_model
 from src.realdata.candidates import ApplyRejected, CandidateNotFound
 from src.realdata.jobs import JobConflict
 from src.schemas.realdata import (
@@ -76,6 +77,11 @@ def create_training_run(
     _: dict[str, Any] = Depends(require_auth("data:write")),
 ) -> dict[str, Any]:
     _require_known_model(body.model_id)
+    dataset = next((d for d in snapshot.list_datasets() if d["dataset_id"] == body.dataset_id), None)
+    if dataset is None:
+        raise HTTPException(status_code=404, detail="선택한 데이터셋을 찾을 수 없습니다. 스냅샷을 다시 생성하세요.")
+    if not dataset_matches_model(dataset, body.model_id):
+        raise HTTPException(status_code=400, detail="대상 모델에 맞는 데이터셋을 선택하세요.")
     try:
         job_id = jobs.start_training(body.model_id, body.dataset_id)
     except JobConflict as exc:
@@ -108,14 +114,20 @@ def list_training_runs(
 # ── 모델·후보 조회 ────────────────────────────────────────
 # 응답 구조는 OpenAPI `responses`로만 싣는다 — response_model로 거르면 응답 JSON이 바뀔 수 있다.
 @router.get("/models", response_model=None, responses={200: {"model": Envelope[list[RealdataModelEntry]]}})
-def list_models(_: dict[str, Any] = Depends(require_auth("data:read"))) -> dict[str, Any]:
+def list_models(
+    _: dict[str, Any] = Depends(require_auth("data:read")),
+    region_id: str | None = Query(None),
+) -> dict[str, Any]:
     entries = []
     for model_id, target in MODEL_TARGETS.items():
+        if region_id is not None and MODEL_REGIONS[model_id] != region_id:
+            continue
         active = candidates.get_active(model_id)
         entries.append(
             {
                 "model_id": model_id,
                 "target": target,
+                "region_id": MODEL_REGIONS[model_id],
                 "active_version": active["version"] if active else None,
                 "applied_at": active["applied_at"] if active else None,
                 "previous_version": active["previous_version"] if active else None,
@@ -123,7 +135,7 @@ def list_models(_: dict[str, Any] = Depends(require_auth("data:read"))) -> dict[
                 "retrain_needed": candidates.retrain_needed_cached(model_id) if active else False,
             }
         )
-    return _envelope("ok", data=entries)
+    return _envelope("ok" if entries else "empty", data=entries)
 
 
 @router.get("/models/{model_id}/candidates")

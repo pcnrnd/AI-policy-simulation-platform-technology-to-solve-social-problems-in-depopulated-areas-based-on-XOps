@@ -121,6 +121,24 @@ check("PSI 목록은 행정동 원핫을 피처명 접두사로 제외한다", (
 });
 
 // ── 2. 빈 상태 ───────────────────────────────────────────────
+check("신안 보고서에는 남원 활성 모델·실측 지표를 연결하지 않는다", () => {
+  const shinan = { ...REGION, id: "shinan", name: "전라남도 신안군" };
+  assert.equal(pickActiveModel([MODEL], shinan), null);
+  assert.equal(pickActiveModel([MODEL], REGION), MODEL);
+  const bound = toReportIndicators(shinan, MODEL, EVALUATION_OK, DRIFT_OK);
+  assert.equal(bound, null);
+  assert.doesNotMatch(JSON.stringify(buildReportBlocks(shinan, TEMPLATE, { live: bound?.indicators })), /812\.500|WAPE|PSI/);
+  assert.equal(buildReportRows(shinan, TEMPLATE, { live: bound?.indicators }).some((r) => r[0] === "모델 검증"), false);
+});
+
+check("지역·모델·target이 맞지 않는 데이터셋은 보고서 바인딩에서 차단한다", () => {
+  const dataset = { dataset_id: "ds-namwon", spec: { model_id: MODEL.model_id, target: MODEL.target, region_id: "namwon" } };
+  assert.equal(toReportIndicators(REGION, MODEL, EVALUATION_OK, DRIFT_OK, null, dataset).regionId, "namwon");
+  for (const spec of [{ ...dataset.spec, region_id: "shinan" }, { ...dataset.spec, target: "observed_sales_krw" }, { ...dataset.spec, model_id: "other-model" }]) {
+    assert.equal(toReportIndicators(REGION, MODEL, EVALUATION_OK, DRIFT_OK, null, { ...dataset, spec }), null);
+  }
+});
+
 check("활성 모델·검증지표가 없으면 바인딩이 null 이다", () => {
   assert.equal(toReportIndicators(REGION, null, EVALUATION_OK, DRIFT_OK), null);
   assert.equal(toReportIndicators(REGION, MODEL, { status: "model_required", data: null }, DRIFT_OK), null);
