@@ -85,7 +85,9 @@
 | 후보 버전 | `GET /realdata/models/{model_id}/candidates` | `data:read` | Envelope |
 | 평가 | `GET /realdata/models/{model_id}/evaluation?version=` | `data:read` | `Envelope[RealdataEvaluation]` |
 | 드리프트·설명 | `GET /realdata/models/{model_id}/drift?version=`, `.../explain?version=&base_ym=&dong_code=` | `data:read` | Envelope |
-| 분석·진단·대응 후보 | `GET /realdata/analysis?dong_code=&base_ym=` (region=namwon만) | `data:read` | Envelope(`rules_version`) |
+| 분석·진단·대응 후보 (퇴역) | `GET /realdata/analysis` | `data:read` | 인증 후 410, deprecated; 2026-10-14 진단 UI/진입 제거, 원 진단 계산 모듈·기록 보존 |
+| 활성 모델 추론 입력 | `GET /modelops/instances/{id}/versions/{version}/inputs?dong_code=` | `data:read` | 활성 버전·등록본/hash 검증, 실제 입력·조정 범위·근거 |
+| 활성 모델 예측·입력 민감도 | `POST /modelops/instances/{id}/versions/{version}/predict` | `data:read` | 추론/기여도·예측 변화·관측 입력 민감도, 저장·학습·활성 변경 없음; [모델 계약](modelops-contract.md) |
 | 학습 실행 이력 | `GET /realdata/training-runs?model_id=` | `data:read` | Envelope. 페이징·기간 조건 없음 |
 | 데이터셋 스냅샷 | `GET /realdata/datasets`, `GET /realdata/datasets/{dataset_id}?include_rows=true` | `data:read` | Envelope. rows는 최대 5,000행(넘으면 `message`에 절단 표시) |
 | 행정동 대응표 | `GET /realdata/dong-map` | `data:read` | Envelope |
