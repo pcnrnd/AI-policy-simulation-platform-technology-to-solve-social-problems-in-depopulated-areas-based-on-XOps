@@ -2,7 +2,7 @@
 // R3: 스냅샷 생성 → 학습 실행(job 폴링) → 후보 표 → 반영/복원.
 import { useCallback, useEffect, useRef, useState } from "react";
 import Card from "../Card.jsx";
-import { datasetMatchesModel } from "../../lib/trainingDatasets.js";
+import { datasetMatchesModel, mergeDatasets } from "../../lib/trainingDatasets.js";
 import {
   applyCandidate,
   createDataset,
@@ -79,7 +79,7 @@ export default function RealdataTrainingPanel() {
     getDatasets(token)
       .then((res) => {
         const list = res.data?.datasets ?? [];
-        setDatasets(list);
+        setDatasets(mergeDatasets(list));
         setDatasetsError(res.status !== "ok" ? res.message ?? "등록된 데이터셋이 없습니다." : null);
       })
       .catch((err) => setDatasetsError(err.message || "데이터셋 조회 라우트를 사용할 수 없습니다 (작성자 A 담당)."));
@@ -143,7 +143,7 @@ export default function RealdataTrainingPanel() {
           setDatasetsError(res.message ?? "스냅샷 생성에 실패했습니다.");
           return;
         }
-        setDatasets((prev) => [res.data, ...prev]);
+        setDatasets((prev) => mergeDatasets([res.data], prev));
         setSelectedDatasetId(res.data?.dataset_id ?? "");
       })
       .catch((err) => setDatasetsError(err.message || "스냅샷 생성 라우트를 사용할 수 없습니다 (작성자 A 담당)."))
