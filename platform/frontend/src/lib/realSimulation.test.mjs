@@ -1,0 +1,26 @@
+import assert from "node:assert/strict";
+import { activeModelPair, matchingFlowBasis, inferenceRequest, validateInference, rankSensitivity, observedFeatureLabel } from "./realSimulation.js";
+const proof={instance_id:"factor",model_type:"factor_analysis",version_id:"v1",job_id:"job1",dataset_id:"registered1",dataset_hash:"a".repeat(64),region_id:"namwon",target:"observed_sales_krw",dong_code:"45190250",prediction_period:202401,features:["y_lag1"],mode:"real",source:"real"};
+const factor={provenance:proof};
+const sim={provenance:{...proof,instance_id:"sim",model_type:"simulation",dataset_id:"registered2",version_id:"v2",job_id:"job2"}};
+assert.equal(matchingFlowBasis(factor,sim),true);
+assert.equal(matchingFlowBasis(factor,{provenance:{...sim.provenance,dataset_hash:"b".repeat(64)}}),false);
+assert.equal(matchingFlowBasis(factor,{provenance:{...sim.provenance,dong_code:"other"}}),false);
+const request=inferenceRequest(sim,{y_lag1:100});
+assert.equal(request.dataset_id,"registered2");assert.equal(request.dataset_hash,proof.dataset_hash);assert.deepEqual(request.adjustments,{y_lag1:100});
+const result={provenance:sim.provenance,inference_id:"inference_new",intercept:10,prediction:30,baseline_prediction:25,delta:5,contributions:[{feature:"y_lag1",value:20}],recommendations:[
+  {feature:"y_lag1",from:10,to:11,prediction:33,delta:3},{feature:"y_lag1",from:10,to:9,prediction:27,delta:-3},
+  {feature:"y_lag2",from:20,to:19,prediction:35,delta:5},{feature:"invalid",from:1,to:2,prediction:NaN,delta:9}]};
+assert.equal(validateInference(result,sim),result);
+assert.throws(() => validateInference({...result,provenance:{...sim.provenance,job_id:"wrong"}},sim));
+assert.throws(() => validateInference({...result,prediction:99},sim));
+const ranked=rankSensitivity(result);
+assert.deepEqual(ranked.map((row) => row.feature),["y_lag2","y_lag1"]);
+assert.equal(ranked[0].inference_id,result.inference_id);assert.equal(ranked[0].provenance.dataset_id,"registered2");assert.equal(ranked[0].reference_prediction,30);
+assert.throws(() => rankSensitivity({...result,provenance:proof}));
+const pair=activeModelPair({mode:"real",source:"real",instances:[{id:"f",mode:"real",region_id:"namwon",target:"observed_sales_krw",model_type:"factor_analysis",active_version:"v1"},{id:"s",mode:"real",region_id:"namwon",target:"observed_sales_krw",model_type:"simulation",active_version:null}]},"namwon","observed_sales_krw");
+assert.equal(pair.factor.id,"f");assert.equal(pair.simulation,undefined);
+assert.throws(() => activeModelPair({mode:"mock",source:"mock",instances:[]},"namwon","observed_sales_krw"));
+assert.equal(observedFeatureLabel("y_lag1","observed_sales_krw"),"전월 관측 소비");
+assert.equal(observedFeatureLabel("dong_45190250","observed_sales_krw",[{code:"45190250",name:"운봉읍"}]),"행정동: 운봉읍");
+console.log("realSimulation: 활성 2종 선택·내용 hash/좌표 연결·추론 합계·근거 전달·관측 민감도 순위 PASS");
