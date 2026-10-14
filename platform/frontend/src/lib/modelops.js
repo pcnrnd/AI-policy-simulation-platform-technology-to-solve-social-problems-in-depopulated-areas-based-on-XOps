@@ -1,5 +1,8 @@
 export const MODEL_TYPES = [{ id: "factor_analysis", name: "요인분석" }, { id: "simulation", name: "시뮬레이션" }];
 export const TARGET_LABELS = { nonlocal_visitors: "타지역 방문객", observed_sales_krw: "관측 소비", population_change_pct: "인구 변화율" };
+export function datasetRegionName(dataset, regions = []) {
+  return regions.find((region) => region.id === dataset.region_id)?.name ?? dataset.region_id ?? "—";
+}
 export function pipelineDefinition(form, datasets) {
   if (!MODEL_TYPES.some((type) => type.id === form.model_type)) throw new Error("모델 종류를 선택하세요.");
   const dataset = datasets.find((row) => row.id === form.dataset_id);
