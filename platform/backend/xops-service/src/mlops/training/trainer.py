@@ -116,7 +116,7 @@ def _loo_predictions(
 class Trainer:
     """인프로세스 재학습 — 시드 시계열로 후보 모델을 실제 학습한다."""
 
-    def train(self, model_id: str, *, horizon: int, version: str) -> TrainingResult:
+    def train(self, model_id: str, *, horizon: int, version: str, artifact_id: str | None = None) -> TrainingResult:
         """그리드 전체를 학습해 최고 후보와 기준선을 함께 반환하고 아티팩트를 남긴다."""
         settings = get_settings()
         lags = sorted(settings.train_lag_windows)
@@ -151,7 +151,7 @@ class Trainer:
             latency_ms=_measure_latency(final, rows),
             model=final.to_dict(),
         )
-        _write_artifact(result, version)
+        _write_artifact(result, version, artifact_id=artifact_id)
         _logger.info(
             f"train model={model_id} h={horizon} rows={len(dataset)} candidates={len(candidates)} "
             f"best_lag={best.lag} best_lambda={best.ridge_lambda} f1={best.metrics.get('f1')}"
@@ -213,13 +213,14 @@ def artifact_path(model_id: str, version: str) -> Path:
     return get_settings().model_artifact_dir / model_id / f"{version}.json"
 
 
-def _write_artifact(result: TrainingResult, version: str) -> Path:
+def _write_artifact(result: TrainingResult, version: str, *, artifact_id: str | None = None) -> Path:
     """학습 산출물을 로컬 JSON으로 저장. 승급 여부와 무관하게 기록한다(실험 산출물)."""
-    path = artifact_path(result.model_id, version)
+    path = artifact_path(result.model_id, artifact_id or version)
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "model_id": result.model_id,
         "version": version,
+        "artifact_id": artifact_id or version,
         "trained_at": datetime.now(timezone.utc).isoformat(),
         "hyperparams": result.best,
         "metrics": result.candidate_metrics,
