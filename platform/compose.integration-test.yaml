@@ -1,0 +1,30 @@
+# Opt-in dts-only routing probes; no host ports, production profile disabled.
+services:
+  integration-dashboard:
+    image: nginx:alpine
+    profiles: [integration-test]
+    environment:
+      DUMMY_MODULE: dashboard
+      DUMMY_APP_PUBLIC_PATH: ${APP_PUBLIC_PATH:-/rnd/population/}
+      DUMMY_FE_BASE_PATH: /dashboard-ui/
+      DUMMY_API_BASE_PATH: /dashboard-backend/
+      DUMMY_PUBLIC_PATH: ${DASHBOARD_PUBLIC_PATH:-${APP_PUBLIC_PATH:-/rnd/population/}dashboard/}
+      DUMMY_PUBLIC_API_PATH: ${DASHBOARD_API_PUBLIC_PATH:-${APP_PUBLIC_PATH:-/rnd/population/}dashboard-api/}
+    volumes:
+      - ./deploy/module-dummies/default.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ./deploy/module-dummies/html:/usr/share/nginx/html:ro
+    restart: "no"
+  integration-reporting:
+    image: nginx:alpine
+    profiles: [integration-test]
+    environment:
+      DUMMY_MODULE: reporting
+      DUMMY_APP_PUBLIC_PATH: ${APP_PUBLIC_PATH:-/rnd/population/}
+      DUMMY_FE_BASE_PATH: /reporting-ui/
+      DUMMY_API_BASE_PATH: /reporting-backend/
+      DUMMY_PUBLIC_PATH: ${REPORTING_PUBLIC_PATH:-${APP_PUBLIC_PATH:-/rnd/population/}reporting/}
+      DUMMY_PUBLIC_API_PATH: ${REPORTING_API_PUBLIC_PATH:-${APP_PUBLIC_PATH:-/rnd/population/}reporting-api/}
+    volumes:
+      - ./deploy/module-dummies/default.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ./deploy/module-dummies/html:/usr/share/nginx/html:ro
+    restart: "no"

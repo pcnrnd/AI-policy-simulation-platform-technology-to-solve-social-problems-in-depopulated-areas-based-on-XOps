@@ -1,0 +1,26 @@
+map $http_cookie $dummy_cookie_seen { default yes; "" no; }
+map $http_authorization $dummy_authorization_seen { default yes; "" no; }
+server {
+  listen 80;
+  root /usr/share/nginx/html;
+  location ^~ ${DUMMY_FE_BASE_PATH} {
+    rewrite ^${DUMMY_FE_BASE_PATH}(.*)$ /$1 break;
+    try_files $uri /index.html;
+    sub_filter_once off;
+    sub_filter '__MODULE_NAME__' '${DUMMY_MODULE}';
+    sub_filter '__MODULE_PUBLIC_BASE__' '${DUMMY_PUBLIC_PATH}';
+    sub_filter '__MODULE_API_BASE__' '${DUMMY_PUBLIC_API_PATH}';
+    sub_filter '__APP_PUBLIC_BASE__' '${DUMMY_APP_PUBLIC_PATH}';
+    sub_filter '__REQUEST_MODE__' '$http_x_data_mode';
+    add_header X-Dummy-Module ${DUMMY_MODULE} always;
+  }
+  location ^~ ${DUMMY_API_BASE_PATH} {
+    default_type text/plain;
+    add_header Set-Cookie "integration_dummy_probe=blocked; Path=/";
+    add_header Clear-Site-Data '"cache"';
+    add_header X-Accel-Redirect /integration-xaccel-probe-must-not-follow;
+    add_header Refresh "0; url=/integration-refresh-probe-must-not-follow";
+    return 200 "module=${DUMMY_MODULE}\nrequest_uri=$request_uri\nremote_user=$http_remote_user\nremote_groups=$http_remote_groups\nx_data_mode=$http_x_data_mode\nx_forwarded_prefix=$http_x_forwarded_prefix\nx_forwarded_host=$http_x_forwarded_host\nx_forwarded_proto=$http_x_forwarded_proto\ncookie_received=$dummy_cookie_seen\nauthorization_received=$dummy_authorization_seen\n";
+  }
+  location / { return 404; }
+}
