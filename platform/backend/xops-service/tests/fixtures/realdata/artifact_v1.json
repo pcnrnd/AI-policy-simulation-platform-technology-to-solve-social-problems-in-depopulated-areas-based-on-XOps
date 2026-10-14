@@ -1,33 +1,58 @@
 {
   "model_id": "namwon-nonlocal-visitors-next-month",
-  "version": "v20260901-aaaaaa",
-  "dataset_id": "ds-aaaaaaaaaaaa",
-  "content_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-  "features": ["y_lag1", "y_lag2", "y_lag3", "month_sin", "month_cos"],
-  "coef": [0.5, 0.2, 0.1, 300.0, -150.0],
-  "intercept": 100.0,
+  "version": "v1-synthetic",
+  "dataset_id": "ds-synthetic-b820f567f13d1027",
+  "content_hash": "b820f567f13d1027e34b17b6dab9a912ca14386773ea0b6a6879388390081247",
+  "features": [
+    "y_lag1",
+    "y_lag2",
+    "y_lag3",
+    "month_sin",
+    "month_cos"
+  ],
+  "coef": [
+    0.02702703,
+    0.05405405,
+    0.08108108,
+    0.10810811,
+    0.13513514
+  ],
+  "intercept": 14.0,
   "train_means": {
-    "y_lag1": 1000.0,
-    "y_lag2": 980.0,
-    "y_lag3": 960.0,
-    "month_sin": 0.0,
-    "month_cos": 0.0
+    "y_lag1": 7.0,
+    "y_lag2": 14.0,
+    "y_lag3": 21.0,
+    "month_sin": 28.0,
+    "month_cos": 35.0
   },
   "train_stds": {
-    "y_lag1": 120.0,
-    "y_lag2": 118.0,
-    "y_lag3": 115.0,
-    "month_sin": 0.7,
-    "month_cos": 0.7
+    "y_lag1": 1.5,
+    "y_lag2": 2.5,
+    "y_lag3": 3.5,
+    "month_sin": 4.5,
+    "month_cos": 5.5
   },
   "lambda": 1.0,
   "eval": {
-    "period": {"from": 202307, "to": 202309, "n": 6},
-    "metrics": {"mae": 12.3, "rmse": 15.1, "wape": 0.08},
-    "baseline": {"name": "yoy", "mae": 20.0, "rmse": 25.0, "wape": 0.15}
+    "period": {
+      "from": 202302,
+      "to": 202304,
+      "n": 9
+    },
+    "metrics": {
+      "mae": 2.0,
+      "rmse": 3.0,
+      "wape": 0.02
+    },
+    "baseline": {
+      "name": "yoy_or_prev_month",
+      "mae": 9.0,
+      "rmse": 11.0,
+      "wape": 0.09
+    }
   },
-  "observed_end_month": 202310,
-  "forecast_month": 202311,
-  "train_rows": 50,
-  "trained_at": "2026-09-01T00:00:00+00:00"
+  "observed_end_month": 202304,
+  "forecast_month": 202305,
+  "train_rows": 30,
+  "trained_at": "2000-01-01T00:00:00+00:00"
 }
