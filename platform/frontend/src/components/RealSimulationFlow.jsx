@@ -32,11 +32,11 @@ function Evidence({ result, regions }) {
 }
 
 export default function RealSimulationFlow() {
-  const { appData, navigateToTab } = useAppState();
+  const { appData, currentRegion, setCurrentRegion, navigateToTab } = useAppState();
   const regions = appData.regions.map(({id,name}) => ({id,name}));
   const [catalog,setCatalog] = useState(EMPTY);
   const [catalogRevision,setCatalogRevision] = useState(0);
-  const [region,setRegion] = useState("namwon");
+  const region=currentRegion.id;
   const [target,setTarget] = useState("observed_sales_krw");
   const [dong,setDong] = useState("");
   const [contexts,setContexts] = useState(null);
@@ -125,7 +125,7 @@ export default function RealSimulationFlow() {
   return <div className="real-simulation-flow">
     <Card title="실데이터 요인분석·시뮬레이션" icon="fa-chart-line" dataSource="api">
       <div className="real-flow-controls">
-        <label>지역<select value={region} disabled={busy==="catalog"} onChange={(e) => { reset();setDong("");setRegion(e.target.value); }}>{regions.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label>
+        <label>지역<select value={region} disabled={busy==="catalog"} onChange={(e) => { reset();setDong("");setCurrentRegion(appData.regions.find((row) => row.id===e.target.value)); }}>{regions.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label>
         <label>학습 대상<select value={target} disabled={busy==="catalog"} onChange={(e) => { reset();setDong("");setTarget(e.target.value); }}>{Object.entries(REAL_TARGETS).map(([id,name]) => <option key={id} value={id}>{name}</option>)}</select></label>
         <label>행정동<select value={dong || contexts?.simulation.provenance.dong_code || ""} disabled={!contexts || Boolean(busy)} onChange={(e) => { reset();setDong(e.target.value); }}>
           {!contexts && <option value="">모델과 관측 입력 확인 후 선택</option>}

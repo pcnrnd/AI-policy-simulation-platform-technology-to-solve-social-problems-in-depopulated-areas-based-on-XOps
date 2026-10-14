@@ -77,8 +77,8 @@ function riskGrade(riskIndex) {
 }
 
 export default function SimulatorPage() {
-  const { mockDataVisible } = useAppState();
-  return mockDataVisible ? <MockSimulatorPage /> : <RealSimulationFlow />;
+  const { mockDataVisible, currentRegion } = useAppState();
+  return mockDataVisible ? <MockSimulatorPage /> : <RealSimulationFlow key={currentRegion.id} />;
 }
 
 function MockSimulatorPage() {
