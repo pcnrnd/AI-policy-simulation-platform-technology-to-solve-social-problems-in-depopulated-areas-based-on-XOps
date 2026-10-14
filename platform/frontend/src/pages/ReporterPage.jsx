@@ -20,7 +20,7 @@ import { fetchReportData } from "../lib/dataopsApi.js";
 const EXPORT_FORMATS = [
   { id: "docx", label: "Word (.docx)", icon: "fa-file-word", ext: "docx" },
   { id: "xlsx", label: "Excel (.xlsx)", icon: "fa-file-excel", ext: "xlsx" },
-  { id: "hwp", label: "한글 (.hwp)", icon: "fa-file-lines", ext: "hwp" },
+  { id: "html", label: "HTML (.html)", icon: "fa-file-code", ext: "html" },
   { id: "md", label: "Markdown (.md)", icon: "fa-markdown", ext: "md" }
 ];
 
@@ -268,7 +268,7 @@ export default function ReporterPage() {
           sheetName: "지표요약",
           rows: buildReportRows(region, template, extra)
         });
-      } else if (fmt.id === "hwp") {
+      } else if (fmt.id === "html") {
         blob = buildHwpHtml({ title: template.title, blocks });
       } else {
         const markdown = blocksToMarkdown(template.title, blocks);
@@ -432,7 +432,7 @@ export default function ReporterPage() {
             <i className="fa-solid fa-circle-info"></i> 지자체 실무자 팁
           </div>
           <div style={{ fontSize: 11, color: "var(--text-secondary)", lineHeight: 1.5 }}>
-            Word(.docx)·Excel(.xlsx)는 OOXML 규격으로, 한글(.hwp)은 한컴오피스 호환 형식으로 즉시
+            Word(.docx)·Excel(.xlsx)는 OOXML 규격으로, HTML(.html)은 웹 문서 형식으로 즉시
             저장됩니다. 정량 성과 지표 텍스트와 표가 모두 자동 기입됩니다. 동일 파일명 재저장 시{" "}
             <code>_(1)</code> 형식으로 자동 증분되며, 저장 실패 시 콘솔에 오류가 기록됩니다.
             (브라우저 보안 정책상 저장 경로는 브라우저 다운로드 폴더로 고정됩니다.)
