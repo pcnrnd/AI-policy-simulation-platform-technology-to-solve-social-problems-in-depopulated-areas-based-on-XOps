@@ -11,6 +11,7 @@ services:
     environment:
       SITE_DOMAIN: ${SITE_DOMAIN:?deploy/.env에 SITE_DOMAIN 필요}
       CADDY_TLS: ${CADDY_TLS:?deploy/.env에 CADDY_TLS 필요}
+      AUTH_PUBLIC_URL: ${AUTH_PUBLIC_URL:-https://${SITE_DOMAIN}/authelia/}
     ports:
       # 80은 인증서 발급(HTTP-01)과 HTTPS 리다이렉트용이라 보안그룹에서 전체 공개해야 한다.
       # 로컬 검증에서 호스트 80/443이 점유돼 있을 때만 CADDY_HTTP_PORT/CADDY_HTTPS_PORT로 바꾼다.
@@ -28,6 +29,7 @@ services:
     image: authelia/authelia:4.39.28
     environment:
       SITE_DOMAIN: ${SITE_DOMAIN:?deploy/.env에 SITE_DOMAIN 필요}
+      AUTH_PUBLIC_URL: ${AUTH_PUBLIC_URL:-https://${SITE_DOMAIN}/authelia/}
       X_AUTHELIA_CONFIG_FILTERS: template # configuration.yml의 {{ mustEnv "SITE_DOMAIN" }} 치환
       AUTHELIA_SESSION_SECRET_FILE: /config/secrets/session_secret
       AUTHELIA_STORAGE_ENCRYPTION_KEY_FILE: /config/secrets/storage_encryption_key
@@ -47,6 +49,9 @@ services:
     ports: !reset []
 
   frontend:
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN}
+      AUTH_PUBLIC_URL: ${AUTH_PUBLIC_URL:-https://${SITE_DOMAIN}/authelia/}
     ports: !reset []
 
   # DB 비밀번호는 볼륨을 처음 만들 때만 적용된다 — 기존 볼륨이 있으면 바꿔도 반영되지 않는다.

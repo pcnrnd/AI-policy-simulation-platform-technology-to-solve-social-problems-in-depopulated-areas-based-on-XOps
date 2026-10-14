@@ -41,7 +41,8 @@ session:
   expiration: '12h'
   cookies:
     - domain: '{{ mustEnv "SITE_DOMAIN" }}'
-      authelia_url: 'https://{{ mustEnv "SITE_DOMAIN" }}/authelia'
+      # Backwards compatible with an existing container without AUTH_PUBLIC_URL.
+      authelia_url: '{{ env "AUTH_PUBLIC_URL" | default (printf "https://%s/authelia/" (mustEnv "SITE_DOMAIN")) }}'
       default_redirection_url: 'https://{{ mustEnv "SITE_DOMAIN" }}/'
 
 storage:
