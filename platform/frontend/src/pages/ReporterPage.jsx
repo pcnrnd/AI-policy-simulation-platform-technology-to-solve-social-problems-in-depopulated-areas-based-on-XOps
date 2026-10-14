@@ -6,6 +6,7 @@ import {
   buildReportRows,
   blocksToMarkdown,
   formatMetric,
+  formatReportTimestamp,
   reportGateMode
 } from "../lib/reportContent.js";
 import {
@@ -28,7 +29,7 @@ function regionShortName(region) {
   return parts[parts.length - 1] || region.name;
 }
 
-function buildPreview(region, template, live) {
+function buildPreview(region, template, live, generatedAt) {
   const tenYearPop = Math.round(region.population * 0.81).toLocaleString();
   const indicators = live?.indicators ?? null;
   const explain = live?.explain ?? null;
@@ -40,7 +41,7 @@ function buildPreview(region, template, live) {
         보고서 번호: RD-POP-2026-{region.id.toUpperCase()}
       </p>
       <p style={{ textAlign: "right", fontSize: 12, color: "#4b5563" }}>
-        발생 일시: 2026년 05월 23일 13:00
+        생성 일시: {formatReportTimestamp(generatedAt)}
       </p>
 
       <h3>1. 대상 지자체 기본 현황 및 예측 요약</h3>
@@ -124,6 +125,7 @@ export default function ReporterPage() {
   const [regionId, setRegionId] = useState(currentRegion?.id ?? regions[0].id);
   const [format, setFormat] = useState("docx");
   const [preview, setPreview] = useState(null);
+  const [generatedAt, setGeneratedAt] = useState(null);
 
   // Data source API 자동 바인딩 상태 (Notion: 데이터 갱신 부분 자동 업데이트)
   const [binding, setBinding] = useState(null);
@@ -153,6 +155,7 @@ export default function ReporterPage() {
       const requestId = ++refreshRequestRef.current;
       setRefreshing(true);
       setPreview(null);
+      setGeneratedAt(null);
       setReportFeedback(null);
       setBinding(null);
       setLastUpdated(null);
@@ -198,6 +201,7 @@ export default function ReporterPage() {
   // 템플릿이 바뀌면 기존 템플릿으로 만든 미리보기를 현재 결과처럼 남기지 않는다.
   useEffect(() => {
     setPreview(null);
+    setGeneratedAt(null);
     setReportFeedback(null);
   }, [templateId]);
 
@@ -214,7 +218,9 @@ export default function ReporterPage() {
       return;
     }
     if (!regionBinding) return;
-    setPreview(buildPreview(region, template, regionBinding));
+    const timestamp = new Date().toISOString();
+    setGeneratedAt(timestamp);
+    setPreview(buildPreview(region, template, regionBinding, timestamp));
     setReportFeedback({ tone: "success", message: `${region.name} 보고서 미리보기를 생성했습니다.` });
     addConsoleLog(`INFO: 보고서 미리보기 생성 성공 - ${region.name}`);
   };
@@ -235,10 +241,16 @@ export default function ReporterPage() {
     // 시드로 가득 찬 docx/xlsx/hwp/md 가 생성되는 것을 막는 가드 — 실데이터 바인딩이 있으면
     // 그 걱정이 없으므로 데모 OFF 에서도 내보낸다. 차단 시 사유 문구는 만들지 않는다.
     if (!regionBinding) return;
+    const timestamp = generatedAt ?? new Date().toISOString();
+    if (!generatedAt) {
+      setGeneratedAt(timestamp);
+      setPreview(buildPreview(region, template, regionBinding, timestamp));
+    }
     const fmt = EXPORT_FORMATS.find((f) => f.id === format) ?? EXPORT_FORMATS[0];
     const baseName = `R_D_인구소멸대응보고서_${regionShortName(region)}`;
     const filename = dedupeFilename(baseName, fmt.ext);
     const extra = {
+      generatedAt: timestamp,
       populationChange: appData.population_change,
       vitalPopulation: appData.vital_population,
       live: regionBinding.indicators,
@@ -360,6 +372,7 @@ export default function ReporterPage() {
             onChange={(e) => {
               const nextId = e.target.value;
               setPreview(null);
+              setGeneratedAt(null);
               setRegionId(nextId);
               const nextRegion = regions.find((item) => item.id === nextId);
               if (nextRegion) setCurrentRegion(nextRegion);

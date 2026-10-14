@@ -29,6 +29,16 @@ export function formatMetric(value, digits = 3) {
   return typeof value === "number" ? value.toFixed(digits) : "–";
 }
 
+/** 미리보기와 모든 내보내기 형식에서 동일한 생성 시각을 KST로 표시한다. */
+export function formatReportTimestamp(generatedAt = new Date().toISOString()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hourCycle: "h23"
+  }).formatToParts(new Date(generatedAt));
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day} ${values.hour}:${values.minute} (KST)`;
+}
+
 /**
  * 모델 검증지표 블록 — evaluation(WAPE·MAE)·drift(PSI) 실측값만 싣는다.
  * 바인딩이 없으면(활성 모델 없음·조회 실패) 섹션 자체를 비운다.
@@ -51,10 +61,10 @@ function modelMetricBlocks(live) {
 }
 
 // 정책 품의·기안 공통양식 머리말 (제목·기안자·일시·결재).
-function approvalHeader(region) {
+function approvalHeader(region, generatedAt) {
   return [
     { type: "paragraph", text: `보고서 번호: RD-POP-2026-${region.id.toUpperCase()}` },
-    { type: "paragraph", text: "기안자: 인구정책담당관   |   일시: 2026-05-23 13:00" },
+    { type: "paragraph", text: `기안자: 인구정책담당관   |   생성 일시: ${formatReportTimestamp(generatedAt)}` },
     { type: "paragraph", text: "결재: 담당 ___  팀장 ___  과장 ___  국장 ___" }
   ];
 }
@@ -227,7 +237,7 @@ function caseBlocks(region) {
 
 /** 포맷 중립 블록 모델 (docx/hwp/markdown 공통 소스). */
 export function buildReportBlocks(region, template, extra = {}) {
-  const header = approvalHeader(region);
+  const header = approvalHeader(region, extra.generatedAt);
   if (template.id === "template_task_order") {
     return [...header, ...taskOrderBlocks(region)];
   }
@@ -248,7 +258,7 @@ export function buildReportRows(region, template, extra = {}) {
     ["인구감소 대응 R&D 지표 요약", template.title],
     ["보고서 번호", `RD-POP-2026-${region.id.toUpperCase()}`],
     ["기안자", "인구정책담당관"],
-    ["일시", "2026-05-23 13:00"],
+    ["생성 일시", formatReportTimestamp(extra.generatedAt)],
     [],
     ["구분", "지표", "값"],
     ["기본 현황", "대상 지자체", region.name],
