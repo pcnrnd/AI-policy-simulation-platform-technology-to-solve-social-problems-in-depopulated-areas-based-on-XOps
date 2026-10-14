@@ -2451,6 +2451,29 @@
         ],
         "summary": "List Models",
         "operationId": "list_models_api_v3_realdata_models_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "region_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Region Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2461,13 +2484,18 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/v3/realdata/models/{model_id}/candidates": {
@@ -4232,6 +4260,11 @@
             ],
             "title": "Target"
           },
+          "region_id": {
+            "type": "string",
+            "title": "Region Id",
+            "description": "모델의 실측 데이터 대상 지자체"
+          },
           "active_version": {
             "anyOf": [
               {
@@ -4278,6 +4311,7 @@
         "required": [
           "model_id",
           "target",
+          "region_id",
           "active_version",
           "applied_at",
           "previous_version",
@@ -4291,6 +4325,7 @@
             "applied_at": "2026-09-18T07:12:44.120931+00:00",
             "model_id": "namwon-observed-sales-next-month",
             "previous_version": "v20260911-8d1e04",
+            "region_id": "namwon",
             "retrain_needed": false,
             "target": "observed_sales_krw"
           }
@@ -4544,6 +4579,13 @@
           "type": {
             "type": "string",
             "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
           }
         },
         "type": "object",

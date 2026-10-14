@@ -230,9 +230,19 @@ export function buildApiResponse({ method, schema, adapter, query, payload, filt
 
 const REALDATA_BASE = "/api/v3/realdata";
 
+const MODEL_REGIONS = {
+  "namwon-nonlocal-visitors-next-month": "namwon",
+  "namwon-observed-sales-next-month": "namwon"
+};
+
+export function modelMatchesRegion(region, model) {
+  const modelRegion = model?.region_id ?? MODEL_REGIONS[model?.model_id];
+  return Boolean(region?.id && modelRegion === region.id);
+}
+
 /** 활성 버전이 있는 첫 모델 — 모델 ID는 하드코딩하지 않는다. */
-export function pickActiveModel(models = []) {
-  return models.find((m) => m.active_version) ?? null;
+export function pickActiveModel(models = [], region = null) {
+  return models.find((m) => m.active_version && (!region || modelMatchesRegion(region, m))) ?? null;
 }
 
 /** 활성 모델의 최신 스냅샷 — `/realdata/datasets` 는 created_at 내림차순이라 첫 건이 최신이다. */
@@ -352,12 +362,15 @@ function psiEntries(driftResponse, modelTarget) {
  * 실호출 응답 → 리포트 바인딩 모델. 활성 모델이나 검증지표가 없으면 null(빈 상태).
  * population·birthRate는 대응 실데이터 소스가 없어 지자체 시드 값을 그대로 옮긴다.
  */
-export function toReportIndicators(region, model, evaluationResponse, driftResponse, explain = null) {
+export function toReportIndicators(region, model, evaluationResponse, driftResponse, explain = null, dataset = null) {
   const validation = evaluationResponse?.status === "ok" ? evaluationResponse.data?.validation : null;
-  if (!model || !validation) return null;
+  if (!modelMatchesRegion(region, model) || !validation) return null;
+  if (dataset && (dataset.spec?.model_id !== model.model_id || dataset.spec?.target !== model.target || (dataset.spec.region_id && dataset.spec.region_id !== region.id))) return null;
 
   return {
     explain,
+    regionId: region.id,
+    datasetId: dataset?.dataset_id ?? null,
     source: `${REALDATA_BASE}/models/${model.model_id}/evaluation`,
     driftSource: `${REALDATA_BASE}/models/${model.model_id}/drift`,
     modelId: model.model_id,
@@ -386,24 +399,26 @@ export async function fetchReportData(region) {
   // api.js 도 호출 시점 import — 최상위 import.meta.env 가 node 테스트에서 터진다.
   const { apiGet } = await import("./api.js");
   const token = await getRealdataToken();
-  const model = pickActiveModel((await getModels(token)).data ?? []);
+  const model = pickActiveModel((await getModels(token, region.id)).data ?? [], region);
   if (!model) return null;
+  const dataset = pickModelDataset((await getDatasets(token)).data?.datasets ?? [], model);
+  if (!dataset || dataset.spec?.target !== model.target || (dataset.spec.region_id && dataset.spec.region_id !== region.id)) return null;
 
   const [evaluation, drift, explain] = await Promise.all([
     getEvaluation(token, model.model_id, model.active_version),
     getDrift(token, model.model_id, model.active_version),
-    fetchExplainBinding(token, model, { getDatasets, getExplain, apiGet })
+    fetchExplainBinding(token, model, { getDatasets, getExplain, apiGet }, dataset)
   ]);
-  return toReportIndicators(region, model, evaluation, drift, explain);
+  return toReportIndicators(region, model, evaluation, drift, explain, dataset);
 }
 
 /**
  * SHAP 기여도 실호출 — 최신 스냅샷의 `observed_to` 월에서 생활인구가 가장 많은 행정동을 고른다.
  * 어느 단계든 조건을 못 채우면 null(빈 상태). 사유 문구는 만들지 않는다.
  */
-async function fetchExplainBinding(token, model, { getDatasets, getExplain, apiGet }) {
+async function fetchExplainBinding(token, model, { getDatasets, getExplain, apiGet }, boundDataset = null) {
   try {
-    const dataset = pickModelDataset((await getDatasets(token)).data?.datasets ?? [], model);
+    const dataset = boundDataset ?? pickModelDataset((await getDatasets(token)).data?.datasets ?? [], model);
     if (!dataset) return null;
 
     // include_rows 는 5,000행 상한이 있다 — 절단되면 최대값을 믿을 수 없어 pickExplainTarget 이 버린다.

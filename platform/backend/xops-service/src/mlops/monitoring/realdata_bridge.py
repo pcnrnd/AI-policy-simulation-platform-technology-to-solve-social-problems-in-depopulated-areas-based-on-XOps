@@ -22,6 +22,7 @@ from src.realdata import candidates as candidates_mod
 from src.realdata import jobs as jobs_mod
 from src.realdata import monitoring as rd_monitoring
 from src.realdata import snapshot as snapshot_mod
+from src.realdata.binding import dataset_matches_model
 
 _logger = get_logger("xops.monitoring.realdata")
 _drift = DriftDetector()
@@ -242,7 +243,7 @@ def _latest_dataset_id(model_id: str) -> str | None:
     영구히 잠긴다. 실행에 필요한 값은 job 이력이 아니라 스냅샷이므로 여기서 직접 읽는다.
     """
     for ds in snapshot_mod.list_datasets():
-        if ds.get("spec", {}).get("model_id") == model_id:
+        if dataset_matches_model(ds, model_id):
             return str(ds["dataset_id"])  # rd_datasets.dataset_id 는 TEXT PRIMARY KEY
     return None
 
@@ -253,7 +254,7 @@ def pipelines() -> list[dict[str, Any]]:
     for model_id, name in PIPELINE_NAMES.items():
         job_rows = jobs_mod.list_jobs(model_id)
         version = resolve_version(model_id)
-        dataset_id = job_rows[0]["dataset_id"] if job_rows else _latest_dataset_id(model_id)
+        dataset_id = _latest_dataset_id(model_id)
         if version is None and not job_rows and dataset_id is None:
             continue
         active = candidates_mod.get_active(model_id)
