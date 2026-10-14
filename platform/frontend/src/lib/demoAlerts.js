@@ -2,6 +2,21 @@ export function retainRealAlerts(entries = []) {
   return entries.filter((entry) => entry.source !== "demo");
 }
 
+// 모드 전환은 데이터 결과만 폐기한다. 세션·시스템 알림의 객체와 읽음 상태는 그대로 둔다.
+export function retainModeIndependentAlerts(entries = []) {
+  return entries.filter((entry) => entry.system === true || entry.source === "session" || entry.source === "system");
+}
+
+export function notificationFromAlert(alert) {
+  return {
+    severity: alert.system ? "info" : "warn",
+    title: alert.title,
+    message: alert.message,
+    source: alert.source,
+    system: alert.system === true
+  };
+}
+
 export function unreadNotifications(entries = []) {
   return entries.filter((entry) => entry.unread).length;
 }

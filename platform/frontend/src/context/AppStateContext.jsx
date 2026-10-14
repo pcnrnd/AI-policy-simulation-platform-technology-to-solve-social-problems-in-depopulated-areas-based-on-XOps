@@ -5,7 +5,7 @@ import { RETRAIN_PIPELINES, MODEL_STORE } from "../constants/models.js";
 import { apiGet, apiSend } from "../lib/api.js";
 import { MOCK_DATA_STORAGE_KEY, readMockDataVisible } from "../lib/demoVisibility.js";
 import { consumeSessionExpired } from "../lib/sessionGate.js";
-import { retainRealAlerts, unreadNotifications, detectDemoDrift } from "../lib/demoAlerts.js";
+import { retainRealAlerts, retainModeIndependentAlerts, notificationFromAlert, unreadNotifications, detectDemoDrift } from "../lib/demoAlerts.js";
 import { setDataMode, dataModeEpoch } from "../lib/dataMode.js";
 import { getRealdataToken } from "../components/realdata/realdataClient.jsx";
 
@@ -185,8 +185,8 @@ export function AppStateProvider({ children }) {
     setDriftInjected(false);
     setDriftChecking(false);
     driftCheckEpochRef.current = null;
-    setAlerts([]);
-    setNotifications([]);
+    setAlerts(retainModeIndependentAlerts);
+    setNotifications(retainModeIndependentAlerts);
     setConsoleLogs([]);
     demoVisibleRef.current = next;
     setMockDataVisible(next);
@@ -321,7 +321,7 @@ export function AppStateProvider({ children }) {
       setAlerts((prev) => [...prev, entry]);
       setTimeout(() => dismissAlert(id), ALERT_AUTO_DISMISS_MS);
       // 팝업으로 띄운 경보는 벨 알림 이력에도 적재
-      pushNotification({ severity: alert.system ? "info" : "warn", title: alert.title, message: alert.message, source: alert.source });
+      pushNotification(notificationFromAlert(alert));
     },
     [dismissAlert, pushNotification]
   );
@@ -332,6 +332,7 @@ export function AppStateProvider({ children }) {
       showAlert({
         title: "다시 로그인했습니다",
         message: "세션이 만료되어 로그인 화면을 거쳤습니다. 이어서 작업하세요.",
+        source: "session",
         system: true
       });
     }
