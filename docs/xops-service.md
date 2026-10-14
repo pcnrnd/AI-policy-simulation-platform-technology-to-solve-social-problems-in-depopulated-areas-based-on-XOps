@@ -102,7 +102,8 @@ python -m pytest tests/ --cov=src --cov-report=term-missing   # 80% 게이트
   실패 시 스텁으로 degrade). 쓰기는 본문 값 있는 POST/PUT/PATCH·filter 있는 PUT/PATCH/DELETE 만
   실행하고 값은 전부 드라이버 파라미터로 바인딩한다 — 조건 미충족이면 종전 결정적 스텁 유지.
 - **실데이터**: ds_08(전국 시군구 경계 251, PostGIS)·ds_09(남원·신안 사회복지시설 17, PostgreSQL)는
-  `platform/data/real/` 원본을 `platform/scripts/load_real_data.py` 로 적재한 실제 공공데이터다.
+  로컬의 ignored `platform/data/real/` 원본을 `platform/scripts/load_real_data.py` 로 적재한 실제 공공데이터다.
+  신규 clone에는 원본이 없으며 보존·재현 절차는 [저장소 데이터 정책](repository-data-policy.md)을 따른다.
 
 ### 4.2 MLOps 모니터링 (`src/mlops/monitoring/`)
 
@@ -290,7 +291,7 @@ python -m pytest tests/ --cov=src --cov-report=term-missing   # 80% 게이트
   계층(backends.py)으로 채우고 compose 에 실 저장소 3종을 편성했다. 읽기·쓰기(파라미터 바인딩)
   모두 실 저장소를 관통하며, DSN·드라이버 부재 시 In-Memory 로 degrade 하는 이중 구조는 유지된다.
   실데이터 2건(행정구역경계 251·사회복지시설 17)도 적재·카탈로그 등록됐다(ds_08·ds_09,
-  `platform/data/real/README.md`).
+  [저장소 데이터 정책](repository-data-policy.md)).
 - ~~compose 실물 기동 검증~~ → **완료.** §11 참조.
 - MLflow/MinIO 는 재학습 파이프라인 실물화(SQLite 레지스트리 + 로컬 아티팩트) 때 **의도적으로
-  도입하지 않았다** — 필요 시 `registry.py` provider seam 에 어댑터로 끼운다(체크리스트 참조).
+  도입하지 않았다** — 필요 시 `registry.py` provider seam 에 어댑터로 끼운다(로컬 보존 체크리스트 참조).
