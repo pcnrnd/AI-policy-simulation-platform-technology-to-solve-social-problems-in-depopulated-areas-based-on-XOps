@@ -17,15 +17,16 @@ import NextStepBanner from "../components/NextStepBanner.jsx";
 import PerfBadge from "../components/PerfBadge.jsx";
 import GaugeChart from "../components/GaugeChart.jsx";
 import { useAppState } from "../context/AppStateContext.jsx";
+import { dataModeEpoch } from "../lib/dataMode.js";
 import { useChartTheme } from "../hooks/useChartTheme.js";
 import { useRenderTiming } from "../lib/perf.js";
-import { MODEL_REGISTRY, RETRAIN_PIPELINES } from "../constants/models.js";
+import { MODEL_REGISTRY } from "../constants/models.js";
 import InfoTip from "../components/InfoTip.jsx";
 import RealdataEvaluationPanel from "../components/realdata/RealdataEvaluationPanel.jsx";
 import { getRealdataToken } from "../components/realdata/realdataClient.jsx";
 import { apiGet, apiSend } from "../lib/api.js";
 
-// 드리프트 자동 재학습 대상 — 인구이동 예측 모델(백엔드 오케스트레이션 시드 id).
+// 데모 분포 표시 대상 — 인구이동 예측 모델(백엔드 시드 id).
 // PSI·이상값·예측 지연 값 자체는 이 모델 하나만 관측한다(대상 모델 선택과 무관, 값 확장은 별도 결정 사항).
 const DRIFT_MODEL_ID = "population-forecast";
 
@@ -130,12 +131,8 @@ export default function MonitorPage() {
     driftInjected,
     metricOverrides,
     modelStore,
-    pipelineRunning,
-    pipelineScheduled,
-    pipelineRun,
-    pipelineResult,
+    driftChecking,
     injectDrift,
-    startPipeline,
     navigateToTab,
     addConsoleLog,
     setMonitorCollectStatus,
@@ -226,6 +223,8 @@ export default function MonitorPage() {
 
   const loadMonitoringData = useCallback(() => {
     const requestId = ++monitoringRequestRef.current;
+    const epoch = dataModeEpoch();
+    const isCurrent = () => requestId === monitoringRequestRef.current && epoch === dataModeEpoch();
     setMonitoringLoading(true);
     setMonitoringError(null);
     // model_id 를 함께 보내 백엔드가 실측(SQLite 실행 이력·학습 아티팩트)을 먼저 찾게 한다.
@@ -243,27 +242,29 @@ export default function MonitorPage() {
       })
     ])
       .then(([m, s]) => {
-        if (requestId !== monitoringRequestRef.current) return;
+        if (!isCurrent()) return;
         setMetricsResp(m);
         setShapResp(s);
         setLastCollected(new Date());
       })
       .catch((err) => {
-        if (requestId !== monitoringRequestRef.current) return;
+        if (!isCurrent()) return;
         setMetricsResp(null);
         setShapResp(null);
         setMonitoringError(err?.message ?? "모니터링 서버에 연결할 수 없습니다.");
         addConsoleLog(`ERROR: 모니터링 지표 로드 실패 — ${err?.message ?? "알 수 없는 오류"}`);
       })
       .finally(() => {
-        if (requestId === monitoringRequestRef.current) setMonitoringLoading(false);
+        if (isCurrent()) setMonitoringLoading(false);
       });
   }, [addConsoleLog, modelTarget, mockDataVisible, realdataToken, windowHours]);
 
   // 백엔드 PSI/KL 판정 재조회(표시 전용) — driftInjected 변경 효과와 [다시 시도] 버튼이 같은 경로를 쓴다.
-  // 재학습 발화는 injectDrift → 오케스트레이션 이벤트 경로가 단독 담당(중복 트리거 방지).
+  // 데모 판정은 읽기 전용이다. 등록 파이프라인 실행은 오케스트레이터에서 별도로 선택한다.
   const loadDriftData = useCallback(() => {
     const requestId = ++driftRequestRef.current;
+    const epoch = dataModeEpoch();
+    const isCurrent = () => requestId === driftRequestRef.current && epoch === dataModeEpoch();
     setDriftResp(null);
     setDriftStatus("pending");
     return apiGet("/api/v3/monitoring/drift", {
@@ -277,12 +278,12 @@ export default function MonitorPage() {
       }
     })
       .then((d) => {
-        if (requestId !== driftRequestRef.current) return;
+        if (!isCurrent()) return;
         setDriftResp(d);
         setDriftStatus("ok");
       })
       .catch((err) => {
-        if (requestId !== driftRequestRef.current) return;
+        if (!isCurrent()) return;
         setDriftResp(null);
         setDriftStatus("error");
         addConsoleLog(`ERROR: 드리프트 조회 실패 — ${err.message}`);
@@ -705,111 +706,22 @@ export default function MonitorPage() {
 
   // 수집 상태 — 성능·설명 API 결과와 문구를 일치시킨다(실패 시 데이터 소스 정상 수신을 주장하지 않음).
   // 색상 외 아이콘 형태로도 상태를 구분한다(§9 A11Y-06 · §10 UI-01).
-  // 드리프트 액션 — 파이프라인 진행/종료 상태를 따른다. driftInjected만으로 '진행 중'을 주장하면
-  // 실패·롤백·반려·조정으로 종료된 뒤에도 버튼이 잠긴 채 남는다.
-  const TERMINAL_RESULT_LABELS = {
-    failed: "실행 실패",
-    rolled_back: "자동 롤백",
-    rejected: "승급 반려",
-    debounced: "실행 조정"
-  };
-  // 파이프라인 상태는 전역 1개뿐이므로 대상 모델을 확인한다.
-  // 다른 모델(생활인구·정주여건) 실행 결과가 이 화면의 드리프트 종료 배너·재시도를 가로채면 안 된다.
-  const driftPipeline = RETRAIN_PIPELINES.find((p) => p.model === DRIFT_MODEL_ID) ?? RETRAIN_PIPELINES[0];
-  const isDriftRun = pipelineRun?.model === DRIFT_MODEL_ID;
-  // 예약(pipelineScheduled)은 injectDrift만 세우므로 항상 드리프트 대응이다(이때 pipelineRun은 아직 이전 실행일 수 있음).
-  const driftInFlight = pipelineScheduled || (pipelineRunning && isDriftRun);
-  const otherRunInFlight = pipelineRunning && !driftInFlight;
-  const terminalState =
-    !pipelineRunning && !pipelineScheduled && isDriftRun && pipelineResult && pipelineResult.state !== "succeeded"
-      ? pipelineResult.state
-      : null;
-  const terminalLabel = terminalState
-    ? TERMINAL_RESULT_LABELS[terminalState] ?? `미승급(${terminalState})`
-    : null;
-  const terminalReason = terminalState
-    ? pipelineResult?.reason ?? pipelineResult?.deploy?.reason ?? pipelineResult?.evaluation?.reason ?? ""
-    : "";
-  // 승급 후에는 운영 버전이 등록 후보와 같아져 재학습이 시작되지 않는다(startPipeline 조기 반환).
-  // 이 경우 실행되지 않을 버튼 대신 사유와 다음 행동(오케스트레이터의 후보 등록)을 안내한다(§10 UI-04).
-  const driftServingVersion = servingVersionOf(DRIFT_MODEL_ID, driftPipeline.baseVersion);
-  // 후보 버전은 백엔드 레지스트리(next_version)가 정한다. 프런트 상수(candidateVersion)는 승급
-  // 한 번이면 운영 버전과 같아져 버튼이 영구 비활성으로 굳는다 — 응답 전에만 상수로 폴백한다.
-  const driftCandidateVersion =
-    modelCandidates?.[DRIFT_MODEL_ID]?.nextVersion ?? driftPipeline.candidateVersion;
-  const candidateAvailable = driftServingVersion !== driftCandidateVersion;
-  // 재학습 이력의 트리거는 실제 사유와 일치해야 한다. 드리프트 미감지 상태의 재시도까지
-  // 드리프트/PSI로 기록하면 백엔드 트리거 분류(drift/manual)와 콘솔 로그가 모두 거짓이 된다.
-  const retryLabel = driftInjected ? "드리프트 대응 재학습 재시도" : "수동 재학습 재시도";
-  const retryRetrain = () =>
-    startPipeline(
-      driftInjected ? "드리프트 자동 감지 (PSI 임계 0.20 초과) 재시도" : "모니터 화면 수동 재시도",
-      driftPipeline
-    );
-  const buildDriftAction = () => {
-    // 드리프트 시뮬레이션은 시드 분포(PSI 0.384)·시드 파이프라인을 재현하는 **데모 장치**다.
-    // 데모 표시 OFF에서 눌리면 PSI 카드는 "판정 없음"인데 배너·로그·벨 알림만 드리프트를
-    // 단언하는 모순이 생기므로 잠근다. 실데이터 드리프트는 아래 실데이터 평가 패널이 담당한다.
-    if (!allowSeed) {
-      return {
-        icon: "fa-vial-circle-check",
-        label: "이상 시나리오 재현 (데모 전용)",
-        locked: true,
-        run: undefined,
-        title: "설정에서 데모 데이터 표시를 켜면 실행할 수 있습니다."
-      };
-    }
-    if (driftInFlight) {
-      return {
-        icon: "fa-hourglass-half",
-        label: "드리프트 대응 진행 중...",
-        locked: true,
-        run: undefined,
-        title: "재학습 파이프라인이 실행 중입니다. 오케스트레이터 탭에서 단계를 확인할 수 있습니다."
-      };
-    }
-    // 다른 모델 실행 중에는 드리프트 시뮬레이션이 시작되지 않는다(injectDrift가 조기 반환) — 사유를 밝힌다.
-    if (otherRunInFlight) {
-      return {
-        icon: "fa-hourglass-half",
-        label: "다른 재학습 실행 중...",
-        locked: true,
-        run: undefined,
-        title: `${pipelineRun?.pipelineName ?? "다른 모델"} 파이프라인이 실행 중입니다. 완료 후 드리프트 시뮬레이션을 실행할 수 있습니다.`
-      };
-    }
-    if (!candidateAvailable) {
-      return {
-        icon: "fa-circle-info",
-        label: "오케스트레이터에서 후보 확인",
-        locked: false,
-        run: () => navigateToTab("tab-mlops-orch"),
-        title: `${driftPipeline.name}은 현재 운영 버전(${driftServingVersion})과 백엔드 후보 버전(${driftCandidateVersion})이 같아 실행할 수 없습니다. 오케스트레이터 탭으로 이동해 파이프라인·Model Store 상태를 확인합니다.`
-      };
-    }
-    if (terminalState || driftInjected) {
-      return {
-        icon: "fa-rotate-right",
-        label: retryLabel,
-        locked: false,
-        run: retryRetrain,
-        title: driftInjected
-          ? `${terminalLabel ? `직전 재학습 종료 상태: ${terminalLabel}. ` : ""}감지된 드리프트(PSI 임계 초과)에 대한 재학습을 다시 실행합니다.`
-          : `직전 재학습 종료 상태: ${terminalLabel}. 드리프트가 감지되지 않은 상태이므로 수동 실행으로 기록됩니다.`
-      };
-    }
-    return {
-      icon: "fa-vial-circle-check",
-      label: "이상 시나리오 재현 (드리프트 시뮬레이션)",
-      locked: false,
-      run: injectDrift,
-      title: "드리프트 유입 상황을 재현하여 감지 → 알림 → 자동 재학습 파이프라인을 검증합니다"
-    };
-  };
-  const driftAction = buildDriftAction();
+  // 시드 분포의 PSI/KL 판정만 재현한다. 기존 seed 모델을 재학습·승급하지 않는다.
+  const driftAction = !allowSeed
+    ? { icon: "fa-vial-circle-check", label: "이상 시나리오 재현 (데모 전용)", locked: true,
+        title: "설정에서 데모 데이터 표시를 켜면 실행할 수 있습니다." }
+    : driftChecking
+      ? { icon: "fa-hourglass-half", label: "데모 분포 판정 중...", locked: true,
+          title: "백엔드에서 데모 분포의 PSI/KL을 계산하고 있습니다." }
+      : driftInjected
+        ? { icon: "fa-diagram-project", label: "등록 파이프라인 확인", locked: false,
+            run: () => navigateToTab("tab-mlops-orch"),
+            title: "등록한 모델과 학습데이터를 확인한 뒤 실행할 파이프라인을 선택하세요." }
+        : { icon: "fa-vial-circle-check", label: "이상 시나리오 재현 (드리프트 시뮬레이션)", locked: false,
+            run: injectDrift, title: "데모 분포의 PSI/KL 판정과 경보를 확인합니다." };
 
   // 진행 중에도 마운트를 유지해야 키보드 초점이 버튼에 남는다(native disabled는 초점을 body로 떨어뜨림).
-  // ref 가드: 같은 틱의 연타는 state 갱신 전이라 파이프라인 상태로 막을 수 없다(중복 오케스트레이션 요청 방지).
+  // ref 가드: 같은 틱의 연타가 데모 판정 요청을 중복해서 보내지 않게 한다.
   const handleDriftAction = () => {
     if (driftAction.locked || driftBusyRef.current) return;
     driftBusyRef.current = true;
@@ -956,7 +868,7 @@ export default function MonitorPage() {
 
   return (
     <>
-      {/* 운영 툴바 — 수집 상태 + 이상 시나리오 재현(드리프트 → 자동 재학습 검증) */}
+      {/* 운영 툴바 — 수집 상태 + 데모 분포의 드리프트 판정·경보 */}
       <div className="monitor-toolbar">
         <span className="monitor-collected" ref={collectRef} tabIndex={-1}>
           <i
@@ -998,7 +910,7 @@ export default function MonitorPage() {
           style={{ padding: "6px 14px", fontSize: 12 }}
           onClick={handleDriftAction}
           aria-disabled={driftAction.locked}
-          aria-busy={driftInFlight}
+          aria-busy={driftChecking}
           title={driftAction.title}
         >
           <i className={`fa-solid ${driftAction.icon}`} aria-hidden="true"></i> {driftAction.label}
@@ -1007,21 +919,6 @@ export default function MonitorPage() {
       </div>
       {/* 상태 안내 슬롯 — 배너가 붙고 떨어져도 아래 지표 카드가 위아래로 밀리지 않도록 높이를 예약한다(§11 상태 전환) */}
       <div className="monitor-state-slot">
-        {terminalLabel && (
-          <p
-            className={`async-feedback is-${terminalState === "failed" || terminalState === "rolled_back" ? "error" : "pending"}`}
-            role={terminalState === "failed" || terminalState === "rolled_back" ? "alert" : "status"}
-            aria-live={terminalState === "failed" || terminalState === "rolled_back" ? "assertive" : "polite"}
-          >
-            재학습 파이프라인이 종료되었습니다 — 결과: {terminalLabel}
-            {terminalReason ? ` · ${terminalReason}` : ""}.{" "}
-            {driftInjected
-              ? `드리프트 감지 상태는 유지됩니다. 상단 [${retryLabel}] 버튼에서 다시 실행할 수 있습니다.`
-              : `드리프트가 감지되지 않은 실행이므로 상단 [${retryLabel}] 버튼은 수동 실행으로 기록됩니다.`}
-          </p>
-        )}
-        {/* 후보 부재 안내문은 화면에서 제거했다(UI 피드백 #1). 같은 내용은 상단 실행 버튼의 title에
-            남아 있고, 이 슬롯의 종료 안내·liveStatus가 role=status/alert 알림 자리를 계속 맡는다. */}
         {liveStatus && (
           <div
             className={`async-feedback is-${liveStatus.tone}`}
@@ -1046,20 +943,10 @@ export default function MonitorPage() {
         )}
       </div>
 
-      {/* 드리프트 이후의 다음 단계 — 재학습 진행/결과는 오케스트레이터 탭에서 확인한다.
-          문구는 위 드리프트 판정(driftInFlight/otherRunInFlight)을 그대로 따른다. 다른 모델의 수동 실행까지
-          '드리프트 대응 자동 재학습'으로 부르면 안 되므로 그때는 중립 문구를 쓴다.
-          상태 안내 슬롯(.monitor-state-slot)은 목업 가림 대상이라 그 밖에 둔다. */}
-      {(driftInjected || driftInFlight || otherRunInFlight) && (
+      {driftInjected && (
         <NextStepBanner
-          tone={driftInjected || driftInFlight ? "warn" : "info"}
-          message={
-            driftInFlight
-              ? "드리프트 대응 자동 재학습이 진행 중입니다"
-              : driftInjected
-                ? "드리프트 감지 상태가 남아 있습니다 — 직전 재학습 결과를 확인하세요"
-                : "파이프라인 실행 중 — 오케스트레이터에서 진행 확인"
-          }
+          tone="warn"
+          message="데모 분포에서 드리프트를 감지했습니다 — 등록한 모델과 파이프라인을 확인하세요"
           actionLabel="오케스트레이터에서 보기"
           targetTab="tab-mlops-orch"
         />
@@ -1097,7 +984,7 @@ export default function MonitorPage() {
               text={
                 driftUsable?.source === "realdata"
                   ? `실데이터 대표 피처 ${driftUsable.feature}의 학습 구간 대비 ${driftUsable.kind === "operational" ? "학습 이후 관측" : "검증"} 구간 PSI입니다. 0.2를 초과하면 분포 변화로 판정합니다.`
-                  : "PSI(Population Stability Index)는 원본 학습 분포와 실시간 유입 분포의 차이를 측정합니다. 0.2를 초과하면 데이터 드리프트로 판정해 자동 재학습을 트리거합니다."
+                  : "PSI는 기준 분포와 현재 분포의 차이를 계산합니다. 데모 입력은 시드 분포이며, PSI/KL 임계 초과 경보를 확인한 뒤 등록한 파이프라인을 선택해 수동 실행합니다."
               }
             />
           </div>

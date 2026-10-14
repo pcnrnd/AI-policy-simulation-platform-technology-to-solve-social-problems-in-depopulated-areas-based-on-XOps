@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { retainRealAlerts, unreadNotifications } from "./demoAlerts.js";
+import { retainRealAlerts, unreadNotifications, detectDemoDrift } from "./demoAlerts.js";
+import { setDataMode, dataModeEpoch } from "./dataMode.js";
 
 const demo = { id: 1, source: "demo", title: "드리프트", unread: true };
 const real = { id: 2, source: "real", title: "실측 경보", unread: true };
@@ -11,4 +12,22 @@ assert.equal(unreadNotifications(retained), 2);
 assert.equal(unreadNotifications(retained.map((entry) => ({ ...entry, unread: false }))), 0);
 assert.deepEqual(retainRealAlerts(retained), retained);
 assert.deepEqual(retainRealAlerts([demo]), []);
+const calculated = { source: "seed", drifted: true, psi: 0.4, kl: 0.2, psi_threshold: 0.2, kl_threshold: 0.1 };
+const detected = [];
+await detectDemoDrift({ loadDrift: async () => calculated, isCurrent: () => true, onDetected: (_, alert) => detected.push(alert) });
+assert.equal(detected.length, 1);
+assert.equal(detected[0].source, "demo");
+assert.match(detected[0].message, /PSI 0.4.*임계 0.2/);
+await detectDemoDrift({ loadDrift: async () => ({ ...calculated, psi: 0.01, kl: 0.01 }), isCurrent: () => true, onDetected: () => assert.fail("임계 미만 경보") });
+await assert.rejects(detectDemoDrift({ loadDrift: async () => ({ source: null }), isCurrent: () => true, onDetected: () => assert.fail("판정 없는 경보") }));
+setDataMode("mock");
+const epoch = dataModeEpoch();
+let finish;
+const pending = detectDemoDrift({ loadDrift: () => new Promise((resolve) => { finish = resolve; }),
+  isCurrent: () => epoch === dataModeEpoch(), onDetected: () => assert.fail("이전 모드 응답이 경보/로그를 복원") });
+setDataMode("real");
+setDataMode("mock");
+finish(calculated);
+await pending;
+await detectDemoDrift({ loadDrift: () => assert.fail("real 모드에서 mock 요청"), isCurrent: () => false, onDetected: () => assert.fail("real 경보") });
 console.log("demoAlerts: 데모 OFF에서 데모 경보만 제거·실측 경보와 읽음 상태 보존 PASS");
