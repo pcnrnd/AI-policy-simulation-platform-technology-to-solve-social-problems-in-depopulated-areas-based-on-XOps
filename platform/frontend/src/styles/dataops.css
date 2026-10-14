@@ -713,3 +713,6 @@
     grid-column: 1 / -1;
   }
 }
+.training-dataset-table { table-layout: fixed; width: 100%; }
+.training-dataset-table th, .training-dataset-table td { padding: 12px 8px; white-space: nowrap; }
+.training-dataset-table td > span { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
