@@ -14,6 +14,7 @@ from src.core.db import init_db
 from src.core.exceptions import register_exception_handlers
 from src.core.logger import get_logger
 from src.core.settings import get_settings
+from src.modelops.store import init_db as init_modelops_db
 
 
 def create_app() -> FastAPI:
@@ -21,6 +22,7 @@ def create_app() -> FastAPI:
     settings = get_settings()
     settings.validate_runtime()  # prod 기본 시크릿 사용 시 기동 거부
     init_db()  # SQLite 테이블 준비 (사용자 소스·모델 버전·실행 이력)
+    init_modelops_db()
     get_logger().info(f"xops-service 기동 env={settings.environment} prefix={settings.api_prefix}")
     app = FastAPI(title="xops-service", version="0.1.0")
 
