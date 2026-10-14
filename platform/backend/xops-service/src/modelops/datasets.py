@@ -52,6 +52,10 @@ def register(mode: str, body: dict[str, Any], actor: str) -> dict[str, Any]:
         keys = [(row.get("base_ym"), row.get("dong_code")) for row in record.rows]
         if len(keys) != len(set(keys)) or any(not month or not dong for month, dong in keys):
             raise HTTPException(400, "중복된 지역·기간 또는 누락된 항목을 확인하세요.")
+        if record.row_count != len(record.rows) or record.observed_from != min(month for month, _ in keys) or record.observed_to != max(month for month, _ in keys):
+            raise HTTPException(400, "학습데이터의 기간과 행 수를 확인하세요.")
+        if any(row.get("y") is not None and (isinstance(row["y"], bool) or not isinstance(row["y"], (int, float)) or not math.isfinite(row["y"])) for row in record.rows):
+            raise HTTPException(400, "학습 대상 수치를 확인하세요.")
         document = asdict(record)
         features = feature_names(record)
         row_count = record.row_count
