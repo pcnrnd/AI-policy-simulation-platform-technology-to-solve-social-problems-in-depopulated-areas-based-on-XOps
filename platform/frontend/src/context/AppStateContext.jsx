@@ -5,6 +5,7 @@ import { RETRAIN_PIPELINES, MODEL_STORE } from "../constants/models.js";
 import { apiGet, apiSend } from "../lib/api.js";
 import { MOCK_DATA_STORAGE_KEY, readMockDataVisible } from "../lib/demoVisibility.js";
 import { consumeSessionExpired } from "../lib/sessionGate.js";
+import { retainRealAlerts, unreadNotifications } from "../lib/demoAlerts.js";
 import { getRealdataToken } from "../components/realdata/realdataClient.jsx";
 
 const AppStateContext = createContext(null);
@@ -146,7 +147,9 @@ export function AppStateProvider({ children }) {
   const [alerts, setAlerts] = useState([]);
   // 헤더 벨 알림 이력 — 팝업과 달리 사라지지 않고 최근 N건 보존
   const [notifications, setNotifications] = useState([]);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const unreadCount = unreadNotifications(notifications);
+  const demoVisibleRef = useRef(mockDataVisible);
+  demoVisibleRef.current = mockDataVisible;
 
   const pipelineTimerRef = useRef(null);
   const pipelineRequestRef = useRef(0);
@@ -164,6 +167,18 @@ export function AppStateProvider({ children }) {
       localStorage.setItem(MOCK_DATA_STORAGE_KEY, String(mockDataVisible));
     } catch {
       // 저장공간 초과·프라이빗 모드 등 — 이번 세션 동안은 메모리 상태로 계속 동작
+    }
+  }, [mockDataVisible]);
+
+  useEffect(() => {
+    if (mockDataVisible) return;
+    setDriftInjected(false);
+    setAlerts(retainRealAlerts);
+    setNotifications(retainRealAlerts);
+    if (driftStartTimerRef.current) {
+      clearTimeout(driftStartTimerRef.current);
+      driftStartTimerRef.current = null;
+      setPipelineScheduled(false);
     }
   }, [mockDataVisible]);
 
@@ -256,24 +271,25 @@ export function AppStateProvider({ children }) {
 
   const MAX_NOTIFICATIONS = 8;
   const pushNotification = useCallback((n) => {
+    if (n.source === "demo" && !demoVisibleRef.current) return;
     const now = new Date();
     const time = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
     setNotifications((prev) =>
-      [{ id: Date.now() + Math.random(), time, severity: "info", ...n }, ...prev].slice(0, MAX_NOTIFICATIONS)
+      [{ id: Date.now() + Math.random(), time, severity: "info", unread: true, ...n }, ...prev].slice(0, MAX_NOTIFICATIONS)
     );
-    setUnreadCount((c) => c + 1);
   }, []);
 
-  const markNotificationsRead = useCallback(() => setUnreadCount(0), []);
+  const markNotificationsRead = useCallback(() => setNotifications((prev) => prev.map((n) => ({ ...n, unread: false }))), []);
 
   const showAlert = useCallback(
     (alert) => {
+      if (alert.source === "demo" && !demoVisibleRef.current) return;
       const id = Date.now() + Math.random();
       const entry = { id, ...alert };
       setAlerts((prev) => [...prev, entry]);
       setTimeout(() => dismissAlert(id), ALERT_AUTO_DISMISS_MS);
       // 팝업으로 띄운 경보는 벨 알림 이력에도 적재
-      pushNotification({ severity: alert.system ? "info" : "warn", title: alert.title, message: alert.message });
+      pushNotification({ severity: alert.system ? "info" : "warn", title: alert.title, message: alert.message, source: alert.source });
     },
     [dismissAlert, pushNotification]
   );
@@ -313,6 +329,7 @@ export function AppStateProvider({ children }) {
     async (trigger, pipelineDef) => {
       const pl = pipelineDef ?? RETRAIN_PIPELINES[0];
       const triggerLabel = typeof trigger === "string" ? trigger : "수동 실행";
+      const notificationSource = triggerLabel.includes("드리프트 자동 감지") ? "demo" : "real";
       if (pipelineRunning) {
         addConsoleLog("WARN: 이미 실행 중인 재학습 파이프라인이 있어 새 실행을 시작하지 않았습니다.");
         return;
@@ -328,7 +345,7 @@ export function AppStateProvider({ children }) {
       if (currentServing?.version === candidateVersion) {
         const message = `${pl.name}은 현재 운영 버전(${currentServing.version})보다 새로운 후보가 등록되지 않아 실행할 수 없습니다.`;
         addConsoleLog(`WARN: ${message}`);
-        pushNotification({ severity: "warn", title: "재학습 후보 없음", message });
+        pushNotification({ severity: "warn", title: "재학습 후보 없음", message, source: notificationSource });
         return;
       }
       resetPipeline();
@@ -343,6 +360,7 @@ export function AppStateProvider({ children }) {
         candidateVersion,
         experiment: pl.experiment,
         trigger: triggerLabel,
+        source: notificationSource,
         startedAt: `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`
       };
       const requestId = pipelineRequestRef.current;
@@ -394,6 +412,7 @@ export function AppStateProvider({ children }) {
               : "최근 재학습과 간격이 짧아 실행이 조정되었습니다.";
           addConsoleLog(`${backend.state === "rolled_back" ? "WARN" : "INFO"}: ${message}`);
           pushNotification({
+            source: notificationSource,
             severity: backend.state === "rolled_back" ? "warn" : "info",
             title: backend.state === "rolled_back" ? "자동 롤백 수행" : "재학습 결과",
             message
@@ -414,6 +433,7 @@ export function AppStateProvider({ children }) {
           [run.pipelineId]: { runId: run.runId, finishedAt, result: "실패" }
         }));
         pushNotification({
+          source: notificationSource,
           severity: "warn",
           title: "재학습 실행 실패",
           message: `${run.pipelineName} — ${reason}`
@@ -449,6 +469,7 @@ export function AppStateProvider({ children }) {
                 : `ERROR: 알 수 없는 오케스트레이션 상태(${state}) — 승급을 중단했습니다.`;
         addConsoleLog(msg);
         pushNotification({
+          source: pipelineRun?.source,
           severity: state === "failed" || state === "rolled_back" ? "warn" : "info",
           title:
             state === "failed"
@@ -498,6 +519,7 @@ export function AppStateProvider({ children }) {
         `SUCCESS: 승급·배포 완료 — ${pipelineRun?.model ?? "모델"} ${result?.active_version ?? pipelineRun?.candidateVersion} (primary ${result?.evaluation?.primary_metric ?? "-"})`
       );
       pushNotification({
+        source: pipelineRun?.source,
         severity: "success",
         title: "모델 승급·배포 완료",
         message: `${pipelineRun?.pipelineName ?? "재학습"} — 신규 모델(Accuracy ${newAcc ?? "-"})이 SOTA로 승급되어 배포되었습니다.`
@@ -566,12 +588,13 @@ export function AppStateProvider({ children }) {
   ]);
 
   const injectDrift = useCallback(() => {
-    if (pipelineRunning || driftStartTimerRef.current) return;
+    if (!demoVisibleRef.current || pipelineRunning || driftStartTimerRef.current) return;
     setDriftInjected(true);
     setPipelineScheduled(true);
     addConsoleLog("WARN: 데이터 드리프트 심각수준 감지! (PSI 임계 0.20 초과)", false, true);
     addConsoleLog("INFO: MLOps 오케스트레이터가 재학습 자동 스케줄링을 시작합니다...");
     showAlert({
+      source: "demo",
       title: "[경보] 데이터 드리프트 발생",
       message: "실시간 수집 분포 불안정 (PSI 임계 초과). MLOps 오케스트레이터 가동."
     });
