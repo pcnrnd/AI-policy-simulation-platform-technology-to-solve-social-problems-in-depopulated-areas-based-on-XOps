@@ -16,7 +16,7 @@ def test_catalog_modes_are_disjoint_and_override_legacy_include_seed(client, aut
     assert all(row["is_seed"] for row in mock.json())
     assert all(not row["is_seed"] for row in real.json())
     assert not {row["id"] for row in mock.json()} & {row["id"] for row in real.json()}
-    assert client.get("/api/v3/dataops/ds_11_kt_monthly_visitors", headers=mode_headers(auth_headers, "mock")).status_code == 404
+    assert client.get("/api/v3/dataops/ds_11_kt_namwon_monthly_dong_visitors", headers=mode_headers(auth_headers, "mock")).status_code == 404
     assert client.get("/api/v3/dataops/ds_01_resident_registry", headers=mode_headers(auth_headers, "real")).status_code == 404
     # 헤더 없는 기존 클라이언트의 계약은 유지한다.
     all_rows = client.get("/api/v3/dataops/catalog?include_seed=true").json()
@@ -66,9 +66,12 @@ def test_user_sources_and_built_apis_are_bound_to_creation_mode(client, auth_hea
     assert client.delete("/api/v3/dataops/catalog/" + source_id, headers=mock).status_code == 200
 
 
-def test_real_storage_unavailable_does_not_return_stub_rows(client, auth_headers):
-    # 로컬 단위 환경에는 DB가 없다. real에서는 가상 1,248행을 반환하지 않는다.
-    response = client.get("/api/v3/dataops/ds_11_kt_monthly_visitors", headers=mode_headers(auth_headers, "real"))
-    if response.status_code == 200 and response.json()["source_kind"] == "in-memory":
-        assert response.json()["result_rows"] == 0
-        assert response.json()["pagination"]["total"] is None
+def test_real_storage_unavailable_does_not_return_stub_rows(client, auth_headers, monkeypatch):
+    from src.dataops.service import DataService
+    from src.dataops.results import ExecutionResult
+    monkeypatch.setattr(DataService, "_run", staticmethod(lambda **_: ExecutionResult.not_executed("unit unavailable")))
+    response = client.get("/api/v3/dataops/ds_11_kt_namwon_monthly_dong_visitors", headers=mode_headers(auth_headers, "real"))
+    assert response.status_code == 200
+    assert response.json()["source_kind"] == "in-memory"
+    assert response.json()["result_rows"] == 0
+    assert response.json()["pagination"]["total"] is None
