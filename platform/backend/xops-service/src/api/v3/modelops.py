@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends, Header, Query
 from pydantic import BaseModel, Field
 
 from src.api.dependencies import require_auth
-from src.modelops import datasets, service, store
+from src.modelops import datasets, inference, service, store
 
 router = APIRouter(prefix="/modelops", tags=["modelops"])
 Mode = Annotated[Literal["mock", "real"], Header(alias="X-Data-Mode")]
@@ -33,6 +33,16 @@ class PipelineRegistration(InstanceRegistration):
     id: str = Field(min_length=3, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")
     name: str = Field(min_length=1, max_length=120)
     trigger_policy: str = Field(default="수동", max_length=120)
+
+
+class PredictionInput(BaseModel):
+    model_config = {"extra": "forbid"}
+    region_id: str = Field(min_length=1, max_length=128)
+    target: str = Field(min_length=1, max_length=128)
+    dataset_id: str = Field(min_length=1, max_length=128)
+    dataset_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    dong_code: str | None = Field(default=None, max_length=32)
+    adjustments: dict[str, Annotated[float, Field(strict=True, allow_inf_nan=False)]] = Field(default_factory=dict, max_length=30)
 
 
 def _actor(auth: dict[str, Any]) -> str:
@@ -79,6 +89,16 @@ def list_versions(instance_id: str, auth: Read, mode: Mode = "real") -> dict[str
 @router.get("/instances/{instance_id}/versions/{version_id}/artifact")
 def version_artifact(instance_id: str, version_id: str, auth: Read, mode: Mode = "real") -> dict[str, Any]:
     return service.load_artifact(mode, instance_id, version_id)
+
+
+@router.get("/instances/{instance_id}/versions/{version_id}/inputs")
+def inference_inputs(instance_id: str, version_id: str, auth: Read, mode: Mode = "real", dong_code: str | None = Query(None, max_length=32)) -> dict[str, Any]:
+    return inference.inputs(mode, instance_id, version_id, dong_code)
+
+
+@router.post("/instances/{instance_id}/versions/{version_id}/predict")
+def predict_version(instance_id: str, version_id: str, body: PredictionInput, auth: Read, mode: Mode = "real") -> dict[str, Any]:
+    return inference.predict(mode, instance_id, version_id, body.model_dump())
 
 
 @router.post("/instances/{instance_id}/versions/{version_id}/activate")
