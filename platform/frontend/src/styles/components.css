@@ -780,3 +780,32 @@ td.cell-actions {
   border-top-color: transparent;
   border-bottom-color: var(--border-control);
 }
+/* Canvas 밖 범례: 긴 소스명도 카드 폭 안에서 줄바꿈하고 키보드로 표시를 전환한다. */
+.archive-source-legend {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 6px 12px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.archive-source-legend li { min-width: 0; }
+.archive-source-legend button {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  padding: 4px;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.archive-source-legend button[aria-pressed="false"] { opacity: 0.55; text-decoration: line-through; }
+.archive-source-color { flex: 0 0 12px; height: 12px; margin-top: 2px; border-radius: 2px; }
