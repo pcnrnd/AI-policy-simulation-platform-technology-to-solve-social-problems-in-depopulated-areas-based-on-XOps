@@ -1,0 +1,3 @@
+# These scripts execute inside Linux containers even when built from a Windows checkout.
+platform/frontend/docker/*.sh text eol=lf
+platform/frontend/tests/*.sh text eol=lf
