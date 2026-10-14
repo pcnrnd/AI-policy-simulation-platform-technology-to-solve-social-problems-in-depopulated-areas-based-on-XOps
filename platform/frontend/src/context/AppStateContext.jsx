@@ -6,6 +6,7 @@ import { apiGet, apiSend } from "../lib/api.js";
 import { MOCK_DATA_STORAGE_KEY, readMockDataVisible } from "../lib/demoVisibility.js";
 import { consumeSessionExpired } from "../lib/sessionGate.js";
 import { retainRealAlerts, unreadNotifications } from "../lib/demoAlerts.js";
+import { setDataMode, dataModeEpoch } from "../lib/dataMode.js";
 import { getRealdataToken } from "../components/realdata/realdataClient.jsx";
 
 const AppStateContext = createContext(null);
@@ -160,7 +161,32 @@ export function AppStateProvider({ children }) {
     setTabFocusRequest((request) => request + 1);
   }, []);
 
-  const toggleMockDataVisible = useCallback(() => setMockDataVisible((prev) => !prev), []);
+  const toggleMockDataVisible = useCallback(() => {
+    const next = !demoVisibleRef.current;
+    setDataMode(next ? "mock" : "real");
+    pipelineRequestRef.current += 1;
+    if (driftStartTimerRef.current) clearTimeout(driftStartTimerRef.current);
+    if (pipelineTimerRef.current) clearTimeout(pipelineTimerRef.current);
+    driftStartTimerRef.current = null;
+    pipelineTimerRef.current = null;
+    setPipelineRunning(false);
+    setPipelineScheduled(false);
+    setPipelineStep(0);
+    setPipelineRun(null);
+    setPipelineResult(null);
+    setPipelineHistory({});
+    setMetricOverrides({});
+    setModelCandidates({});
+    setModelStore(next ? MODEL_STORE : []);
+    setOverviewSummary(null);
+    setMonitorCollectStatus("unknown");
+    setDriftInjected(false);
+    setAlerts([]);
+    setNotifications([]);
+    setConsoleLogs([]);
+    demoVisibleRef.current = next;
+    setMockDataVisible(next);
+  }, []);
 
   useEffect(() => {
     try {
@@ -200,8 +226,10 @@ export function AppStateProvider({ children }) {
   // 운영 버전과 같아지고, startPipeline 의 "후보 없음" 가드가 영구히 참이 되어 재실행이 잠긴다.
   // 데모 표시 OFF면 시드 지표 모델(metrics_source="seed")을 빼고 받는다 — 목록 계약은 카탈로그와 같다.
   const syncModels = useCallback(() => {
+    const requestEpoch = dataModeEpoch();
     return apiGet(`/api/v3/orchestration/models?include_seed=${mockDataVisible}`)
       .then((models) => {
+        if (requestEpoch !== dataModeEpoch()) return;
         if (!Array.isArray(models)) return;
         setModelCandidates(
           Object.fromEntries(

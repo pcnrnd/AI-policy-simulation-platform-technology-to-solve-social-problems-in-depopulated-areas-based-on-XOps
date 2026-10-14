@@ -8,10 +8,11 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 
 from src.api.dependencies import optional_auth, require_auth
 from src.core import db
+from src.core.data_mode import current_mode
 from src.core.exceptions import SourceNotFoundError
 from src.mlops.monitoring import realdata_bridge
 from src.mlops.orchestration.registry import RUNNING_STATE, get_registry, recover_stale_runs
@@ -50,7 +51,7 @@ def list_models(
     auth: dict[str, Any] | None = _OPTIONAL_AUTH,
 ) -> list[dict[str, Any]]:
     """등록된 운영 모델과 현재 버전/지표."""
-    rows = get_registry().models(include_seed=include_seed)
+    rows = [] if current_mode() == "real" else get_registry().models(include_seed=include_seed)
     if _with_realdata(include_seed, auth):
         rows = rows + realdata_bridge.models()
     return rows
@@ -63,7 +64,7 @@ def list_pipelines(
     auth: dict[str, Any] | None = _OPTIONAL_AUTH,
 ) -> list[dict[str, Any]]:
     """등록된 재학습 파이프라인 (등록이 없으면 빈 목록)."""
-    rows = get_registry().pipelines(include_seed=include_seed)
+    rows = [] if current_mode() == "real" else get_registry().pipelines(include_seed=include_seed)
     if _with_realdata(include_seed, auth):
         rows = rows + realdata_bridge.pipelines()
     return rows
@@ -72,6 +73,7 @@ def list_pipelines(
 @router.post("/pipelines", status_code=201)
 def register_pipeline(body: PipelineCreateRequest, _: dict[str, Any] = _WRITE_AUTH) -> dict[str, Any]:
     """재학습 파이프라인 등록 → SQLite 영속화."""
+    _guard_legacy_write()
     return get_registry().register_pipeline(
         {**body.model_dump(), "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
     )
@@ -80,6 +82,7 @@ def register_pipeline(body: PipelineCreateRequest, _: dict[str, Any] = _WRITE_AU
 @router.delete("/pipelines/{pipeline_id}")
 def delete_pipeline(pipeline_id: str, _: dict[str, Any] = _WRITE_AUTH) -> dict[str, str]:
     """등록 파이프라인 삭제. 실행 이력은 보존한다."""
+    _guard_legacy_write()
     get_registry().delete_pipeline(pipeline_id)
     return {"deleted": pipeline_id}
 
@@ -89,6 +92,7 @@ def run_pipeline(
     pipeline_id: str, body: PipelineRunRequest | None = None, _: dict[str, Any] = _WRITE_AUTH
 ) -> dict[str, Any]:
     """등록 파이프라인 실행 접수 — `/events` 와 같은 백그라운드 경로(모델별 락을 함께 쓴다)."""
+    _guard_legacy_write()
     registry = get_registry()
     pipeline = registry.get_pipeline(pipeline_id)
     request = body or PipelineRunRequest()
@@ -109,7 +113,7 @@ def list_runs(
     auth: dict[str, Any] | None = _OPTIONAL_AUTH,
 ) -> list[dict[str, Any]]:
     """파이프라인 실행 이력 (최신 우선)."""
-    rows = list(reversed(get_registry().runs(pipeline_id, include_seed=include_seed)))
+    rows = [] if current_mode() == "real" else list(reversed(get_registry().runs(pipeline_id, include_seed=include_seed)))
     if _with_realdata(include_seed, auth):
         rows = rows + realdata_bridge.runs(pipeline_id)
     return rows
@@ -118,7 +122,7 @@ def list_runs(
 @router.get("/runs/{run_id}")
 def get_run(run_id: str) -> dict[str, Any]:
     """실행 하나의 현재 상태 — 접수(202) 뒤 종결까지 폴링하는 경로."""
-    run = db.get_run(run_id)
+    run = None if current_mode() == "real" else db.get_run(run_id)
     if run is None:
         raise SourceNotFoundError(f"실행 기록을 찾을 수 없습니다: {run_id}")
     return run
@@ -127,7 +131,7 @@ def get_run(run_id: str) -> dict[str, Any]:
 @router.get("/runs/{run_id}/logs")
 def get_run_logs(run_id: str, auth: dict[str, Any] | None = _OPTIONAL_AUTH) -> dict[str, Any]:
     """실행 하나의 저장된 로그 라인. 실데이터 job은 job 레코드의 상태 전이를 라인으로 만든다."""
-    run = db.get_run(run_id)
+    run = None if current_mode() == "real" else db.get_run(run_id)
     if run is None:
         if auth is not None:
             realdata = realdata_bridge.run_logs(run_id)
@@ -144,6 +148,7 @@ def trigger_event(body: EventRequest, _: dict[str, Any] = _WRITE_AUTH) -> dict[s
     학습·평가·배포가 요청 스레드를 붙잡지 않고, 진행 중 상태가 저장돼 프로세스가 죽어도
     실행 흔적이 남는다(기동 시 `recover_stale_runs`가 마감).
     """
+    _guard_legacy_write()
     run_id = get_registry().start_trigger(
         model_id=body.model_id,
         trigger=body.trigger,
@@ -152,3 +157,8 @@ def trigger_event(body: EventRequest, _: dict[str, Any] = _WRITE_AUTH) -> dict[s
         pipeline_id=body.pipeline_id,
     )
     return db.get_run(run_id) or {"run_id": run_id, "state": RUNNING_STATE}
+
+
+def _guard_legacy_write() -> None:
+    if current_mode() == "real":
+        raise HTTPException(400, "등록된 실데이터 학습 파이프라인을 선택하세요.")

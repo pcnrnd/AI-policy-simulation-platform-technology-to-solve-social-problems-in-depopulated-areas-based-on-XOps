@@ -1346,7 +1346,7 @@ export default function MonitorPage() {
       </Card>
 
       {/* 실데이터 연계(R4) — 남원 모델 검증/운영 평가·선형 SHAP·드리프트. 위 데모 지표와는 별개 경로. */}
-      <RealdataEvaluationPanel />
+      {!mockDataVisible && <RealdataEvaluationPanel />}
     </>
   );
 }

@@ -15,6 +15,7 @@ from typing import Any, Protocol
 
 from src.core.logger import get_logger
 from src.core.settings import get_settings
+from src.core.data_mode import current_mode
 from src.dataops.results import ExecutionRequest, ExecutionResult
 
 _logger = get_logger("xops.dataops.adapter")
@@ -88,6 +89,8 @@ def get_adapter(schema: dict[str, Any]) -> QueryAdapter:
     import 실패(선택 의존성 미설치)와 DSN 부재를 모두 degrade 사유로 취급한다.
     """
     name = adapter_of(schema)
+    if current_mode() == "mock":
+        return InMemoryAdapter(name, "데모 모드의 가상 데이터입니다.")
     dsn = dsn_for(schema)
     if not dsn:
         return InMemoryAdapter(name)

@@ -2,6 +2,7 @@
 // base가 빈값이면 상대경로(/api/v3/...)로 요청 → dev는 vite proxy(8000), prod는 VITE_API_BASE_URL.
 
 import { isGateResponse, loginUrl, markSessionExpired } from "./sessionGate.js";
+import { beginDataRequest } from "./dataMode.js";
 
 const BASE = import.meta.env.VITE_API_BASE_URL || "";
 
@@ -46,6 +47,7 @@ function failSessionExpired() {
  */
 export async function apiRequest(method, path, opts = {}) {
   const { token, body, params, timeoutMs = DEFAULT_TIMEOUT_MS } = opts;
+  const modeRequest = beginDataRequest();
   // Accept·X-Requested-With: 세션이 끊겼을 때 게이트가 포털 HTML(302) 대신 401을 주게 한다.
   const headers = {
     "Content-Type": "application/json",
@@ -53,13 +55,15 @@ export async function apiRequest(method, path, opts = {}) {
     "X-Requested-With": "XMLHttpRequest"
   };
   if (token) headers["Authorization"] = `Bearer ${token}`;
+  headers["X-Data-Mode"] = modeRequest.mode;
 
+  try {
   const res = await fetch(`${BASE}${path}${toQuery(params)}`, {
     method,
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
     // 타임아웃은 reject로 나간다 — 호출부의 catch가 진행 중 상태를 정리한다.
-    signal: AbortSignal.timeout(timeoutMs)
+    signal: AbortSignal.any([AbortSignal.timeout(timeoutMs), modeRequest.signal])
   });
 
   const contentType = res.headers.get("content-type") || "";
@@ -68,6 +72,7 @@ export async function apiRequest(method, path, opts = {}) {
   }
 
   const text = await res.text();
+  if (!modeRequest.isCurrent()) throw new Error("데이터 모드가 변경됐습니다.");
   // JSON이 아닌 본문(nginx 오류 HTML 등)은 파싱하지 않는다 — "Unexpected token '<'" 대신 HTTP 상태로 알린다.
   const data = text && contentType.includes("application/json") ? JSON.parse(text) : null;
   if (!res.ok) {
@@ -78,6 +83,7 @@ export async function apiRequest(method, path, opts = {}) {
     throw err;
   }
   return data;
+  } finally { modeRequest.release(); }
 }
 
 export const apiGet = (path, opts) => apiRequest("GET", path, opts);

@@ -1026,7 +1026,7 @@ export default function SimulatorPage() {
       </CollapsibleStage>
 
       {/* ── 실데이터 진단(남원) — 신규 패널(R5), 기존 데모 스테이지와 무관 ── */}
-      <RealdataAnalysisPanel />
+      {!mockDataVisible && <RealdataAnalysisPanel />}
     </>
   );
 }

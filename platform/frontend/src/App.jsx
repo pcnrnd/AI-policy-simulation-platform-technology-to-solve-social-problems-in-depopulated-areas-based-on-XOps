@@ -233,7 +233,7 @@ export default function App() {
                 tabIndex={isActive ? 0 : -1}
                 hidden={!isActive}
               >
-                {isActive && <ActiveComponent />}
+                {isActive && <ActiveComponent key={mockDataVisible ? "mock" : "real"} />}
               </section>
             );
           })}
