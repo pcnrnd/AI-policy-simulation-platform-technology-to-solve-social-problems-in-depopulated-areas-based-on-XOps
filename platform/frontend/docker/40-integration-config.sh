@@ -138,7 +138,8 @@ map \$${module}_mode \$${module}_cookie_header {
 }
 EOF
   cat >> "$conf_dir/routes.conf.tmp" <<EOF
-location @${module}_ready {
+location = /integration-ready-$module.html {
+  internal;
   root $html_dir;
   try_files /integration-ready-$module.html =500;
   add_header Cache-Control "no-store" always;
@@ -153,7 +154,7 @@ EOF
 location = ${route_path%/} { return 308 $route_path\$is_args\$args; }
 location ^~ $route_path {
   set \$${module}_state unconfigured;
-  error_page 418 =200 @${module}_ready;
+  error_page 418 =200 /integration-ready-$module.html;
 EOF
     if [ -z "$route_origin" ]; then
       printf '  return 418;\n}\n' >> "$conf_dir/routes.conf.tmp"

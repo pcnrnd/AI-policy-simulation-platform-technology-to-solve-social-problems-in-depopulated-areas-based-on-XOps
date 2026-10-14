@@ -16,8 +16,9 @@ options = parser.parse_args()
 step = 0
 
 
-def get(path, headers=None):
-    request = urllib.request.Request(options.base + path, headers=headers or {})
+def get(path, headers=None, method="GET"):
+    request = urllib.request.Request(options.base + path, headers=headers or {}, method=method,
+                                     data=b'{"probe":"routing"}' if method == "POST" else None)
     try:
         response = urllib.request.urlopen(request, timeout=10)
     except urllib.error.HTTPError as error:
@@ -26,16 +27,16 @@ def get(path, headers=None):
     return response.status, response.headers, body.decode("utf-8"), hashlib.sha256(body).hexdigest()
 
 
-def check(name, path, status, verify, headers=None):
+def check(name, path, status, verify, headers=None, method="GET"):
     global step
-    actual, received, text, digest = get(path, headers)
+    actual, received, text, digest = get(path, headers, method)
     assert actual == status, f"{name}: HTTP {actual}, expected {status}"
     verify(received, text)
     step += 1
     safe_headers = {key: received.get(key) for key in
                     ("X-Data-Mode", "X-Integration-State", "Content-Type", "Cache-Control", "Vary")}
     print(json.dumps({"step": step, "name": name, "boundary": "internal-nginx", "path": path,
-                      "http_status": actual, "headers": safe_headers, "body_sha256": digest,
+                      "method": method, "http_status": actual, "headers": safe_headers, "body_sha256": digest,
                       "result": "PASS"}, ensure_ascii=False))
 
 
@@ -53,10 +54,12 @@ for module in ("dashboard", "reporting"):
         for route in (fe, api):
             for mode in ("mock", "real"):
                 check(f"{module}-unset-{mode}", route + "?mode=" + mode, 200, ready)
+        check(f"{module}-unset-api-post", api + "?mode=mock", 200, ready, method="POST")
         continue
     if options.state == "unsupported":
         for route in (fe, api):
             check(f"{module}-unsupported-mock", route + "?mode=mock", 200, ready)
+        check(f"{module}-unsupported-api-post", api + "?mode=mock", 200, ready, method="POST")
         continue
     for mode in ("mock", "real"):
         def html(headers, text):
@@ -84,6 +87,8 @@ for module in ("dashboard", "reporting"):
         check(f"{module}-api-{mode}", path, 200, echo,
               {"X-Data-Mode": mode, "Remote-User": "integration-probe",
                "Cookie": "integration-probe=placeholder", "Authorization": "Bearer integration-probe-placeholder"})
+        check(f"{module}-api-post-{mode}", path, 200, echo,
+              {"X-Data-Mode": mode, "Remote-User": "integration-probe"}, method="POST")
     def encoded(headers, text):
         assert f"request_uri=/{module}-backend/encoded%20name%3Fsegment?mode=mock&label=a%26b" in text
     check(f"{module}-raw-uri", api + "encoded%20name%3Fsegment?mode=mock&label=a%26b", 200, encoded)
