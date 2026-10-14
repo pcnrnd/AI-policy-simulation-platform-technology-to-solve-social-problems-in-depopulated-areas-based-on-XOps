@@ -41,9 +41,9 @@ def _artifact_path(model_id: str, version: str) -> Path:
     return get_settings().model_artifact_dir / model_id / f"{version}.json"
 
 
-def train(model_id: str, dataset_id: str, version: str) -> TrainOutcome:
+def train(model_id: str, dataset_id: str, version: str, *, dataset: snapshot.DatasetRecord | None = None) -> TrainOutcome:
     """학습 + 3개월 순차 평가 + 아티팩트 기록. 선행 관측 부족 시 `InsufficientData`."""
-    dataset = snapshot.load_dataset(dataset_id)
+    dataset = dataset if dataset is not None else snapshot.load_dataset(dataset_id)
     expected_model_id = snapshot.TARGETS.get(dataset.target)
     if expected_model_id != model_id:
         raise RealdataError(
