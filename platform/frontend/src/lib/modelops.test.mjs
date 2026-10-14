@@ -1,0 +1,12 @@
+import assert from "node:assert/strict";
+import { MODEL_TYPES, pipelineDefinition } from "./modelops.js";
+const dataset = { id: "registered_real", content_hash: "a".repeat(64) };
+const form = { id: "PL_new", name: "등록 학습", model_type: "factor_analysis", dataset_id: dataset.id };
+assert.deepEqual(MODEL_TYPES.map((row) => row.id), ["factor_analysis", "simulation"]);
+const body = pipelineDefinition(form, [dataset]);
+assert.equal(body.dataset_id, dataset.id);
+assert.equal(body.dataset_hash, dataset.content_hash);
+assert.throws(() => pipelineDefinition({ ...form, dataset_id: "other_mode" }, [dataset]));
+assert.throws(() => pipelineDefinition({ ...form, model_type: "population" }, [dataset]));
+assert.throws(() => pipelineDefinition({ ...form, id: "../../x" }, [dataset]));
+console.log("modelops: 두 종류 제한·등록 데이터셋 ID/hash 전달·입력 차단 PASS");
