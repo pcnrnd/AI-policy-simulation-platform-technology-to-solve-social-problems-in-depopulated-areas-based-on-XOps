@@ -14,7 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.core.db import _conn
-from src.realdata import candidates, jobs
+from src.realdata import candidates, jobs, snapshot
 
 _MODEL_ID = "namwon-nonlocal-visitors-next-month"
 _UNKNOWN_MODEL_ID = "not-a-real-model"
@@ -134,6 +134,7 @@ def test_training_run_unknown_model_returns_404(client: TestClient, auth_headers
 
 
 def test_training_run_success_flow(client: TestClient, auth_headers: dict[str, str], monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(snapshot, "list_datasets", lambda: [{"dataset_id": "ds-abc123def456", "spec": {"model_id": _MODEL_ID, "target": "nonlocal_visitors"}}])
     monkeypatch.setattr(jobs, "_import_models", lambda: FakeModels())
     monkeypatch.setattr(jobs, "_import_snapshot", lambda: FakeSnapshot())
     monkeypatch.setattr(jobs, "_import_errors", lambda: FakeErrors)
@@ -151,7 +152,8 @@ def test_training_run_success_flow(client: TestClient, auth_headers: dict[str, s
     assert body["data"]["state"] == "saved"
 
 
-def test_training_run_conflict_returns_409(client: TestClient, auth_headers: dict[str, str]) -> None:
+def test_training_run_conflict_returns_409(client: TestClient, auth_headers: dict[str, str], monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(snapshot, "list_datasets", lambda: [{"dataset_id": "ds-abc123def456", "spec": {"model_id": _MODEL_ID, "target": "nonlocal_visitors"}}])
     lock = jobs._lock_for(_MODEL_ID)
     assert lock.acquire(blocking=False)
     try:

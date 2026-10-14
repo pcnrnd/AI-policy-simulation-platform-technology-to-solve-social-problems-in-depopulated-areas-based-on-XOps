@@ -226,7 +226,8 @@ def test_runs_without_token_excludes_realdata(client: TestClient) -> None:
     assert [r for r in rows if r.get("source") == "realdata"] == []
 
 
-def test_pipelines_demo_off_lists_realdata_entry(client: TestClient, auth_headers: dict[str, str]) -> None:
+def test_pipelines_demo_off_lists_realdata_entry(client: TestClient, auth_headers: dict[str, str], monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(realdata_bridge.snapshot_mod, "list_datasets", lambda: [{"dataset_id": _DATASET_ID, "spec": {"model_id": _MODEL_ID, "target": "nonlocal_visitors"}}])
     rows = client.get("/api/v3/orchestration/pipelines", params={"include_seed": "false"}, headers=auth_headers).json()
 
     entry = next(r for r in rows if r["id"] == realdata_bridge.pipeline_id_for(_MODEL_ID))
