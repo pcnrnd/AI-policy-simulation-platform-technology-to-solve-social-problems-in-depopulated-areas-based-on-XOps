@@ -5,7 +5,7 @@ import Header from "./components/Header.jsx";
 import AlertPopupContainer from "./components/AlertPopup.jsx";
 import Overview from "./pages/Overview.jsx";
 import MonitorPage from "./pages/MonitorPage.jsx";
-import OrchestratorPage from "./pages/OrchestratorPage.jsx";
+import OrchestratorPage from "./pages/ModelOpsPage.jsx";
 import DataOpsPage from "./pages/DataOpsPage.jsx";
 import SimulatorPage from "./pages/SimulatorPage.jsx";
 import ReporterPage from "./pages/ReporterPage.jsx";
@@ -233,7 +233,7 @@ export default function App() {
                 tabIndex={isActive ? 0 : -1}
                 hidden={!isActive}
               >
-                {isActive && <ActiveComponent />}
+                {isActive && <ActiveComponent key={mockDataVisible ? "mock" : "real"} />}
               </section>
             );
           })}

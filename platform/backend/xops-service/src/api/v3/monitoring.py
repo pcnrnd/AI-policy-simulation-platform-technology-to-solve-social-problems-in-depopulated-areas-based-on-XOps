@@ -17,6 +17,7 @@ from src.api.dependencies import optional_auth
 from src.auth.jwt import require_scope
 from src.core.exceptions import AuthError
 from src.core.seed import get_seed
+from src.core.data_mode import current_mode
 from src.mlops.monitoring.drift import DriftDetector, DriftResult
 from src.mlops.monitoring.explain import ExplainabilityModule
 from src.mlops.monitoring.metrics import MetricCollector
@@ -114,7 +115,7 @@ def metrics_history(
         realdata = realdata_bridge.metrics(model_id)  # type: ignore[arg-type]
         if realdata is not None:
             return _tail(realdata, window)
-    measured = sources.measured_metrics(model_id) if model_id else None
+    measured = sources.measured_metrics(model_id) if model_id and current_mode() != "real" else None
     if measured is not None:
         return _tail({**measured, "source": "measured", "model_id": model_id}, window)
     if not include_seed:
@@ -209,7 +210,7 @@ def explain_from_seed(
         realdata = realdata_bridge.explain(model_id)  # type: ignore[arg-type]
         if realdata is not None:
             return {"backend": "linear-shap", **realdata}
-    if model_id:
+    if model_id and current_mode() != "real":
         version = next(
             (m["version"] for m in get_registry().models() if m["model_id"] == model_id), None
         )

@@ -11,7 +11,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-SourceKind = Literal["database", "in-memory"]
+SourceKind = Literal["database", "in-memory", "mock"]
 
 
 class OverviewSourceRollup(BaseModel):

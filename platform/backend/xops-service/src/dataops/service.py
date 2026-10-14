@@ -10,6 +10,7 @@ from typing import Any
 
 from src.core.logger import get_logger
 from src.core.settings import get_settings
+from src.core.data_mode import current_mode
 from src.dataops.adapters import adapter_of, get_adapter
 from src.dataops.query_builder import build_query
 from src.dataops.results import ExecutionRequest, ExecutionResult
@@ -85,6 +86,11 @@ def _get_extras(
     }
     if result.executed:
         extras["rows"] = result.rows  # 실 저장소에서 읽은 행 (미연결 시에는 키 자체가 없다)
+    elif current_mode() == "real":
+        extras.update({"rows": [], "result_rows": 0, "sample": {}, "pagination": {
+            "page": page, "page_size": page_size, "total": None, "total_pages": None}})
+    if current_mode() == "mock":
+        extras["source_kind"] = "mock"
     return extras
 
 
@@ -101,9 +107,9 @@ def _write_extras(method: str, filter_expr: str | None, result: ExecutionResult)
             else f"{method} processed through Data API Builder (storage abstracted)."
         )
     return {
-        "affected_rows": affected,
+        "affected_rows": 0 if current_mode() == "real" and not result.executed else affected,
         "message": message,
-        "source_kind": "database" if result.executed else "in-memory",
+        "source_kind": "mock" if current_mode() == "mock" else "database" if result.executed else "in-memory",
         "source_kind_reason": result.reason or None,
     }
 

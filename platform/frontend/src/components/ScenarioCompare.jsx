@@ -5,14 +5,14 @@ import ConfirmDialog from "./ConfirmDialog.jsx";
 import { ChartEmptyNote, NO_DEMO_DATA } from "./PendingData.jsx";
 import { useChartTheme } from "../hooks/useChartTheme.js";
 import { YEAR_LABELS, computeTrends, computeScenarioTrend, budgetToFactor, controlBoostOf } from "../lib/simulation.js";
+import { scenarioStorageKey } from "../lib/dataMode.js";
 
-const STORAGE_KEY = "decline_poc_scenarios";
 const MAX_PER_REGION = 8;
 const SCENARIO_COLORS = ["#a78bfa", "#f59e0b", "#10b981", "#ec4899", "#22d3ee", "#f97316", "#84cc16", "#e879f9"];
 
-function loadScenarios() {
+function loadScenarios(allowSeed) {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(scenarioStorageKey(allowSeed));
     const parsed = raw ? JSON.parse(raw) : [];
     return Array.isArray(parsed) ? parsed.filter((s) => s && s.id && s.regionId) : [];
   } catch {
@@ -20,9 +20,9 @@ function loadScenarios() {
   }
 }
 
-function persistScenarios(scenarios) {
+function persistScenarios(scenarios, allowSeed) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(scenarios));
+    localStorage.setItem(scenarioStorageKey(allowSeed), JSON.stringify(scenarios));
     return true;
   } catch {
     // 저장공간 초과 등 — 비교 기능은 메모리 상태로 계속 동작
@@ -37,7 +37,7 @@ function persistScenarios(scenarios) {
 // 지자체 인구(시드 전용)에서 계산되므로 예측 인구·증감률·차트를 빈 상태로 둔다.
 export default function ScenarioCompare({ region, snapshot, onApply, addConsoleLog, allowSeed = true }) {
   const ct = useChartTheme();
-  const [scenarios, setScenarios] = useState(loadScenarios);
+  const [scenarios, setScenarios] = useState(() => loadScenarios(allowSeed));
   const [name, setName] = useState("");
   const [compared, setCompared] = useState(() => new Set());
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -47,13 +47,13 @@ export default function ScenarioCompare({ region, snapshot, onApply, addConsoleL
 
   // 지역 변경 시 비교 선택을 해당 지역 시나리오 전체로 초기화
   useEffect(() => {
-    setCompared(new Set(loadScenarios().filter((s) => s.regionId === region.id).map((s) => s.id)));
+    setCompared(new Set(loadScenarios(allowSeed).filter((s) => s.regionId === region.id).map((s) => s.id)));
     setName("");
-  }, [region.id]);
+  }, [region.id, allowSeed]);
 
   const updateScenarios = (next) => {
     setScenarios(next);
-    return persistScenarios(next);
+    return persistScenarios(next, allowSeed);
   };
 
   const handleSave = (event) => {

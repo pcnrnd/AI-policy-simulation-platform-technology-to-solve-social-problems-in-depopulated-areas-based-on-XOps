@@ -15,6 +15,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Any
+from uuid import uuid4
 
 from src.core.logger import get_logger
 from src.core.settings import get_settings
@@ -80,21 +81,19 @@ class Orchestrator:
         self._evaluator = Evaluator()
         self._deployer = AutoDeployer()
         self._trainer = Trainer()
-        self._counter = 0
 
     def _next_run_id(self) -> str:
-        self._counter += 1
         stamp = datetime.now(timezone.utc).strftime("%Y%m%d")
-        return f"RUN-{stamp}-{self._counter:04d}"
+        return f"RUN-{stamp}-{uuid4().hex}"
 
     def next_run_id(self) -> str:
         """접수(202) 시점에 run_id를 먼저 발급하기 위한 공개 진입점."""
         return self._next_run_id()
 
-    def _train(self, event: RetrainEvent, *, horizon: int, version: str) -> TrainingResult | None:
+    def _train(self, event: RetrainEvent, *, horizon: int, version: str, artifact_id: str | None = None) -> TrainingResult | None:
         """실제 학습 수행. 실패하면 None을 돌려 fallback 경로로 넘긴다."""
         try:
-            return self._trainer.train(event.model_id, horizon=horizon, version=version)
+            return self._trainer.train(event.model_id, horizon=horizon, version=version, artifact_id=artifact_id)
         except (ValueError, KeyError, OSError) as exc:
             _logger.warning(f"train failed model={event.model_id} reason={exc} — 파생 후보로 대체")
             return None
@@ -167,10 +166,11 @@ class Orchestrator:
         # 계산·디스크 쓰기를 아끼고, DB에 기록되는 지표(주입값)와 아티팩트 파일의
         # 지표(실측)가 어긋나는 것을 막는다.
         trained = None
+        artifact_version = f"{candidate_version}-{run.run_id}"
         if not event.candidate_metrics:
             steps = horizon if horizon is not None else get_settings().train_default_horizon
-            trained = self._train(event, horizon=steps, version=candidate_version)
-        self._record_training(run, trained, event, candidate_version)
+            trained = self._train(event, horizon=steps, version=candidate_version, artifact_id=artifact_version)
+        self._record_training(run, trained, event, artifact_version)
         run.stages.append({"stage": "evaluating", "status": "done"})
 
         promote = self._evaluate(
