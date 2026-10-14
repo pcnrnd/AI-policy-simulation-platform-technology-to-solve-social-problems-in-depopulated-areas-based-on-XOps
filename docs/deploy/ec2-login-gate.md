@@ -1,8 +1,7 @@
 # EC2 로그인 게이트 런북 (Caddy + Authelia)
 
 플랫폼을 외부에 공개할 때 앞단에 로그인 화면을 붙여, 로그인한 계정만 화면과 `/api`에 닿게 한다.
-앱 코드(`platform/backend`, `platform/frontend`)와 기존 `compose.xops.yaml`·`nginx.conf`·Dockerfile은 바꾸지 않고,
-`platform/compose.ec2.yaml`을 겹쳐 쓴다.
+기존 로그인 게이트는 `platform/compose.ec2.yaml`을 겹쳐 쓴다. Phase D는 그 뒤 frontend nginx의 외부 모듈 경로를 추가하며 Caddy+Authelia는 유지한다. 주소 미정의 환경변수·더미 profile·안전한 단위 배포는 [외부 모듈 런북](external-modules.md)을 따른다. 실제 파트너 연결은 미완료다.
 
 ```
 브라우저 ──HTTPS──▶ Caddy :443 ──(forward_auth)──▶ Authelia :9091  ← 세션 없으면 로그인 포털로
@@ -19,6 +18,7 @@
 | `platform/deploy/.env.example` | 필요한 환경변수 목록 (실제 `.env`는 커밋 금지) |
 
 - 로그인 포털: `https://<SITE_DOMAIN>/authelia/`
+- `AUTH_PUBLIC_URL`은 같은 origin 포털 URL의 선택 env다. 비어 있으면 Caddy·Authelia 모두 기존 SITE_DOMAIN 기반 URL을 사용한다. 하위 앱 별칭 `/rnd/population/`·외부 모듈도 동일 게이트와 `/authelia/?rd=<전체 URL>` 복귀를 받는다. domain·DNS·인증서 확정 및 변경은 사용자 담당 후속이다.
 - 앱은 `XOPS_ENVIRONMENT=dev` 그대로다. 앱의 토큰 발급은 열려 있지만 Caddy 앞단 로그인을 통과한 요청만 닿는다.
 - 호스트에 열리는 포트는 Caddy의 80·443뿐이다. 8000·8080은 바인딩하지 않고, DB(5433·5434·27017)는 `127.0.0.1`에만 연다.
 

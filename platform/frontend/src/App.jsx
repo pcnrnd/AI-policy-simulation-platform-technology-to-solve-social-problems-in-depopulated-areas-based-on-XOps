@@ -1,6 +1,8 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import Sidebar from "./components/Sidebar.jsx";
 import { flattenNavTabs } from "./lib/nav.js";
+import { parseIntegrationConfig, moduleNavSections, firstInternalTab } from "./lib/moduleNavigation.js";
+import { isGateResponse, markSessionExpired, loginUrl } from "./lib/sessionGate.js";
 import Header from "./components/Header.jsx";
 import AlertPopupContainer from "./components/AlertPopup.jsx";
 import Overview from "./pages/Overview.jsx";
@@ -37,6 +39,7 @@ const NAV_SECTIONS = [
 const TABS = flattenNavTabs(NAV_SECTIONS);
 
 export default function App() {
+  const [integrationConfig, setIntegrationConfig] = useState(undefined);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(() => window.matchMedia("(max-width: 768px)").matches);
   const sidebarRef = useRef(null);
@@ -53,7 +56,33 @@ export default function App() {
     tabFocusRequest,
     mockDataVisible
   } = useAppState();
+  const navSections = useMemo(() => moduleNavSections(NAV_SECTIONS, integrationConfig, mockDataVisible), [integrationConfig, mockDataVisible]);
+  const internalTabs = useMemo(() => flattenNavTabs(navSections).filter((tab) => !tab.href), [navSections]);
   const { width, resizing, startResize, resizeBy, resetWidth } = useResizableSidebar();
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch("/integration-config.json", { credentials: "same-origin", cache: "no-store", signal: controller.signal, headers: { Accept: "application/json" } })
+      .then((response) => {
+        if (isGateResponse({ status: response.status, contentType: response.headers.get("content-type"), redirected: response.redirected, url: response.url })) {
+          markSessionExpired(window.sessionStorage);
+          window.location.assign(loginUrl(window.location.href));
+          throw new Error("로그인이 필요합니다.");
+        }
+        if (!response.ok) throw new Error("모듈 연결 설정을 확인하지 못했습니다.");
+        return response.json();
+      })
+      .then((raw) => setIntegrationConfig(parseIntegrationConfig(raw)))
+      .catch((error) => { if (controller.signal.aborted) return; console.warn("[integration] configuration unavailable", error.message); setIntegrationConfig(null); });
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    const external = flattenNavTabs(navSections).find((tab) => tab.id === activeTab && tab.href);
+    if (!external) return;
+    if (tabFocusRequest > handledTabFocusRequestRef.current) window.location.assign(external.href);
+    else setActiveTab(firstInternalTab(navSections));
+  }, [navSections, activeTab, tabFocusRequest, setActiveTab]);
 
   const handleResizerKeyDown = useCallback(
     (event) => {
@@ -145,8 +174,8 @@ export default function App() {
   }, [sidebarOpen, isMobile, closeSidebar]);
 
   const ActiveComponent = useMemo(
-    () => TABS.find((t) => t.id === activeTab)?.Component ?? Overview,
-    [activeTab]
+    () => internalTabs.find((t) => t.id === activeTab)?.Component ?? internalTabs[0]?.Component,
+    [activeTab, internalTabs]
   );
 
   const activeLabel = useMemo(
@@ -170,7 +199,7 @@ export default function App() {
     requestAnimationFrame(() => document.getElementById(`${activeTab}-panel`)?.focus());
   }, [activeTab, tabFocusRequest]);
 
-  if (!ready) {
+  if (!ready || integrationConfig === undefined) {
     return (
       <div className="loading-screen">
         <div>R&D 데이터 자산을 로딩 중...</div>
@@ -185,7 +214,7 @@ export default function App() {
     >
       <Sidebar
         sidebarRef={sidebarRef}
-        sections={NAV_SECTIONS}
+        sections={navSections}
         activeTab={activeTab}
         onSelect={handleSelect}
         open={sidebarOpen}
@@ -221,7 +250,7 @@ export default function App() {
           menuButtonRef={menuButtonRef}
         />
         <div className="content-body" ref={contentBodyRef}>
-          {TABS.map((tab) => {
+          {internalTabs.map((tab) => {
             const isActive = tab.id === activeTab;
             return (
               <section

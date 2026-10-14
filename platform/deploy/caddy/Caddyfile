@@ -13,11 +13,23 @@
 
 	# 나머지 전부(화면과 /api) — 로그인 세션이 없으면 Authelia가 포털로 돌려보내거나 401을 준다.
 	handle {
-		forward_auth authelia:9091 {
-			uri /api/authz/forward-auth?authelia_url=https://{$SITE_DOMAIN}/authelia/
-			copy_headers Remote-User Remote-Groups Remote-Email Remote-Name
+		route {
+			# Old containers may not have the new optional variable yet.
+			map {env.AUTH_PUBLIC_URL} {auth_public_url} {
+				"" https://{$SITE_DOMAIN}/authelia/
+				default {env.AUTH_PUBLIC_URL}
+			}
+			# Client identity claims are discarded; only Authelia's successful response is trusted.
+			request_header -Remote-User
+			request_header -Remote-Groups
+			request_header -Remote-Email
+			request_header -Remote-Name
+			forward_auth authelia:9091 {
+				uri /api/authz/forward-auth?authelia_url={auth_public_url}
+				copy_headers Remote-User Remote-Groups Remote-Email Remote-Name
+			}
+			encode gzip
+			reverse_proxy frontend:80
 		}
-		encode gzip
-		reverse_proxy frontend:80
 	}
 }

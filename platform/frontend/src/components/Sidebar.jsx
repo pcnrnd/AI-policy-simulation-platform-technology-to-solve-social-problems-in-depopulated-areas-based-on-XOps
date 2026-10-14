@@ -53,7 +53,7 @@ export default function Sidebar({ sidebarRef, sections, activeTab, onSelect, ope
   const moveTo = (visibleIndex) => {
     const next = visibleTabs[(visibleIndex + visibleTabs.length) % visibleTabs.length];
     const index = tabs.findIndex((tab) => tab.id === next.id);
-    onSelect(next.id, { closeDrawer: false });
+    if (!next.href) onSelect(next.id, { closeDrawer: false });
     requestAnimationFrame(() => tabRefs.current[index]?.focus());
   };
 
@@ -78,6 +78,14 @@ export default function Sidebar({ sidebarRef, sections, activeTab, onSelect, ope
   const renderTab = (tab, groupLabelId) => {
     const index = tabs.findIndex((entry) => entry.id === tab.id);
     const isActive = activeTab === tab.id;
+    if (tab.href) {
+      return (
+        <a key={tab.id} ref={(node) => { tabRefs.current[index] = node; }} id={`nav-${tab.id}`}
+          className="nav-item" href={tab.href} onKeyDown={(event) => handleKeyDown(event, tab.id)}>
+          <i className={"fa-solid " + tab.icon} aria-hidden="true"></i><span>{tab.label}</span>
+        </a>
+      );
+    }
     return (
       <button
         key={tab.id}
@@ -127,8 +135,9 @@ export default function Sidebar({ sidebarRef, sections, activeTab, onSelect, ope
         {sections.map((section) => {
           if (!section.label) {
             return (
-              <div key={section.tabs[0].id} role="tablist" aria-orientation="vertical">
-                {section.tabs.map((tab) => renderTab(tab))}
+              <div key={section.tabs[0].id} role={section.tabs.every((tab) => !tab.href) ? "tablist" : undefined} aria-orientation={section.tabs.every((tab) => !tab.href) ? "vertical" : undefined}>
+                {section.tabs.map((tab) => section.tabs.some((entry) => entry.href) && !tab.href
+                  ? <div key={tab.id} role="tablist" aria-orientation="vertical">{renderTab(tab)}</div> : renderTab(tab))}
               </div>
             );
           }
