@@ -107,8 +107,9 @@ def test_nginx_serves_openapi_and_keeps_api_block() -> None:
     assert api_block is not None
     # URI 없는 proxy_pass — `/api/v3/...` 경로가 그대로 전달된다(슬래시를 붙이면 경로가 잘린다).
     assert "proxy_pass http://xops-service:8000;" in api_block.group(1)
-    # 타 부서 경로는 이름·upstream 확정 전까지 주석 자리표시로만 둔다(활성 location 금지).
-    assert re.search(r"^\s*#\s*location /department/ \{", conf, re.MULTILINE)
+    # 타 부서 경로는 env 생성 설정을 include하고 하드코딩 활성 location을 두지 않는다.
+    assert re.search(r"^include /etc/nginx/integration/maps\.conf;", conf, re.MULTILINE)
+    assert re.search(r"^\s*include /etc/nginx/integration/routes\.conf;", conf, re.MULTILINE)
     assert not re.search(r"^\s*location /department/", conf, re.MULTILINE)
 
 
