@@ -14,6 +14,7 @@ from src.core.db import init_db
 from src.core.exceptions import register_exception_handlers
 from src.core.logger import get_logger
 from src.core.settings import get_settings
+from src.core.data_mode import DataModeMiddleware
 from src.modelops.store import init_db as init_modelops_db
 
 
@@ -25,6 +26,7 @@ def create_app() -> FastAPI:
     init_modelops_db()
     get_logger().info(f"xops-service 기동 env={settings.environment} prefix={settings.api_prefix}")
     app = FastAPI(title="xops-service", version="0.1.0")
+    app.add_middleware(DataModeMiddleware)
 
     app.add_middleware(
         CORSMiddleware,

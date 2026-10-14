@@ -8,11 +8,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 
 from src.api.dependencies import require_auth, require_client
 from src.auth.jwt import issue_jwt, issue_oauth2
 from src.core import db
+from src.core.data_mode import current_mode, source_mode
 from src.core.exceptions import SourceNotFoundError
 from src.core.settings import get_settings
 from src.dataops.catalog import get_catalog
@@ -85,6 +86,8 @@ def list_catalog(
     무관하다(데모 ON에서 고른 시드 소스가 곧바로 404가 되면 안 된다).
     """
     sources = get_catalog().search(q, include_seed=include_seed)
+    if current_mode() == "mock":
+        return [{**row, "live_rows": row.get("archive", {}).get("rows"), "source_kind": "mock"} for row in sources] if live else sources
     return annotate(sources) if live else sources
 
 
@@ -126,7 +129,10 @@ def list_built_apis(
     _: dict[str, Any] = Depends(require_auth("data:read")),
 ) -> list[dict[str, Any]]:
     """빌드·등록된 API 목록 (최근 순). 소스 id·필터·스키마 힌트가 실리므로 `data:read`를 요구한다."""
-    return [_to_summary(api) for api in db.list_built_apis()]
+    rows = db.list_built_apis()
+    if current_mode() is not None:
+        rows = [row for row in rows if row.get("mode", "real") == current_mode()]
+    return [_to_summary(api) for api in rows]
 
 
 @router.post("/apis", response_model=BuiltApiSummary, status_code=201)
@@ -136,7 +142,13 @@ def register_built_api(
 ) -> dict[str, Any]:
     """API 구성 등록 — 같은 id 재등록은 덮어쓴다. 대상 소스가 없으면 404."""
     get_catalog().get(body.source_id)
-    return _to_summary(db.upsert_built_api(body.model_dump()))
+    existing = next((row for row in db.list_built_apis() if row["id"] == body.id), None)
+    if existing and current_mode() is not None and existing.get("mode", "real") != current_mode():
+        raise HTTPException(409, "다른 모드의 API와 다른 이름을 사용하세요.")
+    definition = body.model_dump()
+    if current_mode() is not None:
+        definition["mode"] = current_mode()
+    return _to_summary(db.upsert_built_api(definition))
 
 
 @router.delete("/apis/{api_id}")
@@ -145,6 +157,9 @@ def delete_built_api(
     _: dict[str, Any] = Depends(require_auth("data:write")),
 ) -> dict[str, str]:
     """발급 API 제거."""
+    existing = next((row for row in db.list_built_apis() if row["id"] == api_id), None)
+    if existing and current_mode() is not None and existing.get("mode", "real") != current_mode():
+        raise HTTPException(404, "현재 모드에서 사용할 API를 선택하세요.")
     if not db.delete_built_api(api_id):
         raise SourceNotFoundError(f"발급 API를 찾을 수 없습니다: {api_id}")
     return {"deleted": api_id}

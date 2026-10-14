@@ -80,7 +80,7 @@ def test_registration_rejects_unknown_hash_and_third_type(client, auth_headers):
     body["dataset_hash"] = "a" * 64
     assert client.post(BASE + "/instances", headers=h, json=body).status_code == 409
     assert client.post(BASE + "/datasets", json={}).status_code == 401
-    assert client.get(BASE + "/catalog", headers=headers(auth_headers, "other")).status_code == 422
+    assert client.get(BASE + "/catalog", headers=headers(auth_headers, "other")).status_code == 400
 
 
 @pytest.mark.parametrize("model_type", ["factor_analysis", "simulation"])

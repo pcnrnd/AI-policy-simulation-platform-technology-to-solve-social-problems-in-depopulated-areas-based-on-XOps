@@ -238,6 +238,7 @@ function caseBlocks(region) {
 /** 포맷 중립 블록 모델 (docx/hwp/markdown 공통 소스). */
 export function buildReportBlocks(region, template, extra = {}) {
   const header = approvalHeader(region, extra.generatedAt);
+  if (extra.allowSeed === false) return [...header, ...modelMetricBlocks(extra.live), ...shapBlocks(extra.explain)];
   if (template.id === "template_task_order") {
     return [...header, ...taskOrderBlocks(region)];
   }
@@ -254,6 +255,14 @@ export function buildReportBlocks(region, template, extra = {}) {
 export function buildReportRows(region, template, extra = {}) {
   const live = extra.live;
   const explain = extra.explain;
+  if (extra.allowSeed === false) return [
+    ["인구감소 대응 R&D 지표 요약", template.title],
+    ["보고서 번호", `RD-POP-2026-${region.id.toUpperCase()}`],
+    ["대상 지자체", region.name], ["생성 일시", formatReportTimestamp(extra.generatedAt)],
+    ...(live ? [["모델 검증", "WAPE", live.wape], ["모델 검증", "MAE", live.mae],
+      ["모델 검증", "기준선 MAE", live.baselineMae], ...(live.psi ?? []).map((entry) => ["모델 검증", `PSI (${entry.label})`, entry.psi])] : []),
+    ...(explain ? explain.contributions.map((entry) => [`SHAP 기여 (${explainBasis(explain)})`, entry.label, entry.phi]) : [])
+  ];
   const rows = [
     ["인구감소 대응 R&D 지표 요약", template.title],
     ["보고서 번호", `RD-POP-2026-${region.id.toUpperCase()}`],

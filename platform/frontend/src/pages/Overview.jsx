@@ -78,7 +78,7 @@ export default function Overview() {
   // 요청 실패(overviewSummary === null)나 In-Memory degrade면 mock_data.json 으로 폴백하고,
   // 어느 쪽 값인지는 카드 컨테이너의 data-values-source 로 드러낸다(mock 스위치 계약).
   const liveSources =
-    overviewSummary?.source_kind === "database" && Array.isArray(overviewSummary.sources)
+    !allowSeed && overviewSummary?.source_kind === "database" && Array.isArray(overviewSummary.sources)
       ? overviewSummary.sources
       : null;
   const catalogOrigin = liveSources ? "api" : "mock";
@@ -93,7 +93,7 @@ export default function Overview() {
             .filter((s) => typeof s.archive_rows === "number")
             .map((s) => ({ label: s.label ?? s.id, rows: s.archive_rows }))
         : allowSeed
-          ? appData.metadata_schemas.map((s) => ({ label: s.label ?? s.id, rows: s.archive?.rows ?? 0 }))
+          ? appData.metadata_schemas.filter((s) => s.is_seed).map((s) => ({ label: s.label ?? s.id, rows: s.archive?.rows ?? 0 }))
           : [],
     [liveSources, appData, allowSeed]
   );
@@ -141,7 +141,7 @@ export default function Overview() {
   const sourceCount = liveSources
     ? overviewSummary.source_count ?? liveSources.length
     : allowSeed
-      ? appData.metadata_schemas.length
+      ? appData.metadata_schemas.filter((s) => s.is_seed).length
       : "–";
 
   const doughnutOpts = {
