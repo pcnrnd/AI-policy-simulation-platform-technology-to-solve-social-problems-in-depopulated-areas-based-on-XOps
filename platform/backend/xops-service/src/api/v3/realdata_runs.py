@@ -12,7 +12,8 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from src.api.dependencies import require_auth
-from src.realdata import candidates, jobs, monitoring
+from src.realdata import candidates, jobs, monitoring, snapshot
+from src.realdata.binding import dataset_matches_model
 from src.realdata.candidates import ApplyRejected, CandidateNotFound
 from src.realdata.jobs import JobConflict
 from src.schemas.realdata import (
@@ -76,6 +77,11 @@ def create_training_run(
     _: dict[str, Any] = Depends(require_auth("data:write")),
 ) -> dict[str, Any]:
     _require_known_model(body.model_id)
+    dataset = next((d for d in snapshot.list_datasets() if d["dataset_id"] == body.dataset_id), None)
+    if dataset is None:
+        raise HTTPException(status_code=404, detail="선택한 데이터셋을 찾을 수 없습니다. 스냅샷을 다시 생성하세요.")
+    if not dataset_matches_model(dataset, body.model_id):
+        raise HTTPException(status_code=400, detail="대상 모델에 맞는 데이터셋을 선택하세요.")
     try:
         job_id = jobs.start_training(body.model_id, body.dataset_id)
     except JobConflict as exc:
