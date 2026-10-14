@@ -2,10 +2,13 @@ import { useCallback, useEffect, useState } from "react";
 import Card from "./Card.jsx";
 import { apiGet, apiSend } from "../lib/api.js";
 import { getRealdataToken } from "./realdata/realdataClient.jsx";
+import { useAppState } from "../context/AppStateContext.jsx";
+import { datasetRegionName } from "../lib/modelops.js";
 
 const TARGET_NAMES = { nonlocal_visitors: "타지역 방문객", observed_sales_krw: "관측 소비", population_change_pct: "인구 변화율" };
 
 export default function TrainingDatasetRegistration() {
+  const { appData } = useAppState();
   const [available, setAvailable] = useState([]);
   const [datasets, setDatasets] = useState([]);
   const [sourceId, setSourceId] = useState("");
@@ -62,8 +65,8 @@ export default function TrainingDatasetRegistration() {
     {feedback && <p role="status">{feedback}</p>}
     <div className="table-container"><table>
       <caption className="sr-only">등록된 학습데이터 목록</caption>
-      <thead><tr><th>이름</th><th>데이터셋</th><th>학습 대상</th><th>기간</th><th>행 수</th><th>내용 해시</th></tr></thead>
-      <tbody>{datasets.map((row) => <tr key={row.id}><td>{row.name}</td><td>{row.id}</td><td>{TARGET_NAMES[row.target] ?? row.target}</td>
+      <thead><tr><th>이름</th><th>데이터셋</th><th>지역</th><th>학습 대상</th><th>기간</th><th>행 수</th><th>내용 해시</th></tr></thead>
+      <tbody>{datasets.map((row) => <tr key={row.id}><td>{row.name}</td><td>{row.id}</td><td title={row.region_id}>{datasetRegionName(row, appData.regions)}</td><td>{TARGET_NAMES[row.target] ?? row.target}</td>
         <td>{row.observed_from}~{row.observed_to}</td><td>{row.row_count.toLocaleString()}</td><td title={row.content_hash}>{row.content_hash.slice(0, 12)}</td></tr>)}</tbody>
     </table></div>
   </Card>;
