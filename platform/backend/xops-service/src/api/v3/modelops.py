@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-from pathlib import Path
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Header
@@ -80,10 +78,7 @@ def list_versions(instance_id: str, auth: Read, mode: Mode = "real") -> dict[str
 
 @router.get("/instances/{instance_id}/versions/{version_id}/artifact")
 def version_artifact(instance_id: str, version_id: str, auth: Read, mode: Mode = "real") -> dict[str, Any]:
-    version = next((row for row in service.versions(mode, instance_id) if row["id"] == version_id), None)
-    if version is None:
-        store.get(mode, "version", "missing")
-    return json.loads(Path(version["artifact_path"]).read_text(encoding="utf-8"))
+    return service.load_artifact(mode, instance_id, version_id)
 
 
 @router.post("/instances/{instance_id}/versions/{version_id}/activate")

@@ -41,6 +41,8 @@ def register_instance(mode: str, body: dict[str, Any], actor: str) -> dict[str, 
 
 
 def register_pipeline(mode: str, body: dict[str, Any], actor: str) -> dict[str, Any]:
+    if any(row["id"] == body["id"] for row in store.list_assets(mode, "pipeline")):
+        raise HTTPException(409, "이미 등록된 파이프라인 ID입니다.")
     dataset, _ = datasets.load(mode, body["dataset_id"], body["dataset_hash"])
     instance = register_instance(mode, body, actor)
     pipeline = store.save(mode, "pipeline", {
@@ -117,8 +119,8 @@ def _run_job(mode: str, job: dict[str, Any], lock: threading.Lock) -> None:
             "observed_from": dataset["observed_from"], "observed_to": dataset["observed_to"], "features": artifact["features"],
             "job_id": job["id"], "metrics": metrics, "baseline": baseline, "artifact_path": str(path),
             "artifact_hash": hashlib.sha256(path.read_bytes()).hexdigest(), "created_at": store.now(), "status": "candidate"}, create=True)
-        job = store.save(mode, "job", {**job, "state": "saved", "finished_at": store.now(), "artifact_path": str(path)})
         store.audit(mode, "training_saved", instance["id"], job["actor"], job_id=job["id"], version_id=job["version_id"], dataset_hash=dataset["content_hash"])
+        job = store.save(mode, "job", {**job, "state": "saved", "finished_at": store.now(), "artifact_path": str(path)})
     except Exception as exc:
         store.save(mode, "job", {**job, "state": "failed", "finished_at": store.now(), "error": type(exc).__name__})
         store.audit(mode, "training_failed", job["instance_id"], job["actor"], job_id=job["id"], reason=type(exc).__name__)
@@ -130,6 +132,18 @@ def versions(mode: str, instance_id: str) -> list[dict[str, Any]]:
     instance = store.get(mode, "instance", instance_id)
     return [{**version, "status": "active" if version["id"] == instance["active_version"] else "previous" if version["id"] == instance["previous_version"] else "candidate"}
             for version in store.list_assets(mode, "version") if version["instance_id"] == instance_id]
+
+
+def load_artifact(mode: str, instance_id: str, version_id: str) -> dict[str, Any]:
+    store.get(mode, "instance", instance_id)
+    version = store.get(mode, "version", version_id)
+    if version["instance_id"] != instance_id:
+        raise HTTPException(404, "현재 모델의 버전을 선택하세요.")
+    datasets.load(mode, version["dataset_id"], version["dataset_hash"])
+    path = Path(version["artifact_path"])
+    if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != version["artifact_hash"]:
+        raise HTTPException(409, "학습 결과의 내용을 확인하세요.")
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def activate(mode: str, instance_id: str, version_id: str, actor: str, *, rollback: bool = False) -> dict[str, Any]:

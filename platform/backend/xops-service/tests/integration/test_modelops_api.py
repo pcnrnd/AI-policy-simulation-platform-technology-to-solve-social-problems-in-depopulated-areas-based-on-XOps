@@ -171,3 +171,35 @@ def test_real_registration_copies_source_and_trains_that_copy(client, auth_heade
     assert artifact["dataset_id"] == ds["id"] and artifact["content_hash"] == ds["content_hash"]
     assert artifact["source"] == "real"
     assert hashlib.sha256(Path(record.file_path).read_bytes()).hexdigest() == original_hash
+
+
+def test_version_scope_integrity_and_activation_gate(client, auth_headers):
+    ds = register(client, auth_headers)
+    p = pipeline(client, auth_headers, ds)
+    h = headers(auth_headers, "mock")
+    job = wait_job(client, h, client.post(BASE + "/pipelines/" + p["id"] + "/run", headers=h).json()["id"])
+    url = BASE + "/instances/" + p["instance_id"] + "/versions/" + job["version_id"]
+    assert client.post(url + "/rollback", headers=h).status_code == 400
+    assert client.get(url + "/artifact", headers=headers(auth_headers, "real")).status_code == 404
+    second = pipeline(client, auth_headers, ds, "simulation")
+    wrong_url = BASE + "/instances/" + second["instance_id"] + "/versions/" + job["version_id"]
+    assert client.get(wrong_url + "/artifact", headers=h).status_code == 404
+    assert client.post(wrong_url + "/activate", headers=h).status_code == 400
+    version = store.get("mock", "version", job["version_id"])
+    store.save("mock", "version", {**version, "metrics": {**version["metrics"], "mae": version["baseline"]["mae"]}})
+    assert client.post(url + "/activate", headers=h).status_code == 400
+    assert store.get("mock", "instance", p["instance_id"])["active_version"] is None
+    store.save("mock", "version", version)
+    Path(version["artifact_path"]).write_text("{}", encoding="utf-8")
+    assert client.get(url + "/artifact", headers=h).status_code == 409
+    assert client.post(url + "/activate", headers=h).status_code == 409
+
+
+def test_duplicate_pipeline_does_not_create_extra_instance(client, auth_headers):
+    ds = register(client, auth_headers)
+    p = pipeline(client, auth_headers, ds)
+    h = headers(auth_headers, "mock")
+    before = client.get(BASE + "/catalog", headers=h).json()["instances"]
+    body = {"id": p["id"], "name": "다른 모델", "model_type": "simulation", "dataset_id": ds["id"], "dataset_hash": ds["content_hash"]}
+    assert client.post(BASE + "/pipelines", headers=h, json=body).status_code == 409
+    assert client.get(BASE + "/catalog", headers=h).json()["instances"] == before
