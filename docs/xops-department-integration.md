@@ -1,18 +1,18 @@
 # xops 타 부서 연동 기술문서
 
 > 인구감소 R&D 플랫폼 — 타 부서(`department`, 이름 미정) 대시보드·자동 리포팅이 xops-service API를 읽는 방법
-> 대상: `platform/backend/xops-service/` `/api/v3` · `platform/frontend/nginx.conf` · `platform/compose.xops.yaml` · 최종 갱신 2026-10-08
+> 대상: `platform/backend/xops-service/` `/api/v3` · `platform/frontend/nginx.conf` · `platform/compose.xops.yaml` · 최종 갱신 2026-10-14
 > 함께 전달: [`docs/xops-openapi.json`](xops-openapi.json)(이 커밋 시점 OpenAPI), [`docs/xops-service.md`](xops-service.md), [`docs/deploy/ec2-login-gate.md`](deploy/ec2-login-gate.md)
 
 ---
 
 ## 1. 개요·책임 경계
 
-같은 도메인에서 nginx 경로로 화면을 나누고, 우리 API 경로 `/api/v3`는 그대로 둔다. 자동 리포팅과 통합 대시보드의 화면·산출물은 타 부서가 만든다. 우리는 그 화면이 읽을 API·인증·nginx 경로·이 문서를 맡는다.
+같은 도메인에서 기존 Caddy+Authelia 뒤 nginx 경로로 화면을 나누고, 우리 API 경로 `/api/v3`는 그대로 둔다. 자동 리포팅과 통합 대시보드의 화면·산출물은 타 부서가 만든다. 우리는 그 화면이 읽을 API·인증·nginx 경로·이 문서를 맡는다. Phase D는 주소 미정의 설정·라우팅 준비만 완료하며 실제 연동은 [파트너 대조표](partner-integration-checklist.md)로 별도 확인한다.
 
 | 우리(PCN) | 타 부서 | 함께 정할 것 |
 |---|---|---|
-| xops-service API·인증·응답 스키마, 이 문서와 `xops-openapi.json` | 대시보드·자동 리포팅 화면과 산출물, 보고서 문구·서식 | 타 부서 경로 이름(현재 자리표시 `/department/`) |
+| xops-service API·인증·응답 스키마, 이 문서와 `xops-openapi.json` | 대시보드·자동 리포팅 화면과 산출물, 보고서 문구·서식 | 공개 FE/API 접두·upstream origin/port/base path |
 | `frontend` nginx 라우팅(타 부서 location 포함), compose 생존 확인 | 타 부서 서버(BFF)와 조회 전용 자격증명의 서버 보관 | 서버 간(s2s) 호출 허용 여부 |
 | Caddy·Authelia 로그인 게이트 운영 | 자체 upstream 컨테이너 이름·포트 | 조회 전용 자격증명 발급·교체 주기 |
 | 우리 UI의 운영(prod) 인증 설계(별도 과제) | | 시드 전용 지표(인구·출산율 등)를 화면에 보일지 |
@@ -26,7 +26,10 @@
                      └─▶ frontend :80 (nginx)
                            ├ /api/                      ─▶ xops-service :8000   (/api/v3/... 경로 그대로)
                            ├ = /api/v3/openapi.json     ─▶ xops-service :8000/openapi.json
-                           ├ /department/  (자리표시)    ─▶ department-upstream  (타 부서 컨테이너)
+                           ├ /rnd/population/dashboard/      ─▶ env FE upstream 또는 준비 안내
+                           ├ /rnd/population/dashboard-api/  ─▶ env API upstream 또는 준비 안내
+                           ├ /rnd/population/reporting/ · reporting-api/ ─▶ 별도 env upstream 또는 준비 안내
+                           ├ /rnd/population/               ─▶ 우리 SPA 별칭
                            └ /                          ─▶ 우리 SPA 정적 파일
 타 부서 서버(BFF) ─HTTP(같은 Docker 네트워크)─▶ xops-service :8000/api/v3/...   (Authelia 미경유)
                                                    └─▶ pg / timescale / mongo, SQLite
@@ -43,11 +46,13 @@
 |---|---|---|
 | `/api/` | `proxy_pass http://xops-service:8000;` | URI 없는 proxy_pass라 `/api/v3/...`가 그대로 전달된다. **끝에 슬래시를 붙이지 않는다**(붙이면 `/api/` 접두가 잘린다). |
 | `= /api/v3/openapi.json` | `proxy_pass http://xops-service:8000/openapi.json;` | FastAPI는 OpenAPI를 루트(`/openapi.json`)에 둔다. 정확 일치가 `/api/` 접두 일치보다 먼저 잡힌다. `/docs`(Swagger UI)는 열지 않는다(CDN 자산을 읽는다). |
-| `/department/` | 주석 자리표시 | 타 부서 경로 이름·upstream 이름·포트가 정해지면 주석을 풀고 이름을 바꾼다. |
+| module FE/API env 접두 | 런타임 `40-integration-config.sh`가 검증·생성 | prefix를 upstream base path로 치환, raw URI/query 보존, 미설정·미지원200 준비 중, 실패를 SPA로 fallback하지 않음 |
+| `/rnd/population/` | APP_PUBLIC_PATH env 별칭 | 같은 앱 index; 기존 root 자산 URL과 `/api/` 유지 |
 | `/` | SPA 정적 파일 | `try_files $uri /index.html`. 우리 SPA는 Vite `base`가 없어 `/`에 있어야 한다. |
 
 - 타 부서 경로로 쓰면 안 되는 접두: `/api/`(우리 API), `/assets/`(Vite 산출물), `/authelia/`(로그인 포털).
-- 타 부서 location을 켤 때: ① 주석 해제와 이름 지정 ② 타 부서 컨테이너를 같은 compose 네트워크에 붙임 ③ `nginx -t` ④ `frontend` 이미지 재빌드. nginx는 기동 시 upstream 이름을 해석하므로 그 컨테이너가 네트워크에 없으면 frontend가 뜨지 않는다.
+- 타 부서 origin/port/base/public prefix·지원 mode는 env로 교체하고 설정 검증 후 frontend만 `--no-deps` 반영한다. 동적 Docker resolver를 사용하므로 미확인 module DNS가 앱 전체 기동을 막지 않는다. 실패한 모듈은 502 등 실패 응답을 유지한다. 운영 기본 upstream은 비어 있으며 테스트 더미 profile은 기본 비활성이다.
+- Caddy가 입력 Remote-*를 제거하고 Authelia의 identity만 module로 전달한다. Cookie/Authorization 미전달, 응답 Set-Cookie·Clear-Site-Data·X-Accel·Refresh 차단, 같은 origin JS 저장소 격리 한계와 mock/real mode 계약은 [외부 모듈 런북](deploy/external-modules.md)을 따른다. 실제 partner 자체 auth·storage 격리 확인 전 실통합은 보류한다.
 
 ## 4. 인증
 
