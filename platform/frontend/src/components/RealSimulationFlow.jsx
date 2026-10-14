@@ -4,7 +4,7 @@ import { getRealdataToken } from "./realdata/realdataClient.jsx";
 import { useAppState } from "../context/AppStateContext.jsx";
 import { apiGet, apiSend } from "../lib/api.js";
 import { dataModeEpoch } from "../lib/dataMode.js";
-import { REAL_TARGETS, activeModelPair, matchingFlowBasis, inferenceRequest, validateInference, rankSensitivity, observedFeatureLabel } from "../lib/realSimulation.js";
+import { REAL_TARGETS, activeModelPair, matchingFlowBasis, inferenceRequest, validateInference, rankSensitivity, observedFeatureLabel, createRequestGate } from "../lib/realSimulation.js";
 
 const EMPTY = { mode:"real", source:"real", instances:[] };
 const number = (value) => Number.isFinite(value) ? value.toLocaleString("ko-KR",{maximumFractionDigits:3}) : "—";
@@ -47,20 +47,22 @@ export default function RealSimulationFlow() {
   const [busy,setBusy] = useState("");
   const [feedback,setFeedback] = useState(null);
   const mounted = useRef(true);
-  const requestRef = useRef(0);
-  useEffect(() => { mounted.current=true; return () => { mounted.current=false; requestRef.current+=1; }; },[]);
+  const requestRef = useRef(createRequestGate(dataModeEpoch));
+  const catalogRef = useRef(createRequestGate(dataModeEpoch));
+  useEffect(() => { mounted.current=true; return () => { mounted.current=false; requestRef.current.cancel();catalogRef.current.cancel(); }; },[]);
   const guard = () => {
-    const request=++requestRef.current, epoch=dataModeEpoch();
-    return () => mounted.current && request === requestRef.current && epoch === dataModeEpoch();
+    const current=requestRef.current.begin();
+    return () => mounted.current && current();
   };
   const reset = (inputs=true) => {
-    requestRef.current+=1;
+    requestRef.current.cancel();
     setAnalysis(null);setSimulation(null);setRanking(null);setFeedback(null);setBusy("");
     if (inputs) { setContexts(null);setFields({}); }
   };
   const load = useCallback(async () => {
-    const request=++requestRef.current,epoch=dataModeEpoch();
-    const current=() => mounted.current && request===requestRef.current && epoch===dataModeEpoch();
+    const isCurrent=catalogRef.current.begin();
+    const current=() => mounted.current && isCurrent();
+    requestRef.current.cancel();setCatalog(EMPTY);setDong("");
     setBusy("catalog");setContexts(null);setAnalysis(null);setSimulation(null);setRanking(null);setFeedback(null);
     try {
       const token=await getRealdataToken();
@@ -93,7 +95,7 @@ export default function RealSimulationFlow() {
       } catch (error) { if (current()) setFeedback(error.message || "관측 입력을 다시 확인하세요."); }
       finally { if (current()) setBusy(""); }
     })();
-    return () => { requestRef.current+=1; };
+    return () => { requestRef.current.cancel(); };
   },[pairKey,dong,catalogRevision]);
   const runAnalysis = async () => {
     if (!contexts || busy) return;
@@ -123,8 +125,8 @@ export default function RealSimulationFlow() {
   return <div className="real-simulation-flow">
     <Card title="실데이터 요인분석·시뮬레이션" icon="fa-chart-line" dataSource="api">
       <div className="real-flow-controls">
-        <label>지역<select value={region} onChange={(e) => { reset();setDong("");setRegion(e.target.value); }}>{regions.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label>
-        <label>학습 대상<select value={target} onChange={(e) => { reset();setDong("");setTarget(e.target.value); }}>{Object.entries(REAL_TARGETS).map(([id,name]) => <option key={id} value={id}>{name}</option>)}</select></label>
+        <label>지역<select value={region} disabled={busy==="catalog"} onChange={(e) => { reset();setDong("");setRegion(e.target.value); }}>{regions.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label>
+        <label>학습 대상<select value={target} disabled={busy==="catalog"} onChange={(e) => { reset();setDong("");setTarget(e.target.value); }}>{Object.entries(REAL_TARGETS).map(([id,name]) => <option key={id} value={id}>{name}</option>)}</select></label>
         <label>행정동<select value={dong || contexts?.simulation.provenance.dong_code || ""} disabled={!contexts || Boolean(busy)} onChange={(e) => { reset();setDong(e.target.value); }}>
           {!contexts && <option value="">모델과 관측 입력 확인 후 선택</option>}
           {contexts?.simulation.dong_options.map((row) => <option key={row.code} value={row.code}>{row.name}</option>)}
@@ -134,7 +136,7 @@ export default function RealSimulationFlow() {
       <p>현재 등록 데이터에는 정책 변수가 없어, 예측에 영향이 큰 관측 지표 순으로 보여줍니다.</p>
       {busy && <p role="status">{busy==="catalog" ? "모델 목록 확인 중…" : busy==="inputs" ? "관측 입력 확인 중…" : "활성 모델로 계산 중…"}</p>}
       {feedback && <p className="async-feedback is-error" role="alert">{feedback}</p>}
-      {(missing || (!busy && !contexts)) && <div className="real-flow-guide">
+      {!busy && (missing || !contexts) && <div className="real-flow-guide">
         <p>선택한 지역·학습 대상의 요인분석과 시뮬레이션 활성 버전이 필요합니다. 학습데이터 등록 → 파이프라인 학습 → 버전 활성화 순서로 준비하세요.</p>
         <button className="btn btn-secondary" onClick={() => navigateToTab("tab-dataops")}>DataOps에서 학습데이터 등록</button>{" "}
         <button className="btn btn-primary" onClick={() => navigateToTab("tab-mlops-orch")}>오케스트레이터에서 학습·활성화</button>
@@ -158,7 +160,7 @@ export default function RealSimulationFlow() {
         <p>범위: 선택한 행정동의 학습 구간 {month(contexts.simulation.provenance.range_provenance.from)}~{month(contexts.simulation.provenance.range_provenance.to)} · 예측은 등록 관측 마지막 달 다음 달({month(contexts.simulation.provenance.prediction_period)}) 기준입니다.</p>
         <form onSubmit={runSimulation}>
           <div className="real-flow-inputs">{contexts.simulation.controls.map((control) => <label key={control.feature}>
-            <span>{label(control.feature)}</span><input type="number" step="any" value={fields[control.feature] ?? ""} disabled={Boolean(busy)} required aria-label={label(control.feature)} onChange={(e) => { requestRef.current+=1;setFields((prev) => ({...prev,[control.feature]:e.target.value}));setSimulation(null);setRanking(null);setFeedback(null); }}/>
+            <span>{label(control.feature)}</span><input type="number" step="any" value={fields[control.feature] ?? ""} disabled={Boolean(busy)} required aria-label={label(control.feature)} onChange={(e) => { requestRef.current.cancel();setFields((prev) => ({...prev,[control.feature]:e.target.value}));setSimulation(null);setRanking(null);setFeedback(null); }}/>
             <span>관측 범위 {number(control.min)}~{number(control.max)} {unit(target)}</span>
           </label>)}</div>
           <button className="btn btn-primary" type="submit" disabled={Boolean(busy) || !analysis}>시뮬레이션 실행</button>{" "}
