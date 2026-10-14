@@ -1985,6 +1985,177 @@
         }
       }
     },
+    "/api/v3/modelops/instances/{instance_id}/versions/{version_id}/inputs": {
+      "get": {
+        "tags": [
+          "modelops"
+        ],
+        "summary": "Inference Inputs",
+        "operationId": "inference_inputs_api_v3_modelops_instances__instance_id__versions__version_id__inputs_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "instance_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Instance Id"
+            }
+          },
+          {
+            "name": "version_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Version Id"
+            }
+          },
+          {
+            "name": "dong_code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 32
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dong Code"
+            }
+          },
+          {
+            "name": "X-Data-Mode",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "enum": [
+                "mock",
+                "real"
+              ],
+              "type": "string",
+              "default": "real",
+              "title": "X-Data-Mode"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Inference Inputs Api V3 Modelops Instances  Instance Id  Versions  Version Id  Inputs Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v3/modelops/instances/{instance_id}/versions/{version_id}/predict": {
+      "post": {
+        "tags": [
+          "modelops"
+        ],
+        "summary": "Predict Version",
+        "operationId": "predict_version_api_v3_modelops_instances__instance_id__versions__version_id__predict_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "instance_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Instance Id"
+            }
+          },
+          {
+            "name": "version_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Version Id"
+            }
+          },
+          {
+            "name": "X-Data-Mode",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "enum": [
+                "mock",
+                "real"
+              ],
+              "type": "string",
+              "default": "real",
+              "title": "X-Data-Mode"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PredictionInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Predict Version Api V3 Modelops Instances  Instance Id  Versions  Version Id  Predict Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v3/modelops/instances/{instance_id}/versions/{version_id}/activate": {
       "post": {
         "tags": [
@@ -3717,86 +3888,30 @@
           "realdata-analysis"
         ],
         "summary": "Get Analysis",
-        "description": "`GET /realdata/analysis`(R5) — 현황·진단·예측·대응 후보를 한 번에 반환한다.",
         "operationId": "get_analysis_api_v3_realdata_analysis_get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "region",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "default": "namwon",
-              "title": "Region"
-            }
-          },
-          {
-            "name": "dong_code",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "pattern": "^(all|\\d{8})$",
-              "title": "Dong Code"
-            }
-          },
-          {
-            "name": "base_ym",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "maximum": 999912,
-              "minimum": 190001,
-              "title": "Base Ym"
-            }
-          },
-          {
-            "name": "model_id",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Model Id"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
                   "additionalProperties": true,
+                  "type": "object",
                   "title": "Response Get Analysis Api V3 Realdata Analysis Get"
                 }
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
+          "410": {
+            "description": "진단 기능 종료"
           }
-        }
+        },
+        "deprecated": true,
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/": {
@@ -5043,6 +5158,62 @@
         "type": "object",
         "title": "PipelineRunRequest",
         "description": "등록 파이프라인 실행 요청 — 트리거만 받고 대상 모델은 등록 정의를 따른다."
+      },
+      "PredictionInput": {
+        "properties": {
+          "region_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Region Id"
+          },
+          "target": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Target"
+          },
+          "dataset_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Dataset Id"
+          },
+          "dataset_hash": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Dataset Hash"
+          },
+          "dong_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 32
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dong Code"
+          },
+          "adjustments": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "maxProperties": 30,
+            "title": "Adjustments"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "region_id",
+          "target",
+          "dataset_id",
+          "dataset_hash"
+        ],
+        "title": "PredictionInput"
       },
       "Provenance": {
         "properties": {
