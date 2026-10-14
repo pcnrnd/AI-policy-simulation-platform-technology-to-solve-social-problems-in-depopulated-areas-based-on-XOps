@@ -75,3 +75,24 @@ def test_real_storage_unavailable_does_not_return_stub_rows(client, auth_headers
     assert response.json()["source_kind"] == "in-memory"
     assert response.json()["result_rows"] == 0
     assert response.json()["pagination"]["total"] is None
+
+
+def test_demo_alert_detection_calculates_distribution_without_model_mutation(client, auth_headers, monkeypatch):
+    from src.api.v3 import monitoring
+    from src.core.seed import get_seed
+    from src.mlops.monitoring.drift import DriftDetector
+
+    def forbidden():
+        raise AssertionError("읽기 전용 경보 판정이 모델 재학습/승급을 호출함")
+    monkeypatch.setattr(monitoring, "get_registry", forbidden)
+    params = {"drifted": "true", "include_seed": "true", "auto_retrain": "false"}
+    detected = client.get("/api/v3/monitoring/drift", params=params, headers=mode_headers(auth_headers, "mock")).json()
+    dist = get_seed()["drift_distribution"]
+    expected = DriftDetector().detect(dist["reference"], dist["current_drifted"])
+    assert detected["source"] == "seed" and detected["drifted"] is True
+    assert detected["psi"] == expected.psi and detected["kl"] == expected.kl
+    assert detected["retrain"] is None
+    normal = client.get("/api/v3/monitoring/drift", params={**params, "drifted": "false"}, headers=mode_headers(auth_headers, "mock")).json()
+    assert normal["drifted"] is False and normal["retrain"] is None
+    real = client.get("/api/v3/monitoring/drift", params=params, headers=mode_headers(auth_headers, "real")).json()
+    assert real["source"] is None and real["reference"] == [] and "psi" not in real
