@@ -4,6 +4,7 @@ from fastapi import APIRouter
 from src.api.v3 import (
     dataops,
     monitoring,
+    modelops,
     orchestration,
     overview,
     realdata,
@@ -15,6 +16,7 @@ from src.api.v3 import (
 api_router = APIRouter()
 api_router.include_router(dataops.router)
 api_router.include_router(monitoring.router)
+api_router.include_router(modelops.router)
 api_router.include_router(orchestration.router)
 api_router.include_router(overview.router)
 api_router.include_router(realdata.router)

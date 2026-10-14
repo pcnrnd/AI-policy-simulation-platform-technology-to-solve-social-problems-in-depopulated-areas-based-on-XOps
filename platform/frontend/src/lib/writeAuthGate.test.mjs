@@ -45,7 +45,7 @@ let found = 0;
 for (const file of sourceFiles(srcRoot)) {
   const text = readFileSync(file, "utf-8");
   for (const call of apiSendCalls(text)) {
-    if (!call.text.includes("/api/v3/orchestration/")) continue;
+    if (!call.text.includes("/api/v3/orchestration/") && !call.text.includes("/api/v3/modelops/")) continue;
     found += 1;
     if (/\btoken\b/.test(call.text)) continue;
     const lineNo = text.slice(0, call.index).split("\n").length;
@@ -54,6 +54,6 @@ for (const file of sourceFiles(srcRoot)) {
 }
 
 // 등록 폼·삭제·재학습 이벤트 3곳이 검사 대상에 잡혀야 검사 자체가 유효하다.
-assert.ok(found >= 3, `오케스트레이션 쓰기 호출을 ${found}곳만 찾았다(3곳 이상이어야 한다)`);
+assert.ok(found >= 7, `모델 운영 쓰기 호출을 ${found}곳만 찾았다(7곳 이상이어야 한다)`);
 assert.deepEqual(offenders, [], `토큰 없이 부르는 오케스트레이션 쓰기:\n${offenders.join("\n")}`);
 console.log(`  ok  오케스트레이션 쓰기 ${found}곳이 모두 토큰을 보낸다`);

@@ -9,6 +9,7 @@ import ConfirmDialog from "../components/ConfirmDialog.jsx";
 import NextStepBanner from "../components/NextStepBanner.jsx";
 import InfoTip from "../components/InfoTip.jsx";
 import FilterBuilder from "../components/FilterBuilder.jsx";
+import TrainingDatasetRegistration from "../components/TrainingDatasetRegistration.jsx";
 import { useAppState } from "../context/AppStateContext.jsx";
 import { apiGet, apiSend } from "../lib/api.js";
 import { filterValidationMessage } from "../lib/filterExpression.js";
@@ -804,6 +805,7 @@ export default function DataOpsPage() {
 
   return (
     <>
+      <TrainingDatasetRegistration />
       <p className="dataops-page-sub">
         <i className="fa-solid fa-box-archive" aria-hidden="true"></i> 데이터 라이프사이클 관리
         기술(DataOps) — 빅데이터 관리 아카이빙 · 메타데이터 기반 다기종 데이터 관리

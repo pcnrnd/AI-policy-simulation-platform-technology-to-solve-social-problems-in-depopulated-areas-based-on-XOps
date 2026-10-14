@@ -20,7 +20,7 @@ import { fetchReportData } from "../lib/dataopsApi.js";
 const EXPORT_FORMATS = [
   { id: "docx", label: "Word (.docx)", icon: "fa-file-word", ext: "docx" },
   { id: "xlsx", label: "Excel (.xlsx)", icon: "fa-file-excel", ext: "xlsx" },
-  { id: "hwp", label: "한글 (.hwp)", icon: "fa-file-lines", ext: "hwp" },
+  { id: "html", label: "HTML (.html)", icon: "fa-file-code", ext: "html" },
   { id: "md", label: "Markdown (.md)", icon: "fa-markdown", ext: "md" }
 ];
 
@@ -29,7 +29,7 @@ function regionShortName(region) {
   return parts[parts.length - 1] || region.name;
 }
 
-function buildPreview(region, template, live, generatedAt) {
+function buildPreview(region, template, live, generatedAt, allowSeed) {
   const tenYearPop = Math.round(region.population * 0.81).toLocaleString();
   const indicators = live?.indicators ?? null;
   const explain = live?.explain ?? null;
@@ -44,7 +44,7 @@ function buildPreview(region, template, live, generatedAt) {
         생성 일시: {formatReportTimestamp(generatedAt)}
       </p>
 
-      <h3>1. 대상 지자체 기본 현황 및 예측 요약</h3>
+      {allowSeed && <><h3>1. 대상 지자체 기본 현황 및 예측 요약</h3>
       <p>
         본 분석서의 대상인 <strong>{region.name}</strong>은 현재 등록 인구수{" "}
         <strong>{region.population.toLocaleString()}명</strong>, 평균 가중 출산율{" "}
@@ -52,7 +52,7 @@ function buildPreview(region, template, live, generatedAt) {
         달해 인구소멸 위험지수 <strong>{region.riskIndex}</strong> 등급의 극심한 소멸 위험 지역입니다.
         AI 예측 모델에 따르면, 현행 유지 시 10년 후 인구는 약 <strong>{tenYearPop}명</strong>{" "}
         수준으로 급감할 것으로 예측됩니다.
-      </p>
+      </p></>}
 
       {indicators && (
         <>
@@ -88,12 +88,12 @@ function buildPreview(region, template, live, generatedAt) {
         </>
       )}
 
-      <h3>4. 제언 및 최종 권고 요약</h3>
+      {allowSeed && <><h3>4. 제언 및 최종 권고 요약</h3>
       <ol>
         <li>welfare 예산 부문에 청년 보조 자금 배정 가중치를 최소 60% 이상으로 확대 편성.</li>
         <li>industry 부문의 산업단지 유치를 유도하여 청년 근로자의 유입 세제 혜택 가속화.</li>
         <li>정량적 성과 모니터링 강화를 위해 3차년도 MLOps 대시보드 실시간 API 연계 체계 가동.</li>
-      </ol>
+      </ol></>}
 
       <div
         style={{
@@ -165,7 +165,7 @@ export default function ReporterPage() {
         if (requestId !== refreshRequestRef.current) return;
         // 활성 모델·지표가 없으면 null — 사유를 지어내지 않고 빈 상태로 둔다.
         if (!result) {
-          setBindingFeedback({ tone: "info", message: "선택한 지자체의 데이터를 확인한 뒤 다시 갱신하세요." });
+          setBindingFeedback({ tone: "info", message: allowSeed ? "데모 데이터를 선택했습니다." : "선택한 지자체의 데이터를 확인한 뒤 다시 갱신하세요." });
           addConsoleLog("INFO: 리포트 지표 갱신 - 표시할 데이터 없음");
           return;
         }
@@ -185,7 +185,7 @@ export default function ReporterPage() {
         if (requestId === refreshRequestRef.current) setRefreshing(false);
       }
     },
-    [region, addConsoleLog]
+    [region, addConsoleLog, allowSeed]
   );
 
   // 지자체 변경 시 자동 재바인딩(드리프트 토글은 실측 지표에 영향을 주지 않는다).
@@ -217,10 +217,9 @@ export default function ReporterPage() {
       addConsoleLog(`WARN: 보고서 미리보기 생성 중단 - ${region.name} 실데이터 없음`);
       return;
     }
-    if (!regionBinding) return;
     const timestamp = new Date().toISOString();
     setGeneratedAt(timestamp);
-    setPreview(buildPreview(region, template, regionBinding, timestamp));
+    setPreview(buildPreview(region, template, regionBinding, timestamp, allowSeed));
     setReportFeedback({ tone: "success", message: `${region.name} 보고서 미리보기를 생성했습니다.` });
     addConsoleLog(`INFO: 보고서 미리보기 생성 성공 - ${region.name}`);
   };
@@ -240,21 +239,22 @@ export default function ReporterPage() {
   const handleDownload = () => {
     // 시드로 가득 찬 docx/xlsx/hwp/md 가 생성되는 것을 막는 가드 — 실데이터 바인딩이 있으면
     // 그 걱정이 없으므로 데모 OFF 에서도 내보낸다. 차단 시 사유 문구는 만들지 않는다.
-    if (!regionBinding) return;
+    if (gateMode === "empty") return;
     const timestamp = generatedAt ?? new Date().toISOString();
     if (!generatedAt) {
       setGeneratedAt(timestamp);
-      setPreview(buildPreview(region, template, regionBinding, timestamp));
+      setPreview(buildPreview(region, template, regionBinding, timestamp, allowSeed));
     }
     const fmt = EXPORT_FORMATS.find((f) => f.id === format) ?? EXPORT_FORMATS[0];
     const baseName = `R_D_인구소멸대응보고서_${regionShortName(region)}`;
     const filename = dedupeFilename(baseName, fmt.ext);
     const extra = {
       generatedAt: timestamp,
+      allowSeed,
       populationChange: appData.population_change,
       vitalPopulation: appData.vital_population,
-      live: regionBinding.indicators,
-      explain: regionBinding.explain
+      live: regionBinding?.indicators ?? null,
+      explain: regionBinding?.explain ?? null
     };
 
     try {
@@ -268,7 +268,7 @@ export default function ReporterPage() {
           sheetName: "지표요약",
           rows: buildReportRows(region, template, extra)
         });
-      } else if (fmt.id === "hwp") {
+      } else if (fmt.id === "html") {
         blob = buildHwpHtml({ title: template.title, blocks });
       } else {
         const markdown = blocksToMarkdown(template.title, blocks);
@@ -403,10 +403,10 @@ export default function ReporterPage() {
         </div>
 
         <div className="slider-container reporter-action-row">
-          <button className="btn btn-secondary" style={{ flexGrow: 1 }} onClick={handleGenerate} disabled={refreshing || !regionBinding}>
+          <button className="btn btn-secondary" style={{ flexGrow: 1 }} onClick={handleGenerate} disabled={refreshing || gateMode === "empty"}>
             <i className="fa-solid fa-pen-nib" aria-hidden="true"></i> 보고서 실시간 본문 생성
           </button>
-          <button className="btn btn-primary" style={{ flexGrow: 1 }} onClick={handleDownload} disabled={refreshing || !regionBinding}>
+          <button className="btn btn-primary" style={{ flexGrow: 1 }} onClick={handleDownload} disabled={refreshing || gateMode === "empty"}>
             <i className="fa-solid fa-file-arrow-down" aria-hidden="true"></i> 보고서 다운로드
           </button>
         </div>
@@ -432,7 +432,7 @@ export default function ReporterPage() {
             <i className="fa-solid fa-circle-info"></i> 지자체 실무자 팁
           </div>
           <div style={{ fontSize: 11, color: "var(--text-secondary)", lineHeight: 1.5 }}>
-            Word(.docx)·Excel(.xlsx)는 OOXML 규격으로, 한글(.hwp)은 한컴오피스 호환 형식으로 즉시
+            Word(.docx)·Excel(.xlsx)는 OOXML 규격으로, HTML(.html)은 웹 문서 형식으로 즉시
             저장됩니다. 정량 성과 지표 텍스트와 표가 모두 자동 기입됩니다. 동일 파일명 재저장 시{" "}
             <code>_(1)</code> 형식으로 자동 증분되며, 저장 실패 시 콘솔에 오류가 기록됩니다.
             (브라우저 보안 정책상 저장 경로는 브라우저 다운로드 폴더로 고정됩니다.)

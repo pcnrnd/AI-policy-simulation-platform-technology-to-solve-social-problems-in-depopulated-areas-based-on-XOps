@@ -9,10 +9,12 @@ from __future__ import annotations
 import json
 from functools import lru_cache
 from typing import Any
+from fastapi import HTTPException
 
 from src.core import db
 from src.core.exceptions import SourceNotFoundError, XopsError
 from src.core.settings import get_settings
+from src.core.data_mode import current_mode, source_mode
 
 
 class DuplicateSourceError(XopsError):
@@ -47,12 +49,16 @@ class MetadataCatalog:
         표식으로만 가른다. 사용자 등록 소스는 시드가 아니므로 항상 남는다.
         """
         seeds = self._seed.values() if include_seed else [s for s in self._seed.values() if not s.get("is_seed")]
-        return [*seeds, *db.list_user_sources()]
+        rows = [*seeds, *db.list_user_sources()]
+        mode = current_mode()
+        return [row for row in rows if mode is None or source_mode(row) == mode]
 
     def get(self, source_id: str) -> dict[str, Any]:
         schema = self._seed.get(source_id) or db.get_user_source(source_id)
         if schema is None:
             raise SourceNotFoundError(f"데이터 소스를 찾을 수 없습니다: {source_id}")
+        if current_mode() is not None and source_mode(schema) != current_mode():
+            raise HTTPException(404, "현재 모드에서 사용할 데이터를 선택하세요.")
         return schema
 
     def search(self, query: str, include_seed: bool = True) -> list[dict[str, Any]]:
@@ -67,11 +73,14 @@ class MetadataCatalog:
         if source_id in self._seed or db.get_user_source(source_id) is not None:
             raise DuplicateSourceError(f"이미 존재하는 소스 id입니다: {source_id}")
         stored = {**schema, "user_registered": True}
+        if current_mode() is not None:
+            stored.update({"mode": current_mode(), "is_seed": current_mode() == "mock"})
         db.add_user_source(stored)
         return stored
 
     def remove(self, source_id: str) -> None:
         """사용자 등록 소스만 삭제 — 기본 시드 소스는 보호."""
+        self.get(source_id)
         if source_id in self._seed:
             raise ProtectedSourceError(f"기본 소스는 삭제할 수 없습니다: {source_id}")
         if not db.delete_user_source(source_id):

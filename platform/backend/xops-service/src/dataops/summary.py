@@ -19,6 +19,7 @@ from __future__ import annotations
 from typing import Any
 
 from src.core.settings import get_settings
+from src.core.data_mode import current_mode
 from src.dataops.adapters import adapter_of
 from src.dataops.catalog import get_catalog
 from src.dataops.liveness import live_rows_for
@@ -38,7 +39,7 @@ def _rollup(schema: dict[str, Any]) -> dict[str, Any]:
     `source_kind` 도 DSN 문자열 유무가 아니라 **실제로 세는 데 성공했는지**를 따른다.
     """
     archive = schema.get("archive") or {}
-    counted = live_rows_for(schema)
+    counted = archive.get("rows") if current_mode() == "mock" else live_rows_for(schema)
     return {
         "id": schema.get("id"),
         "label": schema.get("label") or schema.get("id"),
@@ -47,7 +48,7 @@ def _rollup(schema: dict[str, Any]) -> dict[str, Any]:
         "archive_rows": counted,
         "storage_tier": archive.get("tier"),
         "loaded_at": archive.get("loaded_at"),
-        "source_kind": DATABASE if counted is not None else IN_MEMORY,
+        "source_kind": "mock" if current_mode() == "mock" else DATABASE if counted is not None else IN_MEMORY,
         "user_registered": bool(schema.get("user_registered")),
     }
 
@@ -58,6 +59,8 @@ def _model_snapshot(model_id: str = OVERVIEW_MODEL_ID, include_seed: bool = True
     `include_seed=False` 면 지표가 시드인 모델은 아예 나오지 않으므로 None 이 되고, 화면은
     "측정값 없음"을 고른다.
     """
+    if current_mode() == "real":
+        return None
     for model in get_registry().models(include_seed=include_seed):
         if model.get("model_id") != model_id:
             continue
@@ -86,7 +89,7 @@ def build_overview_summary(include_seed: bool = True) -> dict[str, Any]:
         "method": "GET",
         "endpoint": f"{settings.api_prefix}/overview/summary",
         "dataops_version": settings.dataops_version,
-        "source_kind": DATABASE if counted else IN_MEMORY,
+        "source_kind": "mock" if current_mode() == "mock" else DATABASE if counted else IN_MEMORY,
         "source_count": len(sources),
         # 확인한 소스만 더한다 — 확인 못 한 소스를 0으로 치면 합계가 실제보다 작다고 단정하게 된다.
         "archive_rows_total": sum(counted),

@@ -5,7 +5,8 @@ import { RETRAIN_PIPELINES, MODEL_STORE } from "../constants/models.js";
 import { apiGet, apiSend } from "../lib/api.js";
 import { MOCK_DATA_STORAGE_KEY, readMockDataVisible } from "../lib/demoVisibility.js";
 import { consumeSessionExpired } from "../lib/sessionGate.js";
-import { retainRealAlerts, unreadNotifications } from "../lib/demoAlerts.js";
+import { retainRealAlerts, unreadNotifications, detectDemoDrift } from "../lib/demoAlerts.js";
+import { setDataMode, dataModeEpoch } from "../lib/dataMode.js";
 import { getRealdataToken } from "../components/realdata/realdataClient.jsx";
 
 const AppStateContext = createContext(null);
@@ -111,6 +112,7 @@ export function AppStateProvider({ children }) {
   const [budgetTotal, setBudgetTotal] = useState(600); // 총 예산(억) — 시뮬레이션 제약요소
 
   const [driftInjected, setDriftInjected] = useState(false);
+  const [driftChecking, setDriftChecking] = useState(false);
   const [pipelineRunning, setPipelineRunning] = useState(false);
   // 모니터 화면의 실제 최근 지표 수집 판정("ok" | "fail" | "unknown") — 헤더 상태 칩이
   // 모니터 화면과 같은 API 응답 기준으로 성공/실패/미수집을 표시하도록 전역에 공유한다.
@@ -154,13 +156,41 @@ export function AppStateProvider({ children }) {
   const pipelineTimerRef = useRef(null);
   const pipelineRequestRef = useRef(0);
   const driftStartTimerRef = useRef(null);
+  const driftCheckEpochRef = useRef(null);
 
   const navigateToTab = useCallback((tabId) => {
     setActiveTab(tabId);
     setTabFocusRequest((request) => request + 1);
   }, []);
 
-  const toggleMockDataVisible = useCallback(() => setMockDataVisible((prev) => !prev), []);
+  const toggleMockDataVisible = useCallback(() => {
+    const next = !demoVisibleRef.current;
+    setDataMode(next ? "mock" : "real");
+    pipelineRequestRef.current += 1;
+    if (driftStartTimerRef.current) clearTimeout(driftStartTimerRef.current);
+    if (pipelineTimerRef.current) clearTimeout(pipelineTimerRef.current);
+    driftStartTimerRef.current = null;
+    pipelineTimerRef.current = null;
+    setPipelineRunning(false);
+    setPipelineScheduled(false);
+    setPipelineStep(0);
+    setPipelineRun(null);
+    setPipelineResult(null);
+    setPipelineHistory({});
+    setMetricOverrides({});
+    setModelCandidates({});
+    setModelStore(next ? MODEL_STORE : []);
+    setOverviewSummary(null);
+    setMonitorCollectStatus("unknown");
+    setDriftInjected(false);
+    setDriftChecking(false);
+    driftCheckEpochRef.current = null;
+    setAlerts([]);
+    setNotifications([]);
+    setConsoleLogs([]);
+    demoVisibleRef.current = next;
+    setMockDataVisible(next);
+  }, []);
 
   useEffect(() => {
     try {
@@ -200,8 +230,10 @@ export function AppStateProvider({ children }) {
   // 운영 버전과 같아지고, startPipeline 의 "후보 없음" 가드가 영구히 참이 되어 재실행이 잠긴다.
   // 데모 표시 OFF면 시드 지표 모델(metrics_source="seed")을 빼고 받는다 — 목록 계약은 카탈로그와 같다.
   const syncModels = useCallback(() => {
+    const requestEpoch = dataModeEpoch();
     return apiGet(`/api/v3/orchestration/models?include_seed=${mockDataVisible}`)
       .then((models) => {
+        if (requestEpoch !== dataModeEpoch()) return;
         if (!Array.isArray(models)) return;
         setModelCandidates(
           Object.fromEntries(
@@ -587,23 +619,36 @@ export function AppStateProvider({ children }) {
     mockDataVisible
   ]);
 
-  const injectDrift = useCallback(() => {
-    if (!demoVisibleRef.current || pipelineRunning || driftStartTimerRef.current) return;
-    setDriftInjected(true);
-    setPipelineScheduled(true);
-    addConsoleLog("WARN: 데이터 드리프트 심각수준 감지! (PSI 임계 0.20 초과)", false, true);
-    addConsoleLog("INFO: MLOps 오케스트레이터가 재학습 자동 스케줄링을 시작합니다...");
-    showAlert({
-      source: "demo",
-      title: "[경보] 데이터 드리프트 발생",
-      message: "실시간 수집 분포 불안정 (PSI 임계 초과). MLOps 오케스트레이터 가동."
-    });
-    driftStartTimerRef.current = setTimeout(() => {
-      driftStartTimerRef.current = null;
-      setPipelineScheduled(false);
-      startPipeline("드리프트 자동 감지 (PSI 임계 0.20 초과)");
-    }, 1500);
-  }, [pipelineRunning, addConsoleLog, showAlert, startPipeline]);
+  const injectDrift = useCallback(async () => {
+    if (!demoVisibleRef.current || driftCheckEpochRef.current !== null) return;
+    const epoch = dataModeEpoch();
+    const isCurrent = () => demoVisibleRef.current && epoch === dataModeEpoch();
+    driftCheckEpochRef.current = epoch;
+    setDriftChecking(true);
+    try {
+      await detectDemoDrift({
+        isCurrent,
+        loadDrift: async () => {
+          const token = await getRealdataToken();
+          if (!isCurrent()) return null;
+          return apiGet("/api/v3/monitoring/drift", { token, params: {
+            drifted: true, include_seed: true, auto_retrain: false
+          } });
+        },
+        onDetected: (result, alert) => {
+          setDriftInjected(true);
+          addConsoleLog(`WARN: 데모 분포 드리프트 감지 — PSI ${result.psi} / 임계 ${result.psi_threshold} · KL ${result.kl} / 임계 ${result.kl_threshold}`);
+          addConsoleLog("INFO: 오케스트레이터에서 등록한 모델과 파이프라인을 선택해 수동 실행하세요.");
+          showAlert(alert);
+        }
+      });
+    } catch (error) {
+      if (isCurrent()) addConsoleLog(`ERROR: 데모 분포 판정 실패 — ${error.message}`);
+    } finally {
+      if (isCurrent()) setDriftChecking(false);
+      if (driftCheckEpochRef.current === epoch) driftCheckEpochRef.current = null;
+    }
+  }, [addConsoleLog, showAlert]);
 
   // 지자체를 선택하고 지정 탭으로 이동(예: 현황 테이블 → 정책 시뮬레이터).
   const focusRegion = useCallback((region, tabId = "tab-simulator") => {
@@ -632,6 +677,7 @@ export function AppStateProvider({ children }) {
     budgetTotal,
     setBudgetTotal,
     driftInjected,
+    driftChecking,
     pipelineRunning,
     monitorCollectStatus,
     setMonitorCollectStatus,

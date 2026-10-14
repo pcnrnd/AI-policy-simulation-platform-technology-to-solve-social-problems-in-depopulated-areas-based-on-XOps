@@ -2,6 +2,7 @@
 // 그대로 재사용해 단일 토큰(scope: data:read data:write)으로 조회·쓰기를 모두 게이팅한다.
 // JSX는 없지만 컴포넌트 소유 경계(components/realdata/*.jsx)를 지키기 위해 .jsx로 둔다.
 import { apiGet, apiSend } from "../../lib/api.js";
+import { dataModeEpoch } from "../../lib/dataMode.js";
 
 const BASE = "/api/v3/realdata";
 
@@ -19,9 +20,10 @@ let cachedToken = null;
 
 /** 유효한 실데이터 토큰을 돌려준다(진행 중 요청은 공유, 실패하면 캐시를 비워 재시도 가능). */
 export function getRealdataToken() {
-  if (cachedToken && Date.now() - cachedToken.issuedAt < TOKEN_TTL_MS) return cachedToken.promise;
+  if (cachedToken && cachedToken.epoch === dataModeEpoch() && Date.now() - cachedToken.issuedAt < TOKEN_TTL_MS) return cachedToken.promise;
   const entry = {
     issuedAt: Date.now(),
+    epoch: dataModeEpoch(),
     promise: issueRealdataToken().catch((err) => {
       if (cachedToken === entry) cachedToken = null;
       throw err;
