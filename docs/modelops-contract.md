@@ -31,6 +31,18 @@
 
 예측값은 `intercept + Σ coef[i] × (x[i]-train_means[i])/train_stds[i]`이고 같은 각 항을 요인 기여도로 사용할 수 있다. 이는 모델의 조건 입력 예측/선형 기여도이며 정책 변경의 인과 효과를 뜻하지 않는다. real 버전은 원 관측기간·평가기간·예측월도 보존한다. 추론→시뮬레이션→추천 UI 연결은 Phase C에서 수행한다.
 
+## 활성 버전 추론과 관측 입력 민감도 (Phase C)
+
+`GET /modelops/instances/{id}/versions/{version}/inputs?dong_code=`는 활성 버전만 사용하며 등록본 private hash·모델 artifact hash·지역/target/종류·job 연결을 재검증한다. 실제 입력값, 행정동 목록, 조정 가능한 연속 관측값의 학습 범위, model/dataset/version/job/평가기간/예측기간 근거를 반환한다. real 입력은 등록 자료의 마지막 관측 다음 달이며, 과거 관측값의 lag·전년동월·계절/지역 인코딩으로 만든다. 범위는 **선택 행정동의 학습 구간**(`range_provenance` from/to/row_count)으로 계산한다. mock API 입력은 private seed의 마지막 관측 기간에 대한 기존 학습 입력이며 미래 예측이라고 표시하지 않는다.
+
+`POST .../predict`는 `region_id`, `target`, `dataset_id`, `dataset_hash`, 선택 `dong_code` 및 `adjustments`(조정 가능한 feature → 유한 수치)를 받는다. 활성 버전이 바뀌거나 입력 근거가 다르면 409, 조정 불가/비유한/누락 입력은 422, 다른 모드 ID는 404다. 모든 계산은 read 권한으로 수행하며 저장·학습·활성 변경은 없다. 응답의 `inference_id`는 영속 기록이 아니라 해당 계산 결과의 연결 식별자다.
+
+반환 `prediction`은 artifact 수식으로 계산하고 `intercept + Σ contributions.value`와 일치한다. `baseline_inputs`/`baseline_prediction` 대비 조정 `inputs`/`prediction`의 `delta`, 기여도의 입력/계수/평균/표준편차와 실제 값, 관측 범위 밖 입력 목록을 함께 반환한다. 시뮬레이션 응답 `recommendations`는 각 조정 가능한 관측 입력을 선택 행정동 학습 범위의 1%만큼 증가/감소한 단일 변경 시나리오의 실제 prediction/delta다. 전년 관측이 없으면 기존 feature 규칙대로 전월 값의 파생 대체 입력을 함께 갱신한다.
+
+real UI는 두 활성 모델의 지역·target·원 내용 hash·입력 좌표/기간·feature가 같을 때 연결하며 등록본 ID가 다르면 각 ID를 명시한다. 기여도 → 입력 가정 예측 → **예측 민감도 기반 검토 우선순위**로 표시한다. 현재 관측 lag에는 정책 변수가 없으므로 정책 효과나 RICE 점수를 제시하지 않는다. 실제 외생 정책 입력을 가진 등록·학습 스키마는 후속 범위다. 활성/대응 자료가 없으면 등록→학습→활성화 안내만 제공한다.
+
+실데이터 진단 UI는 제거했고 `GET /realdata/analysis`는 인증 유지·deprecated·410으로 퇴역했다. 진단 계산 모듈/원 기록과 모니터의 별도 evaluation/explain/drift 평가 패널은 보존한다.
+
 ## 모드 전환과 외부 모듈
 
 전환은 진행 중 앱 요청을 취소하고 응답 epoch·토큰 캐시를 무효화하며 선택·폴링·알림·지표 override·리포트 미리보기를 정리한다. 추천 시나리오 저장 키도 모드별로 분리한다. 서버의 진행 중 작업과 감사 기록은 보존한다.

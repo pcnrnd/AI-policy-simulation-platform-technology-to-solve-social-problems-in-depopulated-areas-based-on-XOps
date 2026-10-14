@@ -63,11 +63,13 @@ export default function TrainingDatasetRegistration() {
       </div>
     </form>
     {feedback && <p role="status">{feedback}</p>}
-    <div className="table-container"><table>
+    <div className="table-container"><table className="training-dataset-table">
       <caption className="sr-only">등록된 학습데이터 목록</caption>
+      <colgroup>{[20,20,16,13,14,8,9].map((width,index) => <col key={index} style={{width:`${width}%`}} />)}</colgroup>
       <thead><tr><th>이름</th><th>데이터셋</th><th>지역</th><th>학습 대상</th><th>기간</th><th>행 수</th><th>내용 해시</th></tr></thead>
-      <tbody>{datasets.map((row) => <tr key={row.id}><td>{row.name}</td><td>{row.id}</td><td title={row.region_id}>{datasetRegionName(row, appData.regions)}</td><td>{TARGET_NAMES[row.target] ?? row.target}</td>
-        <td>{row.observed_from}~{row.observed_to}</td><td>{row.row_count.toLocaleString()}</td><td title={row.content_hash}>{row.content_hash.slice(0, 12)}</td></tr>)}</tbody>
+      <tbody>{datasets.map((row) => <tr key={row.id}><td><span title={row.name}>{row.name}</span></td><td><span title={row.id}>{row.id}</span></td>
+        <td><span title={`${datasetRegionName(row, appData.regions)} (${row.region_id})`}>{datasetRegionName(row, appData.regions)}</span></td><td><span title={TARGET_NAMES[row.target] ?? row.target}>{TARGET_NAMES[row.target] ?? row.target}</span></td>
+        <td><span title={`${row.observed_from}~${row.observed_to}`}>{row.observed_from}~{row.observed_to}</span></td><td><span title={row.row_count.toLocaleString()}>{row.row_count.toLocaleString()}</span></td><td><span title={row.content_hash}>{row.content_hash.slice(0, 12)}</span></td></tr>)}</tbody>
     </table></div>
   </Card>;
 }
