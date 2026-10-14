@@ -31,7 +31,7 @@ export function getRealdataToken() {
   return entry.promise;
 }
 
-export const getModels = (token) => apiGet(`${BASE}/models`, { token });
+export const getModels = (token, regionId) => apiGet(`${BASE}/models`, { token, params: regionId ? { region_id: regionId } : undefined });
 
 export const getDatasets = (token) => apiGet(`${BASE}/datasets`, { token });
 

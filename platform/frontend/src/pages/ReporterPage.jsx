@@ -144,7 +144,8 @@ export default function ReporterPage() {
   );
 
   // 표시 판정은 순수 함수 한 곳에서만 한다(회귀 테스트 대상).
-  const gateMode = reportGateMode({ binding, allowSeed });
+  const regionBinding = binding?.regionId === region.id ? binding : null;
+  const gateMode = reportGateMode({ binding: regionBinding, allowSeed });
 
   // 양식에 연결된 실데이터 API(평가·드리프트)를 호출해 지표를 자동 갱신.
   const refreshBinding = useCallback(
@@ -161,7 +162,7 @@ export default function ReporterPage() {
         if (requestId !== refreshRequestRef.current) return;
         // 활성 모델·지표가 없으면 null — 사유를 지어내지 않고 빈 상태로 둔다.
         if (!result) {
-          setBindingFeedback(null);
+          setBindingFeedback({ tone: "info", message: "선택한 지자체의 데이터를 확인한 뒤 다시 갱신하세요." });
           addConsoleLog("INFO: 리포트 지표 갱신 - 표시할 데이터 없음");
           return;
         }
@@ -212,7 +213,8 @@ export default function ReporterPage() {
       addConsoleLog(`WARN: 보고서 미리보기 생성 중단 - ${region.name} 실데이터 없음`);
       return;
     }
-    setPreview(buildPreview(region, template, binding));
+    if (!regionBinding) return;
+    setPreview(buildPreview(region, template, regionBinding));
     setReportFeedback({ tone: "success", message: `${region.name} 보고서 미리보기를 생성했습니다.` });
     addConsoleLog(`INFO: 보고서 미리보기 생성 성공 - ${region.name}`);
   };
@@ -232,15 +234,15 @@ export default function ReporterPage() {
   const handleDownload = () => {
     // 시드로 가득 찬 docx/xlsx/hwp/md 가 생성되는 것을 막는 가드 — 실데이터 바인딩이 있으면
     // 그 걱정이 없으므로 데모 OFF 에서도 내보낸다. 차단 시 사유 문구는 만들지 않는다.
-    if (gateMode === "empty") return;
+    if (!regionBinding) return;
     const fmt = EXPORT_FORMATS.find((f) => f.id === format) ?? EXPORT_FORMATS[0];
     const baseName = `R_D_인구소멸대응보고서_${regionShortName(region)}`;
     const filename = dedupeFilename(baseName, fmt.ext);
     const extra = {
       populationChange: appData.population_change,
       vitalPopulation: appData.vital_population,
-      live: binding ? binding.indicators : null,
-      explain: binding ? binding.explain : null
+      live: regionBinding.indicators,
+      explain: regionBinding.explain
     };
 
     try {
@@ -308,7 +310,7 @@ export default function ReporterPage() {
             <div>
               엔드포인트:{" "}
               <code style={{ color: "var(--accent-blue)" }}>
-                {binding?.source ?? "—"}
+                {regionBinding?.source ?? "—"}
               </code>
             </div>
             <div>마지막 갱신: {lastUpdated ?? "—"}</div>
@@ -357,6 +359,7 @@ export default function ReporterPage() {
             value={regionId}
             onChange={(e) => {
               const nextId = e.target.value;
+              setPreview(null);
               setRegionId(nextId);
               const nextRegion = regions.find((item) => item.id === nextId);
               if (nextRegion) setCurrentRegion(nextRegion);
@@ -387,10 +390,10 @@ export default function ReporterPage() {
         </div>
 
         <div className="slider-container reporter-action-row">
-          <button className="btn btn-secondary" style={{ flexGrow: 1 }} onClick={handleGenerate} disabled={refreshing || !binding}>
+          <button className="btn btn-secondary" style={{ flexGrow: 1 }} onClick={handleGenerate} disabled={refreshing || !regionBinding}>
             <i className="fa-solid fa-pen-nib" aria-hidden="true"></i> 보고서 실시간 본문 생성
           </button>
-          <button className="btn btn-primary" style={{ flexGrow: 1 }} onClick={handleDownload} disabled={refreshing || !binding}>
+          <button className="btn btn-primary" style={{ flexGrow: 1 }} onClick={handleDownload} disabled={refreshing || !regionBinding}>
             <i className="fa-solid fa-file-arrow-down" aria-hidden="true"></i> 보고서 다운로드
           </button>
         </div>

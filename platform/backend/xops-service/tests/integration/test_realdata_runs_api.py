@@ -184,6 +184,14 @@ def test_candidates_empty_when_none_registered(client: TestClient, auth_headers:
     assert body["data"] == []
 
 
+@pytest.mark.parametrize("region_id, expected_count", [("namwon", 2), ("shinan", 0), ("unknown", 0)])
+def test_report_models_are_filtered_by_region(client: TestClient, auth_headers: dict[str, str], region_id: str, expected_count: int) -> None:
+    body = client.get(f"{_BASE}/models", params={"region_id": region_id}, headers=auth_headers).json()
+    assert len(body["data"]) == expected_count
+    assert body["status"] == ("ok" if expected_count else "empty")
+    assert all(row["region_id"] == region_id for row in body["data"])
+
+
 def _seed_candidate(*, mae: float = 5.0, baseline_mae: float = 10.0, quality: dict[str, Any] | None = None) -> None:
     conn = _conn()
     conn.execute(
