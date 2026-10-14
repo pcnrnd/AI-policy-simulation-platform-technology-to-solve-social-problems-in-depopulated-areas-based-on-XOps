@@ -17,7 +17,7 @@ function Evidence({ result, regions }) {
   const evaluation = p.evaluation_period;
   return <details className="real-flow-evidence"><summary>모델·학습데이터와 계산 근거</summary>
     <dl>
-      <dt>지역 / 학습 대상</dt><dd>{regions.find((r) => r.id === p.region_id)?.name ?? p.region_id} / {REAL_TARGETS[p.target] ?? p.target} ({p.target})</dd>
+      <dt>지역 / 학습 대상</dt><dd>{regions.find((r) => r.id === p.region_id)?.name ?? p.region_id} / {REAL_TARGETS[p.target] ?? p.target}</dd>
       <dt>모델 종류 / 활성 버전</dt><dd>{p.model_type === "factor_analysis" ? "요인분석" : "시뮬레이션"} / {p.version_id}</dd>
       <dt>등록 모델 / 학습 작업</dt><dd>{p.instance_id} / {p.job_id}</dd>
       <dt>등록 데이터셋 / 원본</dt><dd>{p.dataset_id} / {p.source_dataset_id}</dd>
@@ -25,7 +25,7 @@ function Evidence({ result, regions }) {
       <dt>모델 파일 해시</dt><dd>{p.artifact_hash}</dd>
       <dt>관측 기간 / 예측월</dt><dd>{month(p.observed_from)}~{month(p.observed_to)} / {month(p.prediction_period)}</dd>
       <dt>검증 기간 / 평균 절대 오차</dt><dd>{evaluation ? `${month(evaluation.from)}~${month(evaluation.to)}` : "—"} / {number(p.metrics.mae)} {unit(p.target)} (기준선 {number(p.baseline.mae)} {unit(p.target)})</dd>
-      <dt>입력 항목</dt><dd>{p.features.join(", ")}</dd>
+      <dt>입력 항목</dt><dd>{p.features.map((feature) => observedFeatureLabel(feature,p.target,result.dong_options)).join(", ")}</dd>
       {result.inference_id && <><dt>추론 / 예측 출력</dt><dd>{result.inference_id} / {number(result.prediction)} {unit(p.target)}</dd></>}
     </dl>
   </details>;
@@ -150,7 +150,7 @@ export default function RealSimulationFlow() {
           <p>각 기여도의 합에 기준값 {number(analysis.intercept)} {unit(target)}을 더하면 예측값이 됩니다.</p>
           <div className="table-container"><table><caption className="sr-only">활성 요인분석 버전의 실제 입력과 예측 기여도</caption>
             <thead><tr><th>입력 지표</th><th>관측 입력</th><th>예측 기여도 ({unit(target)})</th></tr></thead>
-            <tbody>{[...analysis.contributions].sort((a,b) => Math.abs(b.value)-Math.abs(a.value)).map((row) => <tr key={row.feature}><td title={row.feature}>{label(row.feature)}</td><td>{number(row.input)}</td><td>{number(row.value)}</td></tr>)}</tbody>
+            <tbody>{[...analysis.contributions].sort((a,b) => Math.abs(b.value)-Math.abs(a.value)).map((row) => <tr key={row.feature}><td>{label(row.feature)}</td><td>{number(row.input)}</td><td>{number(row.value)}</td></tr>)}</tbody>
           </table></div>
         </> : <p>활성 요인분석 버전의 관측 입력으로 기여도를 계산하세요.</p>}
         <Evidence result={analysis ?? contexts.factor} regions={regions}/>
