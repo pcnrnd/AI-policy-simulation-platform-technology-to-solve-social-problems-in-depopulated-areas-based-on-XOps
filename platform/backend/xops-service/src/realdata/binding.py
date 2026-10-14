@@ -4,6 +4,8 @@ from typing import Any
 
 from src.realdata.snapshot import TARGETS
 
+MODEL_REGIONS = {model_id: "namwon" for model_id in TARGETS.values()}
+
 
 def dataset_matches_model(dataset: dict[str, Any], model_id: str) -> bool:
     spec = dataset.get("spec") or {}
