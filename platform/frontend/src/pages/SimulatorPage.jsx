@@ -9,7 +9,7 @@ import FactorAnalysisStage from "../components/FactorAnalysisStage.jsx";
 import FactorResultStage from "../components/FactorResultStage.jsx";
 import PendingData, { NO_DEMO_DATA } from "../components/PendingData.jsx";
 import ScenarioCompare from "../components/ScenarioCompare.jsx";
-import RealdataAnalysisPanel from "../components/realdata/RealdataAnalysisPanel.jsx";
+import RealSimulationFlow from "../components/RealSimulationFlow.jsx";
 import { useAppState } from "../context/AppStateContext.jsx";
 import { useChartTheme } from "../hooks/useChartTheme.js";
 import { buildRegionGrid, densityColor, DENSITY_LEGEND } from "../lib/geo.js";
@@ -77,6 +77,11 @@ function riskGrade(riskIndex) {
 }
 
 export default function SimulatorPage() {
+  const { mockDataVisible } = useAppState();
+  return mockDataVisible ? <MockSimulatorPage /> : <RealSimulationFlow />;
+}
+
+function MockSimulatorPage() {
   const {
     appData,
     currentRegion,
@@ -1025,8 +1030,6 @@ export default function SimulatorPage() {
         </div>
       </CollapsibleStage>
 
-      {/* ── 실데이터 진단(남원) — 신규 패널(R5), 기존 데모 스테이지와 무관 ── */}
-      {!mockDataVisible && <RealdataAnalysisPanel />}
     </>
   );
 }
