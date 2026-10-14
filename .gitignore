@@ -1,17 +1,25 @@
 # === Data ===
 data
-# 실 공공데이터 원본(platform/data/real)은 적재 재현을 위해 추적한다
+# 원본 데이터는 저장소 밖 정본/로컬 적재 경로에서 보존한다.
 !platform/data/
 platform/data/*
-!platform/data/real/
-!platform/data/real/**
-# 외부데이터 xlsx 원본(약 12MB)은 OneDrive가 정본 — 추적하지 않는다 (2026-09-11)
-platform/data/real/*.xlsx
+/platform/data/real/
 data_2025
 data_2026
 data_raw
 data_prepro
 /data_dvc
+
+# === Private data, analysis outputs and local review state ===
+/.dvc/
+/.review/
+/xops-service-checklist.md
+/docs/xops-service-checklist.md
+/docs/research-notes/
+/data_version*/
+*.dvc
+/docs/reports/
+/docs/plans/2026-09-16-데이터분석보고서-제작계획.md
 
 # === Python virtual environments ===
 venv
