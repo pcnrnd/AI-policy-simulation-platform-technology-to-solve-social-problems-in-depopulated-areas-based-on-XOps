@@ -1,4 +1,11 @@
 export const REAL_TARGETS = { observed_sales_krw: "관측 소비", nonlocal_visitors: "타지역 방문객" };
+export function createRequestGate(epochReader) {
+  let sequence=0;
+  return { cancel:() => { sequence+=1; }, begin:() => {
+    const request=++sequence, epoch=epochReader();
+    return () => request===sequence && epoch===epochReader();
+  } };
+}
 export function observedFeatureLabel(name, target, dongs = []) {
   const noun = REAL_TARGETS[target] ?? target;
   const labels = { y_lag1: `전월 ${noun}`, y_lag2: `2개월 전 ${noun}`, y_lag3: `3개월 전 ${noun}`, y_yoy: `전년 같은 달 ${noun}`,
