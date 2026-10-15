@@ -101,11 +101,14 @@ def start_job(mode: str, pipeline_id: str, actor: str) -> dict[str, Any]:
 
 
 def _run_job(mode: str, job: dict[str, Any], lock: threading.Lock) -> None:
+    stage = "preparing"  # 실패 시 어느 단계에서 멈췄는지 화면 노드에 표시한다.
     try:
         job = store.save(mode, "job", {**job, "state": "running", "started_at": store.now()})
         dataset, document = datasets.load(mode, job["dataset_id"], job["dataset_hash"])
         instance = store.get(mode, "instance", job["instance_id"])
+        stage = "training"
         artifact, metrics, baseline = _train(mode, dataset, document, job["version_id"])
+        stage = "registering"
         artifact.update({"model_id": instance["id"], "model_type": instance["model_type"],
             "mode": mode, "source": mode, "region_id": instance["region_id"], "target": instance["target"],
             "version": job["version_id"], "dataset_id": dataset["id"], "content_hash": dataset["content_hash"],
@@ -122,7 +125,7 @@ def _run_job(mode: str, job: dict[str, Any], lock: threading.Lock) -> None:
         store.audit(mode, "training_saved", instance["id"], job["actor"], job_id=job["id"], version_id=job["version_id"], dataset_hash=dataset["content_hash"])
         job = store.save(mode, "job", {**job, "state": "saved", "finished_at": store.now(), "artifact_path": str(path)})
     except Exception as exc:
-        store.save(mode, "job", {**job, "state": "failed", "finished_at": store.now(), "error": type(exc).__name__})
+        store.save(mode, "job", {**job, "state": "failed", "finished_at": store.now(), "error": type(exc).__name__, "failed_stage": stage})
         store.audit(mode, "training_failed", job["instance_id"], job["actor"], job_id=job["id"], reason=type(exc).__name__)
     finally:
         lock.release()

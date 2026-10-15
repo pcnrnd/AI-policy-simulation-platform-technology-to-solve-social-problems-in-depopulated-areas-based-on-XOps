@@ -203,3 +203,46 @@ def test_duplicate_pipeline_does_not_create_extra_instance(client, auth_headers)
     body = {"id": p["id"], "name": "다른 모델", "model_type": "simulation", "dataset_id": ds["id"], "dataset_hash": ds["content_hash"]}
     assert client.post(BASE + "/pipelines", headers=h, json=body).status_code == 409
     assert client.get(BASE + "/catalog", headers=h).json()["instances"] == before
+
+
+def test_pipeline_experiment_is_saved_and_bounded(client, auth_headers):
+    ds = register(client, auth_headers)
+    h = headers(auth_headers, "mock")
+    body = {"id": "test_exp", "name": "실험 학습", "model_type": "factor_analysis", "dataset_id": ds["id"], "dataset_hash": ds["content_hash"], "experiment": "EXP-POP-DECLINE-031"}
+    assert client.post(BASE + "/pipelines", headers=h, json=body).status_code == 201
+    assert client.get(BASE + "/catalog", headers=h).json()["pipelines"][0]["experiment"] == "EXP-POP-DECLINE-031"
+    assert client.post(BASE + "/pipelines", headers=h, json={**body, "id": "test_exp2", "experiment": "x" * 65}).status_code == 422
+    plain = pipeline(client, auth_headers, ds, "simulation")
+    assert plain["experiment"] == ""
+
+
+def test_catalog_lists_versions_in_current_mode_only(client, auth_headers):
+    ds = register(client, auth_headers)
+    p = pipeline(client, auth_headers, ds)
+    h = headers(auth_headers, "mock")
+    job = wait_job(client, h, client.post(BASE + "/pipelines/" + p["id"] + "/run", headers=h).json()["id"])
+    versions = client.get(BASE + "/catalog", headers=h).json()["versions"]
+    assert [row["id"] for row in versions] == [job["version_id"]]
+    assert versions[0]["instance_id"] == p["instance_id"]
+    assert client.get(BASE + "/catalog", headers=headers(auth_headers, "real")).json()["versions"] == []
+
+
+def test_failed_job_records_failed_stage(client, auth_headers, monkeypatch):
+    ds = register(client, auth_headers)
+    p = pipeline(client, auth_headers, ds)
+    h = headers(auth_headers, "mock")
+    def failing(*args):
+        raise ValueError("invalid input")
+    monkeypatch.setattr(service, "_train", failing)
+    job = wait_job(client, h, client.post(BASE + "/pipelines/" + p["id"] + "/run", headers=h).json()["id"])
+    assert job["state"] == "failed" and job["failed_stage"] == "training"
+    original = service.datasets.load
+    calls = []
+    def load_once(*args):
+        calls.append(args)
+        if len(calls) > 1:
+            raise ValueError("tampered")
+        return original(*args)
+    monkeypatch.setattr(service.datasets, "load", load_once)
+    job = wait_job(client, h, client.post(BASE + "/pipelines/" + p["id"] + "/run", headers=h).json()["id"])
+    assert job["failed_stage"] == "preparing"

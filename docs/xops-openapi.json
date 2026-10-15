@@ -5123,6 +5123,12 @@
             "maxLength": 120,
             "title": "Trigger Policy",
             "default": "수동"
+          },
+          "experiment": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Experiment",
+            "default": ""
           }
         },
         "type": "object",
