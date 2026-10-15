@@ -18,12 +18,11 @@ function snapshotName(source) {
   return `${source.name} 스냅샷 ${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
 }
 
-export default function RealdataTrainingPanel({ catalog, versions, demoVisible, regionName, busy, job, onReload, onRunPipeline, onActivate, onLog }) {
+export default function RealdataTrainingPanel({ catalog, versions, demoVisible, regionName, busy, job, onReload, onRunPipeline, onActivate, onLog, versionResult, onClearResult }) {
   const [selectedInstanceId, setSelectedInstanceId] = useState("");
   const [selectedDatasetId, setSelectedDatasetId] = useState("");
   const [working, setWorking] = useState(null); // "snapshot" | "train"
   const [error, setError] = useState(null);
-  const [notice, setNotice] = useState(null); // 반영·복원 성공 안내(실패는 error)
 
   const instance = catalog.instances.find((row) => row.id === selectedInstanceId) ?? catalog.instances[0];
   const instanceId = instance?.id ?? "";
@@ -38,7 +37,7 @@ export default function RealdataTrainingPanel({ catalog, versions, demoVisible, 
     if (!instance || locked) return;
     setWorking("snapshot");
     setError(null);
-    setNotice(null);
+    onClearResult();
     try {
       const token = await getRealdataToken();
       let sourceId = null;
@@ -65,7 +64,7 @@ export default function RealdataTrainingPanel({ catalog, versions, demoVisible, 
     const dataset = matchingDatasets.find((row) => row.id === selectedDatasetId);
     setWorking("train");
     setError(null);
-    setNotice(null);
+    onClearResult();
     try {
       let pipeline = catalog.pipelines.find((row) => row.instance_id === instance.id && row.dataset_id === dataset.id);
       if (!pipeline) {
@@ -90,11 +89,9 @@ export default function RealdataTrainingPanel({ catalog, versions, demoVisible, 
       : `후보 ${version.id}을(를) 반영하시겠습니까? 현재 활성 모델을 교체합니다.`;
     if (!window.confirm(question)) return;
     setError(null);
-    setNotice(null);
-    const result = await onActivate(instanceId, version, rollback);
-    if (!result) return;
-    if (result.ok) setNotice(result.message);
-    else setError(result.message);
+    onClearResult();
+    // 결과 문구는 페이지 공유 상태(versionResult)로 돌아온다 — ⑥에서 새 동작이 일어나면 여기 문구는 사라진다.
+    await onActivate(instanceId, version, rollback);
   };
 
   const cardJob = job && job.instance_id === instanceId ? job : null;
@@ -104,9 +101,10 @@ export default function RealdataTrainingPanel({ catalog, versions, demoVisible, 
       icon="fa-flask-vial"
       className="page-section realdata-panel"
       dataSource="api"
+      sourceLabel={demoVisible ? "데모" : undefined}
       headerRight={
         <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
-          {demoVisible ? "시드 지역 시계열 · Ridge · 후보 승인 후 반영" : "남원 23동 실데이터 · Ridge 공동 학습 · 후보 승인 후 반영"}
+          {demoVisible ? "데모 지역 시계열 · Ridge · 후보 승인 후 반영" : "남원 23동 실데이터 · Ridge 공동 학습 · 후보 승인 후 반영"}
         </span>
       }
     >
@@ -158,7 +156,11 @@ export default function RealdataTrainingPanel({ catalog, versions, demoVisible, 
         </p>
       )}
       {error && <p className="realdata-error" role="alert">{error}</p>}
-      {notice && <p className="realdata-hint" role="status">{notice}</p>}
+      {versionResult?.origin === "card" && (
+        versionResult.ok
+          ? <p className="realdata-hint" role="status">{versionResult.message}</p>
+          : <p className="realdata-error" role="alert">{versionResult.message}</p>
+      )}
 
       <div className="table-container">
         <table>

@@ -74,7 +74,7 @@ function announcement(nodes, status, target) {
  * target: { kind: "modelops", job, version, instance, pipeline } | { kind: "legacy", run } | null
  * pollError: { message, stopped } — 이 작업의 상태 폴링 실패(화면 잠금은 풀려 있다). onRecheck 로 다시 폴링한다.
  */
-export default function PipelineStatusCard({ target, regionName, onReset, anchorRef, pollError, onRecheck }) {
+export default function PipelineStatusCard({ target, regionName, onReset, anchorRef, pollError, onRecheck, sourceLabel }) {
   const nodes = !target ? jobNodeStatuses(null)
     : target.kind === "legacy" ? PIPELINE_NODES.map((_, index) => legacyNodeStatus(index, target.run))
       : jobNodeStatuses(target.job, target.version);
@@ -96,6 +96,8 @@ export default function PipelineStatusCard({ target, regionName, onReset, anchor
           <code style={{ fontSize: 12, color: "var(--accent-purple-text)", fontWeight: 500 }}>{titleId}</code></> : <>파이프라인 실행 상태 — 대기 중</>}
         icon="fa-diagram-project"
         className="page-section orchestrator-live"
+        dataSource={target ? "api" : undefined}
+        sourceLabel={target ? sourceLabel : undefined}
         headerRight={
           <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
             <span className="system-status" style={{ padding: "2px 10px", fontSize: 11, ...TONE_STYLE[status.tone] }}>
@@ -139,7 +141,7 @@ export default function PipelineStatusCard({ target, regionName, onReset, anchor
         )}
         {run && (
           <div className="run-meta" data-values-source="api">
-            <span className="run-meta-item"><span className="run-meta-label">대상 모델</span>{orDash(run.model_id)} → {orDash(run.active_version)} (이전 경로 기록)</span>
+            <span className="run-meta-item"><span className="run-meta-label">대상 모델</span>{orDash(run.model_id)} → {orDash(run.active_version)} (과거 기록)</span>
             <span className="run-meta-item"><span className="run-meta-label">실행 ID</span><code>{run.run_id}</code></span>
             <span className="run-meta-item"><span className="run-meta-label">트리거</span>{orDash(run.trigger)}</span>
             <span className="run-meta-item"><span className="run-meta-label">시작</span>{orDash(logTime(run.started_at))}</span>

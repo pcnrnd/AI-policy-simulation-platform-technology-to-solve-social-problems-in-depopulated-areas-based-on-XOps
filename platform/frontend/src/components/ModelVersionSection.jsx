@@ -1,4 +1,3 @@
-import { useState } from "react";
 import Card from "./Card.jsx";
 import { MODEL_TYPES, TARGET_LABELS, versionStatus } from "../lib/modelops.js";
 
@@ -9,23 +8,23 @@ const metric = (value) => Number.isFinite(value) ? value.toLocaleString("ko-KR",
  * 오케스트레이터 맨 아래 — 모델 종류별 등록 모델과 버전 활성화·이전 버전 복원.
  * 카탈로그·버전(상태 파생 완료)과 활성화 동작은 페이지가 소유한다(실데이터 학습 카드와 같은 상태를 쓴다).
  */
-export default function ModelVersionSection({ catalog, versions, regionName, busy, selectedType, onSelectType, instanceId, onSelectInstance, onActivate }) {
+export default function ModelVersionSection({ catalog, versions, regionName, busy, selectedType, onSelectType, instanceId, onSelectInstance, onActivate, versionResult, onClearResult, sourceLabel }) {
   const modelInstances = catalog.instances.filter((row) => row.model_type === selectedType);
   const selectedInstance = modelInstances.find((row) => row.id === instanceId) ?? modelInstances[0];
   const selectedId = selectedInstance?.id ?? "";
   const rows = versions.filter((row) => row.instance_id === selectedId);
-  // 활성화·복원 결과를 버튼이 있는 이 카드에도 표시한다(페이지 맨 위 안내와 같은 결과).
-  const [result, setResult] = useState(null);
-  const select = (type, id) => { setResult(null); if (type) onSelectType(type); onSelectInstance(id); };
-  const decide = async (row, rollback) => setResult(await onActivate(selectedId, row, rollback));
+  // 활성화·복원 결과는 페이지 공유 상태 — 이 카드에서 시작한 동작(origin "versions")일 때만 여기 표시한다.
+  const result = versionResult?.origin === "versions" ? versionResult : null;
+  const select = (type, id) => { onClearResult(); if (type) onSelectType(type); onSelectInstance(id); };
+  const decide = (row, rollback) => onActivate(selectedId, row, rollback);
   return <>
     <div className="grid-cols-2" role="group" aria-label="모델 종류">
-      {MODEL_TYPES.map((type) => <Card key={type.id} title={type.name} icon={type.id === "factor_analysis" ? "fa-magnifying-glass-chart" : "fa-chart-line"} dataSource="api">
+      {MODEL_TYPES.map((type) => <Card key={type.id} title={type.name} icon={type.id === "factor_analysis" ? "fa-magnifying-glass-chart" : "fa-chart-line"} dataSource="api" sourceLabel={sourceLabel}>
         <p>등록 모델 {catalog.instances.filter((row) => row.model_type === type.id).length}개</p>
         <button className="btn btn-secondary" aria-pressed={selectedType === type.id} onClick={() => select(type.id, "")}>{type.name} 버전 보기</button>
       </Card>)}
     </div>
-    <Card title="모델 버전 관리" icon="fa-code-branch" dataSource="api">
+    <Card title="모델 버전 관리" icon="fa-code-branch" dataSource="api" sourceLabel={sourceLabel}>
       <label className="realdata-field"><span>등록 모델 선택</span><select value={selectedId} onChange={(event) => select(null, event.target.value)}>
         {!modelInstances.length && <option value="">등록된 모델 없음</option>}
         {modelInstances.map((row) => <option key={row.id} value={row.id}>{regionName(row.region_id)} · {TARGET_LABELS[row.target] ?? row.target}</option>)}
@@ -44,7 +43,7 @@ export default function ModelVersionSection({ catalog, versions, regionName, bus
         </tr>)}</tbody>
       </table></div>
     </Card>
-    <Card title="최근 운영 기록" icon="fa-clock-rotate-left" dataSource="api">
+    <Card title="최근 운영 기록" icon="fa-clock-rotate-left" dataSource="api" sourceLabel={sourceLabel}>
       {catalog.audit.length ? <ul>{catalog.audit.slice(0, 20).map((row) => <li key={row.id}>{ACTION_NAMES[row.action] ?? "운영 기록"} · {new Date(row.created_at).toLocaleString("ko-KR")} · {row.asset_id}</li>)}</ul>
         : <p>아직 운영 기록이 없습니다.</p>}
     </Card>

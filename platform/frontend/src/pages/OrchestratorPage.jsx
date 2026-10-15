@@ -40,6 +40,8 @@ export default function OrchestratorPage() {
   // 데모 표시는 화면 구조가 아니라 데이터만 바꾼다. 새 경로는 X-Data-Mode(mock|real)로 모드별 자산을 받고,
   // 이전 경로(옛 시드 파이프라인·고정 모델 3개)의 과거 기록은 데모 ON에서만 읽기 전용으로 붙인다.
   const demo = mockDataVisible;
+  // 출처 칩: 학습 자산은 모드별로 분리돼 데모 표시의 값은 전부 예시다("데모 포함"이 아니라 "데모").
+  const chipLabel = demo ? "데모" : undefined;
   const [catalog, setCatalog] = useState(EMPTY);
   const [catalogLoaded, setCatalogLoaded] = useState(false);
   const [catalogError, setCatalogError] = useState(null);
@@ -47,6 +49,8 @@ export default function OrchestratorPage() {
   const [registerOpen, setRegisterOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState(null);
+  const [versionResult, setVersionResult] = useState(null); // { origin: "card" | "versions", ok, message }
+  const clearVersionResult = useCallback(() => setVersionResult(null), []);
   const [liveJob, setLiveJob] = useState(null);
   const [pollError, setPollError] = useState(null); // { message, stopped } — 상태 폴링 실패(잠금 해제·다시 확인)
   const [selectedKey, setSelectedKey] = useState(null); // "modelops:<job>" | "legacy:<run>" — ②·⑤가 함께 본다
@@ -170,6 +174,8 @@ export default function OrchestratorPage() {
         setPollError({ message: error?.message || "알 수 없는 오류", stopped });
         addConsoleLog(`WARN: 학습 상태 확인 실패 (${failures}/${POLL_MAX_FAILURES}) — ${jobId}: ${error?.message ?? "알 수 없는 오류"}`, false, true);
         if (!stopped) jobTimer.current = setTimeout(tick, JOB_POLL_MS);
+        // 멈춘 뒤에는 행 [실행] 잠금의 원천(catalog.jobs)을 서버 기준으로 한 번 맞춘다.
+        else reloadCatalog();
       }
     };
     jobTimer.current = setTimeout(tick, delay);
@@ -198,24 +204,32 @@ export default function OrchestratorPage() {
     } finally { if (mounted.current) setBusy(false); }
   }, [locked, addConsoleLog, reloadCatalog, pollJob]);
 
-  // 활성화·복원 — 결과({ ok, message })를 돌려줘 버튼이 있는 섹션(버전 관리·학습 카드)도 근처에 표시한다.
-  const activate = useCallback(async (instanceId, version, rollback) => {
-    if (locked) return { ok: false, message: "진행 중인 작업이 끝난 뒤 다시 시도하세요." };
+  // 활성화·복원 — 결과는 페이지 상태 하나(versionResult)에 둔다. 버튼이 있는 섹션(학습 카드 "card" / 버전 관리
+  // "versions")은 origin 이 자기일 때만 그리므로, 어느 쪽에서든 새 동작이 일어나면 다른 쪽의 낡은 문구는 사라진다.
+  const activate = useCallback(async (instanceId, version, rollback, origin) => {
+    if (locked) {
+      setVersionResult({ origin, ok: false, message: "진행 중인 작업이 끝난 뒤 다시 시도하세요." });
+      return;
+    }
     setBusy(true);
+    setVersionResult(null);
     try {
       const token = await getRealdataToken();
       await apiSend("POST", `/api/v3/modelops/instances/${encodeURIComponent(instanceId)}/versions/${encodeURIComponent(version.id)}/${rollback ? "rollback" : "activate"}`, { token });
-      if (!mounted.current) return null;
+      if (!mounted.current) return;
       await reloadCatalog();
       const message = rollback ? "이전 버전을 복원했습니다." : "선택한 버전을 활성화했습니다.";
       setFeedback(message);
+      setVersionResult({ origin, ok: true, message });
       addConsoleLog(`INFO: ${rollback ? "이전 버전 복원" : "버전 활성화"} — ${version.id}`);
-      return { ok: true, message };
     } catch (error) {
       const message = error.message || "학습 결과를 확인하세요.";
-      if (mounted.current) setFeedback(message);
       addConsoleLog(`WARN: ${rollback ? "복원" : "활성화"} 실패 — ${error.message ?? "알 수 없는 오류"}`, false, true);
-      return { ok: false, message: `${rollback ? "복원" : "활성화"} 실패 — ${message}` };
+      if (!mounted.current) return;
+      setFeedback(message);
+      setVersionResult({ origin, ok: false, message: `${rollback ? "복원" : "활성화"} 실패 — ${message}` });
+      // 409·400 뒤에도 외부 변경이 있을 수 있어 활성/이전 표시를 서버 기준으로 다시 맞춘다.
+      await reloadCatalog();
     } finally { if (mounted.current) setBusy(false); }
   }, [locked, addConsoleLog, reloadCatalog]);
 
@@ -240,6 +254,8 @@ export default function OrchestratorPage() {
     setPollError(null);
     setSelectedKey(null);
     addConsoleLog("INFO: MLOps 재학습 파이프라인 실행 상태 표시를 초기화했습니다.");
+    // 화면 표시만 끊었으므로 행 [실행] 잠금은 서버의 실제 작업 상태로 다시 맞춘다.
+    reloadCatalog();
   };
 
   const pl = paginate(catalog.pipelines, plPage, PAGE_SIZE);
@@ -256,6 +272,8 @@ export default function OrchestratorPage() {
         title="등록된 재학습 파이프라인"
         icon="fa-list-check"
         className="page-section orchestrator-live"
+        dataSource="api"
+        sourceLabel={chipLabel}
         headerRight={
           <span style={{ display: "inline-flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
@@ -396,7 +414,9 @@ export default function OrchestratorPage() {
         job={liveJob}
         onReload={reloadCatalog}
         onRunPipeline={runPipeline}
-        onActivate={activate}
+        onActivate={(instanceId, version, rollback) => activate(instanceId, version, rollback, "card")}
+        versionResult={versionResult}
+        onClearResult={clearVersionResult}
         onLog={addConsoleLog}
       />
 
@@ -408,13 +428,17 @@ export default function OrchestratorPage() {
         anchorRef={statusAnchorRef}
         pollError={liveJob && selectedJob?.id === liveJob.id ? pollError : null}
         onRecheck={() => liveJob && pollJob(liveJob.id, 0)}
+        sourceLabel={chipLabel}
       />
 
       {/* 활성화된 버전의 다음 단계 — 시뮬레이터는 활성 버전으로 추론한다. */}
       {activatedVersion && (
         <NextStepBanner
           tone="success"
-          message={`${activatedVersion.id} 활성 — 정책 시뮬레이터가 이 버전으로 추론합니다`}
+          // 데모 표시의 시뮬레이터는 예시 값으로 계산한다 — 이 버전으로 추론한다고 말하지 않는다.
+          message={demo
+            ? `${activatedVersion.id} 활성 — 데모 데이터 표시 중에는 정책 시뮬레이터가 예시 값으로 계산합니다`
+            : `${activatedVersion.id} 활성 — 정책 시뮬레이터가 이 버전으로 추론합니다`}
           actionLabel="정책 시뮬레이터에서 활용"
           targetTab="tab-simulator"
         />
@@ -425,6 +449,8 @@ export default function OrchestratorPage() {
         title={<>Model Store — 모델·실험 버전 이력<InfoTip label="모델 승급 기준" text={PROMOTION_RULE} /></>}
         icon="fa-boxes-stacked"
         className="page-section"
+        dataSource="api"
+        sourceLabel={chipLabel}
         headerRight={<span style={{ fontSize: 11, color: "var(--text-muted)" }}>학습데이터·모델 파일 해시로 버전 추적</span>}
       >
         <div className="promotion-criteria" aria-labelledby="promotion-criteria-title">
@@ -464,7 +490,7 @@ export default function OrchestratorPage() {
                       <td style={{ fontSize: 11, color: "var(--text-secondary)" }} data-values-source="mock">{orDash(m.params)}</td>
                       <td className="cell-num" style={{ fontWeight: 600 }}>{typeof m.accuracy === "number" ? `Acc ${m.accuracy.toFixed(3)}` : "–"}</td>
                       <td>
-                        <span className="system-status" title={`이전 경로의 고정 모델입니다. 읽기 전용이며 새 파이프라인 대상이 아닙니다. 원래 상태: ${orDash(m.originalStatus)}`}
+                        <span className="system-status" title={`과거 고정 모델입니다. 읽기 전용이며 새 파이프라인 대상이 아닙니다. 원래 상태: ${orDash(m.originalStatus)}`}
                           style={{ padding: "1px 8px", fontSize: 10, color: STORE_STATUS.legacy.color, backgroundColor: STORE_STATUS.legacy.bg }}>
                           {STORE_STATUS.legacy.label}
                         </span>
@@ -502,7 +528,9 @@ export default function OrchestratorPage() {
         title="파이프라인 실행 이력"
         icon="fa-clock-rotate-left"
         className="page-section orchestrator-live"
-        headerRight={<span style={{ fontSize: 11, color: "var(--text-muted)" }}>{history.length}건 · 학습 작업 저장소{demo ? " + 이전 경로 기록" : ""}</span>}
+        dataSource="api"
+        sourceLabel={chipLabel}
+        headerRight={<span style={{ fontSize: 11, color: "var(--text-muted)" }}>{history.length}건 · 학습 작업 저장소{demo ? " + 과거 기록" : ""}</span>}
       >
         {history.length === 0 ? (
           <p className="pipeline-empty">
@@ -532,7 +560,7 @@ export default function OrchestratorPage() {
                       <tr key={r.key} className={r.key === selectedKey ? "is-selected-run" : undefined}>
                         <td>
                           <code style={{ fontSize: 11, color: "var(--accent-purple-text)" }}>{orDash(r.id)}</code>
-                          {r.readOnly && <div><span className="system-status" style={{ padding: "0 6px", fontSize: 10 }}>이전 경로</span></div>}
+                          {r.readOnly && <div><span className="system-status" style={{ padding: "0 6px", fontSize: 10 }}>과거 기록</span></div>}
                         </td>
                         <td style={{ fontSize: 12 }}>
                           {orDash(r.pipelineId)}{r.origin === "modelops" && r.pipelineMissing ? " (등록 해제됨)" : ""}
@@ -601,7 +629,10 @@ export default function OrchestratorPage() {
         onSelectType={setVersionType}
         instanceId={versionInstanceId}
         onSelectInstance={setVersionInstanceId}
-        onActivate={activate}
+        onActivate={(instanceId, version, rollback) => activate(instanceId, version, rollback, "versions")}
+        versionResult={versionResult}
+        onClearResult={clearVersionResult}
+        sourceLabel={chipLabel}
       />
     </>
   );
