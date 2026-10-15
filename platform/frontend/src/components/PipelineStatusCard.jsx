@@ -72,8 +72,9 @@ function announcement(nodes, status, target) {
 /**
  * ② 파이프라인 실행 상태 — 상시 표시(레이아웃 고정). 새 경로 작업 또는 선택한 이전 경로 기록을 그린다.
  * target: { kind: "modelops", job, version, instance, pipeline } | { kind: "legacy", run } | null
+ * pollError: { message, stopped } — 이 작업의 상태 폴링 실패(화면 잠금은 풀려 있다). onRecheck 로 다시 폴링한다.
  */
-export default function PipelineStatusCard({ target, regionName, onReset, anchorRef }) {
+export default function PipelineStatusCard({ target, regionName, onReset, anchorRef, pollError, onRecheck }) {
   const nodes = !target ? jobNodeStatuses(null)
     : target.kind === "legacy" ? PIPELINE_NODES.map((_, index) => legacyNodeStatus(index, target.run))
       : jobNodeStatuses(target.job, target.version);
@@ -124,6 +125,17 @@ export default function PipelineStatusCard({ target, regionName, onReset, anchor
             <span className="run-meta-item"><span className="run-meta-label">시작</span>{orDash(logTime(job.started_at ?? job.created_at))}</span>
             <span className="run-meta-item"><span className="run-meta-label">종료</span>{orDash(job.finished_at ? logTime(job.finished_at) : null)}</span>
           </div>
+        )}
+        {job && pollError && (
+          <p className="async-feedback is-error" role="alert">
+            <i className="fa-solid fa-circle-exclamation" aria-hidden="true"></i>
+            <span>
+              학습 상태를 확인하지 못했습니다 — {pollError.message}.{" "}
+              {pollError.stopped ? "연속 실패로 자동 확인을 멈췄습니다." : "잠시 후 자동으로 다시 확인합니다."}{" "}
+              서버의 학습 작업은 계속될 수 있으며, 다른 작업은 지금 실행할 수 있습니다.
+            </span>
+            <button className="btn btn-secondary" onClick={onRecheck}>다시 확인</button>
+          </p>
         )}
         {run && (
           <div className="run-meta" data-values-source="api">

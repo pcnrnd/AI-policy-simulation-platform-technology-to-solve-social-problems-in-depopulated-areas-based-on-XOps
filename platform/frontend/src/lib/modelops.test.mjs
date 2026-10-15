@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { MODEL_TYPES, pipelineDefinition, datasetRegionName, versionsWithStatus, jobNodeStatuses, connectorStatusFrom, jobStatusLabel,
-  mergeRunHistory, jobLogLines, storeRows, lastJobOf, cardPipelineId } from "./modelops.js";
+  mergeRunHistory, jobLogLines, storeRows, lastJobOf, cardPipelineId, versionStatus, isLocked, jobLocks } from "./modelops.js";
 const dataset = { id: "registered_real", content_hash: "a".repeat(64) };
 const form = { id: "PL_new", name: "등록 학습", model_type: "factor_analysis", dataset_id: dataset.id };
 assert.deepEqual(MODEL_TYPES.map((row) => row.id), ["factor_analysis", "simulation"]);
@@ -26,6 +26,19 @@ assert.throws(() => pipelineDefinition({ ...form, experiment: "x".repeat(65) }, 
 const instance = { id: "inst", active_version: "v2", previous_version: "v1" };
 const versions = versionsWithStatus([{ id: "v3", instance_id: "inst" }, { id: "v2", instance_id: "inst" }, { id: "v1", instance_id: "inst" }], [instance]);
 assert.deepEqual(versions.map((row) => row.status), ["candidate", "active", "previous"]);
+// 버전 상태 용어는 Model Store·학습 카드와 같은 "운영/이전/후보"
+assert.deepEqual(versions.map((row) => versionStatus(row.status)), ["후보", "운영", "이전"]);
+assert.equal(versionStatus(undefined), "후보");
+
+// 잠금: 진행 중 작업은 잠그지만 상태 폴링이 실패하면 풀린다(요청 중 busy는 그대로 잠금)
+const runningJob = { id: "j", state: "running" };
+assert.equal(isLocked(false, runningJob, null), true);
+assert.equal(isLocked(false, { id: "j", state: "queued" }, null), true);
+assert.equal(isLocked(false, runningJob, { message: "502" }), false);
+assert.equal(jobLocks(runningJob, { message: "502" }), false);
+assert.equal(isLocked(true, runningJob, { message: "502" }), true);
+assert.equal(isLocked(false, { id: "j", state: "saved" }, null), false);
+assert.equal(isLocked(false, null, null), false);
 
 // 6단계 노드: 작업 상태·버전 결과별 표시
 const classes = (job, version) => jobNodeStatuses(job, version).map((n) => n.className);

@@ -6,12 +6,11 @@
 import { useState } from "react";
 import Card from "../Card.jsx";
 import { apiGet, apiSend } from "../../lib/api.js";
-import { JOB_STATE_NAMES, TARGET_LABELS, cardPipelineId, datasetMatchesInstance, typeName } from "../../lib/modelops.js";
+import { JOB_STATE_NAMES, TARGET_LABELS, cardPipelineId, datasetMatchesInstance, typeName, versionStatus } from "../../lib/modelops.js";
 import { getRealdataToken } from "./realdataClient.jsx";
 
 const orDash = (v) => (v === null || v === undefined || v === "" ? "–" : v);
 const fmtNum = (v) => (typeof v === "number" ? v.toLocaleString(undefined, { maximumFractionDigits: 3 }) : "–");
-const STATUS_LABEL = { active: "운영", previous: "이전", candidate: "후보" };
 
 function snapshotName(source) {
   const now = new Date();
@@ -24,6 +23,7 @@ export default function RealdataTrainingPanel({ catalog, versions, demoVisible, 
   const [selectedDatasetId, setSelectedDatasetId] = useState("");
   const [working, setWorking] = useState(null); // "snapshot" | "train"
   const [error, setError] = useState(null);
+  const [notice, setNotice] = useState(null); // 반영·복원 성공 안내(실패는 error)
 
   const instance = catalog.instances.find((row) => row.id === selectedInstanceId) ?? catalog.instances[0];
   const instanceId = instance?.id ?? "";
@@ -38,6 +38,7 @@ export default function RealdataTrainingPanel({ catalog, versions, demoVisible, 
     if (!instance || locked) return;
     setWorking("snapshot");
     setError(null);
+    setNotice(null);
     try {
       const token = await getRealdataToken();
       let sourceId = null;
@@ -64,6 +65,7 @@ export default function RealdataTrainingPanel({ catalog, versions, demoVisible, 
     const dataset = matchingDatasets.find((row) => row.id === selectedDatasetId);
     setWorking("train");
     setError(null);
+    setNotice(null);
     try {
       let pipeline = catalog.pipelines.find((row) => row.instance_id === instance.id && row.dataset_id === dataset.id);
       if (!pipeline) {
@@ -81,11 +83,18 @@ export default function RealdataTrainingPanel({ catalog, versions, demoVisible, 
     finally { setWorking(null); }
   };
 
-  const decide = (version, rollback) => {
+  const decide = async (version, rollback) => {
     if (locked) return;
-    const verb = rollback ? "복원" : "반영";
-    if (!window.confirm(`후보 ${version.id}을(를) ${verb}하시겠습니까? 현재 활성 모델을 교체합니다.`)) return;
-    onActivate(instanceId, version, rollback);
+    const question = rollback
+      ? `이전 버전 ${version.id}(으)로 되돌리시겠습니까? 현재 운영 버전은 '이전'으로 바뀝니다.`
+      : `후보 ${version.id}을(를) 반영하시겠습니까? 현재 활성 모델을 교체합니다.`;
+    if (!window.confirm(question)) return;
+    setError(null);
+    setNotice(null);
+    const result = await onActivate(instanceId, version, rollback);
+    if (!result) return;
+    if (result.ok) setNotice(result.message);
+    else setError(result.message);
   };
 
   const cardJob = job && job.instance_id === instanceId ? job : null;
@@ -149,6 +158,7 @@ export default function RealdataTrainingPanel({ catalog, versions, demoVisible, 
         </p>
       )}
       {error && <p className="realdata-error" role="alert">{error}</p>}
+      {notice && <p className="realdata-hint" role="status">{notice}</p>}
 
       <div className="table-container">
         <table>
@@ -177,7 +187,7 @@ export default function RealdataTrainingPanel({ catalog, versions, demoVisible, 
                 <td className="cell-num">{fmtNum(c.baseline?.mae)}</td>
                 <td>
                   <span className="system-status" style={{ padding: "1px 8px", fontSize: 10 }}>
-                    {STATUS_LABEL[c.status] ?? c.status}
+                    {versionStatus(c.status)}
                   </span>
                 </td>
                 <td className="cell-actions">

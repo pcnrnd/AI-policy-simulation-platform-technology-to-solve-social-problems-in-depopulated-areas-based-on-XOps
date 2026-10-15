@@ -13,11 +13,12 @@ import { useAppState } from "../context/AppStateContext.jsx";
 import { MODEL_REGISTRY } from "../constants/models.js";
 import { apiGet, apiSend } from "../lib/api.js";
 import {
-  JOB_STATE_NAMES, TARGET_LABELS, jobLogLines, lastJobOf, mergeRunHistory, storeRows, typeName, versionsWithStatus
+  JOB_STATE_NAMES, TARGET_LABELS, isLocked, jobLocks, jobLogLines, lastJobOf, mergeRunHistory, storeRows, typeName, versionsWithStatus
 } from "../lib/modelops.js";
 
 const PAGE_SIZE = 5;
 const JOB_POLL_MS = 1500;
+const POLL_MAX_FAILURES = 3;
 const EMPTY = { instances: [], datasets: [], versions: [], pipelines: [], jobs: [], audit: [] };
 
 // 승급(활성화) 기준 — 새 경로 service.activate 의 실제 검사와 같은 문구. 자동 승급·자동 롤백은 없다.
@@ -47,6 +48,7 @@ export default function OrchestratorPage() {
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState(null);
   const [liveJob, setLiveJob] = useState(null);
+  const [pollError, setPollError] = useState(null); // { message, stopped } — 상태 폴링 실패(잠금 해제·다시 확인)
   const [selectedKey, setSelectedKey] = useState(null); // "modelops:<job>" | "legacy:<run>" — ②·⑤가 함께 본다
   const [legacyLogs, setLegacyLogs] = useState(null);
   const [versionType, setVersionType] = useState("factor_analysis");
@@ -58,6 +60,8 @@ export default function OrchestratorPage() {
   const mounted = useRef(true);
   const catalogRequest = useRef(0);
   const jobTimer = useRef(null);
+  // 폴링 세대 — 새 실행·[다시 확인]·[초기화]마다 올려 이전 루프의 늦은 응답과 타이머를 버린다.
+  const pollGen = useRef(0);
   const statusAnchorRef = useRef(null);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; clearTimeout(jobTimer.current); }; }, []);
 
@@ -105,8 +109,8 @@ export default function OrchestratorPage() {
   const statusTarget = selectedJob
     ? { kind: "modelops", job: selectedJob, version: versionById.get(selectedJob.version_id), instance: instanceById.get(selectedJob.instance_id), pipeline: pipelineById.get(selectedJob.pipeline_id) }
     : selectedRow?.origin === "legacy" ? { kind: "legacy", run: selectedRow.raw } : null;
-  const jobActive = liveJob?.state === "queued" || liveJob?.state === "running";
-  const locked = busy || jobActive;
+  const jobActive = jobLocks(liveJob, pollError);
+  const locked = isLocked(busy, liveJob, pollError);
 
   // 선택한 이전 경로 기록의 저장 로그(단건 조회라 include_seed 불요).
   useEffect(() => {
@@ -135,61 +139,85 @@ export default function OrchestratorPage() {
     anchor.scrollIntoView({ block: "start" });
   }, [statusFocusRequest]);
 
-  // 파이프라인 실행 — 202 접수 후 종결(saved/failed)까지 폴링. 실데이터 학습 카드도 이 함수를 쓴다.
+  // 작업 상태 폴링 — 종결(saved/failed)까지. 실패하면 화면을 잠그지 않고 ②에 알리며 다시 시도하고,
+  // 연속 POLL_MAX_FAILURES회면 멈춘다([다시 확인]으로 재개). 호출마다 세대를 올려 이전 루프를 무효화한다.
+  const pollJob = useCallback((jobId, delay) => {
+    const gen = ++pollGen.current;
+    clearTimeout(jobTimer.current);
+    const current = () => mounted.current && gen === pollGen.current;
+    let failures = 0;
+    const tick = async () => {
+      try {
+        const token = await getRealdataToken();
+        const latest = await apiGet(`/api/v3/modelops/jobs/${encodeURIComponent(jobId)}`, { token });
+        if (!current()) return;
+        failures = 0;
+        setPollError(null);
+        setLiveJob(latest);
+        if (latest.state !== "saved" && latest.state !== "failed") { jobTimer.current = setTimeout(tick, JOB_POLL_MS); return; }
+        setFeedback(latest.state === "saved" ? "학습 결과를 등록했습니다. 버전을 확인한 뒤 활성화하세요." : "학습데이터와 관측 기간을 확인한 뒤 다시 실행하세요.");
+        addConsoleLog(latest.state === "saved"
+          ? `INFO: 학습 완료 — ${latest.id} · 후보 ${latest.version_id}`
+          : `WARN: 학습 실패 — ${latest.id} (${latest.error ?? "원인 미기록"})`, false, latest.state === "failed");
+        await reloadCatalog();
+        if (!current()) return;
+        setVersionType(latest.model_type);
+        setVersionInstanceId(latest.instance_id);
+      } catch (error) {
+        if (!current()) return;
+        failures += 1;
+        const stopped = failures >= POLL_MAX_FAILURES;
+        setPollError({ message: error?.message || "알 수 없는 오류", stopped });
+        addConsoleLog(`WARN: 학습 상태 확인 실패 (${failures}/${POLL_MAX_FAILURES}) — ${jobId}: ${error?.message ?? "알 수 없는 오류"}`, false, true);
+        if (!stopped) jobTimer.current = setTimeout(tick, JOB_POLL_MS);
+      }
+    };
+    jobTimer.current = setTimeout(tick, delay);
+  }, [addConsoleLog, reloadCatalog]);
+
+  // 파이프라인 실행 — 202 접수 후 폴링. 실데이터 학습 카드도 이 함수를 쓴다. 진행 중 잠금은 liveJob 이 맡는다.
   const runPipeline = useCallback(async (pipeline) => {
-    if (busy || jobActive) return;
+    if (locked) return;
     setBusy(true);
     setFeedback(null);
     try {
       const token = await getRealdataToken();
       const accepted = await apiSend("POST", `/api/v3/modelops/pipelines/${encodeURIComponent(pipeline.id)}/run`, { token });
       if (!mounted.current) return;
+      setPollError(null);
       setLiveJob(accepted);
       setSelectedKey(`modelops:${accepted.id}`);
       setStatusFocusRequest((request) => request + 1);
       addConsoleLog(`INFO: 재학습 파이프라인 ${pipeline.id}(${pipeline.name}) 실행 접수 — ${accepted.id}`);
+      pollJob(accepted.id, 500);
       await reloadCatalog();
-      const poll = async () => {
-        try {
-          const latest = await apiGet(`/api/v3/modelops/jobs/${encodeURIComponent(accepted.id)}`, { token });
-          if (!mounted.current) return;
-          setLiveJob(latest);
-          if (latest.state === "saved" || latest.state === "failed") {
-            setBusy(false);
-            setFeedback(latest.state === "saved" ? "학습 결과를 등록했습니다. 버전을 확인한 뒤 활성화하세요." : "학습데이터와 관측 기간을 확인한 뒤 다시 실행하세요.");
-            addConsoleLog(latest.state === "saved"
-              ? `INFO: 학습 완료 — ${latest.id} · 후보 ${latest.version_id}`
-              : `WARN: 학습 실패 — ${latest.id} (${latest.error ?? "원인 미기록"})`, false, latest.state === "failed");
-            await reloadCatalog();
-            setVersionType(pipeline.model_type);
-            setVersionInstanceId(pipeline.instance_id);
-          } else jobTimer.current = setTimeout(poll, JOB_POLL_MS);
-        } catch (error) { if (mounted.current) { setBusy(false); setFeedback(error.message || "학습 상태를 다시 확인하세요."); } }
-      };
-      jobTimer.current = setTimeout(poll, 500);
     } catch (error) {
       if (!mounted.current) return;
-      setBusy(false);
       setFeedback(error.status === 409 ? "선택한 모델의 학습이 진행 중입니다." : error.message || "학습데이터를 확인하세요.");
       addConsoleLog(`WARN: 파이프라인 실행 실패 — ${error.message ?? "알 수 없는 오류"}`, false, true);
-    }
-  }, [busy, jobActive, addConsoleLog, reloadCatalog]);
+    } finally { if (mounted.current) setBusy(false); }
+  }, [locked, addConsoleLog, reloadCatalog, pollJob]);
 
+  // 활성화·복원 — 결과({ ok, message })를 돌려줘 버튼이 있는 섹션(버전 관리·학습 카드)도 근처에 표시한다.
   const activate = useCallback(async (instanceId, version, rollback) => {
-    if (busy || jobActive) return;
+    if (locked) return { ok: false, message: "진행 중인 작업이 끝난 뒤 다시 시도하세요." };
     setBusy(true);
     try {
       const token = await getRealdataToken();
       await apiSend("POST", `/api/v3/modelops/instances/${encodeURIComponent(instanceId)}/versions/${encodeURIComponent(version.id)}/${rollback ? "rollback" : "activate"}`, { token });
-      if (!mounted.current) return;
+      if (!mounted.current) return null;
       await reloadCatalog();
-      setFeedback(rollback ? "이전 버전을 복원했습니다." : "선택한 버전을 활성화했습니다.");
+      const message = rollback ? "이전 버전을 복원했습니다." : "선택한 버전을 활성화했습니다.";
+      setFeedback(message);
       addConsoleLog(`INFO: ${rollback ? "이전 버전 복원" : "버전 활성화"} — ${version.id}`);
+      return { ok: true, message };
     } catch (error) {
-      if (mounted.current) setFeedback(error.message || "학습 결과를 확인하세요.");
+      const message = error.message || "학습 결과를 확인하세요.";
+      if (mounted.current) setFeedback(message);
       addConsoleLog(`WARN: ${rollback ? "복원" : "활성화"} 실패 — ${error.message ?? "알 수 없는 오류"}`, false, true);
+      return { ok: false, message: `${rollback ? "복원" : "활성화"} 실패 — ${message}` };
     } finally { if (mounted.current) setBusy(false); }
-  }, [busy, jobActive, addConsoleLog, reloadCatalog]);
+  }, [locked, addConsoleLog, reloadCatalog]);
 
   // aria-disabled 는 클릭을 막지 않으므로(§9 A11Y-01 규약) 실행 차단은 여기서 한다.
   const handleDeletePipeline = async (pipeline) => {
@@ -206,9 +234,10 @@ export default function OrchestratorPage() {
   };
 
   const handleReset = () => {
+    pollGen.current += 1; // 응답 대기 중인 폴링도 결과를 버린다
     clearTimeout(jobTimer.current);
-    if (jobActive) setBusy(false);
     setLiveJob(null);
+    setPollError(null);
     setSelectedKey(null);
     addConsoleLog("INFO: MLOps 재학습 파이프라인 실행 상태 표시를 초기화했습니다.");
   };
@@ -372,7 +401,14 @@ export default function OrchestratorPage() {
       />
 
       {/* ② 실행 상태 — 상시 표시. 새 경로 작업 또는 선택한 이전 경로 기록 */}
-      <PipelineStatusCard target={statusTarget} regionName={regionName} onReset={handleReset} anchorRef={statusAnchorRef} />
+      <PipelineStatusCard
+        target={statusTarget}
+        regionName={regionName}
+        onReset={handleReset}
+        anchorRef={statusAnchorRef}
+        pollError={liveJob && selectedJob?.id === liveJob.id ? pollError : null}
+        onRecheck={() => liveJob && pollJob(liveJob.id, 0)}
+      />
 
       {/* 활성화된 버전의 다음 단계 — 시뮬레이터는 활성 버전으로 추론한다. */}
       {activatedVersion && (

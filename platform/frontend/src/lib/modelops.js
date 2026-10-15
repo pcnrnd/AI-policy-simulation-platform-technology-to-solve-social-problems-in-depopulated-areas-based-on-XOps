@@ -17,7 +17,14 @@ export function pipelineDefinition(form, datasets) {
   return { id: form.id.trim(), name: form.name.trim(), model_type: form.model_type,
     dataset_id: dataset.id, dataset_hash: dataset.content_hash, trigger_policy: form.trigger_policy || "수동", experiment };
 }
-export function versionStatus(status) { return ({ active: "활성", previous: "이전", candidate: "등록" })[status] ?? "등록"; }
+// 버전 상태 용어 — Model Store·학습 카드·버전 관리 표가 같은 말을 쓴다.
+export const VERSION_STATUS_LABELS = { active: "운영", previous: "이전", candidate: "후보" };
+export function versionStatus(status) { return VERSION_STATUS_LABELS[status] ?? VERSION_STATUS_LABELS.candidate; }
+
+/** 폴링 중인 작업이 화면을 잠그는지 — 상태 폴링이 실패하면 서버 상태를 모르므로 잠그지 않는다. */
+export const jobLocks = (liveJob, pollError) => !pollError && (liveJob?.state === "queued" || liveJob?.state === "running");
+/** 실행·삭제·활성화 잠금: 요청 중(busy)이거나 폴링 중인 작업이 진행 중일 때. */
+export const isLocked = (busy, liveJob, pollError) => Boolean(busy) || jobLocks(liveJob, pollError);
 
 /** 버전 상태는 인스턴스의 활성/이전 버전에서 파생한다(백엔드 service.versions 와 같은 규칙). */
 export function versionsWithStatus(versions = [], instances = []) {
