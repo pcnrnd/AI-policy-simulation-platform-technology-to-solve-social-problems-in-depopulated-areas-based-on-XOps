@@ -224,7 +224,19 @@ def test_catalog_lists_versions_in_current_mode_only(client, auth_headers):
     versions = client.get(BASE + "/catalog", headers=h).json()["versions"]
     assert [row["id"] for row in versions] == [job["version_id"]]
     assert versions[0]["instance_id"] == p["instance_id"]
+    assert versions[0]["status"] == "candidate"
     assert client.get(BASE + "/catalog", headers=headers(auth_headers, "real")).json()["versions"] == []
+
+
+def test_catalog_versions_status_follows_activation(client, auth_headers):
+    ds = register(client, auth_headers)
+    p = pipeline(client, auth_headers, ds)
+    h = headers(auth_headers, "mock")
+    job = wait_job(client, h, client.post(BASE + "/pipelines/" + p["id"] + "/run", headers=h).json()["id"])
+    url = BASE + "/instances/" + p["instance_id"] + "/versions/" + job["version_id"] + "/activate"
+    assert client.post(url, headers=h).status_code == 200
+    versions = client.get(BASE + "/catalog", headers=h).json()["versions"]
+    assert [row["status"] for row in versions if row["id"] == job["version_id"]] == ["active"]
 
 
 def test_failed_job_records_failed_stage(client, auth_headers, monkeypatch):

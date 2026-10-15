@@ -58,7 +58,7 @@ def recover_jobs() -> None:
 @router.get("/catalog")
 def catalog(auth: Read, mode: Mode = "real") -> dict[str, Any]:
     return {"mode": mode, "source": mode, "types": [{"model_type": key, "name": name} for key, name in store.MODEL_TYPES.items()],
-            "instances": service.instances(mode), "datasets": store.list_assets(mode, "dataset"), "versions": store.list_assets(mode, "version"),
+            "instances": service.instances(mode), "datasets": store.list_assets(mode, "dataset"), "versions": service.versions(mode),
             "pipelines": store.list_assets(mode, "pipeline"), "jobs": store.list_assets(mode, "job"), "audit": store.list_assets(mode, "audit")}
 
 

@@ -131,10 +131,18 @@ def _run_job(mode: str, job: dict[str, Any], lock: threading.Lock) -> None:
         lock.release()
 
 
-def versions(mode: str, instance_id: str) -> list[dict[str, Any]]:
-    instance = store.get(mode, "instance", instance_id)
-    return [{**version, "status": "active" if version["id"] == instance["active_version"] else "previous" if version["id"] == instance["previous_version"] else "candidate"}
-            for version in store.list_assets(mode, "version") if version["instance_id"] == instance_id]
+def versions(mode: str, instance_id: str | None = None) -> list[dict[str, Any]]:
+    """버전 목록 — status는 저장값이 아니라 instance의 활성·이전 버전으로 파생한다. instance_id가 없으면 모드 전체."""
+    if instance_id is not None:
+        store.get(mode, "instance", instance_id)
+    instances = {row["id"]: row for row in store.list_assets(mode, "instance")}
+
+    def status(version: dict[str, Any]) -> str:
+        instance = instances.get(version["instance_id"], {})
+        return "active" if version["id"] == instance.get("active_version") else "previous" if version["id"] == instance.get("previous_version") else "candidate"
+
+    return [{**version, "status": status(version)} for version in store.list_assets(mode, "version")
+            if instance_id is None or version["instance_id"] == instance_id]
 
 
 def load_artifact(mode: str, instance_id: str, version_id: str) -> dict[str, Any]:
