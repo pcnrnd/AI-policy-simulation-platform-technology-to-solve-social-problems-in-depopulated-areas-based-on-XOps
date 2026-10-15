@@ -8,7 +8,7 @@ import { datasetRegionName } from "../lib/modelops.js";
 const TARGET_NAMES = { nonlocal_visitors: "타지역 방문객", observed_sales_krw: "관측 소비", population_change_pct: "인구 변화율" };
 
 export default function TrainingDatasetRegistration() {
-  const { appData } = useAppState();
+  const { appData, mockDataVisible } = useAppState();
   const [available, setAvailable] = useState([]);
   const [datasets, setDatasets] = useState([]);
   const [sourceId, setSourceId] = useState("");
@@ -46,7 +46,8 @@ export default function TrainingDatasetRegistration() {
     } catch (error) { setFeedback(error.message || "학습데이터를 확인한 뒤 다시 등록하세요."); }
     finally { setBusy(false); }
   };
-  return <Card title="학습데이터 등록" icon="fa-database" dataSource="api">
+  // 학습 자산은 모드별로 분리돼 데모 표시의 목록은 전부 예시다("데모 포함"이 아니라 "데모").
+  return <Card title="학습데이터 등록" icon="fa-database" dataSource="api" sourceLabel={mockDataVisible ? "데모" : undefined}>
     <form className="pipeline-register" onSubmit={submit} aria-label="학습데이터 등록">
       <div className="pipeline-register-grid">
         <label><span>원본 데이터 선택</span><select value={sourceId} onChange={(event) => setSourceId(event.target.value)} required>

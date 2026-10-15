@@ -70,6 +70,11 @@
   color: var(--accent-teal);
   background-color: rgba(var(--accent-teal-rgb), 0.12);
 }
+/* 라이트 테마의 데모 배지·칩 글자 — 주황 틴트 위 소형 글자 대비 4.5:1 이상(#92400e: 헤더 배지 5.87, 카드 칩 5.93). */
+:root[data-theme="light"] .source-chip.is-demo,
+:root[data-theme="light"] .mode-badge.is-demo {
+  color: #92400e;
+}
 
 .card-title {
   font-size: 16px;

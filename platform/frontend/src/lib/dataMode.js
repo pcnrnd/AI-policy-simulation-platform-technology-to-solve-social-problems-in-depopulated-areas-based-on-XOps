@@ -35,9 +35,10 @@ export const modeSwitchLog = (demoVisible) => demoVisible
   : "INFO: 실데이터 표시로 전환했습니다. 등록한 학습데이터와 활성 모델 결과만 표시합니다.";
 
 // 카드 출처 칩 문구. sourceLabel 이 있으면 우선한다. ON 목록 API는 예시 행과 등록 행을 함께 줄 수 있어 "데모 포함".
+// 실데이터 표시에서 데모 출처 카드는 값을 숨기고 "데이터 없음"만 보이므로 칩을 달지 않는다.
 export function sourceChipText(demoVisible, dataSource, sourceLabel) {
   if (sourceLabel) return sourceLabel;
   if (!dataSource) return null;
-  if (dataSource === "mock") return "데모";
+  if (dataSource === "mock") return demoVisible ? "데모" : null;
   return demoVisible ? "데모 포함" : "실데이터";
 }

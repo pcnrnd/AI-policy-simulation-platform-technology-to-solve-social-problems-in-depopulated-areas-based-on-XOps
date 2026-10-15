@@ -30,14 +30,14 @@ assert.equal(sourceChipText(true, "api"), "데모 포함");
 assert.equal(sourceChipText(true, "realdata"), "데모 포함");
 assert.equal(sourceChipText(false, "api"), "실데이터");
 assert.equal(sourceChipText(false, "realdata"), "실데이터");
-assert.equal(sourceChipText(false, "mock"), "데모");
+assert.equal(sourceChipText(false, "mock"), null); // 실데이터 표시의 데모 출처(값 숨김) 카드에는 칩 없음
 assert.equal(sourceChipText(false, undefined), null);
 assert.equal(sourceChipText(true, "api", "데모"), "데모");
 assert.equal(sourceChipText(false, undefined, "실데이터 · 등록본"), "실데이터 · 등록본");
 // 화면 문구에 내부 구현명·제약 표현 금지
-const FORBIDDEN = /mock|seed|시드|경로|modelops|\/api\/|정책 변수/i;
+const FORBIDDEN = /mock|seed|시드|경로|modelops|\/api\/|정책 변수|VITE_|_KEY/i;
 const shown = [true, false].flatMap((on) => [modeBadge(on).text, modeBadge(on).title, modeSwitchLog(on),
-  ...["mock", "api", "realdata"].map((src) => sourceChipText(on, src))]);
+  ...["mock", "api", "realdata"].map((src) => sourceChipText(on, src)).filter(Boolean)]);
 const guides = [REAL_GUIDE_TEXT, realUnavailableText("문제 유형 진단은"), REAL_CONTROLS_LOCK_TEXT, REAL_DIAGNOSIS_NOTE];
 for (const text of [...shown, ...guides]) assert.doesNotMatch(text, FORBIDDEN, text);
 console.log("dataMode: 전환 요청 취소·epoch 격리·추천 저장키·mock 보고서 실측 호출 0·real 보고서 시드 값 차단·모드 배지·출처 칩·화면 문구 금지어 PASS");

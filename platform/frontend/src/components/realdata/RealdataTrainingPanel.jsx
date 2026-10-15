@@ -27,7 +27,8 @@ export default function RealdataTrainingPanel({ catalog, versions, demoVisible, 
   const instance = catalog.instances.find((row) => row.id === selectedInstanceId) ?? catalog.instances[0];
   const instanceId = instance?.id ?? "";
   const matchingDatasets = catalog.datasets.filter((row) => datasetMatchesInstance(row, instance));
-  const datasetReady = matchingDatasets.some((row) => row.id === selectedDatasetId);
+  const selectedDataset = matchingDatasets.find((row) => row.id === selectedDatasetId);
+  const datasetReady = Boolean(selectedDataset);
   const candidates = versions.filter((row) => row.instance_id === instanceId);
   const instanceBusy = catalog.jobs.some((row) => row.instance_id === instanceId && (row.state === "queued" || row.state === "running"));
   const locked = busy || Boolean(working);
@@ -101,7 +102,7 @@ export default function RealdataTrainingPanel({ catalog, versions, demoVisible, 
       icon="fa-flask-vial"
       className="page-section realdata-panel"
       dataSource="api"
-      sourceLabel={demoVisible ? "데모" : undefined}
+      sourceLabel={demoVisible ? "데모" : selectedDataset ? `실데이터 · ${selectedDataset.name}` : undefined}
       headerRight={
         <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
           {demoVisible ? "데모 지역 시계열 · Ridge · 후보 승인 후 반영" : "남원 23동 실데이터 · Ridge 공동 학습 · 후보 승인 후 반영"}
