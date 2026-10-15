@@ -133,7 +133,6 @@ export default function RealSimulationFlow() {
         </select></label>
         <button className="btn btn-secondary" disabled={Boolean(busy)} onClick={load}>모델 목록 새로고침</button>
       </div>
-      <p>현재 등록 데이터에는 정책 변수가 없어, 예측에 영향이 큰 관측 지표 순으로 보여줍니다.</p>
       {busy && <p role="status">{busy==="catalog" ? "모델 목록 확인 중…" : busy==="inputs" ? "관측 입력 확인 중…" : "활성 모델로 계산 중…"}</p>}
       {feedback && <p className="async-feedback is-error" role="alert">{feedback}</p>}
       {!busy && (missing || !contexts) && <div className="real-flow-guide">
@@ -174,16 +173,16 @@ export default function RealSimulationFlow() {
         </>}
         <Evidence result={simulation ?? contexts.simulation} regions={regions}/>
       </Card>
-      <Card title="③ 예측 민감도 기반 검토 우선순위" icon="fa-list-ol" dataSource="api">
-        <p>각 관측 지표를 해당 학습 범위의 1%만큼 증가·감소한 결과 중, {REAL_TARGETS[target]} 증가 예측이 큰 방향을 지표별로 비교합니다. 변수끼리의 관계와 실제 실현 가능성을 함께 확인하세요.</p>
-        <button className="btn btn-primary" disabled={Boolean(busy) || !simulation} onClick={() => setRanking(rankSensitivity(simulation))}>검토 우선순위 보기</button>
+      <Card title="③ 정책 추천" icon="fa-list-ol" dataSource="api">
+        <p>관측 지표의 예측 민감도를 근거로 추천합니다. 각 관측 지표를 해당 학습 범위의 1%만큼 증가·감소한 결과 중, {REAL_TARGETS[target]} 증가 예측이 큰 방향을 지표별로 비교합니다. 변수끼리의 관계와 실제 실현 가능성을 함께 확인하세요.</p>
+        <button className="btn btn-primary" disabled={Boolean(busy) || !simulation} onClick={() => setRanking(rankSensitivity(simulation))}>정책 추천 보기</button>
         {ranking && <>
-          {!ranking.length ? <p>관측 범위 안에서 증가 예측을 만든 조정 항목이 없습니다. 모델과 입력 범위를 확인하세요.</p> : <div className="table-container"><table><caption className="sr-only">시뮬레이션 예측 변화량에 근거한 관측 지표 검토 순위</caption>
+          {!ranking.length ? <p>관측 범위 안에서 증가 예측을 만든 조정 항목이 없습니다. 모델과 입력 범위를 확인하세요.</p> : <div className="table-container"><table><caption className="sr-only">시뮬레이션 예측 변화량에 근거한 관측 지표 정책 추천 순위</caption>
             <thead><tr><th>순위</th><th>관측 지표 입력 가정</th><th>입력 변화 ({unit(target)})</th><th>모델 예측상 변화 ({unit(target)})</th></tr></thead>
             <tbody>{ranking.map((row) => <tr key={row.feature}><td>{row.rank}</td><td>{label(row.feature)} {row.to>row.from ? "증가" : "감소"}</td><td>{number(row.from)} → {number(row.to)}</td><td>{number(row.delta)}</td></tr>)}</tbody>
           </table></div>}
           <p>근거 추론: {simulation.inference_id} · 기준 예측 {number(simulation.prediction)} {unit(target)} · 시뮬레이션 활성 버전 {simulation.provenance.version_id}</p>
-          <p>정책의 실제 인과 효과를 검증한 결과가 아닙니다. 현재 자료에는 정책 입력이 없으므로 관측 지표의 예측 민감도만 비교합니다.</p>
+          <p>추천 순위는 모델 예측의 민감도이며, 정책의 실제 인과 효과를 검증한 결과가 아닙니다.</p>
           <Evidence result={simulation} regions={regions}/>
         </>}
       </Card>
