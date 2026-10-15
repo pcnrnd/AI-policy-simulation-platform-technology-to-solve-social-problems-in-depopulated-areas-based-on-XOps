@@ -114,7 +114,9 @@ export default function SimulatorPage() {
     setSimResult(null);
     setRecommendation(null);
     setRecoSig("");
-  }, [currentRegion, target, dong]);
+    setRecoSim(null);
+    // real.revision: 활성 버전이 바뀌어(409) 입력을 다시 읽으면 이전 버전 기준 결과를 비운다.
+  }, [currentRegion, target, dong, real.revision]);
 
   // 데모 분석 단계 진행 — 단계별 로그 출력 후 완료 시 STAGE② 자동 펼침
   useEffect(() => {
@@ -149,6 +151,7 @@ export default function SimulatorPage() {
     setOpenStages((s) => ({ ...s, "stage-factor": true }));
     setRecommendation(null);
     setRecoSig("");
+    setRecoSim(null);
     setAnalysis(null);
     setSimResult(null);
     setAnalysisStatus("running");
@@ -187,10 +190,11 @@ export default function SimulatorPage() {
   const analysisDone = analysisStatus === "done";
   const analysisRunning = analysisStatus === "running";
   // 관측 입력을 바꾸면 잠시 뒤 다음 달 예측을 다시 계산한다(데모의 실시간 추이 갱신과 같은 자리).
+  const simTimerRef = useRef(null);
   useEffect(() => {
     if (demo || !analysisDone || !real.ready) return undefined;
-    const timer = setTimeout(runSimulation, SIM_DEBOUNCE_MS);
-    return () => clearTimeout(timer);
+    simTimerRef.current = setTimeout(runSimulation, SIM_DEBOUNCE_MS);
+    return () => clearTimeout(simTimerRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [demo, analysisDone, real.ready, controlSig]);
 
@@ -205,6 +209,8 @@ export default function SimulatorPage() {
       setRecoSig(currentSig);
       addConsoleLog(`INFO: ${currentRegion.name} 정책 추천 도출 완료 — 1순위 '${ranked[0].name}' (점수 ${ranked[0].score.toLocaleString()}).`);
     } else {
+      // 대기 중인 자동 계산이 이 요청을 밀어내지 않게 먼저 끈다.
+      clearTimeout(simTimerRef.current);
       const sim = simResult && simSig === currentSig ? simResult : await runSimulation();
       if (!sim) return;
       const ranking = rankSensitivity(sim);
@@ -462,13 +468,14 @@ export default function SimulatorPage() {
     <div className="real-flow-controls" data-slot="sim.factor.conditions">
       <label>
         학습 대상
-        <select value={demo ? "demo" : target} disabled={analysisRunning} onChange={(e) => { if (!demo) { setDong(""); setTarget(e.target.value); } }}>
+        <select aria-label="학습 대상" value={demo ? "demo" : target} disabled={analysisRunning} onChange={(e) => { if (!demo) { setDong(""); setTarget(e.target.value); } }}>
           {demo ? <option value="demo">인구 (데모 사례)</option> : Object.entries(REAL_TARGETS).map(([id, name]) => <option key={id} value={id}>{name}</option>)}
         </select>
       </label>
       <label>
         행정동
         <select
+          aria-label="행정동"
           value={demo ? "all" : dong || simProof?.dong_code || ""}
           disabled={analysisRunning || (!demo && !real.contexts)}
           onChange={(e) => { if (!demo) setDong(e.target.value); }}
@@ -679,6 +686,12 @@ export default function SimulatorPage() {
               </>
             ) : demo ? (
               <PendingData running={analysisRunning} text="[요인분석 실행] 후 인구 예측 결과가 표시됩니다." />
+            ) : analysisDone ? (
+              // 요인분석은 끝났고 예측을 계산 중이거나 실패한 상태 — 다시 실행하라고 하지 않는다.
+              <PendingData
+                running={!real.feedback}
+                text="다음 달 예측을 계산하지 못했습니다. 위 안내를 확인한 뒤 관측 입력을 다시 조정하세요."
+              />
             ) : (
               realPending("[요인분석 실행] 후 다음 달 예측 결과가 표시됩니다.")
             )}
@@ -733,7 +746,7 @@ export default function SimulatorPage() {
         no="STAGE ④"
         // reportFocus 는 데모 사례 정의의 문장이라 실데이터 표시에서는 쓰지 않는다.
         title="추천"
-        sub={demo ? currentRegion.case.reportFocus : real.ready ? "관측 지표 예측 민감도 기반 추천" : null}
+        sub={demo ? currentRegion.case.reportFocus : real.ready ? "관측 지표의 예측 민감도를 근거로 한 추천" : null}
         open={openStages["stage-report"]}
         onToggle={() => toggleStage("stage-report")}
       >
