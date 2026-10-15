@@ -309,8 +309,8 @@ export default function SimulatorMap({ appData, currentRegion, setCurrentRegion,
         </div>
         {!VWORLD_KEY && (
           <p className="map-theme-note">
-            모든 테마 한글 지명(VWorld 공개 타일) — 운영 배포 시 <code>VITE_VWORLD_KEY</code>(인증키)
-            권장, 회색 테마 추가됨.
+            공개 지도 타일로 표시 중입니다(모든 테마 한글 지명). 회색 테마가 필요하면 관리자에게 지도 인증키
+            설정을 요청하세요.
           </p>
         )}
 

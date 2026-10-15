@@ -389,6 +389,7 @@
 .real-flow-controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin-bottom: 16px; }
 .real-flow-controls label, .real-flow-inputs label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
 .real-flow-controls select, .real-flow-inputs input { padding: 8px 10px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-card); color: var(--text-primary); }
+.real-flow-controls select[aria-disabled="true"] { cursor: not-allowed; color: var(--text-disabled); background: var(--input-bg); }
 .real-flow-inputs { display: grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap: 14px; margin: 16px 0; }
 .real-flow-inputs label > span:last-child { color: var(--text-secondary); font-size: 12px; }
 .real-flow-evidence { margin-top: 16px; border-top: 1px solid var(--border-color); padding-top: 12px; }

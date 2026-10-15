@@ -1,7 +1,8 @@
 import { REAL_TARGETS, observedFeatureLabel, targetUnit, formatValue, formatMonth } from "../lib/realSimulation.js";
 
 // 계산 근거 접이식 — 두 모드에 같은 자리로 둔다. 데모는 예시 계산이라는 사실만, 실데이터는 모델·학습데이터·버전 근거를 보인다.
-export default function ModelEvidence({ summary = "계산 근거", demo = false, result, regions = [], datasetName = (id) => id, slot }) {
+// state: 근거가 없을 때 이유 — "loading"(조회 중) | "error"(조회 실패) | 없음(활성 모델 없음).
+export default function ModelEvidence({ summary = "계산 근거", demo = false, result, regions = [], datasetName = (id) => id, slot, state }) {
   if (demo) {
     return (
       <details className="real-flow-evidence" data-slot={slot}>
@@ -18,7 +19,13 @@ export default function ModelEvidence({ summary = "계산 근거", demo = false,
     return (
       <details className="real-flow-evidence" data-slot={slot}>
         <summary>{summary}</summary>
-        <p>활성 모델 없음 — 활성 요인분석·시뮬레이션 버전이 준비되면 모델·학습데이터와 계산 근거가 표시됩니다.</p>
+        {state === "loading" ? (
+          <p role="status"><i className="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> 모델과 관측 입력을 확인하는 중입니다…</p>
+        ) : state === "error" ? (
+          <p>모델 정보를 불러오지 못했습니다. [요인분석 실행]을 눌러 다시 확인하거나 잠시 뒤 다시 시도하세요.</p>
+        ) : (
+          <p>활성 모델 없음 — 활성 요인분석·시뮬레이션 버전이 준비되면 모델·학습데이터와 계산 근거가 표시됩니다.</p>
+        )}
       </details>
     );
   }

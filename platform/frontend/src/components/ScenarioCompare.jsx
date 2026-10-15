@@ -217,8 +217,10 @@ export default function ScenarioCompare({ region, snapshot, onApply, addConsoleL
         data-slot="sim.scenario"
       >
         <p style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 14 }}>
-          현재 예산·정책 강조·시설 변수 조합을 시나리오로 저장하고, 10개년 인구 추이를 나란히 비교합니다.
-          저장된 시나리오는 브라우저 저장소가 허용된 환경에서 보존됩니다.
+          {allowSeed
+            ? "현재 예산·정책 강조·시설 변수 조합을 시나리오로 저장하고, 10개년 인구 추이를 나란히 비교합니다."
+            : "현재 관측 입력 조합을 시나리오로 저장하고, 다시 적용해 다음 달 예측을 나란히 비교합니다."}
+          {" "}저장된 시나리오는 브라우저 저장소가 허용된 환경에서 보존됩니다.
         </p>
 
         {/* 저장 입력 */}

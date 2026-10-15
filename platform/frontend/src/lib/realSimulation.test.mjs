@@ -67,4 +67,18 @@ const page=readFileSync(join(here,"..","pages","SimulatorPage.jsx"),"utf-8");
 assert.doesNotMatch(page,/mockDataVisible\s*\?\s*</);
 assert.doesNotMatch(page,/RealSimulationFlow/);
 assert.equal(existsSync(join(here,"..","components","RealSimulationFlow.jsx")),false);
+// 별칭(const demo = mockDataVisible, { mockDataVisible: isMock } 등)으로 모드를 나눠도 잡는다.
+// 모드 분기(? · && · ? x :) 바로 뒤에 올 수 있는 컴포넌트는 두 모드가 함께 쓰는 부품뿐이다.
+const SHARED_BRANCH_COMPONENTS=new Set(["PendingData","PolicyRecommendation"]);
+const modeBranchComponents=(src) => {
+  const names=new Set(["mockDataVisible","demo","mock","isDemo","isMock",
+    ...[...src.matchAll(/(?:const|let)\s+(\w+)\s*=\s*!?\s*mockDataVisible\b/g)].map((m) => m[1]),
+    ...[...src.matchAll(/mockDataVisible\s*:\s*(\w+)/g)].map((m) => m[1])]);
+  return [...names].flatMap((name) => [...src.matchAll(new RegExp(String.raw`\b${name}\s*(?:\?|&&|\?[^:?]{0,40}:)\s*\(?\s*<([A-Z]\w*)`,"g"))]
+    .map((m) => m[1]).filter((component) => !SHARED_BRANCH_COMPONENTS.has(component)));
+};
+assert.deepEqual(modeBranchComponents(page),[]);
+assert.deepEqual(modeBranchComponents("const demo = mockDataVisible; return demo ? <MockPage /> : <RealFlow />;"),["MockPage"]);
+assert.deepEqual(modeBranchComponents("const { mockDataVisible: isReal } = s; return isReal ? null : <RealFlow />;"),["RealFlow"]);
+assert.deepEqual(modeBranchComponents("const mock = mockDataVisible; return <>{mock && <MockPanel />}</>;"),["MockPanel"]);
 console.log("realSimulation: 활성 2종 선택·내용 hash/좌표 연결·추론 합계·근거 전달·관측 민감도 순위·4단계 화면 매핑·모드 분기 없음 PASS");

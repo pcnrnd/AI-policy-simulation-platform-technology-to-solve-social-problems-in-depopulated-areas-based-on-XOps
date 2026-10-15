@@ -11,9 +11,10 @@ import ScenarioCompare from "../components/ScenarioCompare.jsx";
 import ModelEvidence from "../components/ModelEvidence.jsx";
 import SimulatorMap, { SimulatorMapDetails, riskGrade } from "../components/SimulatorMap.jsx";
 import SimulatorDock from "../components/SimulatorDock.jsx";
+import RealForecastResult from "../components/RealForecastResult.jsx";
 import { useAppState } from "../context/AppStateContext.jsx";
 import { useChartTheme } from "../hooks/useChartTheme.js";
-import { useRealSimulation } from "../hooks/useRealSimulation.js";
+import { useRealSimulation, CANCELLED } from "../hooks/useRealSimulation.js";
 import { getScrollBehavior } from "../lib/motion.js";
 import { rankStrategies } from "../constants/policyStrategies.js";
 import { YEAR_LABELS, computeTrends, budgetToFactor, controlBoostOf, DEMO_ANALYSIS_STEPS as ANALYSIS_STEPS, DEMO_ANALYSIS_STEP_MS as ANALYSIS_STEP_MS } from "../lib/simulation.js";
@@ -42,8 +43,15 @@ export default function SimulatorPage() {
 
   // 실데이터 분석 조건 — 두 모드에 같은 select 를 두고 데모는 선택지 1개.
   const [target, setTarget] = useState("observed_sales_krw");
-  const [dong, setDong] = useState("");
+  // 행정동은 고른 지역과 함께 기억한다 — 지역이 바뀌면 "전체"(첫 옵션)로 돌아가 이전 지역 코드를 요청에 싣지 않는다.
+  const [dongPick, setDongPick] = useState({ regionId: currentRegion.id, code: "" });
+  const dong = dongPick.regionId === currentRegion.id ? dongPick.code : "";
+  const setDong = (code) => setDongPick({ regionId: currentRegion.id, code });
   const real = useRealSimulation({ enabled: !demo, region: currentRegion.id, target, dong });
+  // 실데이터 모델이 준비되지 않아 잠근 컨트롤의 사유 — 조회 중·조회 실패·모델 없음을 구분한다.
+  const realLockTitle = demo || real.ready ? null
+    : real.loading ? "모델과 관측 입력을 확인하는 중입니다." : real.loadFailed ? "모델 정보를 불러오지 못했습니다. [요인분석 실행]으로 다시 확인하세요." : "활성 모델을 먼저 준비하세요.";
+  const evidenceState = real.loading ? "loading" : real.loadFailed ? "error" : undefined;
   const unit = targetUnit(target);
   const targetName = REAL_TARGETS[target];
   const dongOptions = real.contexts?.simulation.dong_options ?? [];
@@ -92,9 +100,13 @@ export default function SimulatorPage() {
   const [simResult, setSimResult] = useState(null); // 실데이터 시뮬레이션 추론 결과
   const [simSig, setSimSig] = useState("");
   const analysisTimerRef = useRef(null);
+  const analysisRunRef = useRef(0); // 실데이터 요인분석 실행 세대 — 조건이 바뀌면 이전 실행의 늦은 응답을 버린다
 
   // 지역·학습 대상·행정동 변경 시 분석 상태 초기화 (지역별 요인분석은 별도 실행)
   useEffect(() => {
+    analysisRunRef.current += 1;
+    // 다른 지역에 갔다가 돌아와도 이전 행정동이 되살아나지 않게 기억을 지운다(화면 값은 이미 "전체").
+    setDongPick((pick) => (pick.regionId === currentRegion.id ? pick : { regionId: currentRegion.id, code: "" }));
     if (analysisTimerRef.current) {
       clearTimeout(analysisTimerRef.current);
       analysisTimerRef.current = null;
@@ -107,7 +119,7 @@ export default function SimulatorPage() {
     setRecoSig("");
     setRecoSim(null);
     // real.revision: 활성 버전이 바뀌어(409) 입력을 다시 읽으면 이전 버전 기준 결과를 비운다.
-  }, [currentRegion, target, dong, real.revision]);
+  }, [currentRegion.id, target, dong, real.revision]);
 
   // 데모 분석 단계 진행 — 단계별 로그 출력 후 완료 시 STAGE② 자동 펼침
   useEffect(() => {
@@ -138,7 +150,8 @@ export default function SimulatorPage() {
   }, [demo, analysisStatus, analysisStep, currentRegion, addConsoleLog]);
 
   const handleRunAnalysis = async () => {
-    if (analysisStatus === "running" || (!demo && !real.ready)) return;
+    // 조회 실패면 실행이 1단계에서 목록·입력을 다시 읽으므로 재시도로 허용한다.
+    if (analysisStatus === "running" || (!demo && !real.ready && !real.loadFailed)) return;
     setOpenStages((s) => ({ ...s, "stage-factor": true }));
     setRecommendation(null);
     setRecoSig("");
@@ -153,11 +166,14 @@ export default function SimulatorPage() {
     }
     // 실데이터: 1 목록·입력 재확인 → 2 활성 모델 추론 → 3 기여도 합계·근거 검증 → 4 완료
     addConsoleLog(`INFO: ${currentRegion.name} 요인분석 실행 — 활성 요인분석 모델로 ${targetName} 입력 기여도를 계산합니다.`);
-    const result = await real.runAnalysis(setAnalysisStep);
-    if (!result) {
+    const run = ++analysisRunRef.current;
+    const result = await real.runAnalysis((step) => { if (run === analysisRunRef.current) setAnalysisStep(step); });
+    // 지역·대상·행정동이 바뀐 뒤 늦게 온 응답은 새 실행 상태를 덮지 않는다(취소는 로그도 남기지 않는다).
+    if (run !== analysisRunRef.current) return;
+    if (!result || result === CANCELLED) {
       setAnalysisStatus("idle");
       setAnalysisStep(0);
-      addConsoleLog(`WARN: ${currentRegion.name} 요인분석을 완료하지 못했습니다. 안내 문구를 확인한 뒤 다시 실행하세요.`, false, true);
+      if (!result) addConsoleLog(`WARN: ${currentRegion.name} 요인분석을 완료하지 못했습니다. 안내 문구를 확인한 뒤 다시 실행하세요.`, false, true);
       return;
     }
     setAnalysis(result);
@@ -285,9 +301,6 @@ export default function SimulatorPage() {
   const policyDifference = finalPop - baseFinalPop;
   const growthPercent = (((finalPop - currentRegion.population) / currentRegion.population) * 100).toFixed(1);
   const growthClass = parseFloat(growthPercent) >= 0 ? "trend-up" : "trend-down";
-  const realDeltaPercent = simResult && simResult.baseline_prediction
-    ? ((simResult.delta / Math.abs(simResult.baseline_prediction)) * 100).toFixed(1)
-    : "0.0";
 
   const scatterData = useMemo(
     () => ({
@@ -350,6 +363,8 @@ export default function SimulatorPage() {
   // 결과 표시 조건 — 실행 상태(조작)와 데이터 유무를 분리한다. 실행 버튼·단계 표시는 그대로 돈다.
   const resultsReady = analysisDone && (demo || Boolean(analysis));
   const recoReady = resultsReady && recommendation && !recoStale;
+  // 관측 입력을 바꾼 뒤 재계산이 실패하면 이전 입력의 예측을 현재 값처럼 두지 않는다(계산 대기 중에는 그대로 둔다).
+  const simShown = simResult && (simSig === currentSig || !real.feedback) ? simResult : null;
 
   // 스텝퍼 완료 표시: ①② 요인분석 완료, ③④ 정책 추천 도출 완료 기준
   const doneStages = [
@@ -468,8 +483,10 @@ export default function SimulatorPage() {
         <select
           aria-label="행정동"
           value={demo ? "all" : dong || simProof?.dong_code || ""}
-          disabled={analysisRunning || (!demo && !real.contexts)}
-          onChange={(e) => { if (!demo) setDong(e.target.value); }}
+          disabled={analysisRunning}
+          aria-disabled={(!demo && !real.contexts) || undefined}
+          title={!demo && !real.contexts ? realLockTitle ?? undefined : undefined}
+          onChange={(e) => { if (!demo && real.contexts) setDong(e.target.value); }}
         >
           {demo && <option value="all">전체</option>}
           {!demo && !real.contexts && <option value="">모델 준비 후 선택</option>}
@@ -511,9 +528,9 @@ export default function SimulatorPage() {
         onRun={handleRunAnalysis}
         view={factorView}
         conditions={conditions}
-        runLockTitle={!demo && !real.ready ? "활성 모델을 먼저 준비하세요." : null}
+        runLockTitle={real.loadFailed ? null : realLockTitle}
         evidence={
-          <ModelEvidence slot="sim.factor.evidence" demo={demo} result={analysis ?? real.contexts?.factor} regions={regions} datasetName={real.datasetName} />
+          <ModelEvidence slot="sim.factor.evidence" demo={demo} state={evidenceState} result={analysis ?? real.contexts?.factor} regions={regions} datasetName={real.datasetName} />
         }
       />
 
@@ -597,10 +614,11 @@ export default function SimulatorPage() {
             onControlChange={(key, value) => setControlValues((prev) => ({ ...prev, [key]: value }))}
             controlsLabel={demo ? "시설 조절변수 (x)" : "관측 입력 조정 (x)"}
             controlsEmptyText={demo ? null : real.missing ? REAL_GUIDE_TEXT : real.loading ? "관측 입력 확인 중…" : null}
+            controlsLockTitle={realLockTitle ?? "조정할 조절변수가 없습니다."}
             onResetControls={() => { if (controls.length) setControlValues(defaultValues()); }}
             onRecommend={handleRecommend}
             recommendDisabled={!analysisDone}
-            notReadyText={analysisDone ? null : "STAGE ① 요인분석 실행 후 추천을 도출할 수 있습니다."}
+            notReadyText={analysisDone ? null : realLockTitle ?? "STAGE ① 요인분석 실행 후 추천을 도출할 수 있습니다."}
             stale={recoStale}
           />
         </div>
@@ -646,47 +664,20 @@ export default function SimulatorPage() {
                   기준 대비 {policyDifference >= 0 ? "+" : ""}{policyDifference.toLocaleString()}명입니다.
                 </p>
               </>
-            ) : !demo && resultsReady && simResult ? (
-              <>
-                <div style={{ position: "relative", height: 200, width: "100%" }}>
-                  <Line data={chartData} options={chartOpts} />
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-around", marginTop: 16, textAlign: "center" }}>
-                  <div>
-                    <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>조정 예측 ({formatMonth(simResult.provenance.prediction_period)})</div>
-                    <div style={{ fontSize: 18, fontWeight: 700, color: "var(--accent-blue)" }}>
-                      {formatValue(simResult.prediction)}{unit}
-                    </div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>기준 대비 변화</div>
-                    <div className={simResult.delta >= 0 ? "trend-up" : "trend-down"} style={{ fontSize: 18, fontWeight: 700 }}>
-                      {simResult.delta > 0 ? "+" : ""}{formatValue(simResult.delta)}{unit} ({simResult.delta > 0 ? "+" : ""}{realDeltaPercent}%)
-                    </div>
-                  </div>
-                </div>
-                <p className="chart-summary">
-                  기준 예측 {formatValue(simResult.baseline_prediction)}{unit}, 조정 예측 {formatValue(simResult.prediction)}{unit}로
-                  모델 예측상 {formatValue(simResult.delta)}{unit} 변화입니다. 검증 평균 절대 오차는 {formatValue(simResult.provenance.metrics?.mae)}{unit}입니다.
-                </p>
-                {simResult.outside_observed_range.length > 0 && (
-                  <p className="async-feedback is-error" role="status">
-                    관측 범위 밖 입력: {simResult.outside_observed_range.map(label).join(", ")}. 해당 구간의 예측 정확도는 확인되지 않았습니다.
-                  </p>
-                )}
-              </>
+            ) : !demo && resultsReady && simShown ? (
+              <RealForecastResult chartData={chartData} chartOpts={chartOpts} result={simShown} unit={unit} label={label} />
             ) : demo ? (
               <PendingData running={analysisRunning} text="[요인분석 실행] 후 인구 예측 결과가 표시됩니다." />
             ) : analysisDone ? (
               // 요인분석은 끝났고 예측을 계산 중이거나 실패한 상태 — 다시 실행하라고 하지 않는다.
               <PendingData
                 running={!real.feedback}
-                text="다음 달 예측을 계산하지 못했습니다. 위 안내를 확인한 뒤 관측 입력을 다시 조정하세요."
+                text="다음 달 예측을 계산하지 못했습니다. STAGE ① 분석 조건의 안내를 확인한 뒤 관측 입력을 다시 조정하거나 [정책 추천 도출]로 다시 계산하세요."
               />
             ) : (
               realPending("[요인분석 실행] 후 다음 달 예측 결과가 표시됩니다.")
             )}
-            <ModelEvidence slot="sim.sim.evidence" demo={demo} result={simResult ?? real.contexts?.simulation} regions={regions} datasetName={real.datasetName} />
+            <ModelEvidence slot="sim.sim.evidence" demo={demo} state={evidenceState} result={simShown ?? real.contexts?.simulation} regions={regions} datasetName={real.datasetName} />
           </Card>
 
           <Card title="전 지자체 위험지수 vs 인구 분포" icon="fa-braille" dataSource={cardSource} data-slot="sim.sim.distribution">
@@ -769,7 +760,8 @@ export default function SimulatorPage() {
           slot="sim.report.evidence"
           summary="추천 근거"
           demo={demo}
-          result={recoSim ?? simResult ?? real.contexts?.simulation}
+          state={evidenceState}
+          result={recoSim ?? simShown ?? real.contexts?.simulation}
           regions={regions}
           datasetName={real.datasetName}
         />

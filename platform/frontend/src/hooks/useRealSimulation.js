@@ -5,8 +5,8 @@ import { dataModeEpoch } from "../lib/dataMode.js";
 import { activeModelPair, matchingFlowBasis, inferenceRequest, validateInference, createRequestGate } from "../lib/realSimulation.js";
 
 const EMPTY = { mode: "real", source: "real", instances: [], datasets: [] };
-// 요청이 더 새 요청에 밀려 취소됨 — "모델 없음"(null)과 구분해 조용히 끝낸다.
-const CANCELLED = Symbol("cancelled");
+// 요청이 더 새 요청에 밀려 취소됨 — "모델 없음"·실패(null)와 구분해 조용히 끝낸다(페이지도 이 값을 그대로 존중).
+export const CANCELLED = Symbol("cancelled");
 const VERSION_CHANGED = "활성 버전이 바뀌었습니다. 모델과 관측 입력을 다시 확인했으니 요인분석을 다시 실행하세요.";
 const endpoint = (instance) =>
   `/api/v3/modelops/instances/${encodeURIComponent(instance.id)}/versions/${encodeURIComponent(instance.active_version)}`;
@@ -28,11 +28,12 @@ export function useRealSimulation({ enabled, region, target, dong }) {
   const catalogGate = useRef(createRequestGate(dataModeEpoch));
   const inputGate = useRef(createRequestGate(dataModeEpoch));
   const predictGate = useRef(createRequestGate(dataModeEpoch));
+  const analysisGate = useRef(createRequestGate(dataModeEpoch)); // 요인분석 실행 세대 — 지역·대상·행정동이 바뀌면 무효
   useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
-      catalogGate.current.cancel(); inputGate.current.cancel(); predictGate.current.cancel();
+      catalogGate.current.cancel(); inputGate.current.cancel(); predictGate.current.cancel(); analysisGate.current.cancel();
     };
   }, []);
   const guard = (gate) => { const current = gate.current.begin(); return () => mounted.current && current(); };
@@ -86,35 +87,39 @@ export function useRealSimulation({ enabled, region, target, dong }) {
         if (!cancelled && mounted.current) setLoading(false);
       }
     })();
-    return () => { cancelled = true; inputGate.current.cancel(); predictGate.current.cancel(); };
+    return () => { cancelled = true; inputGate.current.cancel(); predictGate.current.cancel(); analysisGate.current.cancel(); };
   }, [enabled, region, target, revision, loadCatalog, loadInputs]);
+  // 지역·학습 대상·행정동이 바뀌면 이전 조건의 실행 실패 문구를 지운다(409 재조회는 revision 만 바뀌어 안내를 유지).
+  useEffect(() => { setFeedback(null); }, [region, target, dong]);
 
   const onConflict = () => { setFeedback(VERSION_CHANGED); setRevision((value) => value + 1); };
 
   // 요인분석 실행 — 1 목록·입력 재확인 → 2 추론 → 3 근거·합계 검증 → 4 완료. onStep(n)으로 단계 칩을 움직인다.
+  // 반환: 결과 | null(실패, 안내 문구 있음) | CANCELLED(지역·대상 변경 등으로 무효 — 문구·단계를 건드리지 않음).
   const runAnalysis = useCallback(async (onStep) => {
-    setFeedback(null); setLoadError(null);
+    const current = guard(analysisGate);
+    setFeedback(null); // 조회 실패 문구(loadError)는 다시 읽기가 성공할 때까지 둔다 — 재시도 중 "모델 없음"으로 번쩍이지 않게
     let phase = "load"; // 목록·입력 단계 실패는 loadError(모델 없음 안내와 구분), 추론 단계 실패는 feedback
     try {
       onStep(1);
       const data = await loadCatalog();
-      if (data === CANCELLED) return null;
+      if (data === CANCELLED || !current()) return CANCELLED;
       const models = activeModelPair(data, region, target);
       const fresh = await loadInputs(models);
-      if (fresh === CANCELLED) return null;
+      if (fresh === CANCELLED || !current()) return CANCELLED;
       if (!fresh) throw new Error("이 지역·학습 대상의 활성 모델을 확인하세요.");
+      setLoadError(null);
       phase = "predict";
-      const current = guard(predictGate);
       onStep(2);
       const token = await getRealdataToken();
       const result = await apiSend("POST", endpoint(models.factor) + "/predict", { token, body: inferenceRequest(fresh.factor) });
-      if (!current()) return null;
+      if (!current()) return CANCELLED;
       onStep(3);
       const analysis = validateInference(result, fresh.factor);
       onStep(4);
       return analysis;
     } catch (error) {
-      if (!mounted.current) return null;
+      if (!current()) return CANCELLED; // 취소된 요청의 늦은 오류는 새 조건 화면에 띄우지 않는다
       if (error.status === 409) onConflict();
       else if (phase === "load") setLoadError(error.message || "모델 목록을 다시 확인하세요.");
       else setFeedback(error.message || "요인분석을 다시 실행하세요.");
@@ -126,6 +131,7 @@ export function useRealSimulation({ enabled, region, target, dong }) {
   const simulate = useCallback(async (changes) => {
     if (!contexts || !pair.simulation) return null;
     const current = guard(predictGate);
+    setFeedback(null); // 다시 계산하는 동안 이전 실패 문구 대신 계산 중으로 보인다
     try {
       const token = await getRealdataToken();
       const result = await apiSend("POST", endpoint(pair.simulation) + "/predict", { token, body: inferenceRequest(contexts.simulation, changes) });
@@ -145,5 +151,6 @@ export function useRealSimulation({ enabled, region, target, dong }) {
   const ready = Boolean(enabled && contexts && pair.factor && pair.simulation);
   // 모델이 실제로 없을 때만 "준비" 안내를 띄운다(조회 실패·근거 불일치는 loadError 문구로 알린다).
   const missing = Boolean(enabled && !loading && !ready && !loadError);
-  return { catalog, contexts, loading, ready, missing, feedback: loadError ?? feedback, revision, datasetName, runAnalysis, simulate };
+  // loadFailed: 목록·입력 조회 실패 — 근거 칸·실행 버튼이 "모델 없음"이 아니라 재시도 안내를 보인다.
+  return { catalog, contexts, loading, ready, missing, loadFailed: Boolean(enabled && loadError), feedback: loadError ?? feedback, revision, datasetName, runAnalysis, simulate };
 }

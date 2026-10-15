@@ -9,7 +9,7 @@ import { useId } from "react";
  *   fixed: { budgetTotal: number, setBudgetTotal: Function, welfare: number, setWelfare: Function,
  *     industry: number, setIndustry: Function, housing: number, setHousing: Function, lockText: string|null },
  *   controls: object[], controlValues: object, onControlChange: Function, controlsLabel: string,
- *   controlsEmptyText: string|null, onResetControls: Function, onRecommend: Function,
+ *   controlsEmptyText: string|null, controlsLockTitle: string|undefined, onResetControls: Function, onRecommend: Function,
  *   recommendDisabled: boolean, notReadyText: string|null, stale: boolean }} props
  * regionInfo(region) → { chip: { label, style } | null, meta: string }
  */
@@ -27,6 +27,7 @@ export default function SimulatorDock({
   onControlChange,
   controlsLabel,
   controlsEmptyText,
+  controlsLockTitle,
   onResetControls,
   onRecommend,
   recommendDisabled,
@@ -123,14 +124,17 @@ export default function SimulatorDock({
             style={{ width: "100%", marginTop: 8 }}
             onClick={onResetControls}
             aria-disabled={controls.length === 0 || undefined}
+            title={controls.length === 0 ? controlsLockTitle : undefined}
           >
             <i className="fa-solid fa-rotate-left" aria-hidden="true"></i> 조절변수 초기화
           </button>
+          {/* 잠금은 aria-disabled + 사유 title 로 통일한다(포커스·낭독 유지, 클릭은 무시). */}
           <button
             className="btn btn-primary"
             style={{ width: "100%", marginTop: 8 }}
-            onClick={onRecommend}
-            disabled={recommendDisabled}
+            onClick={() => { if (!recommendDisabled) onRecommend(); }}
+            aria-disabled={recommendDisabled || undefined}
+            title={recommendDisabled ? notReadyText ?? undefined : undefined}
           >
             <i className="fa-solid fa-lightbulb"></i> 정책 추천 도출
           </button>
