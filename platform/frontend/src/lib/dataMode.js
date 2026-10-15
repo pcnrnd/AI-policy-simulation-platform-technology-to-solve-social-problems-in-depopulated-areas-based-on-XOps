@@ -20,3 +20,24 @@ export function beginDataRequest() {
     release: () => pending.delete(controller) };
 }
 export const scenarioStorageKey = (isMock) => `decline_poc_scenarios.${isMock ? "mock" : "real"}.v2`;
+
+// 셸 헤더의 상시 모드 배지 — 문구·아이콘·색이 함께 바뀐다(색만으로 구분하지 않음).
+const SWITCH_HINT = "설정의 '데모 데이터 표시'에서 바꿀 수 있습니다.";
+export function modeBadge(demoVisible) {
+  return demoVisible
+    ? { tone: "demo", icon: "fa-flask", text: "데모 데이터 표시 중", title: `화면의 값은 예시 데이터입니다. ${SWITCH_HINT}` }
+    : { tone: "real", icon: "fa-database", text: "실데이터 표시 중", title: `등록한 학습데이터와 활성 모델 결과만 표시합니다. ${SWITCH_HINT}` };
+}
+
+// 모드 전환 직후 콘솔에 남기는 한 줄.
+export const modeSwitchLog = (demoVisible) => demoVisible
+  ? "INFO: 데모 데이터 표시로 전환했습니다. 화면의 값은 예시입니다."
+  : "INFO: 실데이터 표시로 전환했습니다. 등록한 학습데이터와 활성 모델 결과만 표시합니다.";
+
+// 카드 출처 칩 문구. sourceLabel 이 있으면 우선한다. ON 목록 API는 예시 행과 등록 행을 함께 줄 수 있어 "데모 포함".
+export function sourceChipText(demoVisible, dataSource, sourceLabel) {
+  if (sourceLabel) return sourceLabel;
+  if (!dataSource) return null;
+  if (dataSource === "mock") return "데모";
+  return demoVisible ? "데모 포함" : "실데이터";
+}

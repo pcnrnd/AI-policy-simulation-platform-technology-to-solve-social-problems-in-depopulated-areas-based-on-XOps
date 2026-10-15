@@ -24,6 +24,7 @@ import { MODEL_REGISTRY } from "../constants/models.js";
 import InfoTip from "../components/InfoTip.jsx";
 import RealdataEvaluationPanel from "../components/realdata/RealdataEvaluationPanel.jsx";
 import { getRealdataToken } from "../components/realdata/realdataClient.jsx";
+import SourceChip from "../components/SourceChip.jsx";
 import { apiGet, apiSend } from "../lib/api.js";
 
 // 데모 분포 표시 대상 — 인구이동 예측 모델(백엔드 시드 id).
@@ -956,7 +957,7 @@ export default function MonitorPage() {
         <div className="card" style={{ padding: "var(--space-xl)" }} data-values-source={accF1Src}>
           <div className="stat-label">
             {primaryCard.label}
-            <InfoTip text={primaryCard.tip} />
+            <InfoTip text={primaryCard.tip} /> <SourceChip dataSource={accF1Src} />
           </div>
           <div
             style={{
@@ -984,7 +985,7 @@ export default function MonitorPage() {
               text={
                 driftUsable?.source === "realdata"
                   ? `실데이터 대표 피처 ${driftUsable.feature}의 학습 구간 대비 ${driftUsable.kind === "operational" ? "학습 이후 관측" : "검증"} 구간 PSI입니다. 0.2를 초과하면 분포 변화로 판정합니다.`
-                  : "PSI는 기준 분포와 현재 분포의 차이를 계산합니다. 데모 입력은 시드 분포이며, PSI/KL 임계 초과 경보를 확인한 뒤 등록한 파이프라인을 선택해 수동 실행합니다."
+                  : "PSI는 기준 분포와 현재 분포의 차이를 계산합니다. 데모 입력은 예시 분포이며, PSI/KL 임계 초과 경보를 확인한 뒤 등록한 파이프라인을 선택해 수동 실행합니다."
               }
             />
           </div>

@@ -15,6 +15,7 @@ import { apiGet, apiSend } from "../lib/api.js";
 import { filterValidationMessage } from "../lib/filterExpression.js";
 import { HTTP_METHODS, AUTH_METHODS, adapterOf, buildQuery } from "../lib/dataopsApi.js";
 import { getScrollBehavior } from "../lib/motion.js";
+import SourceChip from "../components/SourceChip.jsx";
 
 const READY_RESPONSE = `// [POST·GET·PUT·PATCH·DELETE] 요청을 전송하면 표준 REST 응답이 표시됩니다.`;
 const CATALOG_URL = "/api/v3/dataops/catalog";
@@ -923,6 +924,7 @@ export default function DataOpsPage() {
 
           {/* 카탈로그 선택 UI는 데모 토글과 무관하게 같은 모습으로 남는다(가림 예외는 layout.css). */}
           <div className="catalog-live-region">
+          <div className="table-source"><SourceChip dataSource={catalogSrc} /></div>
           <div className="table-container" data-values-source={catalogSrc}>
             <table id="dataops-catalog-table" className="catalog-table" tabIndex="-1">
               <caption className="sr-only">메타데이터 카탈로그의 데이터 소스 목록. 선택한 정렬 기준으로 표시합니다.</caption>

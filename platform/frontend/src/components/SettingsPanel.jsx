@@ -77,6 +77,7 @@ export default function SettingsPanel() {
               role="switch"
               aria-checked={mockDataVisible}
               aria-labelledby="mock-data-switch-label"
+              aria-describedby="mock-data-switch-desc"
               className={"theme-switch mock-switch" + (mockDataVisible ? " is-on" : "")}
               onClick={toggleMockDataVisible}
             >
@@ -86,6 +87,9 @@ export default function SettingsPanel() {
               </span>
             </button>
           </div>
+          <p id="mock-data-switch-desc" className="settings-row-desc">
+            켜면 예시 데이터로 모든 화면을 채웁니다. 끄면 실데이터만 표시합니다.
+          </p>
 
         </div>
       )}

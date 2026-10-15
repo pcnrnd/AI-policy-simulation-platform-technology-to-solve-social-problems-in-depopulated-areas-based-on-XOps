@@ -6,7 +6,7 @@ import { apiGet, apiSend } from "../lib/api.js";
 import { MOCK_DATA_STORAGE_KEY, readMockDataVisible } from "../lib/demoVisibility.js";
 import { consumeSessionExpired } from "../lib/sessionGate.js";
 import { retainRealAlerts, retainModeIndependentAlerts, notificationFromAlert, unreadNotifications, detectDemoDrift } from "../lib/demoAlerts.js";
-import { setDataMode, dataModeEpoch } from "../lib/dataMode.js";
+import { setDataMode, dataModeEpoch, modeSwitchLog } from "../lib/dataMode.js";
 import { getRealdataToken } from "../components/realdata/realdataClient.jsx";
 
 const AppStateContext = createContext(null);
@@ -187,7 +187,9 @@ export function AppStateProvider({ children }) {
     driftCheckEpochRef.current = null;
     setAlerts(retainModeIndependentAlerts);
     setNotifications(retainModeIndependentAlerts);
+    // 이전 모드 로그는 비우고, 전환 사실 한 줄만 남긴다(헤더 배지는 live 영역으로 낭독).
     setConsoleLogs([]);
+    addConsoleLog(modeSwitchLog(next));
     demoVisibleRef.current = next;
     setMockDataVisible(next);
   }, []);
