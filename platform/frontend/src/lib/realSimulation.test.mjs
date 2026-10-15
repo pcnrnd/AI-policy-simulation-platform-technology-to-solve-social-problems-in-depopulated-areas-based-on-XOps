@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
-import { activeModelPair, matchingFlowBasis, inferenceRequest, validateInference, rankSensitivity, observedFeatureLabel, createRequestGate } from "./realSimulation.js";
+import { readFileSync, existsSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { activeModelPair, matchingFlowBasis, inferenceRequest, validateInference, rankSensitivity, observedFeatureLabel, createRequestGate,
+  contributionFactors, contributionSplit, realSliderControls, forecastSeries, sensitivityRecommendation, regionRealStatus, REAL_ANALYSIS_STEPS } from "./realSimulation.js";
 const proof={instance_id:"factor",model_type:"factor_analysis",version_id:"v1",job_id:"job1",dataset_id:"registered1",dataset_hash:"a".repeat(64),region_id:"namwon",target:"observed_sales_krw",dong_code:"45190250",prediction_period:202401,features:["y_lag1"],mode:"real",source:"real"};
 const factor={provenance:proof};
 const sim={provenance:{...proof,instance_id:"sim",model_type:"simulation",dataset_id:"registered2",version_id:"v2",job_id:"job2"}};
@@ -31,4 +35,36 @@ assert.equal(previousInput(),false);assert.equal(loadingCatalog(),true);
 const selectedInput=inputGate.begin();
 epoch+=2;
 assert.equal(selectedInput(),false);assert.equal(loadingCatalog(),false);
-console.log("realSimulation: 활성 2종 선택·내용 hash/좌표 연결·추론 합계·근거 전달·관측 민감도 순위 PASS");
+// ── 시뮬레이터 4단계 화면 매핑 ──
+const label=(feature) => observedFeatureLabel(feature,"observed_sales_krw",[{code:"45190250",name:"운봉읍"}]);
+const analysis={contributions:[{feature:"y_lag1",input:5,value:2},{feature:"y_lag2",input:7,value:-9},{feature:"dong_45190250",input:1,value:0}]};
+const factors=contributionFactors(analysis,label);
+assert.deepEqual(factors.map((row) => row.feature),["y_lag2","y_lag1","dong_45190250"]);
+assert.deepEqual(factors.map((row) => row.direction),["-","+","+"]);
+assert.equal(factors[2].label,"행정동: 운봉읍");
+assert.deepEqual(contributionSplit(analysis,label),{positive:["전월 관측 소비"],negative:["2개월 전 관측 소비"]});
+assert.deepEqual(contributionSplit(null,label),{positive:[],negative:[]});
+const sliders=realSliderControls({controls:[{feature:"y_lag1",min:1000,max:3730,default:2000},{feature:"y_yoy",min:5,max:5,default:5}],inputs:{}},label,"원");
+assert.deepEqual([sliders[0].min,sliders[0].max,sliders[0].default,sliders[0].step,sliders[0].unit,sliders[0].locked],[1000,3730,2000,27,"원",false]);
+assert.equal(sliders[1].step,1);assert.equal(sliders[1].locked,true);
+assert.deepEqual(realSliderControls(null,label,"원"),[]);
+const series=forecastSeries({inputs:{y_lag1:30,y_lag2:20,y_lag3:10},provenance:{prediction_period:202410}},{baseline_inputs:{y_lag1:30,y_lag2:20,y_lag3:10},baseline_prediction:40,prediction:44,provenance:{prediction_period:202410}});
+assert.deepEqual(series.labels,["3개월 전","2개월 전","전월","예측월 2024-10"]);
+assert.deepEqual(series.baseline,[10,20,30,40]);assert.deepEqual(series.adjusted,[10,20,30,44]);
+const view=sensitivityRecommendation(ranked,label,"원","관측 소비");
+assert.deepEqual(view.items.map((row) => row.name),["2개월 전 관측 소비 감소","전월 관측 소비 증가"]);
+assert.equal(view.items[0].score,5);assert.equal(view.columns.length,view.items[0].cells.length+1);
+assert.doesNotMatch(JSON.stringify(view),/RICE|점수|"점"/);
+assert.match(view.footnote,/인과 효과를 검증한 결과가 아닙니다/);
+const statusCatalog={instances:[{mode:"real",region_id:"namwon",target:"observed_sales_krw",model_type:"factor_analysis",active_version:"v1"},{mode:"real",region_id:"namwon",target:"observed_sales_krw",model_type:"simulation",active_version:"v2"},{mode:"mock",region_id:"shinan",target:"observed_sales_krw",model_type:"factor_analysis",active_version:"v3"},{mode:"mock",region_id:"shinan",target:"observed_sales_krw",model_type:"simulation",active_version:"v4"}]};
+assert.match(regionRealStatus(statusCatalog,"namwon","observed_sales_krw"),/준비됨/);
+assert.equal(regionRealStatus(statusCatalog,"namwon","nonlocal_visitors"),"실데이터 모델 없음");
+assert.equal(regionRealStatus(statusCatalog,"shinan","observed_sales_krw"),"실데이터 모델 없음");
+assert.equal(REAL_ANALYSIS_STEPS.length,4);
+// 구조 가드 — 시뮬레이터는 모드별 다른 컴포넌트를 띄우지 않는다(한 구조, 모드는 데이터만 바꾼다).
+const here=dirname(fileURLToPath(import.meta.url));
+const page=readFileSync(join(here,"..","pages","SimulatorPage.jsx"),"utf-8");
+assert.doesNotMatch(page,/mockDataVisible\s*\?\s*</);
+assert.doesNotMatch(page,/RealSimulationFlow/);
+assert.equal(existsSync(join(here,"..","components","RealSimulationFlow.jsx")),false);
+console.log("realSimulation: 활성 2종 선택·내용 hash/좌표 연결·추론 합계·근거 전달·관측 민감도 순위·4단계 화면 매핑·모드 분기 없음 PASS");
