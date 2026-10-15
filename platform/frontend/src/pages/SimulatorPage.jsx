@@ -16,24 +16,15 @@ import { useChartTheme } from "../hooks/useChartTheme.js";
 import { useRealSimulation } from "../hooks/useRealSimulation.js";
 import { getScrollBehavior } from "../lib/motion.js";
 import { rankStrategies } from "../constants/policyStrategies.js";
-import { YEAR_LABELS, computeTrends, budgetToFactor, controlBoostOf } from "../lib/simulation.js";
+import { YEAR_LABELS, computeTrends, budgetToFactor, controlBoostOf, DEMO_ANALYSIS_STEPS as ANALYSIS_STEPS, DEMO_ANALYSIS_STEP_MS as ANALYSIS_STEP_MS } from "../lib/simulation.js";
 import {
-  REAL_TARGETS, REAL_ANALYSIS_STEPS, REAL_GUIDE_TEXT, REAL_CONTROLS_LOCK_TEXT, realUnavailableText,
+  REAL_TARGETS, REAL_ANALYSIS_STEPS, REAL_GUIDE_TEXT, REAL_CONTROLS_LOCK_TEXT, REAL_DIAGNOSIS_NOTE, realUnavailableText,
   observedFeatureLabel, rankSensitivity, targetUnit, formatValue, formatMonth,
   contributionFactors, contributionSplit, realSliderControls, forecastSeries, sensitivityRecommendation, regionRealStatus
 } from "../lib/realSimulation.js";
 
-// STAGE① 요인분석 실행 단계(데모 표시) — 실행 버튼 클릭 시 순차 진행 후 결과 공개.
-const ANALYSIS_STEP_MS = 900;
-const ANALYSIS_STEPS = [
-  { key: "collect", label: "연계 데이터 수집", icon: "fa-database", log: "주민등록·통신·카드 연계 데이터 소스 수집 및 정합성 검증" },
-  { key: "dl", label: "딥러닝 모델 추론", icon: "fa-microchip", log: "딥러닝 예측 모델 추론 수행 (시계열 패턴 학습)" },
-  { key: "xai", label: "XAI 기여도 분해", icon: "fa-magnifying-glass-chart", log: "SHAP 기반 주요 요인 기여도(Shapley value) 분해" },
-  { key: "fusion", label: "통계 분석 융합", icon: "fa-layer-group", log: "통계적 모델 분석 결과와 융합 — 상관·문제진단 도출" }
-];
 // 실데이터 표시에서 관측 입력을 바꾼 뒤 시뮬레이션 추론(읽기 전용 계산)을 다시 부르기까지의 대기.
 const SIM_DEBOUNCE_MS = 500;
-const DIAGNOSIS_REAL_NOTE = "문제 유형 진단은 실데이터로 아직 제공되지 않습니다. 실데이터 결과는 STAGE ① 입력 지표 기여도에서 확인하세요. 설정에서 데모 데이터 표시를 켜면 예시를 볼 수 있습니다.";
 const STAGE_IDS = ["stage-factor", "stage-result", "stage-sim", "stage-report"];
 
 // 정책 시뮬레이터 — 기준선 4단계 구조 하나를 두 모드가 함께 쓴다(모드는 데이터 출처만 바꾼다).
@@ -447,7 +438,7 @@ export default function SimulatorPage() {
     negative: split.negative,
     lockedText: "[요인분석 실행] 후 기여 방향이 표시됩니다.",
     blockedText: real.missing ? REAL_GUIDE_TEXT : null,
-    diagnosisNote: DIAGNOSIS_REAL_NOTE,
+    diagnosisNote: REAL_DIAGNOSIS_NOTE,
     paramText: real.contexts ? `조정 가능한 관측 입력 ${controls.length}개 → STAGE ③ 시뮬레이션 입력` : "→ STAGE ③ 시뮬레이션 입력"
   };
   const rangeProof = simProof?.range_provenance;

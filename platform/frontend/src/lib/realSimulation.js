@@ -59,6 +59,7 @@ export function rankSensitivity(result) {
 export const REAL_GUIDE_TEXT = "이 지역·학습 대상의 활성 모델이 없습니다. DataOps에서 학습데이터를 등록하고 오케스트레이터에서 요인분석·시뮬레이션 모델을 학습·활성화하세요.";
 // subject 는 조사까지 포함한다(예: "문제 유형 진단은", "지자체 비교 분포는").
 export const realUnavailableText = (subject) => `${subject} 실데이터로 아직 제공되지 않습니다. 설정에서 데모 데이터 표시를 켜면 예시를 볼 수 있습니다.`;
+export const REAL_DIAGNOSIS_NOTE = "문제 유형 진단은 실데이터로 아직 제공되지 않습니다. 실데이터 결과는 STAGE ① 입력 지표 기여도에서 확인하세요. 설정에서 데모 데이터 표시를 켜면 예시를 볼 수 있습니다.";
 export const REAL_CONTROLS_LOCK_TEXT = "예산·정책 강조 가중치는 데모 데이터 시뮬레이션에서 조정합니다. 실데이터에서는 아래 관측 입력을 조정하세요.";
 // 요인분석 실행 단계 — 데모 4단계와 같은 자리, 실제 비동기 진행에 맞춰 바뀐다.
 export const REAL_ANALYSIS_STEPS = [
