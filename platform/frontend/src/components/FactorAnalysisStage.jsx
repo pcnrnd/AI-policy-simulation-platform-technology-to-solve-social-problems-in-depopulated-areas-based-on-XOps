@@ -1,49 +1,40 @@
 import Card from "./Card.jsx";
 import CollapsibleStage from "./CollapsibleStage.jsx";
 import PendingData from "./PendingData.jsx";
+import { formatValue, FACTOR_EXPLAIN_TEXT, FACTOR_FOOTNOTE } from "../lib/realSimulation.js";
 
 // STAGE ① 사회문제 요인분석
-// region.case 기반: AI+인구학적 요인 → XAI(SHAP)+딥러닝 모델 → 통계 분석 융합.
-// UI(카드 구조)는 항상 노출하고, 데이터는 [요인분석 실행] 완료 후에만 공개한다.
-// 아래 시드 사례(region.case)는 데모 표시 전용이고, 실데이터 표시는 view 로 같은 자리를 채운다.
-//
-// 두 모드가 같은 실행 바·카드 3개(제목 동일)·근거 자리를 쓴다.
-// view(실데이터 표시): { sub, runInfo, cards: [body] × 3 } — 주어지면 카드 내용을 그것으로 채운다(제목은 그대로).
+// 두 모드가 같은 실행 바·단계 칩·카드 3개(기준선 제목)·근거 자리를 쓰고, 내용은 활성 요인분석 모델의 결과다.
+// view: factorAnalysisView(결과) — 있으면 카드 3개를 채운다. 없으면 placeholders[i](실행 전·실행 중·안내)를 둔다.
 // conditions·evidence: 두 모드 공통 컨트롤(학습 대상·행정동 select, 계산 근거)을 호출부가 넘긴다.
 // runLockTitle: 실행할 수 없을 때의 사유 — 버튼은 aria-disabled 로 남고 클릭은 호출부가 막는다.
 export default function FactorAnalysisStage({
-  region,
   open,
   onToggle,
+  sub,
+  runInfo,
   status = "idle",
   stepIndex = 0,
   steps = [],
   onRun,
   view = null,
+  placeholders = [],
+  sourceLabel,
   conditions = null,
   evidence = null,
   runLockTitle = null
 }) {
-  const c = region.case;
-  const factors = c.factorAnalysis ?? [];
-  const ai = c.aiModel ?? {};
   const running = status === "running";
   const done = status === "done";
-  const card = (index, title, demoBody) => (
-    <Card title={title} icon={DEMO_CARD_ICONS[index]} dataSource={view ? "api" : "mock"} data-slot={`sim.factor.card-${index + 1}`}>
-      {view ? view.cards[index] : done ? demoBody : <PendingData running={running} />}
+  const card = (index, title, body) => (
+    <Card title={title} icon={CARD_ICONS[index]} dataSource="api" sourceLabel={sourceLabel} data-slot={`sim.factor.card-${index + 1}`}>
+      {view ? body : placeholders[index] ?? <PendingData running={running} />}
     </Card>
   );
+  const signed = (value) => `${value > 0 ? "+" : ""}${formatValue(value)}`;
 
   return (
-    <CollapsibleStage
-      id="stage-factor"
-      no="STAGE ①"
-      title="사회문제 요인분석"
-      sub={view ? view.sub : `${region.name} · ${region.theme}`}
-      open={open}
-      onToggle={onToggle}
-    >
+    <CollapsibleStage id="stage-factor" no="STAGE ①" title="사회문제 요인분석" sub={sub} open={open} onToggle={onToggle}>
       {/* 분석 실행 바: 분석 조건 → 입력 요약 → 단계 진행 → 실행 버튼 */}
       {conditions}
       <div className="pl-run-bar">
@@ -51,11 +42,7 @@ export default function FactorAnalysisStage({
           <i className="fa-solid fa-flask" aria-hidden="true"></i>
           <div>
             <strong>요인분석 실행</strong>
-            <p>
-              {view
-                ? view.runInfo
-                : `연계 소스 ${c.dataSources.length}개 · ${ai.xai ?? "XAI"} · ${(ai.deepLearning ?? []).join(" / ")}`}
-            </p>
+            <p>{runInfo}</p>
           </div>
         </div>
 
@@ -67,16 +54,11 @@ export default function FactorAnalysisStage({
             return (
               <span
                 key={s.key}
-                className={
-                  "pl-run-step" + (isDone ? " is-done" : "") + (isActive ? " is-active" : "")
-                }
+                className={"pl-run-step" + (isDone ? " is-done" : "") + (isActive ? " is-active" : "")}
                 aria-current={isActive ? "step" : undefined}
               >
                 <i
-                  className={
-                    "fa-solid " +
-                    (isDone ? "fa-circle-check" : isActive ? "fa-circle-dot" : s.icon)
-                  }
+                  className={"fa-solid " + (isDone ? "fa-circle-check" : isActive ? "fa-circle-dot" : s.icon)}
                   aria-hidden="true"
                 ></i>
                 {s.label}
@@ -111,36 +93,39 @@ export default function FactorAnalysisStage({
 
       {/* 결과 영역: 카드 구조는 상시 노출, 데이터는 분석 완료 후 표시 */}
       <div className="pl-flow-grid pl-flow-3">
-        {/* AI + 인구학적 요인 분석 결과 */}
-        {card(0, "AI + 인구학적 요인 분석 결과", (
+        {/* AI + 인구학적 요인 분석 결과 — 요인 기여도(±, |값| 내림차순) */}
+        {card(0, "AI + 인구학적 요인 분석 결과", view && (
             <>
               <ul className="pl-factor-list">
-                {factors.map((f) => (
-                  <li key={f.label} className={f.direction === "-" ? "neg" : "pos"}>
+                {view.factors.map((f) => (
+                  <li key={f.feature} className={f.direction === "-" ? "neg" : "pos"}>
                     <span className="pl-factor-sign">{f.direction}</span>
-                    {f.label}
+                    {f.label} · 기여도 {signed(f.value)} {view.unit} · 관측 {formatValue(f.input)}{f.inputUnit ? ` ${f.inputUnit}` : ""}
                   </li>
                 ))}
               </ul>
+              {view.more > 0 && <p className="pl-stat-baseline">외 {view.more}개 요인은 계산 근거에서 확인</p>}
               <div className="pl-source-note">
-                <i className="fa-solid fa-database" aria-hidden="true"></i> 연계 데이터:{" "}
-                {c.dataSources.length}개 소스 (주민등록·통신·카드 등)
+                <i className="fa-solid fa-database" aria-hidden="true"></i> {view.basis}
               </div>
+              <p className="pl-stat-baseline">{FACTOR_EXPLAIN_TEXT}</p>
+              <p className="pl-stat-baseline">{FACTOR_FOOTNOTE}</p>
             </>
         ))}
 
-        {/* XAI + 딥러닝 예측 모델 */}
-        {card(1, "XAI · 딥러닝 예측 모델", (
+        {/* 모델 정보 — 기여도 분해식과 활성 버전 */}
+        {card(1, "XAI · 딥러닝 예측 모델", view && (
             <>
               <div className="pl-model-box pl-model-xai">
-                <span className="pl-model-tag">XAI 모듈</span>
-                <strong>{ai.xai}</strong>
-                <p>주요 요인 기여도(Shapley value) 분해</p>
+                <span className="pl-model-tag">기여도 분해</span>
+                <strong>요인별 기여도 합 + 기준값 {formatValue(view.model.intercept)} {view.unit}</strong>
+                <p>= 모델 추정값 {formatValue(view.model.prediction)} {view.unit}</p>
               </div>
               <div className="pl-model-box pl-model-dl">
-                <span className="pl-model-tag">딥러닝 예측 모델</span>
+                <span className="pl-model-tag">학습 모델</span>
+                <strong>요인분석 · 활성 버전 {view.model.version}</strong>
                 <div className="pl-model-chips">
-                  {(ai.deepLearning ?? []).map((m) => (
+                  {view.model.features.map((m) => (
                     <span className="pl-chip" key={m}>{m}</span>
                   ))}
                 </div>
@@ -148,16 +133,19 @@ export default function FactorAnalysisStage({
             </>
         ))}
 
-        {/* 통계적 모델 분석 결과 (결과 융합) */}
-        {card(2, "통계적 모델 분석 결과", (
+        {/* 검증 결과 (결과 융합) */}
+        {card(2, "통계적 모델 분석 결과", view && (
             <>
               <div className="pl-fusion-mark">
                 <i className="fa-solid fa-plus" aria-hidden="true"></i> 결과 융합
               </div>
-              <p className="pl-stat-baseline">{ai.statBaseline}</p>
+              <p className="pl-stat-baseline">
+                검증 평균 절대 오차 {formatValue(view.validation.mae)} {view.unit} · 기준선 {formatValue(view.validation.baselineMae)} {view.unit}
+                {view.validation.baselineName ? `(${view.validation.baselineName})` : ""}
+              </p>
               <div className="pl-stage-label">분석 대상</div>
               <ul className="pl-mini-list">
-                {c.analysisTargets.map((t) => (
+                {view.validation.targets.map((t) => (
                   <li key={t}>{t}</li>
                 ))}
               </ul>
@@ -169,4 +157,4 @@ export default function FactorAnalysisStage({
   );
 }
 
-const DEMO_CARD_ICONS = ["fa-list-check", "fa-microchip", "fa-chart-column"];
+const CARD_ICONS = ["fa-list-check", "fa-microchip", "fa-chart-column"];

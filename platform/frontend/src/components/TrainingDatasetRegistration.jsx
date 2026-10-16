@@ -4,9 +4,8 @@ import { apiGet, apiSend } from "../lib/api.js";
 import { getRealdataToken } from "./realdata/realdataClient.jsx";
 import { useAppState } from "../context/AppStateContext.jsx";
 import { alertText } from "../lib/alertText.js";
-import { datasetRegionName } from "../lib/modelops.js";
+import { TARGET_LABELS as TARGET_NAMES, datasetRegionName } from "../lib/modelops.js";
 
-const TARGET_NAMES = { nonlocal_visitors: "타지역 방문객", observed_sales_krw: "관측 소비", population_change_pct: "인구 변화율" };
 
 export default function TrainingDatasetRegistration() {
   const { appData, mockDataVisible, addConsoleLog } = useAppState();

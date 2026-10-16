@@ -4,13 +4,12 @@ export const YEAR_LABELS = ["2026", "2027", "2028", "2029", "2030", "2031", "203
 export const NATURAL_DECLINE = 0.98;
 export const BASELINE_BUDGET = 600; // 억 — budgetFactor=1 기준 예산
 
-// 정책 시뮬레이터 STAGE① 요인분석 실행 단계(데모 표시) — 실행 버튼 클릭 시 순차 진행 후 결과 공개.
-export const DEMO_ANALYSIS_STEP_MS = 900;
-export const DEMO_ANALYSIS_STEPS = [
-  { key: "collect", label: "연계 데이터 수집", icon: "fa-database", log: "주민등록·통신·카드 연계 데이터 소스 수집 및 정합성 검증" },
-  { key: "dl", label: "딥러닝 모델 추론", icon: "fa-microchip", log: "딥러닝 예측 모델 추론 수행 (시계열 패턴 학습)" },
-  { key: "xai", label: "XAI 기여도 분해", icon: "fa-magnifying-glass-chart", log: "SHAP 기반 주요 요인 기여도(Shapley value) 분해" },
-  { key: "fusion", label: "통계 분석 융합", icon: "fa-layer-group", log: "통계적 모델 분석 결과와 융합 — 상관·문제진단 도출" }
+// 정책 시뮬레이터 STAGE① 요인분석 실행 단계 칩 — 두 모드 공용. 칩은 실제 요청 진행(useFactorAnalysis)에 맞춰 움직인다.
+export const ANALYSIS_STEPS = [
+  { key: "collect", label: "연계 데이터 수집", icon: "fa-database" },
+  { key: "dl", label: "딥러닝 모델 추론", icon: "fa-microchip" },
+  { key: "xai", label: "XAI 기여도 분해", icon: "fa-magnifying-glass-chart" },
+  { key: "fusion", label: "통계 분석 융합", icon: "fa-layer-group" }
 ];
 
 // 총 예산(제약요소) → 체감수익 곡선 스케일 팩터.

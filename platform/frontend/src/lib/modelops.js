@@ -1,8 +1,10 @@
 export const MODEL_TYPES = [{ id: "factor_analysis", name: "요인분석" }, { id: "simulation", name: "시뮬레이션" }];
-export const TARGET_LABELS = { nonlocal_visitors: "타지역 방문객", observed_sales_krw: "관측 소비", population_change_pct: "인구 변화율" };
+export const TARGET_LABELS = { nonlocal_visitors: "타지역 방문객", observed_sales_krw: "관측 소비", population_change_pct: "인구 변화율", living_population: "생활인구" };
 export const JOB_STATE_NAMES = { queued: "대기", running: "학습 중", saved: "등록 완료", failed: "실패" };
 export const EXPERIMENT_MAX = 64;
 export const typeName = (id) => MODEL_TYPES.find((type) => type.id === id)?.name ?? id ?? "—";
+/** 등록 모델 이름 — 학습 카드·버전 관리의 "등록 모델 선택"이 같은 문구를 쓴다. */
+export const instanceLabel = (row, regionName) => `${typeName(row.model_type)} · ${regionName(row.region_id)} · ${TARGET_LABELS[row.target] ?? row.target}`;
 export function datasetRegionName(dataset, regions = []) {
   return regions.find((region) => region.id === dataset.region_id)?.name ?? dataset.region_id ?? "—";
 }
@@ -144,6 +146,23 @@ export function jobLogLines(job, version, audit = []) {
       message: `${row.action === "version_activated" ? "버전 활성화" : "이전 버전 복원"} — ${row.version_id} · ${row.actor}` });
   });
   return lines;
+}
+
+export const ACTION_NAMES = { dataset_registered: "학습데이터 등록", instance_registered: "모델 등록", pipeline_registered: "파이프라인 등록", training_saved: "학습 완료", training_failed: "학습 실패", version_activated: "버전 활성화", version_rolled_back: "이전 버전 복원", pipeline_deleted: "파이프라인 삭제" };
+const AUDIT_LEVELS = { training_failed: "ERROR", training_saved: "SUCCESS", version_activated: "SUCCESS", version_rolled_back: "SUCCESS" };
+const pad = (n) => String(n).padStart(2, "0");
+/** 운영 기록 시각 — 여러 날에 걸치므로 MM-DD HH:MM:SS(로컬, 24시간). 해석할 수 없으면 원문. */
+export function auditTime(ts) {
+  const at = new Date(ts);
+  if (Number.isNaN(at.getTime())) return String(ts ?? "");
+  return `${pad(at.getMonth() + 1)}-${pad(at.getDate())} ${pad(at.getHours())}:${pad(at.getMinutes())}:${pad(at.getSeconds())}`;
+}
+/** 최근 운영 기록 → 콘솔 패널 줄. 서버는 최신 순으로 주므로 뒤집어 최신이 아래(자동 스크롤 위치)에 온다. */
+export function auditLogLines(audit = [], limit = 20) {
+  return audit.slice(0, limit).reverse().map((row) => ({
+    time: auditTime(row.created_at), level: AUDIT_LEVELS[row.action] ?? "INFO",
+    message: `${ACTION_NAMES[row.action] ?? "운영 기록"} — ${row.asset_id}${row.version_id ? ` · 버전 ${row.version_id}` : ""}${row.job_id ? ` · 작업 ${row.job_id}` : ""} · ${row.actor}`
+  }));
 }
 
 /** Model Store 행: 새 경로 버전(최신 순) + 데모 ON에서만 이전 고정 모델 과거 버전(읽기 전용). */

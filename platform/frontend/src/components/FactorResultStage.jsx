@@ -1,18 +1,16 @@
 import Card from "./Card.jsx";
 import CollapsibleStage from "./CollapsibleStage.jsx";
 import PendingData from "./PendingData.jsx";
+import { CORRELATION_BASIS_TEXT } from "../lib/realSimulation.js";
 
 // STAGE ② 요인분석 결과
-// 데이터 기반 사회문제: +/- 상관 → 문제 유형 진단 → 파라미터 도출.
+// 상관관계: STAGE ① 요인 기여도의 +/− 방향(두 모드 같은 함수). 문제 유형 진단: 데모는 예시 서사, 실데이터는 안내 한 줄.
 // UI(카드 구조)는 항상 노출하고, 데이터는 STAGE ① 요인분석 완료(locked=false) 후 공개한다.
-//
-// view(실데이터 표시): { note } — 같은 두 카드 자리(제목 동일)에 한 줄 안내만 둔다(요인분석 학습데이터 등록 전).
-export default function FactorResultStage({ region, open, onToggle, locked = false, running = false, view = null }) {
-  const c = region.case;
-  const pos = c.correlations?.positive ?? [];
-  const neg = c.correlations?.negative ?? [];
-  const source = view ? "api" : "mock";
-
+// split: { positive, negative } — ① 카드에 보인 요인 행. diagnosis: 진단 문구 배열(데모) 또는 null.
+// diagnosisNote: 실데이터 진단 자리 안내(실행 여부와 무관). pendingText: 잠금 중 대신 보일 문구(예: 모델 준비 안내).
+export default function FactorResultStage({ open, onToggle, locked = false, running = false, split = null, diagnosis = null,
+  diagnosisNote = null, pendingText = null, sourceLabel, showDerive = false }) {
+  const list = (rows) => rows.length ? rows.map((row) => <li key={row.feature}>{row.label}</li>) : <li>해당 요인 없음</li>;
   return (
     <CollapsibleStage
       id="stage-result"
@@ -23,43 +21,36 @@ export default function FactorResultStage({ region, open, onToggle, locked = fal
       onToggle={onToggle}
     >
       <div className="pl-flow-grid pl-flow-2">
-        <Card title="상관관계 분석" icon="fa-scale-balanced" dataSource={source} data-slot="sim.result.card-1">
-          {view ? (
-            <PendingData text={view.note} />
-          ) : !locked ? (
-            <div className="pl-corr-grid">
-              <div className="pl-corr pl-corr-pos">
-                <div className="pl-corr-head">
-                  <i className="fa-solid fa-arrow-trend-up" aria-hidden="true"></i> Positive correlation
+        <Card title="상관관계 분석" icon="fa-scale-balanced" dataSource="api" sourceLabel={sourceLabel} data-slot="sim.result.card-1">
+          {!locked && split ? (
+            <>
+              <div className="pl-corr-grid">
+                <div className="pl-corr pl-corr-pos">
+                  <div className="pl-corr-head">
+                    <i className="fa-solid fa-arrow-trend-up" aria-hidden="true"></i> Positive correlation
+                  </div>
+                  <ul>{list(split.positive)}</ul>
                 </div>
-                <ul>
-                  {pos.map((p) => (
-                    <li key={p}>{p}</li>
-                  ))}
-                </ul>
-              </div>
-              <div className="pl-corr pl-corr-neg">
-                <div className="pl-corr-head">
-                  <i className="fa-solid fa-arrow-trend-down" aria-hidden="true"></i> Negative correlation
+                <div className="pl-corr pl-corr-neg">
+                  <div className="pl-corr-head">
+                    <i className="fa-solid fa-arrow-trend-down" aria-hidden="true"></i> Negative correlation
+                  </div>
+                  <ul>{list(split.negative)}</ul>
                 </div>
-                <ul>
-                  {neg.map((n) => (
-                    <li key={n}>{n}</li>
-                  ))}
-                </ul>
               </div>
-            </div>
+              <p className="pl-stat-baseline">{CORRELATION_BASIS_TEXT}</p>
+            </>
           ) : (
-            <PendingData running={running} text="[요인분석 실행] 후 상관관계 분석 결과가 표시됩니다." />
+            <PendingData running={running} text={pendingText ?? "[요인분석 실행] 후 상관관계 분석 결과가 표시됩니다."} />
           )}
         </Card>
 
-        <Card title="문제 유형 진단 결과" icon="fa-stethoscope" dataSource={source} data-slot="sim.result.card-2">
-          {view ? (
-            <PendingData text={view.note} />
-          ) : !locked ? (
+        <Card title="문제 유형 진단 결과" icon="fa-stethoscope" dataSource={diagnosisNote ? undefined : "mock"} data-slot="sim.result.card-2">
+          {diagnosisNote ? (
+            <PendingData text={diagnosisNote} />
+          ) : !locked && diagnosis ? (
             <ul className="pl-diag-list">
-              {c.problemDiagnosis.map((d) => (
+              {diagnosis.map((d) => (
                 <li key={d}>
                   <i className="fa-solid fa-circle-exclamation" aria-hidden="true"></i>
                   {d}
@@ -67,9 +58,9 @@ export default function FactorResultStage({ region, open, onToggle, locked = fal
               ))}
             </ul>
           ) : (
-            <PendingData running={running} text="[요인분석 실행] 후 문제 유형 진단 결과가 표시됩니다." />
+            <PendingData running={running} text={pendingText ?? "[요인분석 실행] 후 문제 유형 진단 결과가 표시됩니다."} />
           )}
-          {!view && !locked && (
+          {showDerive && !locked && (
             <div className="pl-param-derive">
               <i className="fa-solid fa-arrow-down-long" aria-hidden="true"></i> 파라미터 도출 → 시뮬레이션 입력
             </div>

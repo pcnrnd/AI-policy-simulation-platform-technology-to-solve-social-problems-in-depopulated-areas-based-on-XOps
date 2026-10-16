@@ -15,11 +15,13 @@ import RealForecastResult from "../components/RealForecastResult.jsx";
 import { useAppState } from "../context/AppStateContext.jsx";
 import { useChartTheme } from "../hooks/useChartTheme.js";
 import { useRealSimulation } from "../hooks/useRealSimulation.js";
+import { useFactorAnalysis } from "../hooks/useFactorAnalysis.js";
 import { getScrollBehavior } from "../lib/motion.js";
 import { rankStrategies } from "../constants/policyStrategies.js";
-import { YEAR_LABELS, computeTrends, budgetToFactor, controlBoostOf, DEMO_ANALYSIS_STEPS as ANALYSIS_STEPS, DEMO_ANALYSIS_STEP_MS as ANALYSIS_STEP_MS } from "../lib/simulation.js";
+import { YEAR_LABELS, computeTrends, budgetToFactor, controlBoostOf, ANALYSIS_STEPS } from "../lib/simulation.js";
 import {
-  REAL_TARGETS, REAL_GUIDE_TEXT, REAL_CONTROLS_LOCK_TEXT, FACTOR_GUIDE_TEXT, FACTOR_PENDING_TEXT, FACTOR_RUN_LOCK_TEXT, realUnavailableText,
+  REAL_TARGETS, REAL_GUIDE_TEXT, REAL_CONTROLS_LOCK_TEXT, FACTOR_GUIDE_TEXT, FACTOR_PENDING_TEXT, FACTOR_RUN_LOCK_TEXT, FACTOR_IDLE_TEXT,
+  FACTOR_DIAGNOSIS_TEXT, DEMO_FACTOR_TARGET, realUnavailableText, activeModelPair, factorAnalysisView,
   observedFeatureLabel, rankSensitivity, targetUnit, formatValue, formatMonth,
   realSliderControls, forecastSeries, sensitivityRecommendation, regionRealStatus
 } from "../lib/realSimulation.js";
@@ -29,9 +31,9 @@ const SIM_DEBOUNCE_MS = 500;
 const STAGE_IDS = ["stage-factor", "stage-result", "stage-sim", "stage-report"];
 
 // 정책 시뮬레이터 — 기준선 4단계 구조 하나를 두 모드가 함께 쓴다(모드는 데이터 출처만 바꾼다).
-// 데모 표시: 지역 사례(mock_data.json)와 화면 예시 계산. 실데이터 표시: ①·②는 요인분석 학습데이터 등록 전까지
-// 안내 상태, ③·④는 같은 지역·학습 대상의 활성 시뮬레이션 버전 추론(useRealSimulation) — ① 실행과 무관하다.
-// 실데이터 대응이 없는 요소는 같은 자리에 행동 안내를 둔다.
+// ①·②: 두 모드 모두 활성 요인분석 모델의 결과(useFactorAnalysis). 데모 표시는 합성 요인 패널 모델을 자동 준비한다.
+// ③·④: 데모는 지역 사례(mock_data.json)와 화면 예시 계산, 실데이터는 같은 지역·학습 대상의 활성 시뮬레이션 버전
+// 추론(useRealSimulation) — 실데이터 ③·④는 ① 실행과 무관하다. 실데이터 대응이 없는 요소는 같은 자리에 행동 안내를 둔다.
 export default function SimulatorPage() {
   const {
     appData, currentRegion, setCurrentRegion,
@@ -49,6 +51,10 @@ export default function SimulatorPage() {
   const dong = dongPick.regionId === currentRegion.id ? dongPick.code : "";
   const setDong = (code) => setDongPick({ regionId: currentRegion.id, code });
   const real = useRealSimulation({ enabled: !demo, region: currentRegion.id, target, dong, log: (message) => addConsoleLog(message, false, true) });
+  // STAGE ① 요인분석 — 두 모드 같은 흐름. 데모는 합성 요인 패널(생활인구), 실데이터는 선택한 학습 대상의 요인분석 모델.
+  const factorTarget = demo ? DEMO_FACTOR_TARGET : target;
+  const factor = useFactorAnalysis({ demo, region: currentRegion.id, target: factorTarget, dong: demo ? "" : dong,
+    log: (message) => addConsoleLog(message, false, message.startsWith("WARN")) });
   // 실데이터 모델이 준비되지 않아 잠근 컨트롤의 사유 — 조회 중·조회 실패·모델 없음을 구분한다.
   const realLockTitle = demo || real.ready ? null
     : real.loading ? "모델과 관측 입력을 확인하는 중입니다." : real.loadFailed ? "모델 정보를 불러오지 못했습니다. [정책 추천 도출]을 눌러 다시 확인하세요." : "시뮬레이션 활성 모델을 먼저 준비하세요.";
@@ -93,24 +99,20 @@ export default function SimulatorPage() {
     }, delay);
   };
 
-  // STAGE① 요인분석 실행 상태(데모 표시) — idle(미실행) → running(단계 진행) → done(결과 공개).
-  // 실데이터 표시는 요인분석 학습데이터 등록 전까지 실행하지 않는다(idle 고정, 단계 칩 대기).
-  const [analysisStatus, setAnalysisStatus] = useState("idle");
-  const [analysisStep, setAnalysisStep] = useState(0); // 1-based 진행 단계
+  // STAGE① 요인분석 실행 상태 — idle(미실행) → running(단계 진행) → done(결과 공개). 두 모드 같은 훅(useFactorAnalysis).
+  const analysisStatus = factor.status;
   const [simResult, setSimResult] = useState(null); // 실데이터 시뮬레이션 추론 결과
   const [simSig, setSimSig] = useState("");
-  const analysisTimerRef = useRef(null);
+  // 실데이터는 같은 지역·학습 대상의 요인분석 활성 모델이 있어야 실행된다(데모는 자동 준비). 조회 중·실패·모델 없음을 구분한다.
+  const factorModel = demo ? null : activeModelPair(real.catalog, currentRegion.id, target).factor;
+  const factorLockTitle = demo || factorModel ? null
+    : real.loading ? "모델 목록을 확인하는 중입니다." : real.loadFailed ? "모델 정보를 불러오지 못했습니다. 잠시 뒤 다시 시도하세요." : FACTOR_RUN_LOCK_TEXT;
+  const factorMissing = !demo && !real.loading && !real.loadFailed && (!factorModel || factor.missing);
 
-  // 지역·학습 대상·행정동 변경 시 분석 상태 초기화 (지역별 요인분석은 별도 실행)
+  // 지역·학습 대상·행정동 변경 시 결과 초기화 (지역별 요인분석은 별도 실행 — 요인분석 상태는 훅이 비운다)
   useEffect(() => {
     // 다른 지역에 갔다가 돌아와도 이전 행정동이 되살아나지 않게 기억을 지운다(화면 값은 이미 "전체").
     setDongPick((pick) => (pick.regionId === currentRegion.id ? pick : { regionId: currentRegion.id, code: "" }));
-    if (analysisTimerRef.current) {
-      clearTimeout(analysisTimerRef.current);
-      analysisTimerRef.current = null;
-    }
-    setAnalysisStatus("idle");
-    setAnalysisStep(0);
     setSimResult(null);
     setRecommendation(null);
     setRecoSig("");
@@ -118,44 +120,23 @@ export default function SimulatorPage() {
     // real.revision: 활성 버전이 바뀌거나(409) 다시 확인해 입력을 다시 읽으면 이전 결과를 비운다.
   }, [currentRegion.id, target, dong, real.revision]);
 
-  // 데모 분석 단계 진행 — 단계별 로그 출력 후 완료 시 STAGE② 자동 펼침
-  useEffect(() => {
-    if (!demo || analysisStatus !== "running" || analysisStep === 0) return undefined;
-
-    if (analysisStep > ANALYSIS_STEPS.length) {
-      setAnalysisStatus("done");
-      addConsoleLog(
-        `SUCCESS: ${currentRegion.name} 사회문제 요인분석 완료 — STAGE ② 요인분석 결과가 갱신되었습니다.`
-      );
-      addConsoleLog(
-        "INFO: 도출 파라미터(조절변수·상관변수)가 STAGE ③ 시뮬레이션 입력으로 전달되었습니다."
-      );
-      setOpenStages((s) => ({ ...s, "stage-result": true, "stage-sim": true }));
-      // 분석 결과가 갱신된 STAGE ②로 이동해 완료가 즉시 보이게 한다
-      revealStage("stage-result", 120);
-      return undefined;
-    }
-
-    const step = ANALYSIS_STEPS[analysisStep - 1];
-    addConsoleLog(`INFO: [요인분석 ${analysisStep}/${ANALYSIS_STEPS.length}] ${step.log}`);
-    analysisTimerRef.current = setTimeout(() => setAnalysisStep((s) => s + 1), ANALYSIS_STEP_MS);
-
-    return () => {
-      if (analysisTimerRef.current) clearTimeout(analysisTimerRef.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [demo, analysisStatus, analysisStep, currentRegion, addConsoleLog]);
-
-  const handleRunAnalysis = () => {
-    // 실데이터 표시: 요인분석 학습데이터 등록 전이라 실행하지 않는다(버튼 aria-disabled + 사유 title).
-    if (!demo || analysisStatus === "running") return;
+  const handleRunAnalysis = async () => {
+    // 실행할 수 없으면(버튼 aria-disabled + 사유 title) 클릭을 무시한다.
+    if (analysisStatus === "running" || factorLockTitle) return;
     setOpenStages((s) => ({ ...s, "stage-factor": true }));
-    setRecommendation(null);
-    setRecoSig("");
-    setRecoSim(null);
-    setAnalysisStatus("running");
-    setAnalysisStep(1);
-    addConsoleLog(`INFO: ${currentRegion.name} 사회문제 요인분석 실행 — XAI·딥러닝·통계 융합 파이프라인 시작.`);
+    if (demo) {
+      // 데모 ③·④는 ① 결과 뒤에 열린다(기준선 흐름) — 다시 실행하면 이전 추천을 비운다.
+      setRecommendation(null);
+      setRecoSig("");
+      setRecoSim(null);
+    }
+    addConsoleLog(`INFO: ${currentRegion.name} 요인분석 실행`);
+    const analysis = await factor.run();
+    if (!analysis) return;
+    addConsoleLog(`SUCCESS: ${currentRegion.name} 요인분석 완료 — 요인 ${analysis.contributions.length}개 기여도 표시`);
+    setOpenStages((s) => ({ ...s, "stage-result": true, "stage-sim": true }));
+    // 분석 결과가 갱신된 STAGE ②로 이동해 완료가 즉시 보이게 한다
+    revealStage("stage-result", 120);
   };
 
   // 실데이터 시뮬레이션 추론 — 현재 조절변수 값으로. 결과는 그때의 서명과 함께 저장해 낡음을 판정한다.
@@ -364,14 +345,15 @@ export default function SimulatorPage() {
   );
   // ③ 자리의 시뮬레이션 모델 대기 문구 — 모델 없음(전문)·조회 중·조회 실패를 구분한다.
   const realPending = <PendingData running={real.loading} text={real.missing ? REAL_GUIDE_TEXT : realLockTitle} />;
-  // ①·② 요인분석 자리 — 활성 모델 유무와 무관하게 안내 상태. 전문은 ① 첫 카드 한 곳, 나머지는 한 줄.
+  // ①·② 요인분석 — 두 모드 같은 매핑(factorAnalysisView). 실데이터 모델 없음이면 안내(전문은 ① 첫 카드 한 곳, 나머지는 한 줄).
+  const factorLabel = (feature) => observedFeatureLabel(feature, factorTarget, factor.result?.analysis.dong_options ?? dongOptions);
+  const factorView = factor.result ? factorAnalysisView(factor.result.analysis, { demo, dataset: factor.result.dataset, label: factorLabel }) : null;
   const factorLine = <PendingData text={FACTOR_PENDING_TEXT} />;
-  const factorView = demo ? null : {
-    sub: `${currentRegion.name} · 실데이터`,
-    runInfo: "인구 구조·시설 지표 요인분석 (학습데이터 등록 대기)",
-    cards: [guide(FACTOR_GUIDE_TEXT), factorLine, factorLine]
-  };
-  const resultView = demo ? null : { note: FACTOR_PENDING_TEXT };
+  const factorIdle = <PendingData running={analysisRunning} text={FACTOR_IDLE_TEXT} />;
+  const factorPlaceholders = factorMissing ? [guide(FACTOR_GUIDE_TEXT), factorLine, factorLine] : [factorIdle, factorIdle, factorIdle];
+  const factorRunInfo = factorView ? factorView.runInfo
+    : demo ? "인구 구조·시설 지표 9개 요인 · 학습 대상 생활인구" : `등록 학습데이터 기준 · 학습 대상 ${targetName}`;
+  const factorSourceLabel = factorView?.sourceLabel ?? (demo ? "데모" : undefined);
   const rangeProof = simProof?.range_provenance;
   const frame = demo
     ? { objective: sim.objective, demand: sim.factors.demand, supply: sim.factors.supply, adjust: sim.factors.adjust, constraint: `${sim.constraint} · ${budgetTotal.toLocaleString()}억` }
@@ -411,6 +393,7 @@ export default function SimulatorPage() {
       </label>
       {!demo && real.loading && <p role="status">모델과 관측 입력 확인 중…</p>}
       {!demo && real.feedback && <p className="async-feedback is-error" role="alert">{real.feedback}</p>}
+      {factor.feedback && <p className="async-feedback is-error" role="alert">{factor.feedback}</p>}
     </div>
   );
 
@@ -435,27 +418,36 @@ export default function SimulatorPage() {
 
       {/* ── STAGE ① 사회문제 요인분석 ── */}
       <FactorAnalysisStage
-        region={currentRegion}
         open={openStages["stage-factor"]}
         onToggle={() => toggleStage("stage-factor")}
+        sub={`${currentRegion.name} · ${demo ? "데모 요인 패널" : "실데이터"}`}
+        runInfo={factorRunInfo}
         status={analysisStatus}
-        stepIndex={analysisStep}
+        stepIndex={factor.step}
         steps={ANALYSIS_STEPS}
         onRun={handleRunAnalysis}
         view={factorView}
+        placeholders={factorPlaceholders}
+        sourceLabel={factorSourceLabel}
         conditions={conditions}
-        runLockTitle={demo ? null : FACTOR_RUN_LOCK_TEXT}
-        evidence={<ModelEvidence slot="sim.factor.evidence" demo={demo} emptyText={FACTOR_PENDING_TEXT} />}
+        runLockTitle={factorLockTitle}
+        evidence={<ModelEvidence slot="sim.factor.evidence" result={factor.result?.analysis} regions={regions} label={factorLabel}
+          datasetName={() => factor.result?.dataset?.name ?? factor.result?.analysis.provenance.dataset_id}
+          emptyText={factorMissing ? FACTOR_PENDING_TEXT : "[요인분석 실행] 후 모델·학습데이터 근거가 표시됩니다."} />}
       />
 
       {/* ── STAGE ② 요인분석 결과 ── */}
       <FactorResultStage
-        region={currentRegion}
         open={openStages["stage-result"]}
         onToggle={() => toggleStage("stage-result")}
         locked={analysisStatus !== "done"}
         running={analysisRunning}
-        view={resultView}
+        split={factorView?.split}
+        sourceLabel={factorSourceLabel}
+        diagnosis={demo ? currentRegion.case.problemDiagnosis : null}
+        diagnosisNote={demo ? null : FACTOR_DIAGNOSIS_TEXT}
+        pendingText={factorMissing ? FACTOR_PENDING_TEXT : null}
+        showDerive={demo}
       />
 
       {/* ── STAGE ③ 시뮬레이션: 공간정보 탐색 + 강화학습 변수 + 예측 ── */}
@@ -665,7 +657,7 @@ export default function SimulatorPage() {
                 "관측 범위 안에서 증가 예측을 만든 조정 항목이 없습니다. 행정동이나 학습 대상을 바꿔 확인하세요."
               ) : (
                 <>
-                  STAGE ③에서 정책 변수를 조정한 뒤 <strong>[정책 추천 도출]</strong> 버튼을 누르면, 시뮬레이션
+                  STAGE ③에서 {demo ? "정책 변수를" : "관측 입력을"} 조정한 뒤 <strong>[정책 추천 도출]</strong> 버튼을 누르면, 시뮬레이션
                   결과에 맞는 맞춤 정책 추천이 생성됩니다.
                 </>
               )}

@@ -1,4 +1,18 @@
+import { TARGET_LABELS } from "./modelops.js";
+
 export const REAL_TARGETS = { observed_sales_krw: "관측 소비", nonlocal_visitors: "타지역 방문객" };
+// 데모 요인분석의 학습 대상(합성 요인 패널) — 실데이터 학습 대상 목록과 별개다.
+export const DEMO_FACTOR_TARGET = "living_population";
+export const DEMO_FACTOR_SOURCE_PREFIX = "mock_factor_";
+// 요인 패널 변수 이름·단위(백엔드 factor_panel.FEATURES 키와 같다).
+const FACTOR_PANEL = {
+  youth_ratio: ["유소년 비율", "%"], aging_index: ["노령화지수", ""], working_age_pop: ["생산연령인구", "명"],
+  elderly_pop: ["고령인구", "명"], death_cancellations: ["사망말소", "명/월"], edu_facility_density: ["교육시설 밀도", "개소/만 명"],
+  medical_facility_density: ["의료시설 밀도", "개소/만 명"], child_welfare_density: ["아동복지시설 밀도", "개소/만 명"],
+  facility_capacity: ["시설 수용력(인구 대비)", "정원/천 명"]
+};
+export const FACTOR_PANEL_FEATURES = Object.keys(FACTOR_PANEL);
+export const targetName = (target) => TARGET_LABELS[target] ?? target;
 export function createRequestGate(epochReader) {
   let sequence=0;
   return { cancel:() => { sequence+=1; }, begin:() => {
@@ -7,15 +21,18 @@ export function createRequestGate(epochReader) {
   } };
 }
 export function observedFeatureLabel(name, target, dongs = []) {
-  const noun = REAL_TARGETS[target] ?? target;
+  const noun = targetName(target);
   const labels = { y_lag1: `전월 ${noun}`, y_lag2: `2개월 전 ${noun}`, y_lag3: `3개월 전 ${noun}`, y_yoy: `전년 같은 달 ${noun}`,
     has_yoy: "전년 관측값 유무", month_sin: "월별 계절성 1", month_cos: "월별 계절성 2" };
   if (name.startsWith("dong_")) return `행정동: ${dongs.find((row) => row.code === name.slice(5))?.name ?? name.slice(5)}`;
-  return labels[name] ?? name;
+  return FACTOR_PANEL[name]?.[0] ?? labels[name] ?? name;
 }
-export function activeModelPair(catalog, region, target) {
-  if (catalog.mode !== "real" || catalog.source !== "real") throw new Error("실데이터 모델 목록을 확인하세요.");
-  const candidates = catalog.instances.filter((row) => row.mode === "real" && row.region_id === region && row.target === target);
+/** 입력값 단위 — 요인 패널 변수는 고유 단위, 과거 관측값(y_*)은 학습 대상 단위, 그 밖(행정동·계절)은 없음. */
+export const featureUnit = (name, target) => FACTOR_PANEL[name]?.[1] ?? (name.startsWith("y_") ? targetUnit(target) : "");
+/** 같은 지역·학습 대상의 활성 요인분석·시뮬레이션 인스턴스. mode: 카탈로그가 속해야 하는 모드(기본 실데이터). */
+export function activeModelPair(catalog, region, target, mode = "real") {
+  if (catalog.mode !== mode || catalog.source !== mode) throw new Error("모델 목록의 데이터 모드를 확인하세요.");
+  const candidates = catalog.instances.filter((row) => row.mode === mode && row.region_id === region && row.target === target);
   return { factor: candidates.find((row) => row.model_type === "factor_analysis" && row.active_version),
     simulation: candidates.find((row) => row.model_type === "simulation" && row.active_version) };
 }
@@ -54,10 +71,18 @@ export const REAL_GUIDE_TEXT = "이 지역·학습 대상의 시뮬레이션 활
 // subject 는 조사까지 포함한다(예: "문제 유형 진단은", "지자체 비교 분포는").
 export const realUnavailableText = (subject) => `${subject} 실데이터로 아직 제공되지 않습니다. 설정에서 데모 데이터 표시를 켜면 예시를 볼 수 있습니다.`;
 export const REAL_CONTROLS_LOCK_TEXT = "예산·정책 강조 가중치는 데모 데이터 시뮬레이션에서 조정합니다. 실데이터에서는 아래 관측 입력을 조정하세요.";
-// STAGE ①·② 요인분석 자리 — 요인분석 학습데이터가 등록되기 전까지 실데이터 표시는 안내만 둔다(전문은 한 곳, 나머지는 한 줄).
-export const FACTOR_GUIDE_TEXT = "요인분석은 인구 구조·시설 지표 학습데이터를 등록한 뒤 제공됩니다. DataOps에서 요인분석용 학습데이터를 등록하고 오케스트레이터에서 요인분석 모델을 학습·활성화하세요.";
-export const FACTOR_PENDING_TEXT = "요인분석 학습데이터 등록 후 표시";
-export const FACTOR_RUN_LOCK_TEXT = "요인분석 학습데이터를 등록한 뒤 실행할 수 있습니다.";
+// STAGE ①·② 요인분석 — 두 모드가 활성 요인분석 모델 결과를 같은 자리에 보인다.
+// 실데이터에 요인분석 활성 모델이 없을 때만 안내(전문은 ① 첫 카드 한 곳, 나머지는 한 줄).
+export const FACTOR_GUIDE_TEXT = "이 지역·학습 대상의 요인분석 활성 모델이 없습니다. DataOps에서 학습데이터를 등록하고 오케스트레이터에서 요인분석 모델을 학습·활성화하세요.";
+export const FACTOR_PENDING_TEXT = "요인분석 활성 모델 준비 후 표시";
+export const FACTOR_RUN_LOCK_TEXT = "이 지역·학습 대상의 요인분석 활성 모델을 먼저 준비하세요.";
+export const FACTOR_IDLE_TEXT = "[요인분석 실행] 후 표시됩니다.";
+export const FACTOR_FAILED_TEXT = "요인분석을 실행하지 못했습니다. 잠시 뒤 다시 실행하세요.";
+export const FACTOR_VERSION_CHANGED_TEXT = "활성 버전이 바뀌었습니다. [요인분석 실행]을 다시 누르세요.";
+export const FACTOR_DIAGNOSIS_TEXT = "문제 유형 진단은 시설 지표 학습데이터 등록 후 제공됩니다.";
+export const FACTOR_EXPLAIN_TEXT = "기여도는 학습 기간 평균 대비 최근 관측값이 모델 추정을 높인(+)·낮춘(−) 크기입니다.";
+export const FACTOR_FOOTNOTE = "※ 모델 추정의 기여도이며 정책의 인과 효과가 아닙니다.";
+export const CORRELATION_BASIS_TEXT = "STAGE ① 요인 기여도의 방향(+ 높임 / − 낮춤) 기준";
 // 알림(role=alert) 고정 문구 — 서버·브라우저 원문은 활동 로그에만 남긴다.
 export const REAL_LOAD_FAILED_TEXT = "모델 정보를 불러오지 못했습니다. 잠시 뒤 다시 시도하세요.";
 export const REAL_PREDICT_FAILED_TEXT = "예측을 계산하지 못했습니다. 입력을 다시 조정하거나 잠시 뒤 다시 시도하세요.";
@@ -78,6 +103,41 @@ export function contributionFactors(result, label) {
 export function contributionSplit(result, label) {
   const rows = contributionFactors(result, label);
   return { positive: rows.filter((row) => row.value > 0), negative: rows.filter((row) => row.value < 0) };
+}
+
+// 학습 시 비교한 기준선 방법 — 알려진 것만 한글로 보인다(모르는 이름은 표시하지 않는다).
+const BASELINE_NAMES = { yoy_or_prev_month: "전년 같은 달·전월 관측값", same_month_last_year: "전년 같은 달 관측값" };
+export const baselineName = (name) => BASELINE_NAMES[name];
+export const FACTOR_LIST_LIMIT = 10;
+const shortId = (id) => String(id ?? "").slice(0, 12);
+
+/**
+ * 요인분석 추론 결과 → STAGE ①(카드 3개)·②(상관관계) 표시 데이터. 두 모드가 같은 함수를 쓰고,
+ * 모드는 출처 문구(basis·sourceLabel)만 바꾼다. dataset: 결과의 등록 학습데이터(카탈로그 행, 없으면 ID로 표기).
+ */
+export function factorAnalysisView(result, { demo, dataset, label }) {
+  const p = result.provenance;
+  const unit = targetUnit(p.target);
+  const all = contributionFactors(result, label).map((row) => ({ ...row, inputUnit: featureUnit(row.feature, p.target) }));
+  const factors = all.slice(0, FACTOR_LIST_LIMIT);
+  const name = dataset?.name ?? p.dataset_id;
+  const observed = `${formatMonth(p.observed_from)}~${formatMonth(p.observed_to)}`;
+  const evaluation = p.evaluation_period;
+  return {
+    unit, factors, more: all.length - factors.length,
+    split: { positive: factors.filter((row) => row.value > 0), negative: factors.filter((row) => row.value < 0) },
+    basis: demo ? `연계 데이터: 데모 요인 패널 · ${name}` : `현재 등록 데이터 기준 · ${name} (관측 ${observed})`,
+    sourceLabel: demo ? "데모" : `실데이터 · ${name}`,
+    runInfo: `학습데이터 ${name} · 요인분석 활성 버전 ${shortId(p.version_id)}`,
+    model: { version: shortId(p.version_id), intercept: result.intercept, prediction: result.prediction,
+      features: (p.features ?? []).map(label) },
+    validation: {
+      mae: p.metrics?.mae, baselineMae: p.baseline?.mae, baselineName: baselineName(p.baseline?.name),
+      targets: [`${targetName(p.target)} · 요인 ${(p.features ?? []).length}개`, `관측 기간 ${observed}`,
+        `검증 기간 ${evaluation ? `${formatMonth(evaluation.from)}~${formatMonth(evaluation.to)}` : "—"}`,
+        `기준월 ${formatMonth(p.prediction_period)}`]
+    }
+  };
 }
 
 // 범위/100을 유효숫자 2자리로 — 슬라이더 한 칸.

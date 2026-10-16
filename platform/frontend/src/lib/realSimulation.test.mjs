@@ -4,7 +4,9 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { activeModelPair, inferenceRequest, validateInference, rankSensitivity, observedFeatureLabel, createRequestGate,
   contributionFactors, contributionSplit, realSliderControls, forecastSeries, sensitivityRecommendation, regionRealStatus,
-  REAL_GUIDE_TEXT, FACTOR_GUIDE_TEXT, FACTOR_PENDING_TEXT, FACTOR_RUN_LOCK_TEXT, REAL_LOAD_FAILED_TEXT, REAL_PREDICT_FAILED_TEXT, REAL_VERSION_CHANGED_TEXT } from "./realSimulation.js";
+  REAL_GUIDE_TEXT, FACTOR_GUIDE_TEXT, FACTOR_PENDING_TEXT, FACTOR_RUN_LOCK_TEXT, REAL_LOAD_FAILED_TEXT, REAL_PREDICT_FAILED_TEXT, REAL_VERSION_CHANGED_TEXT,
+  FACTOR_IDLE_TEXT, FACTOR_FAILED_TEXT, FACTOR_VERSION_CHANGED_TEXT, FACTOR_DIAGNOSIS_TEXT, FACTOR_EXPLAIN_TEXT, FACTOR_FOOTNOTE, CORRELATION_BASIS_TEXT,
+  DEMO_FACTOR_TARGET, FACTOR_PANEL_FEATURES, FACTOR_LIST_LIMIT, factorAnalysisView, featureUnit, targetUnit } from "./realSimulation.js";
 const proof={instance_id:"factor",model_type:"factor_analysis",version_id:"v1",job_id:"job1",dataset_id:"registered1",dataset_hash:"a".repeat(64),region_id:"namwon",target:"observed_sales_krw",dong_code:"45190250",prediction_period:202401,features:["y_lag1"],mode:"real",source:"real"};
 const sim={provenance:{...proof,instance_id:"sim",model_type:"simulation",dataset_id:"registered2",version_id:"v2",job_id:"job2"}};
 const request=inferenceRequest(sim,{y_lag1:100});
@@ -64,8 +66,12 @@ assert.match(regionRealStatus({instances:[statusCatalog.instances[1]]},"namwon",
 assert.equal(regionRealStatus({instances:[statusCatalog.instances[0]]},"namwon","observed_sales_krw"),"실데이터 모델 없음");
 // 안내·알림 문구에 내부 사유·구현명·서버/브라우저 원문 금지
 const INTERNAL=/세종대|미수신|릿지|ridge|lag|XGBoost|SHAP|HTTP|fetch|Failed|Error|mock|seed|시드|modelops|\/api\//i;
-const guideTexts=[REAL_GUIDE_TEXT,FACTOR_GUIDE_TEXT,FACTOR_PENDING_TEXT,FACTOR_RUN_LOCK_TEXT,REAL_LOAD_FAILED_TEXT,REAL_PREDICT_FAILED_TEXT,REAL_VERSION_CHANGED_TEXT];
-for (const text of guideTexts) assert.doesNotMatch(text,INTERNAL,text);
+const guideTexts=[REAL_GUIDE_TEXT,FACTOR_GUIDE_TEXT,FACTOR_PENDING_TEXT,FACTOR_RUN_LOCK_TEXT,REAL_LOAD_FAILED_TEXT,REAL_PREDICT_FAILED_TEXT,REAL_VERSION_CHANGED_TEXT,
+  FACTOR_IDLE_TEXT,FACTOR_FAILED_TEXT,FACTOR_VERSION_CHANGED_TEXT,FACTOR_DIAGNOSIS_TEXT,FACTOR_EXPLAIN_TEXT,FACTOR_FOOTNOTE,CORRELATION_BASIS_TEXT];
+// 인과로 과장하는 표현 금지 — 각주의 "인과 효과가 아닙니다"만 허용한다.
+const CAUSAL=/효과가 있|때문에|유발|원인|덕분/;
+for (const text of guideTexts) { assert.doesNotMatch(text,INTERNAL,text); assert.doesNotMatch(text,CAUSAL,text); }
+assert.match(FACTOR_FOOTNOTE,/인과 효과가 아닙니다/);
 assert.match(REAL_GUIDE_TEXT,/시뮬레이션 활성 모델이 없습니다/);
 assert.match(REAL_VERSION_CHANGED_TEXT,/^활성 버전이 바뀌었습니다/);
 // 구조 가드 — 시뮬레이터는 모드별 다른 컴포넌트를 띄우지 않는다(한 구조, 모드는 데이터만 바꾼다).
@@ -98,13 +104,64 @@ for (const src of [page,factorStage,resultStage]) assert.doesNotMatch(src,/입�
 // 같은 컨트롤: 단계 칩·조건 select·실행 버튼은 두 모드 공용(실데이터는 실행만 aria-disabled + 사유 title).
 assert.match(page,/steps=\{ANALYSIS_STEPS\}/);
 assert.match(page,/conditions=\{conditions\}/);
-assert.match(page,/runLockTitle=\{demo \? null : FACTOR_RUN_LOCK_TEXT\}/);
+assert.match(page,/runLockTitle=\{factorLockTitle\}/);
+assert.match(page,/const factorLockTitle = demo \|\| factorModel \? null/);
 assert.match(factorStage,/aria-disabled=\{runLockTitle \? true : undefined\}/);
-// ③ 계산 근거는 "예측 입력 기여도"로 — "요인" 표현을 쓰지 않는다.
+// ③ 계산 근거는 검증 오차·기준선·버전·데이터셋만 — 기여도 3행은 ① 카드로 옮겼다. "요인" 표현도 쓰지 않는다.
 const evidence=read("components","ModelEvidence.jsx");
-assert.match(evidence,/예측 입력 기여도/);assert.doesNotMatch(evidence,/요인/);
+assert.doesNotMatch(evidence,/예측 입력 기여도|예측을 높인 입력|예측을 낮춘 입력|contributionSplit/);assert.doesNotMatch(evidence,/요인/);
+assert.match(evidence,/typeName\(p\.model_type\)/);
+// ①은 두 모드 같은 렌더 — 데모 사례 서사(region.case)를 ①에서 그리지 않고, 데모 타이머 진행이 남지 않는다.
+assert.doesNotMatch(factorStage,/region\.case|c\.factorAnalysis|aiModel|analysisTargets|dataSources/);
+assert.doesNotMatch(page,/ANALYSIS_STEP_MS|setAnalysisStep|DEMO_ANALYSIS_STEPS/);
+assert.equal(page.match(/useFactorAnalysis\(/g)?.length,1);
+assert.doesNotMatch(page,/useFactorAnalysis\(\{[^}]*enabled/);
+// 훅의 모드 차이는 데모 자동 준비 한 곳뿐이다.
+const factorHook=read("hooks","useFactorAnalysis.js");
+assert.equal(factorHook.match(/await ensureDemoFactorModel\(/g)?.length,1);
+assert.match(factorHook,/if \(!model && demo\) \{/);
+assert.doesNotMatch(factorHook,/set(?:Feedback|Missing)\([^)]*(?:error|err)\b/);
+// ② 상관관계는 ① 기여도 부호, 진단은 데모 서사/실데이터 안내.
+assert.match(page,/split=\{factorView\?\.split\}/);
+assert.match(page,/diagnosisNote=\{demo \? null : FACTOR_DIAGNOSIS_TEXT\}/);
+// ④ 추천 전 안내는 실데이터에서 "관측 입력"
+assert.match(page,/\{demo \? "정책 변수를" : "관측 입력을"\}/);
+// ── 요인분석 매핑(두 모드 같은 함수) ──
+const panelProof={instance_id:"fa",model_type:"factor_analysis",version_id:"demo_factor_version_123456",job_id:"j",dataset_id:"demo_factor_ds",dataset_hash:"b".repeat(64),
+  region_id:"namwon",target:DEMO_FACTOR_TARGET,dong_code:"all",prediction_period:202412,observed_from:201501,observed_to:202412,features:FACTOR_PANEL_FEATURES,
+  evaluation_period:{from:202401,to:202412,n:12},metrics:{mae:1224},baseline:{name:"same_month_last_year",mae:6020},mode:"mock",source:"mock"};
+const panelValues=[-3040,-5080,-503,-5203,-7650,2616,1432,1750,4098];
+const panelResult={provenance:panelProof,intercept:230000,prediction:230000+panelValues.reduce((a,b)=>a+b,0),
+  contributions:FACTOR_PANEL_FEATURES.map((feature,i)=>({feature,input:i+1,value:panelValues[i]}))};
+const panelLabel=(feature) => observedFeatureLabel(feature,DEMO_FACTOR_TARGET);
+assert.equal(new Set(FACTOR_PANEL_FEATURES.map(panelLabel)).size,9);
+for (const feature of FACTOR_PANEL_FEATURES) assert.notEqual(panelLabel(feature),feature,feature);
+assert.deepEqual(["youth_ratio","aging_index","facility_capacity"].map(panelLabel),["유소년 비율","노령화지수","시설 수용력(인구 대비)"]);
+assert.equal(targetUnit(DEMO_FACTOR_TARGET),"명");assert.equal(featureUnit("edu_facility_density",DEMO_FACTOR_TARGET),"개소/만 명");
+assert.equal(featureUnit("y_lag1","observed_sales_krw"),"원");assert.equal(featureUnit("dong_1","observed_sales_krw"),"");
+const demoView=factorAnalysisView(panelResult,{demo:true,dataset:{name:"남원 요인 패널"},label:panelLabel});
+assert.deepEqual(demoView.factors.map((row)=>row.label).slice(0,3),["사망말소","고령인구","노령화지수"]);
+assert.equal(demoView.factors.length,9);assert.equal(demoView.more,0);assert.equal(demoView.unit,"명");
+assert.deepEqual([demoView.split.positive.length,demoView.split.negative.length],[4,5]);
+assert.deepEqual([...demoView.split.positive,...demoView.split.negative].map((r)=>r.feature).sort(),[...FACTOR_PANEL_FEATURES].sort());
+assert.equal(demoView.sourceLabel,"데모");assert.match(demoView.basis,/^연계 데이터: 데모 요인 패널 · 남원 요인 패널$/);
+assert.equal(demoView.validation.baselineName,"전년 같은 달 관측값");assert.equal(demoView.model.version,"demo_factor_");
+assert.match(demoView.validation.targets.join("|"),/생활인구 · 요인 9개\|관측 기간 2015-01~2024-12\|검증 기간 2024-01~2024-12/);
+const realView=factorAnalysisView({...panelResult,provenance:{...panelProof,mode:"real",source:"real",target:"observed_sales_krw"}},{demo:false,dataset:{name:"남원 관측 소비 스냅샷"},label:panelLabel});
+assert.equal(realView.basis,"현재 등록 데이터 기준 · 남원 관측 소비 스냅샷 (관측 2015-01~2024-12)");
+assert.equal(realView.sourceLabel,"실데이터 · 남원 관측 소비 스냅샷");assert.equal(realView.unit,"원");
+const many={...panelResult,contributions:Array.from({length:14},(_,i)=>({feature:`dong_${i}`,input:1,value:i-7}))};
+const manyView=factorAnalysisView(many,{demo:false,dataset:null,label:(f)=>f});
+assert.equal(manyView.factors.length,FACTOR_LIST_LIMIT);assert.equal(manyView.more,4);
+assert.match(manyView.basis,/demo_factor_ds/);
+for (const text of [demoView.basis,realView.basis,demoView.runInfo,...demoView.validation.targets]) assert.doesNotMatch(text,INTERNAL,text);
+// 데모 카탈로그(mock)에서 요인분석 활성 모델을 고른다 — 모드가 다르면 거부, 기본은 실데이터.
+const mockCatalog={mode:"mock",source:"mock",instances:[{id:"m",mode:"mock",region_id:"namwon",target:DEMO_FACTOR_TARGET,model_type:"factor_analysis",active_version:"v"}]};
+assert.equal(activeModelPair(mockCatalog,"namwon",DEMO_FACTOR_TARGET,"mock").factor.id,"m");
+assert.throws(() => activeModelPair(mockCatalog,"namwon",DEMO_FACTOR_TARGET));
+assert.throws(() => activeModelPair({mode:"real",source:"real",instances:[]},"namwon",DEMO_FACTOR_TARGET,"mock"));
 // 알림(role=alert) 문구는 고정 문구만 — 훅이 오류 원문을 화면 상태에 넣지 않는다(원문은 log 로만).
 const hook=read("hooks","useRealSimulation.js");
 assert.doesNotMatch(hook,/set(?:Feedback|LoadFailed)\([^)]*(?:error|err)\b/);
 assert.doesNotMatch(hook,/runAnalysis|factor_analysis/);
-console.log("realSimulation: 활성 시뮬레이션 선택·추론 합계·근거 전달·관측 민감도 순위·③④ 독립·①② 제목 동일·안내/알림 금지어·모드 분기 없음 PASS");
+console.log("realSimulation: 활성 시뮬레이션 선택·추론 합계·근거 전달·관측 민감도 순위·③④ 독립·①② 제목 동일·안내/알림 금지어·모드 분기 없음·요인분석 두 모드 매핑·③ 근거 기여도 제거 PASS");
