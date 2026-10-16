@@ -3,13 +3,15 @@ export const TARGET_LABELS = { nonlocal_visitors: "타지역 방문객", observe
 export const JOB_STATE_NAMES = { queued: "대기", running: "학습 중", saved: "등록 완료", failed: "실패" };
 export const EXPERIMENT_MAX = 64;
 /**
- * 화면용 짧은 ID — 버전·작업·등록본 ID의 내부 접두사(마지막 "_"까지)를 떼고 끝 6자만 "…881abc"처럼 보인다.
- * 접두사가 없거나 끝 조각이 짧으면 그대로. 전체 ID는 title 로 함께 둔다(시뮬레이터·Model Store·버전 관리 공용).
+ * 화면용 짧은 ID — 서버·화면이 만든 버전·작업·등록본·카드 파이프라인 ID의 내부 접두사(modelops_·demo_factor_·
+ * card-<종류>-)를 떼고 끝 6자만 "…881abc"처럼 보인다. 사용자가 지은 ID·과거 기록 ID·끝 조각이 짧은 ID는 그대로.
+ * 전체 ID는 title 로 함께 둔다(시뮬레이터·오케스트레이터 공용). ③ 계산 근거(ModelEvidence)만 전체 ID를 본문에 둔다.
  */
+const INTERNAL_ID = /^(?:modelops_|demo_factor_|card-[a-z_]+-)(.+)$/;
 export function displayId(id) {
   const text = String(id ?? "");
-  const tail = text.slice(text.lastIndexOf("_") + 1);
-  return tail !== text && tail.length >= 6 ? `…${tail.slice(-6)}` : text;
+  const tail = text.match(INTERNAL_ID)?.[1] ?? "";
+  return tail.length >= 6 ? `…${tail.slice(-6)}` : text;
 }
 export const typeName = (id) => MODEL_TYPES.find((type) => type.id === id)?.name ?? id ?? "—";
 /** 등록 모델 이름 — 학습 카드·버전 관리의 "등록 모델 선택"이 같은 문구를 쓴다. */
@@ -138,11 +140,11 @@ const metric = (value) => (Number.isFinite(value) ? String(Math.round(value * 10
 export function jobLogLines(job, version, audit = []) {
   if (!job) return [];
   const lines = [{ ts: job.created_at, level: "INFO",
-    message: `학습 접수 — 파이프라인 ${job.pipeline_id} · 학습데이터 ${job.dataset_id}(${String(job.dataset_hash ?? "").slice(0, 12)})` }];
+    message: `학습 접수 — 파이프라인 ${displayId(job.pipeline_id)} · 학습데이터 ${displayId(job.dataset_id)}(${String(job.dataset_hash ?? "").slice(0, 12)})` }];
   if (job.started_at) lines.push({ ts: job.started_at, level: "INFO", message: "학습 시작" });
   if (job.state === "saved") {
     const scores = version ? ` · MAE ${metric(version.metrics?.mae)} / 기준선 ${metric(version.baseline?.mae)}(${version.baseline?.name ?? "기준선"})` : "";
-    lines.push({ ts: job.finished_at, level: "INFO", message: `학습 결과 등록 — 버전 ${job.version_id}${scores}` });
+    lines.push({ ts: job.finished_at, level: "INFO", message: `학습 결과 등록 — 버전 ${displayId(job.version_id)}${scores}` });
   }
   if (job.state === "failed") {
     lines.push({ ts: job.finished_at, level: "ERROR",
@@ -152,7 +154,7 @@ export function jobLogLines(job, version, audit = []) {
     && (row.job_id === job.id || row.version_id === job.version_id));
   [...related].sort((a, b) => time(a.created_at) - time(b.created_at)).forEach((row) => {
     lines.push({ ts: row.created_at, level: "INFO",
-      message: `${row.action === "version_activated" ? "버전 활성화" : "이전 버전 복원"} — ${row.version_id} · ${row.actor}` });
+      message: `${row.action === "version_activated" ? "버전 활성화" : "이전 버전 복원"} — ${displayId(row.version_id)} · ${row.actor}` });
   });
   return lines;
 }
@@ -170,7 +172,7 @@ export function auditTime(ts) {
 export function auditLogLines(audit = [], limit = 20) {
   return audit.slice(0, limit).reverse().map((row) => ({
     time: auditTime(row.created_at), level: AUDIT_LEVELS[row.action] ?? "INFO",
-    message: `${ACTION_NAMES[row.action] ?? "운영 기록"} — ${row.asset_id}${row.version_id ? ` · 버전 ${row.version_id}` : ""}${row.job_id ? ` · 작업 ${row.job_id}` : ""} · ${row.actor}`
+    message: `${ACTION_NAMES[row.action] ?? "운영 기록"} — ${displayId(row.asset_id)}${row.version_id ? ` · 버전 ${displayId(row.version_id)}` : ""}${row.job_id ? ` · 작업 ${displayId(row.job_id)}` : ""} · ${row.actor}`
   }));
 }
 

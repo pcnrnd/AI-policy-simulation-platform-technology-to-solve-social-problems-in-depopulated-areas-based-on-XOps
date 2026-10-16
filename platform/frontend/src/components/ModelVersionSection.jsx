@@ -1,8 +1,10 @@
 import Card from "./Card.jsx";
 import ConsoleLog from "./ConsoleLog.jsx";
 import { TARGET_LABELS, auditLogLines, displayId, instanceLabel, typeName, versionStatus } from "../lib/modelops.js";
+import { formatUnitValue, targetUnit } from "../lib/realSimulation.js";
 
-const metric = (value) => Number.isFinite(value) ? value.toLocaleString("ko-KR", { maximumFractionDigits: 3 }) : "—";
+// MAE·기준선은 학습 대상 단위 규칙(시뮬레이터 ①과 같은 formatUnitValue)으로 보인다.
+const metric = (value, target) => formatUnitValue(value, targetUnit(target));
 const head = (text, length) => <code title={text}>{String(text ?? "").slice(0, length)}</code>;
 const shortCode = (id) => <code title={id}>{displayId(id)}</code>;
 
@@ -35,7 +37,7 @@ export default function ModelVersionSection({ catalog, versions, regionName, bus
         <tbody>{rows.map((row) => <tr key={row.id}><td>{shortCode(row.id)}<div>학습: {shortCode(row.job_id)}</div></td>
           <td>{shortCode(row.dataset_id)}<div>{head(row.dataset_hash, 12)}</div></td>
           <td>{regionName(row.region_id)} · {TARGET_LABELS[row.target] ?? row.target}<div>{row.observed_from}~{row.observed_to}</div></td>
-          <td className="cell-num">{metric(row.metrics.mae)} / {metric(row.baseline.mae)}</td>
+          <td className="cell-num">{metric(row.metrics.mae, row.target)} / {metric(row.baseline.mae, row.target)}</td>
           <td><span className="system-status" style={{ padding: "1px 8px", fontSize: 10, whiteSpace: "nowrap" }}>{versionStatus(row.status)}</span></td>
           <td className="cell-actions" style={{ whiteSpace: "nowrap" }}><button className="btn btn-secondary" disabled={busy || row.status === "active"} onClick={() => decide(row, false)}>활성화</button>{" "}
             <button className="btn btn-secondary" disabled={busy || row.status !== "previous"} onClick={() => decide(row, true)}>이전 버전 복원</button></td>

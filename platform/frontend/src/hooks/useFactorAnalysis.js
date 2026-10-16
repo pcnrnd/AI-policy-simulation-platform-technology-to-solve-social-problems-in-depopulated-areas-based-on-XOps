@@ -63,14 +63,14 @@ async function ensureDemoFactorModel({ token, catalog, region, at, log }) {
     }
     log(`INFO: 데모 요인분석 모델 준비 — 학습 시작 ${displayId(job.id)}`);
     for (let tries = 0; job.state !== "saved" && job.state !== "failed"; tries += 1) {
-      if (tries >= JOB_POLL_MAX) throw new Error(`training poll timeout: ${job.id}`);
+      if (tries >= JOB_POLL_MAX) throw new Error(`training poll timeout: ${displayId(job.id)}`);
       await at(wait(JOB_POLL_MS));
       job = await at(apiGet(`${BASE}/jobs/${encodeURIComponent(job.id)}`, { token }));
     }
     if (job.state !== "saved") throw new Error(`training ${job.state}: ${job.error ?? ""}`);
     fresh = await at(apiGet(`${BASE}/catalog`, { token }));
     version = fresh.versions.find((row) => row.id === job.version_id);
-    if (!version || belowBaseline(version)) throw new Error(`version not activatable: ${job.version_id}`);
+    if (!version || belowBaseline(version)) throw new Error(`version not activatable: ${displayId(job.version_id)}`);
   }
   await at(apiSend("POST", `/api/v3/modelops/instances/${encodeURIComponent(instanceId)}/versions/${encodeURIComponent(version.id)}/activate`, { token }));
   log(`INFO: 데모 요인분석 모델 준비 — 활성화 ${displayId(version.id)}`);
@@ -125,7 +125,7 @@ export function useFactorAnalysis({ demo, region, target, dong, log }) {
       const inputs = await at(apiGet(endpoint(model) + "/inputs", { token, params: { dong_code: dong || undefined } }));
       const dataset = catalog.datasets.find((row) => row.id === inputs.provenance.dataset_id) ?? null;
       const proof = inputs.provenance;
-      say(`INFO: [요인분석 1/4] 학습데이터 ${dataset?.name ?? proof.dataset_id} · 관측 ${formatMonth(proof.observed_from)}~${formatMonth(proof.observed_to)} 확인`);
+      say(`INFO: [요인분석 1/4] 학습데이터 ${dataset?.name ?? displayId(proof.dataset_id)} · 관측 ${formatMonth(proof.observed_from)}~${formatMonth(proof.observed_to)} 확인`);
       setStep(2);
       say(`INFO: [요인분석 2/4] 요인분석 활성 버전 ${displayId(model.active_version)} 추론`);
       const raw = await at(apiSend("POST", endpoint(model) + "/predict", { token, body: inferenceRequest(inputs) }));

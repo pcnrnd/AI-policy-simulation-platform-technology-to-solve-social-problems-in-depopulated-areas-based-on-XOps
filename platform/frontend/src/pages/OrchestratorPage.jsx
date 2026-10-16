@@ -16,6 +16,7 @@ import { alertText } from "../lib/alertText.js";
 import {
   JOB_STATE_NAMES, TARGET_LABELS, displayId, isLocked, jobLocks, jobLogLines, lastJobOf, mergeRunHistory, storeRows, typeName, versionsWithStatus
 } from "../lib/modelops.js";
+import { formatUnitValue, targetUnit } from "../lib/realSimulation.js";
 
 const PAGE_SIZE = 5;
 const JOB_POLL_MS = 1500;
@@ -33,7 +34,8 @@ const STORE_STATUS = {
   legacy: { label: "과거 버전", color: "var(--text-muted)", bg: "var(--surface-hover)" }
 };
 
-const metric = (value) => (Number.isFinite(value) ? Number(value).toLocaleString(undefined, { maximumFractionDigits: 3 }) : "–");
+// MAE·기준선은 학습 대상 단위 규칙(시뮬레이터 ①과 같은 formatUnitValue)으로 보인다.
+const metric = (value, target) => formatUnitValue(value, targetUnit(target));
 const day = (value) => (value ? String(value).slice(0, 10) : null);
 
 export default function OrchestratorPage() {
@@ -126,7 +128,7 @@ export default function OrchestratorPage() {
       .catch((err) => {
         if (!alive) return;
         setLegacyLogs(null);
-        addConsoleLog(`WARN: 실행 로그 조회 실패 (${runId}) — ${err?.message ?? "알 수 없는 오류"}`);
+        addConsoleLog(`WARN: 실행 로그 조회 실패 (${displayId(runId)}) — ${err?.message ?? "알 수 없는 오류"}`);
       });
     return () => { alive = false; };
   }, [selectedKey, addConsoleLog]);
@@ -161,8 +163,8 @@ export default function OrchestratorPage() {
         if (latest.state !== "saved" && latest.state !== "failed") { jobTimer.current = setTimeout(tick, JOB_POLL_MS); return; }
         setFeedback(latest.state === "saved" ? "학습 결과를 등록했습니다. 버전을 확인한 뒤 활성화하세요." : "학습데이터와 관측 기간을 확인한 뒤 다시 실행하세요.");
         addConsoleLog(latest.state === "saved"
-          ? `INFO: 학습 완료 — ${latest.id} · 후보 ${latest.version_id}`
-          : `WARN: 학습 실패 — ${latest.id} (${latest.error ?? "원인 미기록"})`, false, latest.state === "failed");
+          ? `INFO: 학습 완료 — ${displayId(latest.id)} · 후보 ${displayId(latest.version_id)}`
+          : `WARN: 학습 실패 — ${displayId(latest.id)} (${latest.error ?? "원인 미기록"})`, false, latest.state === "failed");
         await reloadCatalog();
         if (!current()) return;
         setVersionInstanceId(latest.instance_id);
@@ -171,7 +173,7 @@ export default function OrchestratorPage() {
         failures += 1;
         const stopped = failures >= POLL_MAX_FAILURES;
         setPollError({ message: alertText(error, null), stopped });
-        addConsoleLog(`WARN: 학습 상태 확인 실패 (${failures}/${POLL_MAX_FAILURES}) — ${jobId}: ${error?.message ?? "알 수 없는 오류"}`, false, true);
+        addConsoleLog(`WARN: 학습 상태 확인 실패 (${failures}/${POLL_MAX_FAILURES}) — ${displayId(jobId)}: ${error?.message ?? "알 수 없는 오류"}`, false, true);
         if (!stopped) jobTimer.current = setTimeout(tick, JOB_POLL_MS);
         // 멈춘 뒤에는 행 [실행] 잠금의 원천(catalog.jobs)을 서버 기준으로 한 번 맞춘다.
         else reloadCatalog();
@@ -193,7 +195,7 @@ export default function OrchestratorPage() {
       setLiveJob(accepted);
       setSelectedKey(`modelops:${accepted.id}`);
       setStatusFocusRequest((request) => request + 1);
-      addConsoleLog(`INFO: 재학습 파이프라인 ${pipeline.id}(${pipeline.name}) 실행 접수 — ${accepted.id}`);
+      addConsoleLog(`INFO: 재학습 파이프라인 ${displayId(pipeline.id)}(${pipeline.name}) 실행 접수 — ${displayId(accepted.id)}`);
       pollJob(accepted.id, 500);
       await reloadCatalog();
     } catch (error) {
@@ -220,7 +222,7 @@ export default function OrchestratorPage() {
       const message = rollback ? "이전 버전을 복원했습니다." : "선택한 버전을 활성화했습니다.";
       setFeedback(message);
       setVersionResult({ origin, ok: true, message });
-      addConsoleLog(`INFO: ${rollback ? "이전 버전 복원" : "버전 활성화"} — ${version.id}`);
+      addConsoleLog(`INFO: ${rollback ? "이전 버전 복원" : "버전 활성화"} — ${displayId(version.id)}`);
     } catch (error) {
       const message = alertText(error, "학습 결과를 확인한 뒤 다시 시도하세요.");
       addConsoleLog(`WARN: ${rollback ? "복원" : "활성화"} 실패 — ${error.message ?? "알 수 없는 오류"}`, false, true);
@@ -239,7 +241,7 @@ export default function OrchestratorPage() {
     try {
       const token = await getRealdataToken();
       await apiSend("DELETE", `/api/v3/modelops/pipelines/${encodeURIComponent(pipeline.id)}`, { token });
-      addConsoleLog(`INFO: 재학습 파이프라인 등록 해제 — ${pipeline.id} (실행 이력은 보존됩니다)`);
+      addConsoleLog(`INFO: 재학습 파이프라인 등록 해제 — ${displayId(pipeline.id)} (실행 이력은 보존됩니다)`);
       await reloadCatalog();
     } catch (err) {
       addConsoleLog(`WARN: 파이프라인 삭제 실패 — ${err?.message ?? "알 수 없는 오류"}`, false, true);
@@ -292,7 +294,7 @@ export default function OrchestratorPage() {
             onCancel={() => setRegisterOpen(false)}
             onRegistered={async (created) => {
               setRegisterOpen(false);
-              addConsoleLog(`INFO: 재학습 파이프라인 등록 완료 — ${created.id} (${created.name}) · 대상 모델 ${typeName(created.model_type)} · 학습데이터 ${created.dataset_id}`);
+              addConsoleLog(`INFO: 재학습 파이프라인 등록 완료 — ${displayId(created.id)} (${created.name}) · 대상 모델 ${typeName(created.model_type)} · 학습데이터 ${displayId(created.dataset_id)}`);
               await reloadCatalog();
               setFeedback("파이프라인을 등록했습니다.");
             }}
@@ -338,7 +340,7 @@ export default function OrchestratorPage() {
                   <tr key={p.id}>
                     <td>
                       <strong style={{ fontSize: 13 }}>{orDash(p.name)}</strong>
-                      <div><code style={{ fontSize: 11, color: "var(--accent-purple-text)" }}>{orDash(p.id)}</code></div>
+                      <div><code style={{ fontSize: 11, color: "var(--accent-purple-text)" }} title={p.id}>{orDash(displayId(p.id))}</code></div>
                     </td>
                     <td style={{ fontSize: 12 }}>
                       {typeName(p.model_type)} · {regionName(p.region_id)} · {TARGET_LABELS[p.target] ?? p.target}
@@ -350,8 +352,8 @@ export default function OrchestratorPage() {
                     <td style={{ fontSize: 11, color: "var(--text-secondary)" }}>
                       {last ? (
                         <>
-                          <button className="pipeline-run-link" onClick={() => setSelectedKey(`modelops:${last.id}`)} title="이 실행의 저장된 로그를 아래에서 봅니다">
-                            {orDash(last.id)}
+                          <button className="pipeline-run-link" onClick={() => setSelectedKey(`modelops:${last.id}`)} title={`${last.id} — 이 실행의 저장된 로그를 아래에서 봅니다`}>
+                            {displayId(last.id)}
                           </button>
                           <div style={{ color: "var(--text-muted)" }}>
                             {orDash(last.finished_at ? logTime(last.finished_at) : null)} · {orDash(JOB_STATE_NAMES[last.state] ?? last.state)}
@@ -436,8 +438,8 @@ export default function OrchestratorPage() {
           tone="success"
           // 데모 표시의 시뮬레이터는 예시 값으로 계산한다 — 이 버전으로 추론한다고 말하지 않는다.
           message={demo
-            ? `${activatedVersion.id} 활성 — 데모 데이터 표시 중에는 정책 시뮬레이터가 예시 값으로 계산합니다`
-            : `${activatedVersion.id} 활성 — 정책 시뮬레이터가 이 버전으로 추론합니다`}
+            ? `${displayId(activatedVersion.id)} 활성 — 데모 데이터 표시 중에는 정책 시뮬레이터가 예시 값으로 계산합니다`
+            : `${displayId(activatedVersion.id)} 활성 — 정책 시뮬레이터가 이 버전으로 추론합니다`}
           actionLabel="정책 시뮬레이터에서 활용"
           targetTab="tab-simulator"
         />
@@ -484,7 +486,7 @@ export default function OrchestratorPage() {
                         <strong>{MODEL_REGISTRY.find((row) => row.id === m.modelId)?.name ?? m.modelId}</strong>
                         <div><code style={{ fontSize: 11, color: "var(--accent-purple-text)" }}>{orDash(m.modelId)}</code></div>
                       </td>
-                      <td><code style={{ fontSize: 12, fontWeight: 600 }}>{orDash(m.version)}</code></td>
+                      <td><code style={{ fontSize: 12, fontWeight: 600 }} title={m.version}>{orDash(displayId(m.version))}</code></td>
                       <td style={{ fontSize: 12, color: "var(--text-secondary)" }} data-values-source="mock">{orDash(m.dataVersion)}</td>
                       <td style={{ fontSize: 11, color: "var(--text-secondary)" }} data-values-source="mock">{orDash(m.params)}</td>
                       <td className="cell-num" style={{ fontWeight: 600 }}>{typeof m.accuracy === "number" ? `Acc ${m.accuracy.toFixed(3)}` : "–"}</td>
@@ -510,7 +512,7 @@ export default function OrchestratorPage() {
                       {orDash(m.datasetName)}<div style={{ fontSize: 11 }} title={m.datasetHash}>{String(m.datasetHash ?? "").slice(0, 12)}</div>
                     </td>
                     <td style={{ fontSize: 11, color: "var(--text-secondary)" }}>선형 회귀 · 입력 피처 {m.featureCount}개</td>
-                    <td className="cell-num" style={{ fontWeight: 600 }}>MAE {metric(m.mae)} / {metric(m.baselineMae)}</td>
+                    <td className="cell-num" style={{ fontWeight: 600 }}>MAE {metric(m.mae, m.target)} / {metric(m.baselineMae, m.target)}</td>
                     <td><span className="system-status" style={{ padding: "1px 8px", fontSize: 10, color: st.color, backgroundColor: st.bg }}>{st.label}</span></td>
                     <td style={{ fontSize: 11, color: "var(--text-muted)" }}>{orDash(day(m.createdAt))}</td>
                   </tr>
@@ -558,16 +560,16 @@ export default function OrchestratorPage() {
                     return (
                       <tr key={r.key} className={r.key === selectedKey ? "is-selected-run" : undefined}>
                         <td>
-                          <code style={{ fontSize: 11, color: "var(--accent-purple-text)" }}>{orDash(r.id)}</code>
+                          <code style={{ fontSize: 11, color: "var(--accent-purple-text)" }} title={r.id}>{orDash(displayId(r.id))}</code>
                           {r.readOnly && <div><span className="system-status" style={{ padding: "0 6px", fontSize: 10 }}>과거 기록</span></div>}
                         </td>
                         <td style={{ fontSize: 12 }}>
-                          {orDash(r.pipelineId)}{r.origin === "modelops" && r.pipelineMissing ? " (등록 해제됨)" : ""}
+                          <span title={r.pipelineId ?? undefined}>{orDash(displayId(r.pipelineId))}</span>{r.origin === "modelops" && r.pipelineMissing ? " (등록 해제됨)" : ""}
                           <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
                             {r.origin === "modelops"
                               ? `${typeName(r.modelType)}${instance ? ` · ${regionName(instance.region_id)} · ${TARGET_LABELS[instance.target] ?? instance.target}` : ""}`
                               : orDash(r.model)}
-                            {r.datasetId ? ` · ${r.datasetId}` : ""}
+                            {r.datasetId ? <span title={r.datasetId}> · {displayId(r.datasetId)}</span> : ""}
                           </div>
                         </td>
                         <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>{orDash(r.trigger)}</td>
@@ -575,7 +577,7 @@ export default function OrchestratorPage() {
                           {r.origin === "modelops" ? orDash(JOB_STATE_NAMES[r.state] ?? r.state) : orDash(LEGACY_RUN_STATE_LABEL[r.state] ?? r.state)}
                           <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
                             {r.versionId ? <span title={r.versionId}>버전 {displayId(r.versionId)}</span> : ""}
-                            {version ? ` · MAE ${metric(version.metrics?.mae)} / 기준선 ${metric(version.baseline?.mae)}` : ""}
+                            {version ? ` · MAE ${metric(version.metrics?.mae, version.target)} / 기준선 ${metric(version.baseline?.mae, version.target)}` : ""}
                             {r.error ? ` · ${r.error}` : ""}
                           </div>
                         </td>
@@ -583,7 +585,7 @@ export default function OrchestratorPage() {
                           {orDash(r.startedAt ? logTime(r.startedAt) : null)} → {orDash(r.finishedAt ? logTime(r.finishedAt) : null)}
                         </td>
                         <td className="cell-actions">
-                          <button className="btn btn-secondary" style={{ padding: "4px 12px", fontSize: 12 }} onClick={() => setSelectedKey(r.key)} aria-label={`${r.id} 실행 로그 보기`}>
+                          <button className="btn btn-secondary" style={{ padding: "4px 12px", fontSize: 12 }} onClick={() => setSelectedKey(r.key)} aria-label={`${displayId(r.id)} 실행 로그 보기`}>
                             로그
                           </button>
                         </td>

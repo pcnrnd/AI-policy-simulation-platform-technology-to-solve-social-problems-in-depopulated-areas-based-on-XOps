@@ -152,7 +152,7 @@ const panelLabel=(feature) => observedFeatureLabel(feature,DEMO_FACTOR_TARGET);
 assert.equal(new Set(FACTOR_PANEL_FEATURES.map(panelLabel)).size,9);
 for (const feature of FACTOR_PANEL_FEATURES) assert.notEqual(panelLabel(feature),feature,feature);
 assert.deepEqual(["youth_ratio","aging_index","facility_capacity"].map(panelLabel),["유소년 비율","노령화지수","시설 수용력(인구 대비)"]);
-assert.equal(targetUnit(DEMO_FACTOR_TARGET),"명");assert.equal(featureUnit("edu_facility_density",DEMO_FACTOR_TARGET),"개소/만 명");
+assert.equal(targetUnit(DEMO_FACTOR_TARGET),"명");assert.equal(targetUnit("population_change_pct"),"%");assert.equal(formatUnitValue(1224.215,targetUnit("living_population")),"1,224");assert.equal(formatUnitValue(0.1234,targetUnit("population_change_pct")),"0.12");assert.equal(featureUnit("edu_facility_density",DEMO_FACTOR_TARGET),"개소/만 명");
 assert.equal(featureUnit("y_lag1","observed_sales_krw"),"원");assert.equal(featureUnit("dong_1","observed_sales_krw"),"");
 assert.equal(featureUnit("aging_index",DEMO_FACTOR_TARGET),"지수");
 for (const feature of FACTOR_PANEL_FEATURES) assert.ok(featureUnit(feature,DEMO_FACTOR_TARGET),feature);

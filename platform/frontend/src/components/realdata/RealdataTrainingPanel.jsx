@@ -78,7 +78,7 @@ export default function RealdataTrainingPanel({ catalog, versions, demoVisible, 
           id: cardPipelineId(instance.model_type, dataset.id), name: `${typeName(instance.model_type)} 학습 (실데이터 학습 카드)`,
           model_type: instance.model_type, dataset_id: dataset.id, dataset_hash: dataset.content_hash, trigger_policy: "수동(학습 카드)"
         } });
-        onLog(`INFO: 학습 카드 파이프라인 등록 — ${pipeline.id}`);
+        onLog(`INFO: 학습 카드 파이프라인 등록 — ${displayId(pipeline.id)}`);
         await onReload();
       }
       await onRunPipeline(pipeline);
@@ -92,8 +92,8 @@ export default function RealdataTrainingPanel({ catalog, versions, demoVisible, 
   const decide = async (version, rollback) => {
     if (locked) return;
     const question = rollback
-      ? `이전 버전 ${version.id}(으)로 되돌리시겠습니까? 현재 운영 버전은 '이전'으로 바뀝니다.`
-      : `후보 ${version.id}을(를) 반영하시겠습니까? 현재 활성 모델을 교체합니다.`;
+      ? `이전 버전 ${displayId(version.id)}(으)로 되돌리시겠습니까? 현재 운영 버전은 '이전'으로 바뀝니다.`
+      : `후보 ${displayId(version.id)}을(를) 반영하시겠습니까? 현재 활성 모델을 교체합니다.`;
     if (!window.confirm(question)) return;
     setError(null);
     onClearResult();
@@ -130,7 +130,7 @@ export default function RealdataTrainingPanel({ catalog, versions, demoVisible, 
             <option value="">선택하세요</option>
             {matchingDatasets.map((d) => (
               <option key={d.id} value={d.id}>
-                {d.id} ({orDash(d.observed_from)}~{orDash(d.observed_to)}) · {d.name}
+                {displayId(d.id)} ({orDash(d.observed_from)}~{orDash(d.observed_to)}) · {d.name}
               </option>
             ))}
           </select>
@@ -153,12 +153,12 @@ export default function RealdataTrainingPanel({ catalog, versions, demoVisible, 
       {!instance && <p className="realdata-hint">위 [파이프라인 등록]으로 대상 모델을 먼저 등록하세요.</p>}
       {instance && (
         <p className="realdata-hint">
-          활성 버전: <code>{orDash(instance.active_version)}</code>
+          활성 버전: <code title={instance.active_version ?? undefined}>{orDash(displayId(instance.active_version))}</code>
         </p>
       )}
       {cardJob && (
         <p className="realdata-hint" role="status">
-          작업 <code>{cardJob.id}</code> — 상태 <strong>{JOB_STATE_NAMES[cardJob.state] ?? cardJob.state}</strong>
+          작업 <code title={cardJob.id}>{displayId(cardJob.id)}</code> — 상태 <strong>{JOB_STATE_NAMES[cardJob.state] ?? cardJob.state}</strong>
           {cardJob.error && ` (${cardJob.error})`}
         </p>
       )}
@@ -189,7 +189,7 @@ export default function RealdataTrainingPanel({ catalog, versions, demoVisible, 
             )}
             {candidates.map((c) => (
               <tr key={c.id}>
-                <td><code title={c.id}>{c.id.slice(0, 20)}</code></td>
+                <td><code title={c.id}>{displayId(c.id)}</code></td>
                 <td className="cell-num">
                   {fmtNum(c.metrics?.mae)} / {fmtNum(c.metrics?.rmse)} / {fmtNum(c.metrics?.wape)}
                 </td>

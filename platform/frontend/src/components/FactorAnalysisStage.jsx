@@ -2,6 +2,7 @@ import Card from "./Card.jsx";
 import CollapsibleStage from "./CollapsibleStage.jsx";
 import PendingData from "./PendingData.jsx";
 import { formatUnitValue, FACTOR_EXPLAIN_TEXT, FACTOR_FOOTNOTE } from "../lib/realSimulation.js";
+import { displayId } from "../lib/modelops.js";
 
 // STAGE ① 사회문제 요인분석
 // 두 모드가 같은 실행 바·단계 칩·카드 3개(기준선 제목)·근거 자리를 쓰고, 내용은 활성 요인분석 모델의 결과다.
@@ -133,7 +134,7 @@ export default function FactorAnalysisStage({
               </div>
               <div className="pl-model-box pl-model-dl">
                 <span className="pl-model-tag">학습 모델</span>
-                <strong>요인분석 · 활성 버전 <span title={versionTitle}>{view.model.version}</span></strong>
+                <strong>요인분석 · 활성 버전 <span title={versionTitle}>{displayId(versionTitle)}</span></strong>
                 <div className="pl-model-chips">
                   {view.model.features.map((m) => (
                     <span className="pl-chip" key={m}>{m}</span>

@@ -88,7 +88,7 @@ export const REAL_LOAD_FAILED_TEXT = "모델 정보를 불러오지 못했습니
 export const REAL_PREDICT_FAILED_TEXT = "예측을 계산하지 못했습니다. 입력을 다시 조정하거나 잠시 뒤 다시 시도하세요.";
 export const REAL_VERSION_CHANGED_TEXT = "활성 버전이 바뀌었습니다. 새 활성 버전의 관측 입력으로 예측을 다시 계산합니다.";
 
-export const targetUnit = (target) => target === "observed_sales_krw" ? "원" : "명";
+export const targetUnit = (target) => ({ observed_sales_krw: "원", population_change_pct: "%" })[target] ?? "명";
 export const formatValue = (value) => Number.isFinite(value) ? value.toLocaleString("ko-KR", { maximumFractionDigits: 3 }) : "—";
 // 단위별 반올림 — 인원·금액·개수(명·원·개소·명/월)는 정수(천 단위 구분), 비율·지수·밀도는 소수 1~2자리, 단위 없음은 최대 2자리.
 const COUNT_UNITS = new Set(["명", "원", "개소", "명/월"]);

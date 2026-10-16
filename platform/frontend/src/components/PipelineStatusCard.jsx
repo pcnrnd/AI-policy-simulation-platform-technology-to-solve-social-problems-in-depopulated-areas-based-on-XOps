@@ -1,7 +1,9 @@
 import { Fragment } from "react";
 import Card from "./Card.jsx";
 import { PIPELINE_NODES } from "../constants/pipeline.js";
-import { TARGET_LABELS, connectorStatusFrom, jobNodeStatuses, jobStatusLabel, typeName } from "../lib/modelops.js";
+import { TARGET_LABELS, connectorStatusFrom, displayId, jobNodeStatuses, jobStatusLabel, typeName } from "../lib/modelops.js";
+
+const shortCode = (id) => <code title={id}>{displayId(id)}</code>;
 
 // 이전 경로(데모 모드 과거 기록) 실행 결과 라벨 — 읽기 전용 표시에만 쓴다.
 export const LEGACY_RUN_STATE_LABEL = {
@@ -93,7 +95,7 @@ export default function PipelineStatusCard({ target, regionName, onReset, anchor
     <div id="pipeline-status-anchor" ref={anchorRef} tabIndex={-1}>
       <Card
         title={target ? <>파이프라인 실행 상태 — {orDash(titleName)}{" "}
-          <code style={{ fontSize: 12, color: "var(--accent-purple-text)", fontWeight: 500 }}>{titleId}</code></> : <>파이프라인 실행 상태 — 대기 중</>}
+          <code style={{ fontSize: 12, color: "var(--accent-purple-text)", fontWeight: 500 }} title={titleId}>{displayId(titleId)}</code></> : <>파이프라인 실행 상태 — 대기 중</>}
         icon="fa-diagram-project"
         className="page-section orchestrator-live"
         dataSource={target ? "api" : undefined}
@@ -119,9 +121,9 @@ export default function PipelineStatusCard({ target, regionName, onReset, anchor
             <span className="run-meta-item">
               <span className="run-meta-label">대상 모델</span>
               {typeName(job.model_type)}{instance ? ` · ${regionName(instance.region_id)} · ${TARGET_LABELS[instance.target] ?? instance.target}` : ""}{" "}
-              {orDash(instance?.active_version ?? "활성 없음")} → 후보 {orDash(job.version_id)}
+              {instance?.active_version ? shortCode(instance.active_version) : "활성 없음"} → 후보 {job.version_id ? shortCode(job.version_id) : "–"}
             </span>
-            <span className="run-meta-item"><span className="run-meta-label">실행 ID</span><code>{job.id}</code></span>
+            <span className="run-meta-item"><span className="run-meta-label">실행 ID</span>{shortCode(job.id)}</span>
             <span className="run-meta-item"><span className="run-meta-label">실험</span><code>{orDash(target.pipeline?.experiment)}</code></span>
             <span className="run-meta-item"><span className="run-meta-label">트리거</span>{orDash(target.pipeline?.trigger_policy ?? "수동")} · {orDash(job.actor)}</span>
             <span className="run-meta-item"><span className="run-meta-label">시작</span>{orDash(logTime(job.started_at ?? job.created_at))}</span>
@@ -141,8 +143,8 @@ export default function PipelineStatusCard({ target, regionName, onReset, anchor
         )}
         {run && (
           <div className="run-meta" data-values-source="api">
-            <span className="run-meta-item"><span className="run-meta-label">대상 모델</span>{orDash(run.model_id)} → {orDash(run.active_version)} (과거 기록)</span>
-            <span className="run-meta-item"><span className="run-meta-label">실행 ID</span><code>{run.run_id}</code></span>
+            <span className="run-meta-item"><span className="run-meta-label">대상 모델</span>{orDash(run.model_id)} → {orDash(displayId(run.active_version))} (과거 기록)</span>
+            <span className="run-meta-item"><span className="run-meta-label">실행 ID</span>{shortCode(run.run_id)}</span>
             <span className="run-meta-item"><span className="run-meta-label">트리거</span>{orDash(run.trigger)}</span>
             <span className="run-meta-item"><span className="run-meta-label">시작</span>{orDash(logTime(run.started_at))}</span>
             <span className="run-meta-item"><span className="run-meta-label">종료</span>{orDash(run.finished_at ? logTime(run.finished_at) : null)}</span>

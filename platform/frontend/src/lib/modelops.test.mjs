@@ -132,6 +132,40 @@ const trainingPanel = readFileSync(join(dirname(fileURLToPath(import.meta.url)),
 assert.match(section, /<code title=\{id\}>\{displayId\(id\)\}<\/code>/);
 assert.match(orchestratorPage, /title=\{m\.version\}>\{displayId\(m\.version\)\}/);
 assert.doesNotMatch(orchestratorPage, /versionId\.slice|active_version\?\.slice|m\.version\.slice/);
+// 내부 접두사만 뗀다 — 카드 파이프라인은 card-<종류>-, 사용자 ID·과거 기록 ID는 그대로
+assert.equal(displayId(cardPipelineId("factor_analysis", "modelops_0123456789abcdef0123456789abcdef")), "…abcdef");
+assert.equal(displayId(cardPipelineId("simulation", "modelops_0123456789abcdef0123456789abcdef")), "…abcdef");
+assert.equal(displayId("PL_namwon_retrain"), "PL_namwon_retrain");assert.equal(displayId("run-20261015-001"), "run-20261015-001");
+// 실행 로그·⑥ 운영 기록 줄도 짧은 표기
+const longJob = { ...savedJob, id: "modelops_aaaaaaaaaaaaaaaaaaaaaaaaaa111111", pipeline_id: "card-factor_analysis-bbbbbb222222",
+  dataset_id: "modelops_cccccccccccccccccccccccccc333333", version_id: "modelops_dddddddddddddddddddddddddd444444" };
+const longLines = jobLogLines(longJob, null, [{ action: "version_activated", version_id: longJob.version_id, actor: "api", created_at: "2026-10-15T03:00:00Z" }]);
+assert.deepEqual([0, 2, 3].map((i) => longLines[i].message), [`학습 접수 — 파이프라인 …222222 · 학습데이터 …333333(${"b".repeat(12)})`,
+  "학습 결과 등록 — 버전 …444444", "버전 활성화 — …444444 · api"]);
+assert.equal(auditLogLines([{ action: "version_activated", asset_id: "modelops_eeeeeeeeeeeeeeeeeeeeeeeeee555555", version_id: longJob.version_id, job_id: longJob.id, actor: "rnd", created_at: "bad" }])[0].message,
+  "버전 활성화 — …555555 · 버전 …444444 · 작업 …111111 · rnd");
+// 소스 가드: 오케스트레이터·시뮬레이터 화면이 ID 값을 본문({x.id}·${x.version_id}·orDash(x.id)·x.id.slice(…)·?? x.id)에 그대로 내지 않는다.
+// title 속성(전체 ID)·키(modelops:${id})·과거 고정 모델 이름(model_id·modelId)·지역 코드(region.id)는 예외. ③ 계산 근거(ModelEvidence.jsx)는 근거 추적용으로 전체 ID를 두므로 대상에서 뺀다.
+const RAW_ID = /(?<![=:$\w-])(?:\$\{|\{)(?:[^{}`]*?\?\?\s*)?(?:orDash\()?[\w?.]+?(?:\.id|_id|Id|\.version|_version)(?:\.slice\([^)]*\))?\)?\}/g;
+const rawIds = (text) => (text.replace(/title=\{`[^`]*`\}/g, "").match(RAW_ID) ?? []).filter((hit) => !/(?:model_?[iI]d|[rR]egion\.id)\)?\}$/.test(hit));
+const src = (...parts) => readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", ...parts), "utf-8");
+const modelopsLib = src("lib", "modelops.js");
+const guarded = {
+  "pages/OrchestratorPage.jsx": orchestratorPage, "components/realdata/RealdataTrainingPanel.jsx": trainingPanel, "components/ModelVersionSection.jsx": section,
+  "components/PipelineStatusCard.jsx": src("components", "PipelineStatusCard.jsx"), "components/FactorAnalysisStage.jsx": src("components", "FactorAnalysisStage.jsx"),
+  "pages/SimulatorPage.jsx": src("pages", "SimulatorPage.jsx"), "hooks/useFactorAnalysis.js": src("hooks", "useFactorAnalysis.js"),
+  "lib/modelops.js(로그 줄)": modelopsLib.slice(modelopsLib.indexOf("export function jobLogLines"), modelopsLib.indexOf("export function storeRows"))
+};
+for (const [file, text] of Object.entries(guarded)) assert.deepEqual(rawIds(text), [], `${file}: ID는 displayId(…)로 보이고 전체 ID는 title 에 둔다`);
+// 가드가 실제로 잡는지 — 옛 직접 출력 형태 5종
+assert.equal(rawIds("<code>{job.id}</code>{orDash(last.id)}{c.id.slice(0, 20)}`후보 ${latest.version_id}`{name ?? proof.dataset_id}").length, 5);
+assert.deepEqual(rawIds("<code title={c.id}>{displayId(c.id)}</code> key={`modelops:${job.id}`} title={`${last.id} — 로그`}"), []);
+// ③ 계산 근거는 전체 ID 유지(예외)
+assert.match(src("components", "ModelEvidence.jsx"), /\{p\.version_id\}/);
+// MAE·기준선(Model Store·⑥ 버전 표·실행 이력)은 학습 대상 단위 규칙 — 명·원 정수 천 단위, % 소수 1~2자리
+for (const text of [orchestratorPage, section]) { assert.match(text, /formatUnitValue\(value, targetUnit\(target\)\)/); assert.doesNotMatch(text, /maximumFractionDigits: 3/); }
+assert.equal(orchestratorPage.match(/metric\([^)]*mae[^)]*, (?:m|version)\.target\)/gi)?.length, 4);
+assert.match(section, /metric\(row\.metrics\.mae, row\.target\)\} \/ \{metric\(row\.baseline\.mae, row\.target\)/);
 // 같은 내용 재등록은 서버가 기존 등록본을 돌려준다 — DataOps 안내는 "이미 등록" 문구로 구분한다.
 const registration = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "components", "TrainingDatasetRegistration.jsx"), "utf-8");
 assert.match(registration, /const reused = datasets\.some\(\(row\) => row\.id === registered\.id\);[\s\S]*이미 등록되어 있습니다/);
