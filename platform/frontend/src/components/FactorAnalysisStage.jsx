@@ -1,13 +1,14 @@
 import Card from "./Card.jsx";
 import CollapsibleStage from "./CollapsibleStage.jsx";
 import PendingData from "./PendingData.jsx";
-import { formatValue, FACTOR_EXPLAIN_TEXT, FACTOR_FOOTNOTE } from "../lib/realSimulation.js";
+import { formatUnitValue, FACTOR_EXPLAIN_TEXT, FACTOR_FOOTNOTE } from "../lib/realSimulation.js";
 
 // STAGE ① 사회문제 요인분석
 // 두 모드가 같은 실행 바·단계 칩·카드 3개(기준선 제목)·근거 자리를 쓰고, 내용은 활성 요인분석 모델의 결과다.
 // view: factorAnalysisView(결과) — 있으면 카드 3개를 채운다. 없으면 placeholders[i](실행 전·실행 중·안내)를 둔다.
 // conditions·evidence: 두 모드 공통 컨트롤(학습 대상·행정동 select, 계산 근거)을 호출부가 넘긴다.
 // runLockTitle: 실행할 수 없을 때의 사유 — 버튼은 aria-disabled 로 남고 클릭은 호출부가 막는다.
+// runTitle: 실행 가능한 상태의 보조 설명(예: 조회 실패 뒤 "다시 확인" — 클릭이 목록을 다시 읽는다).
 export default function FactorAnalysisStage({
   open,
   onToggle,
@@ -22,7 +23,8 @@ export default function FactorAnalysisStage({
   sourceLabel,
   conditions = null,
   evidence = null,
-  runLockTitle = null
+  runLockTitle = null,
+  runTitle = null
 }) {
   const running = status === "running";
   const done = status === "done";
@@ -31,7 +33,16 @@ export default function FactorAnalysisStage({
       {view ? body : placeholders[index] ?? <PendingData running={running} />}
     </Card>
   );
-  const signed = (value) => `${value > 0 ? "+" : ""}${formatValue(value)}`;
+  const value = (number) => formatUnitValue(number, view?.unit);
+  const versionTitle = view?.model.versionId; // 화면은 짧은 ID, 전체 ID는 title
+  // 부호는 반올림한 표시값 기준(+0 이 나오지 않게 — 0이면 부호 없음)
+  const signed = (number) => { const text = value(number); return number > 0 && /[1-9]/.test(text) ? `+${text}` : text; };
+  const factorRow = (f) => (
+    <li key={f.feature} className={f.direction === "-" ? "neg" : "pos"}>
+      <span className="pl-factor-sign">{f.direction}</span>
+      {f.label} · 기여도 {signed(f.value)} {view.unit} · 관측 {formatUnitValue(f.input, f.inputUnit)}{f.inputUnit ? ` ${f.inputUnit}` : ""}
+    </li>
+  );
 
   return (
     <CollapsibleStage id="stage-factor" no="STAGE ①" title="사회문제 요인분석" sub={sub} open={open} onToggle={onToggle}>
@@ -42,7 +53,7 @@ export default function FactorAnalysisStage({
           <i className="fa-solid fa-flask" aria-hidden="true"></i>
           <div>
             <strong>요인분석 실행</strong>
-            <p>{runInfo}</p>
+            <p title={versionTitle}>{runInfo}</p>
           </div>
         </div>
 
@@ -73,7 +84,7 @@ export default function FactorAnalysisStage({
           onClick={onRun}
           disabled={running}
           aria-disabled={runLockTitle ? true : undefined}
-          title={runLockTitle ?? undefined}
+          title={runLockTitle ?? runTitle ?? undefined}
         >
           {running ? (
             <>
@@ -96,15 +107,14 @@ export default function FactorAnalysisStage({
         {/* AI + 인구학적 요인 분석 결과 — 요인 기여도(±, |값| 내림차순) */}
         {card(0, "AI + 인구학적 요인 분석 결과", view && (
             <>
-              <ul className="pl-factor-list">
-                {view.factors.map((f) => (
-                  <li key={f.feature} className={f.direction === "-" ? "neg" : "pos"}>
-                    <span className="pl-factor-sign">{f.direction}</span>
-                    {f.label} · 기여도 {signed(f.value)} {view.unit} · 관측 {formatValue(f.input)}{f.inputUnit ? ` ${f.inputUnit}` : ""}
-                  </li>
-                ))}
-              </ul>
-              {view.more > 0 && <p className="pl-stat-baseline">외 {view.more}개 요인은 계산 근거에서 확인</p>}
+              <ul className="pl-factor-list">{view.factors.map(factorRow)}</ul>
+              {/* 10행 밖 요인은 같은 카드 안에서 펼쳐 본다(접힘 기본) */}
+              {view.more > 0 && (
+                <details className="pl-stat-baseline">
+                  <summary style={{ cursor: "pointer" }}>외 {view.more}개 요인 모두 보기</summary>
+                  <ul className="pl-factor-list">{view.rest.map(factorRow)}</ul>
+                </details>
+              )}
               <div className="pl-source-note">
                 <i className="fa-solid fa-database" aria-hidden="true"></i> {view.basis}
               </div>
@@ -118,12 +128,12 @@ export default function FactorAnalysisStage({
             <>
               <div className="pl-model-box pl-model-xai">
                 <span className="pl-model-tag">기여도 분해</span>
-                <strong>요인별 기여도 합 + 기준값 {formatValue(view.model.intercept)} {view.unit}</strong>
-                <p>= 모델 추정값 {formatValue(view.model.prediction)} {view.unit}</p>
+                <strong>요인별 기여도 합 + 기준값 {value(view.model.intercept)} {view.unit}</strong>
+                <p>= 모델 추정값 {value(view.model.prediction)} {view.unit}</p>
               </div>
               <div className="pl-model-box pl-model-dl">
                 <span className="pl-model-tag">학습 모델</span>
-                <strong>요인분석 · 활성 버전 {view.model.version}</strong>
+                <strong>요인분석 · 활성 버전 <span title={versionTitle}>{view.model.version}</span></strong>
                 <div className="pl-model-chips">
                   {view.model.features.map((m) => (
                     <span className="pl-chip" key={m}>{m}</span>
@@ -140,7 +150,7 @@ export default function FactorAnalysisStage({
                 <i className="fa-solid fa-plus" aria-hidden="true"></i> 결과 융합
               </div>
               <p className="pl-stat-baseline">
-                검증 평균 절대 오차 {formatValue(view.validation.mae)} {view.unit} · 기준선 {formatValue(view.validation.baselineMae)} {view.unit}
+                검증 평균 절대 오차 {value(view.validation.mae)} {view.unit} · 기준선 {value(view.validation.baselineMae)} {view.unit}
                 {view.validation.baselineName ? `(${view.validation.baselineName})` : ""}
               </p>
               <div className="pl-stage-label">분석 대상</div>

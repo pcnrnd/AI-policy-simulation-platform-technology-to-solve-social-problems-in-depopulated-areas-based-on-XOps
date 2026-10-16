@@ -105,8 +105,10 @@ export default function SimulatorPage() {
   const [simSig, setSimSig] = useState("");
   // 실데이터는 같은 지역·학습 대상의 요인분석 활성 모델이 있어야 실행된다(데모는 자동 준비). 조회 중·실패·모델 없음을 구분한다.
   const factorModel = demo ? null : activeModelPair(real.catalog, currentRegion.id, target).factor;
-  const factorLockTitle = demo || factorModel ? null
-    : real.loading ? "모델 목록을 확인하는 중입니다." : real.loadFailed ? "모델 정보를 불러오지 못했습니다. 잠시 뒤 다시 시도하세요." : FACTOR_RUN_LOCK_TEXT;
+  // 조회 실패면 잠그지 않고 [요인분석 실행]이 목록·입력을 다시 읽는다(재시도).
+  const factorRetry = !demo && real.loadFailed && !factorModel;
+  const factorLockTitle = demo || factorModel || factorRetry ? null
+    : real.loading ? "모델 목록을 확인하는 중입니다." : FACTOR_RUN_LOCK_TEXT;
   const factorMissing = !demo && !real.loading && !real.loadFailed && (!factorModel || factor.missing);
 
   // 지역·학습 대상·행정동 변경 시 결과 초기화 (지역별 요인분석은 별도 실행 — 요인분석 상태는 훅이 비운다)
@@ -121,6 +123,7 @@ export default function SimulatorPage() {
   }, [currentRegion.id, target, dong, real.revision]);
 
   const handleRunAnalysis = async () => {
+    if (factorRetry) { real.reload(); return; }
     // 실행할 수 없으면(버튼 aria-disabled + 사유 title) 클릭을 무시한다.
     if (analysisStatus === "running" || factorLockTitle) return;
     setOpenStages((s) => ({ ...s, "stage-factor": true }));
@@ -431,6 +434,7 @@ export default function SimulatorPage() {
         sourceLabel={factorSourceLabel}
         conditions={conditions}
         runLockTitle={factorLockTitle}
+        runTitle={factorRetry ? "다시 확인" : null}
         evidence={<ModelEvidence slot="sim.factor.evidence" result={factor.result?.analysis} regions={regions} label={factorLabel}
           datasetName={() => factor.result?.dataset?.name ?? factor.result?.analysis.provenance.dataset_id}
           emptyText={factorMissing ? FACTOR_PENDING_TEXT : "[요인분석 실행] 후 모델·학습데이터 근거가 표시됩니다."} />}

@@ -6,7 +6,7 @@ import { activeModelPair, inferenceRequest, validateInference, rankSensitivity, 
   contributionFactors, contributionSplit, realSliderControls, forecastSeries, sensitivityRecommendation, regionRealStatus,
   REAL_GUIDE_TEXT, FACTOR_GUIDE_TEXT, FACTOR_PENDING_TEXT, FACTOR_RUN_LOCK_TEXT, REAL_LOAD_FAILED_TEXT, REAL_PREDICT_FAILED_TEXT, REAL_VERSION_CHANGED_TEXT,
   FACTOR_IDLE_TEXT, FACTOR_FAILED_TEXT, FACTOR_VERSION_CHANGED_TEXT, FACTOR_DIAGNOSIS_TEXT, FACTOR_EXPLAIN_TEXT, FACTOR_FOOTNOTE, CORRELATION_BASIS_TEXT,
-  DEMO_FACTOR_TARGET, FACTOR_PANEL_FEATURES, FACTOR_LIST_LIMIT, factorAnalysisView, featureUnit, targetUnit } from "./realSimulation.js";
+  DEMO_FACTOR_TARGET, FACTOR_PANEL_FEATURES, FACTOR_LIST_LIMIT, factorAnalysisView, featureUnit, targetUnit, formatUnitValue } from "./realSimulation.js";
 const proof={instance_id:"factor",model_type:"factor_analysis",version_id:"v1",job_id:"job1",dataset_id:"registered1",dataset_hash:"a".repeat(64),region_id:"namwon",target:"observed_sales_krw",dong_code:"45190250",prediction_period:202401,features:["y_lag1"],mode:"real",source:"real"};
 const sim={provenance:{...proof,instance_id:"sim",model_type:"simulation",dataset_id:"registered2",version_id:"v2",job_id:"job2"}};
 const request=inferenceRequest(sim,{y_lag1:100});
@@ -105,8 +105,23 @@ for (const src of [page,factorStage,resultStage]) assert.doesNotMatch(src,/입�
 assert.match(page,/steps=\{ANALYSIS_STEPS\}/);
 assert.match(page,/conditions=\{conditions\}/);
 assert.match(page,/runLockTitle=\{factorLockTitle\}/);
-assert.match(page,/const factorLockTitle = demo \|\| factorModel \? null/);
+assert.match(page,/const factorLockTitle = demo \|\| factorModel \|\| factorRetry \? null/);
 assert.match(factorStage,/aria-disabled=\{runLockTitle \? true : undefined\}/);
+// 실데이터 조회 실패면 [요인분석 실행]이 잠기지 않고 재시도(목록·입력 다시 읽기)가 된다 — title "다시 확인".
+assert.match(page,/const factorRetry = !demo && real\.loadFailed && !factorModel;/);
+assert.match(page,/if \(factorRetry\) \{ real\.reload\(\); return; \}/);
+assert.match(page,/runTitle=\{factorRetry \? "다시 확인" : null\}/);
+assert.match(factorStage,/title=\{runLockTitle \?\? runTitle \?\? undefined\}/);
+// ①-1 10행 밖 요인은 같은 카드 안 펼침(접힘 기본)으로 — 삭제된 계산 근거 행을 가리키지 않는다.
+assert.doesNotMatch(factorStage,/계산 근거에서 확인/);
+assert.match(factorStage,/<details className="pl-stat-baseline">[\s\S]*외 \{view\.more\}개 요인 모두 보기[\s\S]*view\.rest\.map\(factorRow\)/);
+// 단위별 반올림(공용 포맷) — 카드 수치는 formatUnitValue 로만, 활성 버전은 짧은 ID + title 전체 ID.
+assert.doesNotMatch(factorStage,/formatValue/);
+assert.match(factorStage,/const versionTitle = view\?\.model\.versionId;/);assert.equal(factorStage.match(/title=\{versionTitle\}/g)?.length,2);
+// 데모 준비 중 학습 요청 409(다른 화면이 먼저 시작) → 진행 중 작업을 이어 폴링한다.
+const hookSource=read("hooks","useFactorAnalysis.js");
+assert.match(hookSource,/if \(error\?\.status !== 409\) throw error;\s*job = runningJob\(await at\(apiGet\(`\$\{BASE\}\/catalog`/);
+assert.doesNotMatch(hookSource,/shortId|slice\(0, 12\)/);
 // ③ 계산 근거는 검증 오차·기준선·버전·데이터셋만 — 기여도 3행은 ① 카드로 옮겼다. "요인" 표현도 쓰지 않는다.
 const evidence=read("components","ModelEvidence.jsx");
 assert.doesNotMatch(evidence,/예측 입력 기여도|예측을 높인 입력|예측을 낮춘 입력|contributionSplit/);assert.doesNotMatch(evidence,/요인/);
@@ -139,13 +154,21 @@ for (const feature of FACTOR_PANEL_FEATURES) assert.notEqual(panelLabel(feature)
 assert.deepEqual(["youth_ratio","aging_index","facility_capacity"].map(panelLabel),["유소년 비율","노령화지수","시설 수용력(인구 대비)"]);
 assert.equal(targetUnit(DEMO_FACTOR_TARGET),"명");assert.equal(featureUnit("edu_facility_density",DEMO_FACTOR_TARGET),"개소/만 명");
 assert.equal(featureUnit("y_lag1","observed_sales_krw"),"원");assert.equal(featureUnit("dong_1","observed_sales_krw"),"");
+assert.equal(featureUnit("aging_index",DEMO_FACTOR_TARGET),"지수");
+for (const feature of FACTOR_PANEL_FEATURES) assert.ok(featureUnit(feature,DEMO_FACTOR_TARGET),feature);
+// 단위별 반올림: 명·원·개소(명/월 포함)는 정수 + 천 단위 구분, 비율·지수·밀도는 소수 1~2자리, 단위 없음은 최대 2자리.
+assert.equal(formatUnitValue(-7650.421,"명"),"-7,650");assert.equal(formatUnitValue(228393.436,"원"),"228,393");
+assert.equal(formatUnitValue(-0.3,"명"),"0");assert.equal(formatUnitValue(81.6,"명/월"),"82");assert.equal(formatUnitValue(12,"개소"),"12");
+assert.equal(formatUnitValue(8.934,"%"),"8.93");assert.equal(formatUnitValue(352,"지수"),"352.0");assert.equal(formatUnitValue(3.256,"개소/만 명"),"3.26");
+assert.equal(formatUnitValue(1,""),"1");assert.equal(formatUnitValue(0.5123,""),"0.51");assert.equal(formatUnitValue(NaN,"명"),"—");
 const demoView=factorAnalysisView(panelResult,{demo:true,dataset:{name:"남원 요인 패널"},label:panelLabel});
 assert.deepEqual(demoView.factors.map((row)=>row.label).slice(0,3),["사망말소","고령인구","노령화지수"]);
 assert.equal(demoView.factors.length,9);assert.equal(demoView.more,0);assert.equal(demoView.unit,"명");
 assert.deepEqual([demoView.split.positive.length,demoView.split.negative.length],[4,5]);
 assert.deepEqual([...demoView.split.positive,...demoView.split.negative].map((r)=>r.feature).sort(),[...FACTOR_PANEL_FEATURES].sort());
 assert.equal(demoView.sourceLabel,"데모");assert.match(demoView.basis,/^연계 데이터: 데모 요인 패널 · 남원 요인 패널$/);
-assert.equal(demoView.validation.baselineName,"전년 같은 달 관측값");assert.equal(demoView.model.version,"demo_factor_");
+assert.equal(demoView.validation.baselineName,"전년 같은 달 관측값");assert.equal(demoView.model.version,"…123456");assert.equal(demoView.model.versionId,panelProof.version_id);
+assert.match(demoView.runInfo,/활성 버전 …123456$/);assert.deepEqual(demoView.rest,[]);
 assert.match(demoView.validation.targets.join("|"),/생활인구 · 요인 9개\|관측 기간 2015-01~2024-12\|검증 기간 2024-01~2024-12/);
 const realView=factorAnalysisView({...panelResult,provenance:{...panelProof,mode:"real",source:"real",target:"observed_sales_krw"}},{demo:false,dataset:{name:"남원 관측 소비 스냅샷"},label:panelLabel});
 assert.equal(realView.basis,"현재 등록 데이터 기준 · 남원 관측 소비 스냅샷 (관측 2015-01~2024-12)");
@@ -153,6 +176,7 @@ assert.equal(realView.sourceLabel,"실데이터 · 남원 관측 소비 스냅�
 const many={...panelResult,contributions:Array.from({length:14},(_,i)=>({feature:`dong_${i}`,input:1,value:i-7}))};
 const manyView=factorAnalysisView(many,{demo:false,dataset:null,label:(f)=>f});
 assert.equal(manyView.factors.length,FACTOR_LIST_LIMIT);assert.equal(manyView.more,4);
+assert.equal(manyView.rest.length,4);assert.deepEqual([...manyView.factors,...manyView.rest].map((r)=>r.feature).sort(),many.contributions.map((r)=>r.feature).sort());
 assert.match(manyView.basis,/demo_factor_ds/);
 for (const text of [demoView.basis,realView.basis,demoView.runInfo,...demoView.validation.targets]) assert.doesNotMatch(text,INTERNAL,text);
 // 데모 카탈로그(mock)에서 요인분석 활성 모델을 고른다 — 모드가 다르면 거부, 기본은 실데이터.

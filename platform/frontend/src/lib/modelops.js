@@ -2,6 +2,15 @@ export const MODEL_TYPES = [{ id: "factor_analysis", name: "요인분석" }, { i
 export const TARGET_LABELS = { nonlocal_visitors: "타지역 방문객", observed_sales_krw: "관측 소비", population_change_pct: "인구 변화율", living_population: "생활인구" };
 export const JOB_STATE_NAMES = { queued: "대기", running: "학습 중", saved: "등록 완료", failed: "실패" };
 export const EXPERIMENT_MAX = 64;
+/**
+ * 화면용 짧은 ID — 버전·작업·등록본 ID의 내부 접두사(마지막 "_"까지)를 떼고 끝 6자만 "…881abc"처럼 보인다.
+ * 접두사가 없거나 끝 조각이 짧으면 그대로. 전체 ID는 title 로 함께 둔다(시뮬레이터·Model Store·버전 관리 공용).
+ */
+export function displayId(id) {
+  const text = String(id ?? "");
+  const tail = text.slice(text.lastIndexOf("_") + 1);
+  return tail !== text && tail.length >= 6 ? `…${tail.slice(-6)}` : text;
+}
 export const typeName = (id) => MODEL_TYPES.find((type) => type.id === id)?.name ?? id ?? "—";
 /** 등록 모델 이름 — 학습 카드·버전 관리의 "등록 모델 선택"이 같은 문구를 쓴다. */
 export const instanceLabel = (row, regionName) => `${typeName(row.model_type)} · ${regionName(row.region_id)} · ${TARGET_LABELS[row.target] ?? row.target}`;

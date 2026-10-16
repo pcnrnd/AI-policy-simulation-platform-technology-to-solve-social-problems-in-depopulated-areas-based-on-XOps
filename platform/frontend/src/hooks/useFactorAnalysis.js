@@ -2,9 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { getRealdataToken } from "../components/realdata/realdataClient.jsx";
 import { apiGet, apiSend } from "../lib/api.js";
 import { dataModeEpoch } from "../lib/dataMode.js";
-import { belowBaseline, cardPipelineId } from "../lib/modelops.js";
+import { belowBaseline, cardPipelineId, displayId } from "../lib/modelops.js";
 import {
-  activeModelPair, inferenceRequest, validateInference, createRequestGate, formatValue, formatMonth,
+  activeModelPair, inferenceRequest, validateInference, createRequestGate, formatUnitValue, formatMonth, targetUnit,
   DEMO_FACTOR_SOURCE_PREFIX, FACTOR_FAILED_TEXT, FACTOR_VERSION_CHANGED_TEXT
 } from "../lib/realSimulation.js";
 
@@ -18,7 +18,6 @@ const MISSING = Symbol("missing");
 const endpoint = (instance) =>
   `${BASE}/instances/${encodeURIComponent(instance.id)}/versions/${encodeURIComponent(instance.active_version)}`;
 const rawText = (error) => error?.message || String(error);
-const shortId = (id) => String(id ?? "").slice(0, 12);
 const wait = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
 
 /**
@@ -35,7 +34,7 @@ async function ensureDemoFactorModel({ token, catalog, region, at, log }) {
     dataset = await at(apiSend("POST", "/api/v3/modelops/datasets", { token, body: {
       name: `${source.name} (정책 시뮬레이터 자동 등록)`, source_dataset_id: source.id, source_hash: source.content_hash, id_prefix: "demo_factor_"
     } }));
-    log(`INFO: 데모 요인분석 모델 준비 — 학습데이터 등록 ${dataset.id}`);
+    log(`INFO: 데모 요인분석 모델 준비 — 학습데이터 등록 ${displayId(dataset.id)}`);
   }
   const pipelineId = cardPipelineId("factor_analysis", dataset.id);
   let pipeline = catalog.pipelines.find((row) => row.id === pipelineId);
@@ -44,15 +43,25 @@ async function ensureDemoFactorModel({ token, catalog, region, at, log }) {
       id: pipelineId, name: "요인분석 학습 (정책 시뮬레이터 데모)", model_type: "factor_analysis",
       dataset_id: dataset.id, dataset_hash: dataset.content_hash, trigger_policy: "자동(정책 시뮬레이터)"
     } }));
-    log(`INFO: 데모 요인분석 모델 준비 — 파이프라인 등록 ${pipeline.id}`);
+    log(`INFO: 데모 요인분석 모델 준비 — 파이프라인 등록 ${displayId(pipeline.id)}`);
   }
   let fresh = await at(apiGet(`${BASE}/catalog`, { token }));
   const instanceId = pipeline.instance_id;
   let version = fresh.versions.find((row) => row.instance_id === instanceId && row.dataset_id === dataset.id && !belowBaseline(row));
   if (!version) {
-    let job = fresh.jobs.find((row) => row.instance_id === instanceId && (row.state === "queued" || row.state === "running"));
-    if (!job) job = await at(apiSend("POST", `/api/v3/modelops/pipelines/${encodeURIComponent(pipeline.id)}/run`, { token }));
-    log(`INFO: 데모 요인분석 모델 준비 — 학습 시작 ${job.id}`);
+    const runningJob = (rows) => rows.jobs.find((row) => row.instance_id === instanceId && (row.state === "queued" || row.state === "running"));
+    let job = runningJob(fresh);
+    if (!job) {
+      try {
+        job = await at(apiSend("POST", `/api/v3/modelops/pipelines/${encodeURIComponent(pipeline.id)}/run`, { token }));
+      } catch (error) {
+        // 409: 목록을 읽은 뒤 다른 화면이 같은 모델 학습을 시작했다 — 그 작업을 이어 폴링한다.
+        if (error?.status !== 409) throw error;
+        job = runningJob(await at(apiGet(`${BASE}/catalog`, { token })));
+        if (!job) throw error;
+      }
+    }
+    log(`INFO: 데모 요인분석 모델 준비 — 학습 시작 ${displayId(job.id)}`);
     for (let tries = 0; job.state !== "saved" && job.state !== "failed"; tries += 1) {
       if (tries >= JOB_POLL_MAX) throw new Error(`training poll timeout: ${job.id}`);
       await at(wait(JOB_POLL_MS));
@@ -64,7 +73,7 @@ async function ensureDemoFactorModel({ token, catalog, region, at, log }) {
     if (!version || belowBaseline(version)) throw new Error(`version not activatable: ${job.version_id}`);
   }
   await at(apiSend("POST", `/api/v3/modelops/instances/${encodeURIComponent(instanceId)}/versions/${encodeURIComponent(version.id)}/activate`, { token }));
-  log(`INFO: 데모 요인분석 모델 준비 — 활성화 ${version.id}`);
+  log(`INFO: 데모 요인분석 모델 준비 — 활성화 ${displayId(version.id)}`);
   return at(apiGet(`${BASE}/catalog`, { token }));
 }
 
@@ -118,13 +127,14 @@ export function useFactorAnalysis({ demo, region, target, dong, log }) {
       const proof = inputs.provenance;
       say(`INFO: [요인분석 1/4] 학습데이터 ${dataset?.name ?? proof.dataset_id} · 관측 ${formatMonth(proof.observed_from)}~${formatMonth(proof.observed_to)} 확인`);
       setStep(2);
-      say(`INFO: [요인분석 2/4] 요인분석 활성 버전 ${shortId(model.active_version)} 추론`);
+      say(`INFO: [요인분석 2/4] 요인분석 활성 버전 ${displayId(model.active_version)} 추론`);
       const raw = await at(apiSend("POST", endpoint(model) + "/predict", { token, body: inferenceRequest(inputs) }));
       setStep(3);
       const analysis = validateInference(raw, inputs);
       say(`INFO: [요인분석 3/4] 요인 ${analysis.contributions.length}개 기여도 분해 — 합계 확인`);
       setStep(4);
-      say(`INFO: [요인분석 4/4] 검증 평균 절대 오차 ${formatValue(proof.metrics?.mae)} / 기준선 ${formatValue(proof.baseline?.mae)}`);
+      const unit = targetUnit(proof.target);
+      say(`INFO: [요인분석 4/4] 검증 평균 절대 오차 ${formatUnitValue(proof.metrics?.mae, unit)} / 기준선 ${formatUnitValue(proof.baseline?.mae, unit)} ${unit}`);
       setResult({ analysis, dataset });
       setStatus("done");
       return analysis;

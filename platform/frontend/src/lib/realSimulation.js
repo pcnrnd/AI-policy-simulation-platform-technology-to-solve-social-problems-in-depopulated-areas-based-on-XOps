@@ -1,4 +1,4 @@
-import { TARGET_LABELS } from "./modelops.js";
+import { TARGET_LABELS, displayId } from "./modelops.js";
 
 export const REAL_TARGETS = { observed_sales_krw: "관측 소비", nonlocal_visitors: "타지역 방문객" };
 // 데모 요인분석의 학습 대상(합성 요인 패널) — 실데이터 학습 대상 목록과 별개다.
@@ -6,7 +6,7 @@ export const DEMO_FACTOR_TARGET = "living_population";
 export const DEMO_FACTOR_SOURCE_PREFIX = "mock_factor_";
 // 요인 패널 변수 이름·단위(백엔드 factor_panel.FEATURES 키와 같다).
 const FACTOR_PANEL = {
-  youth_ratio: ["유소년 비율", "%"], aging_index: ["노령화지수", ""], working_age_pop: ["생산연령인구", "명"],
+  youth_ratio: ["유소년 비율", "%"], aging_index: ["노령화지수", "지수"], working_age_pop: ["생산연령인구", "명"],
   elderly_pop: ["고령인구", "명"], death_cancellations: ["사망말소", "명/월"], edu_facility_density: ["교육시설 밀도", "개소/만 명"],
   medical_facility_density: ["의료시설 밀도", "개소/만 명"], child_welfare_density: ["아동복지시설 밀도", "개소/만 명"],
   facility_capacity: ["시설 수용력(인구 대비)", "정원/천 명"]
@@ -90,6 +90,13 @@ export const REAL_VERSION_CHANGED_TEXT = "활성 버전이 바뀌었습니다. �
 
 export const targetUnit = (target) => target === "observed_sales_krw" ? "원" : "명";
 export const formatValue = (value) => Number.isFinite(value) ? value.toLocaleString("ko-KR", { maximumFractionDigits: 3 }) : "—";
+// 단위별 반올림 — 인원·금액·개수(명·원·개소·명/월)는 정수(천 단위 구분), 비율·지수·밀도는 소수 1~2자리, 단위 없음은 최대 2자리.
+const COUNT_UNITS = new Set(["명", "원", "개소", "명/월"]);
+export function formatUnitValue(value, unit) {
+  if (!Number.isFinite(value)) return "—";
+  if (COUNT_UNITS.has(unit)) return (Math.round(value) || 0).toLocaleString("ko-KR");
+  return value.toLocaleString("ko-KR", unit ? { minimumFractionDigits: 1, maximumFractionDigits: 2 } : { maximumFractionDigits: 2 });
+}
 export const formatMonth = (value) => value ? `${String(value).slice(0, 4)}-${String(value).slice(4)}` : "—";
 
 /** 예측 입력 기여도 → |값| 내림차순 목록(부호는 direction). */
@@ -109,7 +116,6 @@ export function contributionSplit(result, label) {
 const BASELINE_NAMES = { yoy_or_prev_month: "전년 같은 달·전월 관측값", same_month_last_year: "전년 같은 달 관측값" };
 export const baselineName = (name) => BASELINE_NAMES[name];
 export const FACTOR_LIST_LIMIT = 10;
-const shortId = (id) => String(id ?? "").slice(0, 12);
 
 /**
  * 요인분석 추론 결과 → STAGE ①(카드 3개)·②(상관관계) 표시 데이터. 두 모드가 같은 함수를 쓰고,
@@ -124,12 +130,13 @@ export function factorAnalysisView(result, { demo, dataset, label }) {
   const observed = `${formatMonth(p.observed_from)}~${formatMonth(p.observed_to)}`;
   const evaluation = p.evaluation_period;
   return {
-    unit, factors, more: all.length - factors.length,
+    // rest: 10행 밖 요인 — ①-1 카드 안 "모두 보기" 펼침에서 같은 형식으로 보인다.
+    unit, factors, rest: all.slice(FACTOR_LIST_LIMIT), more: all.length - factors.length,
     split: { positive: factors.filter((row) => row.value > 0), negative: factors.filter((row) => row.value < 0) },
     basis: demo ? `연계 데이터: 데모 요인 패널 · ${name}` : `현재 등록 데이터 기준 · ${name} (관측 ${observed})`,
     sourceLabel: demo ? "데모" : `실데이터 · ${name}`,
-    runInfo: `학습데이터 ${name} · 요인분석 활성 버전 ${shortId(p.version_id)}`,
-    model: { version: shortId(p.version_id), intercept: result.intercept, prediction: result.prediction,
+    runInfo: `학습데이터 ${name} · 요인분석 활성 버전 ${displayId(p.version_id)}`,
+    model: { version: displayId(p.version_id), versionId: p.version_id, intercept: result.intercept, prediction: result.prediction,
       features: (p.features ?? []).map(label) },
     validation: {
       mae: p.metrics?.mae, baselineMae: p.baseline?.mae, baselineName: baselineName(p.baseline?.name),
