@@ -11,6 +11,7 @@ import {
   getModels,
   getRealdataToken
 } from "./realdataClient.jsx";
+import { alertText } from "../../lib/alertText.js";
 
 const MODEL_LABELS = {
   "namwon-nonlocal-visitors-next-month": "남원 타지역 방문객 (익월)",
@@ -56,7 +57,8 @@ export default function RealdataEvaluationPanel() {
   useEffect(() => {
     getRealdataToken()
       .then(setToken)
-      .catch((err) => setAuthError(err.message || "인증 토큰 발급에 실패했습니다."));
+      // 원문은 모니터 페이지의 토큰 발급 실패 로그에 남는다.
+      .catch((err) => setAuthError(alertText(err, "인증 토큰 발급에 실패했습니다. 잠시 뒤 다시 시도하세요.")));
   }, []);
 
   useEffect(() => {

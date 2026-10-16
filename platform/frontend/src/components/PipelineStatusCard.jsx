@@ -132,7 +132,7 @@ export default function PipelineStatusCard({ target, regionName, onReset, anchor
           <p className="async-feedback is-error" role="alert">
             <i className="fa-solid fa-circle-exclamation" aria-hidden="true"></i>
             <span>
-              학습 상태를 확인하지 못했습니다 — {pollError.message}.{" "}
+              학습 상태를 확인하지 못했습니다{pollError.message ? ` — ${pollError.message}` : "."}{" "}
               {pollError.stopped ? "연속 실패로 자동 확인을 멈췄습니다." : "잠시 후 자동으로 다시 확인합니다."}{" "}
               서버의 학습 작업은 계속될 수 있으며, 다른 작업은 지금 실행할 수 있습니다.
             </span>

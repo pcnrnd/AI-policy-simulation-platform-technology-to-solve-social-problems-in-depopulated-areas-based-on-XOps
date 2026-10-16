@@ -1,11 +1,14 @@
 import { useState } from "react";
 import { apiSend } from "../lib/api.js";
+import { alertText } from "../lib/alertText.js";
 import { EXPERIMENT_MAX, MODEL_TYPES, TARGET_LABELS, pipelineDefinition } from "../lib/modelops.js";
 import { getRealdataToken } from "./realdata/realdataClient.jsx";
+import { useAppState } from "../context/AppStateContext.jsx";
 
 // 대상 모델 = 모델 종류 2개(이전 고정 모델 3개는 과거 버전으로만 남고 선택지에 없다).
 const EMPTY = { id: "", name: "", model_type: "factor_analysis", dataset_id: "", trigger_policy: "수동", experiment: "" };
 export default function ModelPipelineRegisterForm({ datasets = [], onRegistered, onCancel }) {
+  const { addConsoleLog } = useAppState();
   const [form, setForm] = useState(EMPTY);
   const [error, setError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
@@ -21,7 +24,10 @@ export default function ModelPipelineRegisterForm({ datasets = [], onRegistered,
       const created = await apiSend("POST", "/api/v3/modelops/pipelines", { token, body });
       setForm(EMPTY);
       onRegistered?.(created);
-    } catch (err) { setError(err.message || "입력한 내용을 확인한 뒤 다시 등록하세요."); }
+    } catch (err) {
+      setError(alertText(err, "등록하지 못했습니다. 입력한 내용을 확인한 뒤 다시 등록하세요."));
+      addConsoleLog(`WARN: 재학습 파이프라인 등록 실패 — ${err?.message ?? err}`, false, true);
+    }
     finally { setSubmitting(false); }
   };
   return <form className="pipeline-register" onSubmit={handleSubmit} aria-label="재학습 파이프라인 등록">

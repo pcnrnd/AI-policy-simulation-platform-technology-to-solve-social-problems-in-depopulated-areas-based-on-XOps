@@ -12,6 +12,7 @@ import { getRealdataToken } from "../components/realdata/realdataClient.jsx";
 import { useAppState } from "../context/AppStateContext.jsx";
 import { MODEL_REGISTRY } from "../constants/models.js";
 import { apiGet, apiSend } from "../lib/api.js";
+import { alertText } from "../lib/alertText.js";
 import {
   JOB_STATE_NAMES, TARGET_LABELS, isLocked, jobLocks, jobLogLines, lastJobOf, mergeRunHistory, storeRows, typeName, versionsWithStatus
 } from "../lib/modelops.js";
@@ -79,7 +80,7 @@ export default function OrchestratorPage() {
       setCatalogError(null);
     } catch (err) {
       if (!mounted.current || request !== catalogRequest.current) return;
-      setCatalogError(err?.message ?? "알 수 없는 오류");
+      setCatalogError(alertText(err, "잠시 뒤 다시 시도하세요."));
       addConsoleLog(`ERROR: 파이프라인 카탈로그 로드 실패 — ${err?.message ?? "알 수 없는 오류"}`);
     } finally {
       if (mounted.current && request === catalogRequest.current) setCatalogLoaded(true);
@@ -171,7 +172,7 @@ export default function OrchestratorPage() {
         if (!current()) return;
         failures += 1;
         const stopped = failures >= POLL_MAX_FAILURES;
-        setPollError({ message: error?.message || "알 수 없는 오류", stopped });
+        setPollError({ message: alertText(error, null), stopped });
         addConsoleLog(`WARN: 학습 상태 확인 실패 (${failures}/${POLL_MAX_FAILURES}) — ${jobId}: ${error?.message ?? "알 수 없는 오류"}`, false, true);
         if (!stopped) jobTimer.current = setTimeout(tick, JOB_POLL_MS);
         // 멈춘 뒤에는 행 [실행] 잠금의 원천(catalog.jobs)을 서버 기준으로 한 번 맞춘다.
@@ -199,7 +200,7 @@ export default function OrchestratorPage() {
       await reloadCatalog();
     } catch (error) {
       if (!mounted.current) return;
-      setFeedback(error.status === 409 ? "선택한 모델의 학습이 진행 중입니다." : error.message || "학습데이터를 확인하세요.");
+      setFeedback(error.status === 409 ? "선택한 모델의 학습이 진행 중입니다." : alertText(error, "파이프라인을 실행하지 못했습니다. 학습데이터를 확인한 뒤 다시 시도하세요."));
       addConsoleLog(`WARN: 파이프라인 실행 실패 — ${error.message ?? "알 수 없는 오류"}`, false, true);
     } finally { if (mounted.current) setBusy(false); }
   }, [locked, addConsoleLog, reloadCatalog, pollJob]);
@@ -223,7 +224,7 @@ export default function OrchestratorPage() {
       setVersionResult({ origin, ok: true, message });
       addConsoleLog(`INFO: ${rollback ? "이전 버전 복원" : "버전 활성화"} — ${version.id}`);
     } catch (error) {
-      const message = error.message || "학습 결과를 확인하세요.";
+      const message = alertText(error, "학습 결과를 확인한 뒤 다시 시도하세요.");
       addConsoleLog(`WARN: ${rollback ? "복원" : "활성화"} 실패 — ${error.message ?? "알 수 없는 오류"}`, false, true);
       if (!mounted.current) return;
       setFeedback(message);

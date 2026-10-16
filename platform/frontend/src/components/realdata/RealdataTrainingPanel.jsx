@@ -6,6 +6,7 @@
 import { useState } from "react";
 import Card from "../Card.jsx";
 import { apiGet, apiSend } from "../../lib/api.js";
+import { alertText } from "../../lib/alertText.js";
 import { JOB_STATE_NAMES, TARGET_LABELS, cardPipelineId, datasetMatchesInstance, typeName, versionStatus } from "../../lib/modelops.js";
 import { getRealdataToken } from "./realdataClient.jsx";
 
@@ -56,7 +57,10 @@ export default function RealdataTrainingPanel({ catalog, versions, demoVisible, 
       await onReload();
       setSelectedDatasetId(registered.id);
       onLog(`INFO: 학습데이터 스냅샷 등록 — ${registered.id} (${registered.observed_from}~${registered.observed_to})`);
-    } catch (err) { setError(err.message || "스냅샷 생성에 실패했습니다."); }
+    } catch (err) {
+      setError(alertText(err, "스냅샷을 만들지 못했습니다. 잠시 뒤 다시 시도하세요."));
+      onLog(`WARN: 학습데이터 스냅샷 생성 실패 — ${err?.message ?? err}`);
+    }
     finally { setWorking(null); }
   };
 
@@ -79,7 +83,10 @@ export default function RealdataTrainingPanel({ catalog, versions, demoVisible, 
         await onReload();
       }
       await onRunPipeline(pipeline);
-    } catch (err) { setError(err.status === 409 ? "이미 활성 학습 작업이 있습니다." : err.message || "학습 실행 요청 실패"); }
+    } catch (err) {
+      setError(err.status === 409 ? "이미 활성 학습 작업이 있습니다." : alertText(err, "학습을 실행하지 못했습니다. 잠시 뒤 다시 시도하세요."));
+      onLog(`WARN: 학습 카드 실행 실패 — ${err?.message ?? err}`);
+    }
     finally { setWorking(null); }
   };
 

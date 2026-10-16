@@ -26,6 +26,7 @@ import RealdataEvaluationPanel from "../components/realdata/RealdataEvaluationPa
 import { getRealdataToken } from "../components/realdata/realdataClient.jsx";
 import SourceChip from "../components/SourceChip.jsx";
 import { apiGet, apiSend } from "../lib/api.js";
+import { alertText } from "../lib/alertText.js";
 
 // 데모 분포 표시 대상 — 인구이동 예측 모델(백엔드 시드 id).
 // PSI·이상값·예측 지연 값 자체는 이 모델 하나만 관측한다(대상 모델 선택과 무관, 값 확장은 별도 결정 사항).
@@ -252,7 +253,7 @@ export default function MonitorPage() {
         if (!isCurrent()) return;
         setMetricsResp(null);
         setShapResp(null);
-        setMonitoringError(err?.message ?? "모니터링 서버에 연결할 수 없습니다.");
+        setMonitoringError(alertText(err, "모니터링 서버에 연결할 수 없습니다."));
         addConsoleLog(`ERROR: 모니터링 지표 로드 실패 — ${err?.message ?? "알 수 없는 오류"}`);
       })
       .finally(() => {

@@ -3,12 +3,13 @@ import Card from "./Card.jsx";
 import { apiGet, apiSend } from "../lib/api.js";
 import { getRealdataToken } from "./realdata/realdataClient.jsx";
 import { useAppState } from "../context/AppStateContext.jsx";
+import { alertText } from "../lib/alertText.js";
 import { datasetRegionName } from "../lib/modelops.js";
 
 const TARGET_NAMES = { nonlocal_visitors: "타지역 방문객", observed_sales_krw: "관측 소비", population_change_pct: "인구 변화율" };
 
 export default function TrainingDatasetRegistration() {
-  const { appData, mockDataVisible } = useAppState();
+  const { appData, mockDataVisible, addConsoleLog } = useAppState();
   const [available, setAvailable] = useState([]);
   const [datasets, setDatasets] = useState([]);
   const [sourceId, setSourceId] = useState("");
@@ -43,7 +44,10 @@ export default function TrainingDatasetRegistration() {
       await load();
       setName("");
       setFeedback("학습데이터를 등록했습니다. 오케스트레이터에서 파이프라인을 연결하세요.");
-    } catch (error) { setFeedback(error.message || "학습데이터를 확인한 뒤 다시 등록하세요."); }
+    } catch (error) {
+      setFeedback(alertText(error, "학습데이터를 등록하지 못했습니다. 확인한 뒤 다시 등록하세요."));
+      addConsoleLog(`WARN: 학습데이터 등록 실패 — ${error?.message ?? error}`, false, true);
+    }
     finally { setBusy(false); }
   };
   // 학습 자산은 모드별로 분리돼 데모 표시의 목록은 전부 예시다("데모 포함"이 아니라 "데모").

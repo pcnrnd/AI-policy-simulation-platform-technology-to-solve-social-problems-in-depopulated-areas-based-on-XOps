@@ -7,6 +7,7 @@ import { MOCK_DATA_STORAGE_KEY, readMockDataVisible } from "../lib/demoVisibilit
 import { consumeSessionExpired } from "../lib/sessionGate.js";
 import { retainRealAlerts, retainModeIndependentAlerts, notificationFromAlert, unreadNotifications, detectDemoDrift } from "../lib/demoAlerts.js";
 import { setDataMode, dataModeEpoch, modeSwitchLog } from "../lib/dataMode.js";
+import { alertText } from "../lib/alertText.js";
 import { getRealdataToken } from "../components/realdata/realdataClient.jsx";
 
 const AppStateContext = createContext(null);
@@ -456,8 +457,9 @@ export function AppStateProvider({ children }) {
         }
       } catch (err) {
         if (requestId !== pipelineRequestRef.current) return;
-        const reason = err?.message ?? "백엔드 응답을 받지 못했습니다.";
-        addConsoleLog(`ERROR: 오케스트레이션 이벤트 실패 — ${reason}`);
+        // 원문은 활동 로그에만, 알림·결과에는 사용자 문구만 둔다.
+        const reason = alertText(err, "백엔드 응답을 받지 못했습니다.");
+        addConsoleLog(`ERROR: 오케스트레이션 이벤트 실패 — ${err?.message ?? reason}`);
         setPipelineResult({ state: "failed", reason });
         setPipelineStep(1);
         setPipelineRunning(false);
