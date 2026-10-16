@@ -14,6 +14,8 @@
 
 새 기록은 모드+종류+ID로 분리한 `mo_assets`에 추가한다. private 학습 입력과 아티팩트는 app model storage 아래 modelops/mock 또는 modelops/real 경로에 저장하며 Git 추적 대상이 아니다. real 학습은 등록본의 관측행과 기존 Ridge·순차 평가 함수를 사용하고, mock 학습은 seed 지역 시계열과 교차 검증을 사용한다. 실패를 다른 모드의 수치로 대체하지 않는다.
 
+mock 원본에는 지역마다 데모 요인 패널(`mock_factor_<지역>`, target `living_population`)도 있다. `src/modelops/factor_panel.py`가 seed 인구 추이를 바탕으로 결정적으로 생성하는 합성값(2015-01~2024-12 월 120행, 인구 구조·시설 지표 9개)이며 실제 관측이 아니다. 이 등록본은 앞 108개월로 학습해 마지막 12개월로 검증하고, 기준선은 전년 같은 달 관측값(`same_month_last_year`)이다. 추론 입력은 마지막 관측월 행이고 기여도의 `feature`는 패널 변수 키다.
+
 ## Phase C에서 사용할 버전 인터페이스
 
 `GET /modelops/instances/{id}/versions`는 버전 id, instance_id, model_type, mode/source, region_id, target, dataset_id/hash, source_dataset_id, observed_from/to, features, job_id, metrics/baseline, artifact_path/hash, created_at, status(active/previous/candidate)를 반환한다.

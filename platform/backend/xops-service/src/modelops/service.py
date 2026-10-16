@@ -11,7 +11,7 @@ from fastapi import HTTPException
 from src.core.settings import get_settings
 from src.mlops.training.dataset import build_dataset
 from src.mlops.training.model import RidgeRegressor
-from src.modelops import datasets, store
+from src.modelops import datasets, factor_panel, store
 from src.realdata import evaluate, models, snapshot
 
 _guard = threading.Lock()
@@ -60,6 +60,8 @@ def _train(mode: str, dataset: dict[str, Any], document: dict[str, Any], version
         outcome = models.train(record.model_id, record.dataset_id, version_id, dataset=record)
         artifact = json.loads(Path(outcome.artifact_path).read_text(encoding="utf-8"))
         return artifact, outcome.metrics, outcome.baseline
+    if "panel" in document:  # 데모 요인 패널(이름 있는 변수) — 기존 지역 인구 추이 등록본은 아래 경로 그대로
+        return factor_panel.train(document["panel"]["rows"])
     training = build_dataset([document["region"]], horizon=1, max_lag=2, decline_threshold_pct=1.0)
     if len(training.rows) < 3:
         raise HTTPException(400, "학습에 필요한 관측 기간을 확인하세요.")
