@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
+import { readFileSync, readdirSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { setDataMode, beginDataRequest, dataModeEpoch, scenarioStorageKey, modeBadge, modeSwitchLog, sourceChipText } from "./dataMode.js";
-import { REAL_GUIDE_TEXT, REAL_CONTROLS_LOCK_TEXT, REAL_DIAGNOSIS_NOTE, realUnavailableText } from "./realSimulation.js";import { fetchReportData } from "./dataopsApi.js";
+import { REAL_GUIDE_TEXT, REAL_CONTROLS_LOCK_TEXT, FACTOR_GUIDE_TEXT, FACTOR_PENDING_TEXT, realUnavailableText } from "./realSimulation.js";import { fetchReportData } from "./dataopsApi.js";
+import { alertText } from "./alertText.js";
 import { buildReportBlocks, buildReportRows } from "./reportContent.js";
 setDataMode("real");
 const request = beginDataRequest();
@@ -38,6 +42,26 @@ assert.equal(sourceChipText(false, undefined, "실데이터 · 등록본"), "실
 const FORBIDDEN = /mock|seed|시드|경로|modelops|\/api\/|정책 변수|VITE_|_KEY/i;
 const shown = [true, false].flatMap((on) => [modeBadge(on).text, modeBadge(on).title, modeSwitchLog(on),
   ...["mock", "api", "realdata"].map((src) => sourceChipText(on, src)).filter(Boolean)]);
-const guides = [REAL_GUIDE_TEXT, realUnavailableText("문제 유형 진단은"), REAL_CONTROLS_LOCK_TEXT, REAL_DIAGNOSIS_NOTE];
+const guides = [REAL_GUIDE_TEXT, realUnavailableText("지자체 비교 분포는"), REAL_CONTROLS_LOCK_TEXT, FACTOR_GUIDE_TEXT, FACTOR_PENDING_TEXT];
 for (const text of [...shown, ...guides]) assert.doesNotMatch(text, FORBIDDEN, text);
-console.log("dataMode: 전환 요청 취소·epoch 격리·추천 저장키·mock 보고서 실측 호출 0·real 보고서 시드 값 차단·모드 배지·출처 칩·화면 문구 금지어 PASS");
+// 알림 문구: 서버·브라우저 원문은 고정 문구로, 사용자용 한글 안내(4xx·화면 코드)는 그대로
+const FALLBACK = "잠시 뒤 다시 시도하세요.";
+const httpError = (status, message) => Object.assign(new Error(message), { status });
+assert.equal(alertText(httpError(500, "HTTP 500"), FALLBACK), FALLBACK);
+assert.equal(alertText(new TypeError("Failed to fetch"), FALLBACK), FALLBACK);
+assert.equal(alertText(new DOMException("signal timed out", "TimeoutError"), FALLBACK), FALLBACK);
+assert.equal(alertText(httpError(503, "서버 점검 중입니다."), FALLBACK), FALLBACK);
+assert.equal(alertText(httpError(422, "[object Object]"), FALLBACK), FALLBACK);
+assert.equal(alertText(httpError(400, "Value error, 입력값을 확인하세요"), FALLBACK), FALLBACK);
+assert.equal(alertText(new Error("RuntimeError: 학습 실패"), FALLBACK), FALLBACK);
+assert.equal(alertText(httpError(409, "데이터가 갱신됐습니다. 목록을 다시 확인하세요."), FALLBACK), "데이터가 갱신됐습니다. 목록을 다시 확인하세요.");
+assert.equal(alertText(new Error("파이프라인 ID를 입력하세요."), FALLBACK), "파이프라인 ID를 입력하세요.");
+assert.equal(alertText(undefined, null), null);
+// 화면 상태(오류·피드백·결과 문구)에 오류 원문을 직접 넣는 코드가 없다(리포터 탭은 담당 범위 밖이라 제외).
+const srcRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
+const RAW_INTO_STATE = /set\w*(?:Error|Feedback|Result)\([^;]*\b(?:err|error)\??\.message|message: `[^`]*\$\{(?:err|error)\??\.message/;
+const rawHits = readdirSync(srcRoot, { recursive: true })
+  .filter((file) => /\.jsx?$/.test(file) && !/ReporterPage\.jsx$/.test(file))
+  .flatMap((file) => readFileSync(join(srcRoot, file), "utf-8").split("\n").filter((line) => RAW_INTO_STATE.test(line)).map((line) => `${file}: ${line.trim()}`));
+assert.deepEqual(rawHits, []);
+console.log("dataMode: 전환 요청 취소·epoch 격리·추천 저장키·mock 보고서 실측 호출 0·real 보고서 시드 값 차단·모드 배지·출처 칩·화면 문구 금지어·알림 원문 차단 PASS");

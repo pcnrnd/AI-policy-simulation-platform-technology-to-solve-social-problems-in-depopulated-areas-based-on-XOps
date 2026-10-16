@@ -2,14 +2,11 @@ import assert from "node:assert/strict";
 import { readFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { activeModelPair, matchingFlowBasis, inferenceRequest, validateInference, rankSensitivity, observedFeatureLabel, createRequestGate,
-  contributionFactors, contributionSplit, realSliderControls, forecastSeries, sensitivityRecommendation, regionRealStatus, REAL_ANALYSIS_STEPS } from "./realSimulation.js";
+import { activeModelPair, inferenceRequest, validateInference, rankSensitivity, observedFeatureLabel, createRequestGate,
+  contributionFactors, contributionSplit, realSliderControls, forecastSeries, sensitivityRecommendation, regionRealStatus,
+  REAL_GUIDE_TEXT, FACTOR_GUIDE_TEXT, FACTOR_PENDING_TEXT, FACTOR_RUN_LOCK_TEXT, REAL_LOAD_FAILED_TEXT, REAL_PREDICT_FAILED_TEXT, REAL_VERSION_CHANGED_TEXT } from "./realSimulation.js";
 const proof={instance_id:"factor",model_type:"factor_analysis",version_id:"v1",job_id:"job1",dataset_id:"registered1",dataset_hash:"a".repeat(64),region_id:"namwon",target:"observed_sales_krw",dong_code:"45190250",prediction_period:202401,features:["y_lag1"],mode:"real",source:"real"};
-const factor={provenance:proof};
 const sim={provenance:{...proof,instance_id:"sim",model_type:"simulation",dataset_id:"registered2",version_id:"v2",job_id:"job2"}};
-assert.equal(matchingFlowBasis(factor,sim),true);
-assert.equal(matchingFlowBasis(factor,{provenance:{...sim.provenance,dataset_hash:"b".repeat(64)}}),false);
-assert.equal(matchingFlowBasis(factor,{provenance:{...sim.provenance,dong_code:"other"}}),false);
 const request=inferenceRequest(sim,{y_lag1:100});
 assert.equal(request.dataset_id,"registered2");assert.equal(request.dataset_hash,proof.dataset_hash);assert.deepEqual(request.adjustments,{y_lag1:100});
 const result={provenance:sim.provenance,inference_id:"inference_new",intercept:10,prediction:30,baseline_prediction:25,delta:5,contributions:[{feature:"y_lag1",value:20}],recommendations:[
@@ -42,7 +39,9 @@ const factors=contributionFactors(analysis,label);
 assert.deepEqual(factors.map((row) => row.feature),["y_lag2","y_lag1","dong_45190250"]);
 assert.deepEqual(factors.map((row) => row.direction),["-","+","+"]);
 assert.equal(factors[2].label,"행정동: 운봉읍");
-assert.deepEqual(contributionSplit(analysis,label),{positive:["전월 관측 소비"],negative:["2개월 전 관측 소비"]});
+const split=contributionSplit(analysis,label);
+assert.deepEqual([split.positive.map((row) => row.label),split.negative.map((row) => row.label)],[["전월 관측 소비"],["2개월 전 관측 소비"]]);
+assert.deepEqual([split.positive[0].value,split.negative[0].value],[2,-9]);
 assert.deepEqual(contributionSplit(null,label),{positive:[],negative:[]});
 const sliders=realSliderControls({controls:[{feature:"y_lag1",min:1000,max:3730,default:2000},{feature:"y_yoy",min:5,max:5,default:5}],inputs:{}},label,"원");
 assert.deepEqual([sliders[0].min,sliders[0].max,sliders[0].default,sliders[0].step,sliders[0].unit,sliders[0].locked],[1000,3730,2000,27,"원",false]);
@@ -60,7 +59,15 @@ const statusCatalog={instances:[{mode:"real",region_id:"namwon",target:"observed
 assert.match(regionRealStatus(statusCatalog,"namwon","observed_sales_krw"),/준비됨/);
 assert.equal(regionRealStatus(statusCatalog,"namwon","nonlocal_visitors"),"실데이터 모델 없음");
 assert.equal(regionRealStatus(statusCatalog,"shinan","observed_sales_krw"),"실데이터 모델 없음");
-assert.equal(REAL_ANALYSIS_STEPS.length,4);
+// ③·④는 요인분석 모델과 무관 — 시뮬레이션 활성 버전만 있어도 준비됨, 요인분석만 있으면 없음.
+assert.match(regionRealStatus({instances:[statusCatalog.instances[1]]},"namwon","observed_sales_krw"),/준비됨/);
+assert.equal(regionRealStatus({instances:[statusCatalog.instances[0]]},"namwon","observed_sales_krw"),"실데이터 모델 없음");
+// 안내·알림 문구에 내부 사유·구현명·서버/브라우저 원문 금지
+const INTERNAL=/세종대|미수신|릿지|ridge|lag|XGBoost|SHAP|HTTP|fetch|Failed|Error|mock|seed|시드|modelops|\/api\//i;
+const guideTexts=[REAL_GUIDE_TEXT,FACTOR_GUIDE_TEXT,FACTOR_PENDING_TEXT,FACTOR_RUN_LOCK_TEXT,REAL_LOAD_FAILED_TEXT,REAL_PREDICT_FAILED_TEXT,REAL_VERSION_CHANGED_TEXT];
+for (const text of guideTexts) assert.doesNotMatch(text,INTERNAL,text);
+assert.match(REAL_GUIDE_TEXT,/시뮬레이션 활성 모델이 없습니다/);
+assert.match(REAL_VERSION_CHANGED_TEXT,/^활성 버전이 바뀌었습니다/);
 // 구조 가드 — 시뮬레이터는 모드별 다른 컴포넌트를 띄우지 않는다(한 구조, 모드는 데이터만 바꾼다).
 const here=dirname(fileURLToPath(import.meta.url));
 const page=readFileSync(join(here,"..","pages","SimulatorPage.jsx"),"utf-8");
@@ -81,4 +88,23 @@ assert.deepEqual(modeBranchComponents(page),[]);
 assert.deepEqual(modeBranchComponents("const demo = mockDataVisible; return demo ? <MockPage /> : <RealFlow />;"),["MockPage"]);
 assert.deepEqual(modeBranchComponents("const { mockDataVisible: isReal } = s; return isReal ? null : <RealFlow />;"),["RealFlow"]);
 assert.deepEqual(modeBranchComponents("const mock = mockDataVisible; return <>{mock && <MockPanel />}</>;"),["MockPanel"]);
-console.log("realSimulation: 활성 2종 선택·내용 hash/좌표 연결·추론 합계·근거 전달·관측 민감도 순위·4단계 화면 매핑·모드 분기 없음 PASS");
+// ①·② 카드 제목은 두 모드가 같다(기준선 제목) — view 가 제목을 바꾸지 않고, 실데이터 전용 제목이 남지 않는다.
+const read=(...path) => readFileSync(join(here,"..",...path),"utf-8");
+const factorStage=read("components","FactorAnalysisStage.jsx"), resultStage=read("components","FactorResultStage.jsx");
+for (const title of ["AI + 인구학적 요인 분석 결과","XAI · 딥러닝 예측 모델","통계적 모델 분석 결과"]) assert.match(factorStage,new RegExp(`card\\(\\d, "${title.replace(/[+.]/g,"\\$&")}"`));
+for (const title of ["상관관계 분석","문제 유형 진단 결과"]) assert.match(resultStage,new RegExp(`<Card title="${title}"`));
+for (const src of [factorStage,resultStage]) assert.doesNotMatch(src,/title=\{view|view\.cards\[index\]\.title|corrTitle/);
+for (const src of [page,factorStage,resultStage]) assert.doesNotMatch(src,/입력 지표 기여도 분석|"기여 방향"|"검증 결과"|title: "예측 모델"/);
+// 같은 컨트롤: 단계 칩·조건 select·실행 버튼은 두 모드 공용(실데이터는 실행만 aria-disabled + 사유 title).
+assert.match(page,/steps=\{ANALYSIS_STEPS\}/);
+assert.match(page,/conditions=\{conditions\}/);
+assert.match(page,/runLockTitle=\{demo \? null : FACTOR_RUN_LOCK_TEXT\}/);
+assert.match(factorStage,/aria-disabled=\{runLockTitle \? true : undefined\}/);
+// ③ 계산 근거는 "예측 입력 기여도"로 — "요인" 표현을 쓰지 않는다.
+const evidence=read("components","ModelEvidence.jsx");
+assert.match(evidence,/예측 입력 기여도/);assert.doesNotMatch(evidence,/요인/);
+// 알림(role=alert) 문구는 고정 문구만 — 훅이 오류 원문을 화면 상태에 넣지 않는다(원문은 log 로만).
+const hook=read("hooks","useRealSimulation.js");
+assert.doesNotMatch(hook,/set(?:Feedback|LoadFailed)\([^)]*(?:error|err)\b/);
+assert.doesNotMatch(hook,/runAnalysis|factor_analysis/);
+console.log("realSimulation: 활성 시뮬레이션 선택·추론 합계·근거 전달·관측 민감도 순위·③④ 독립·①② 제목 동일·안내/알림 금지어·모드 분기 없음 PASS");

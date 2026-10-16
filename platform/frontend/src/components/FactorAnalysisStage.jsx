@@ -7,8 +7,8 @@ import PendingData from "./PendingData.jsx";
 // UI(카드 구조)는 항상 노출하고, 데이터는 [요인분석 실행] 완료 후에만 공개한다.
 // 아래 시드 사례(region.case)는 데모 표시 전용이고, 실데이터 표시는 view 로 같은 자리를 채운다.
 //
-// 두 모드가 같은 실행 바·카드 3개·근거 자리를 쓴다.
-// view(실데이터 표시): { sub, runInfo, cards: [{ title, body }] × 3 } — 주어지면 카드 제목·내용을 그것으로 채운다.
+// 두 모드가 같은 실행 바·카드 3개(제목 동일)·근거 자리를 쓴다.
+// view(실데이터 표시): { sub, runInfo, cards: [body] × 3 } — 주어지면 카드 내용을 그것으로 채운다(제목은 그대로).
 // conditions·evidence: 두 모드 공통 컨트롤(학습 대상·행정동 select, 계산 근거)을 호출부가 넘긴다.
 // runLockTitle: 실행할 수 없을 때의 사유 — 버튼은 aria-disabled 로 남고 클릭은 호출부가 막는다.
 export default function FactorAnalysisStage({
@@ -29,9 +29,9 @@ export default function FactorAnalysisStage({
   const ai = c.aiModel ?? {};
   const running = status === "running";
   const done = status === "done";
-  const card = (index, fallbackTitle, demoBody) => (
-    <Card title={view ? view.cards[index].title : fallbackTitle} icon={DEMO_CARD_ICONS[index]} dataSource={view ? "api" : "mock"} sourceLabel={view?.sourceLabel} data-slot={`sim.factor.card-${index + 1}`}>
-      {view ? view.cards[index].body : done ? demoBody : <PendingData running={running} />}
+  const card = (index, title, demoBody) => (
+    <Card title={title} icon={DEMO_CARD_ICONS[index]} dataSource={view ? "api" : "mock"} data-slot={`sim.factor.card-${index + 1}`}>
+      {view ? view.cards[index] : done ? demoBody : <PendingData running={running} />}
     </Card>
   );
 

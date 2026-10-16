@@ -19,12 +19,6 @@ export function activeModelPair(catalog, region, target) {
   return { factor: candidates.find((row) => row.model_type === "factor_analysis" && row.active_version),
     simulation: candidates.find((row) => row.model_type === "simulation" && row.active_version) };
 }
-export function matchingFlowBasis(factor, simulation) {
-  const a = factor?.provenance, b = simulation?.provenance;
-  return Boolean(a && b && a.model_type === "factor_analysis" && b.model_type === "simulation" &&
-    ["mode", "source", "region_id", "target", "dataset_hash", "prediction_period", "dong_code"].every((key) => a[key] === b[key]) &&
-    a.mode === "real" && JSON.stringify(a.features) === JSON.stringify(b.features));
-}
 export function inferenceRequest(context, changes = {}) {
   const p = context.provenance;
   return { region_id: p.region_id, target: p.target, dataset_id: p.dataset_id, dataset_hash: p.dataset_hash,
@@ -55,35 +49,35 @@ export function rankSensitivity(result) {
 }
 
 // ── 시뮬레이터 4단계 화면(실데이터 표시)용 문구·매핑 ──
-// 실데이터가 없을 때 같은 자리에 두는 행동 안내. G1 = 준비 가능, G2 = 실데이터 항목 없음.
-export const REAL_GUIDE_TEXT = "이 지역·학습 대상의 활성 모델이 없습니다. DataOps에서 학습데이터를 등록하고 오케스트레이터에서 요인분석·시뮬레이션 모델을 학습·활성화하세요.";
+// 실데이터가 없을 때 같은 자리에 두는 행동 안내. G1 = 준비 가능(③·④는 시뮬레이션 모델 기준), G2 = 실데이터 항목 없음.
+export const REAL_GUIDE_TEXT = "이 지역·학습 대상의 시뮬레이션 활성 모델이 없습니다. DataOps에서 학습데이터를 등록하고 오케스트레이터에서 시뮬레이션 모델을 학습·활성화하세요.";
 // subject 는 조사까지 포함한다(예: "문제 유형 진단은", "지자체 비교 분포는").
 export const realUnavailableText = (subject) => `${subject} 실데이터로 아직 제공되지 않습니다. 설정에서 데모 데이터 표시를 켜면 예시를 볼 수 있습니다.`;
-export const REAL_DIAGNOSIS_NOTE = "문제 유형 진단은 실데이터로 아직 제공되지 않습니다. 실데이터 결과는 STAGE ① 입력 지표 기여도에서 확인하세요. 설정에서 데모 데이터 표시를 켜면 예시를 볼 수 있습니다.";
 export const REAL_CONTROLS_LOCK_TEXT = "예산·정책 강조 가중치는 데모 데이터 시뮬레이션에서 조정합니다. 실데이터에서는 아래 관측 입력을 조정하세요.";
-// 요인분석 실행 단계 — 데모 4단계와 같은 자리, 실제 비동기 진행에 맞춰 바뀐다.
-export const REAL_ANALYSIS_STEPS = [
-  { key: "inputs", label: "등록 학습데이터 확인", icon: "fa-database" },
-  { key: "predict", label: "활성 모델 추론", icon: "fa-microchip" },
-  { key: "contrib", label: "입력 기여도 분해", icon: "fa-magnifying-glass-chart" },
-  { key: "verify", label: "검증 지표 확인", icon: "fa-layer-group" }
-];
+// STAGE ①·② 요인분석 자리 — 요인분석 학습데이터가 등록되기 전까지 실데이터 표시는 안내만 둔다(전문은 한 곳, 나머지는 한 줄).
+export const FACTOR_GUIDE_TEXT = "요인분석은 인구 구조·시설 지표 학습데이터를 등록한 뒤 제공됩니다. DataOps에서 요인분석용 학습데이터를 등록하고 오케스트레이터에서 요인분석 모델을 학습·활성화하세요.";
+export const FACTOR_PENDING_TEXT = "요인분석 학습데이터 등록 후 표시";
+export const FACTOR_RUN_LOCK_TEXT = "요인분석 학습데이터를 등록한 뒤 실행할 수 있습니다.";
+// 알림(role=alert) 고정 문구 — 서버·브라우저 원문은 활동 로그에만 남긴다.
+export const REAL_LOAD_FAILED_TEXT = "모델 정보를 불러오지 못했습니다. 잠시 뒤 다시 시도하세요.";
+export const REAL_PREDICT_FAILED_TEXT = "예측을 계산하지 못했습니다. 입력을 다시 조정하거나 잠시 뒤 다시 시도하세요.";
+export const REAL_VERSION_CHANGED_TEXT = "활성 버전이 바뀌었습니다. 새 활성 버전의 관측 입력으로 예측을 다시 계산합니다.";
 
 export const targetUnit = (target) => target === "observed_sales_krw" ? "원" : "명";
 export const formatValue = (value) => Number.isFinite(value) ? value.toLocaleString("ko-KR", { maximumFractionDigits: 3 }) : "—";
 export const formatMonth = (value) => value ? `${String(value).slice(0, 4)}-${String(value).slice(4)}` : "—";
 
-/** 요인분석 기여도 → |값| 내림차순 목록(부호는 direction). */
-export function contributionFactors(analysis, label) {
-  return [...(analysis?.contributions ?? [])]
+/** 예측 입력 기여도 → |값| 내림차순 목록(부호는 direction). */
+export function contributionFactors(result, label) {
+  return [...(result?.contributions ?? [])]
     .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
     .map((row) => ({ feature: row.feature, label: label(row.feature), direction: row.value < 0 ? "-" : "+", input: row.input, value: row.value }));
 }
 
-/** 예측을 높인 입력 / 낮춘 입력. 기여 0은 어느 쪽에도 넣지 않는다. */
-export function contributionSplit(analysis, label) {
-  const rows = contributionFactors(analysis, label);
-  return { positive: rows.filter((row) => row.value > 0).map((row) => row.label), negative: rows.filter((row) => row.value < 0).map((row) => row.label) };
+/** 예측을 높인 입력 / 낮춘 입력(|값| 내림차순 행). 기여 0은 어느 쪽에도 넣지 않는다. */
+export function contributionSplit(result, label) {
+  const rows = contributionFactors(result, label);
+  return { positive: rows.filter((row) => row.value > 0), negative: rows.filter((row) => row.value < 0) };
 }
 
 // 범위/100을 유효숫자 2자리로 — 슬라이더 한 칸.
@@ -132,9 +126,9 @@ export function sensitivityRecommendation(ranking, label, unit, targetName) {
   };
 }
 
-/** 지역 목록 메타 — 같은 지역·학습 대상의 활성 요인분석·시뮬레이션이 모두 있으면 준비됨. */
+/** 지역 목록 메타 — 같은 지역·학습 대상의 활성 시뮬레이션 모델이 있으면 준비됨(③·④는 요인분석 모델과 무관). */
 export function regionRealStatus(catalog, regionId, target) {
-  const rows = (catalog?.instances ?? []).filter((row) => row.mode === "real" && row.region_id === regionId && row.target === target && row.active_version);
-  const ready = ["factor_analysis", "simulation"].every((type) => rows.some((row) => row.model_type === type));
-  return ready ? "실데이터 모델 준비됨 (요인분석·시뮬레이션 활성)" : "실데이터 모델 없음";
+  const ready = (catalog?.instances ?? []).some((row) => row.mode === "real" && row.region_id === regionId && row.target === target &&
+    row.model_type === "simulation" && row.active_version);
+  return ready ? "실데이터 시뮬레이션 모델 준비됨" : "실데이터 모델 없음";
 }
