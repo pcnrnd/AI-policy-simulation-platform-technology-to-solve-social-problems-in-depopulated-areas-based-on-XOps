@@ -16,6 +16,7 @@ from src.realdata import evaluate, models, snapshot
 
 _guard = threading.Lock()
 _locks: dict[tuple[str, str], threading.Lock] = {}
+_register_lock = threading.Lock()  # 파이프라인 ID 확인과 저장 사이 경합을 막는다(단일 서버 프로세스 기준)
 
 
 def instances(mode: str) -> list[dict[str, Any]]:
@@ -41,7 +42,16 @@ def register_instance(mode: str, body: dict[str, Any], actor: str) -> dict[str, 
 
 
 def register_pipeline(mode: str, body: dict[str, Any], actor: str) -> dict[str, Any]:
-    if any(row["id"] == body["id"] for row in store.list_assets(mode, "pipeline")):
+    with _register_lock:
+        return _register_pipeline(mode, body, actor)
+
+
+def _register_pipeline(mode: str, body: dict[str, Any], actor: str) -> dict[str, Any]:
+    existing = next((row for row in store.list_assets(mode, "pipeline") if row["id"] == body["id"]), None)
+    if existing is not None:
+        # 같은 ID·같은 정의(종류·학습데이터·해시)의 재등록은 기존 파이프라인을 돌려준다(동시 첫 실행). 정의가 다르면 충돌이다.
+        if all(existing.get(key) == body[key] for key in ("model_type", "dataset_id", "dataset_hash")):
+            return existing
         raise HTTPException(409, "이미 등록된 파이프라인 ID입니다.")
     dataset, _ = datasets.load(mode, body["dataset_id"], body["dataset_hash"])
     instance = register_instance(mode, body, actor)

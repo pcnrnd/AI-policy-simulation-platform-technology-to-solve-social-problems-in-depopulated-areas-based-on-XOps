@@ -4,6 +4,7 @@ import hashlib
 import json
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict
 from pathlib import Path
 
@@ -203,6 +204,35 @@ def test_duplicate_pipeline_does_not_create_extra_instance(client, auth_headers)
     body = {"id": p["id"], "name": "다른 모델", "model_type": "simulation", "dataset_id": ds["id"], "dataset_hash": ds["content_hash"]}
     assert client.post(BASE + "/pipelines", headers=h, json=body).status_code == 409
     assert client.get(BASE + "/catalog", headers=h).json()["instances"] == before
+
+
+def test_same_source_registration_and_same_pipeline_definition_are_reused(client, auth_headers):
+    # 두 화면이 동시에 첫 실행을 해도 같은 원천·해시는 등록본 1벌, 같은 ID·정의는 파이프라인 1벌이다.
+    h = headers(auth_headers, "mock")
+    first = register(client, auth_headers)
+    with ThreadPoolExecutor(4) as pool:
+        again = list(pool.map(lambda _: register(client, auth_headers), range(4)))
+    assert {row["id"] for row in again} == {first["id"]}
+    p = pipeline(client, auth_headers, first)
+    assert pipeline(client, auth_headers, first)["id"] == p["id"]
+    catalog = client.get(BASE + "/catalog", headers=h).json()
+    assert len(catalog["datasets"]) == 1 and len(catalog["pipelines"]) == 1 and len(catalog["instances"]) == 1
+    assert [row["action"] for row in catalog["audit"]].count("dataset_registered") == 1
+    # 등록본 파일이 손상되면 재사용하지 않고 새로 등록한다.
+    Path(first["private_path"]).write_text("{}", encoding="utf-8")
+    assert register(client, auth_headers)["id"] != first["id"]
+
+
+def test_factor_panel_registration_checks_row_count_and_continuous_period(client, auth_headers, monkeypatch):
+    from src.modelops import factor_panel
+    h = headers(auth_headers, "mock")
+    source = next(row for row in client.get(BASE + "/available-datasets", headers=h).json()["data"] if row["id"].startswith("mock_factor_"))
+    generate = factor_panel.generate
+    for broken in (lambda rows: rows[:-1], lambda rows: rows[:60] + rows[61:] + rows[-1:]):
+        monkeypatch.setattr(factor_panel, "generate", lambda region, broken=broken: broken(generate(region)))
+        monkeypatch.setattr("src.modelops.datasets._hash", lambda value: source["content_hash"])
+        response = client.post(BASE + "/datasets", headers=h, json={"name": "x", "source_dataset_id": source["id"], "source_hash": source["content_hash"]})
+        assert response.status_code == 400
 
 
 def test_pipeline_experiment_is_saved_and_bounded(client, auth_headers):
