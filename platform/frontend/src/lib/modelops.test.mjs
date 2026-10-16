@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { MODEL_TYPES, pipelineDefinition, datasetRegionName, versionsWithStatus, jobNodeStatuses, connectorStatusFrom, jobStatusLabel,
-  mergeRunHistory, jobLogLines, storeRows, lastJobOf, cardPipelineId, versionStatus, isLocked, jobLocks } from "./modelops.js";
+  mergeRunHistory, jobLogLines, storeRows, lastJobOf, cardPipelineId, versionStatus, isLocked, jobLocks,
+  instanceLabel, auditLogLines, auditTime } from "./modelops.js";
 const dataset = { id: "registered_real", content_hash: "a".repeat(64) };
 const form = { id: "PL_new", name: "등록 학습", model_type: "factor_analysis", dataset_id: dataset.id };
 assert.deepEqual(MODEL_TYPES.map((row) => row.id), ["factor_analysis", "simulation"]);
@@ -97,4 +101,26 @@ const cardId = cardPipelineId("simulation", "modelops_0123456789abcdef0123456789
 assert.equal(cardId, cardPipelineId("simulation", "modelops_0123456789abcdef0123456789abcdef"));
 assert.notEqual(cardId, cardPipelineId("factor_analysis", "modelops_0123456789abcdef0123456789abcdef"));
 assert.match(cardId, /^[A-Za-z0-9_-]{3,128}$/);
-console.log("modelops: 두 종류 제한·등록 데이터셋 ID/hash 전달·입력 차단·노드/이력/로그/저장소 매핑 PASS");
+
+// ⑥ 등록 모델 이름 — 종류·지역·학습 대상(학습 카드와 같은 문구), 데모 요인 패널 대상 포함
+const regionName = (id) => regions.find((row) => row.id === id)?.name ?? id;
+assert.equal(instanceLabel({ model_type: "factor_analysis", region_id: "namwon", target: "living_population" }, regionName), "요인분석 · 남원시 · 생활인구");
+assert.equal(instanceLabel({ model_type: "simulation", region_id: "shinan", target: "observed_sales_krw" }, regionName), "시뮬레이션 · 신안군 · 관측 소비");
+// ⑥ 최근 운영 기록 → 콘솔 줄: 서버 최신 순을 뒤집어 최신이 아래, 20건 제한, 수준·메시지 형식
+const auditRows = Array.from({ length: 25 }, (_, i) => ({ id: `a${i}`, created_at: new Date(2026, 9, 16, 14, 59 - i, 5).toISOString(),
+  action: i === 0 ? "version_activated" : i === 1 ? "training_failed" : "pipeline_registered", asset_id: `inst${i}`, actor: "rnd", ...(i === 0 ? { version_id: "v9", job_id: "j9" } : {}) }));
+const auditLines = auditLogLines(auditRows);
+assert.equal(auditLines.length, 20);
+assert.equal(auditLines.at(-1).message, "버전 활성화 — inst0 · 버전 v9 · 작업 j9 · rnd");
+assert.equal(auditLines.at(-1).level, "SUCCESS");assert.equal(auditLines.at(-2).level, "ERROR");assert.equal(auditLines[0].level, "INFO");
+assert.equal(auditLines.at(-1).time, "10-16 14:59:05");assert.equal(auditLines[0].time, "10-16 14:40:05");
+assert.equal(auditLogLines([{ action: "unknown", asset_id: "x", actor: "a", created_at: "bad" }])[0].message, "운영 기록 — x · a");
+assert.equal(auditTime("bad"), "bad");
+assert.deepEqual(auditLogLines(), []);
+// ⑥ 구조: 종류 카드 삭제, 운영 기록은 콘솔 패널, 카드 간격은 다른 카드와 같은 page-section
+const section = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "components", "ModelVersionSection.jsx"), "utf-8");
+assert.doesNotMatch(section, /MODEL_TYPES\.map|aria-label="모델 종류"|버전 보기|grid-cols-2|selectedType/);
+assert.equal(section.match(/<ConsoleLog /g)?.length, 1);
+assert.equal(section.match(/className="page-section/g)?.length, 2);
+assert.match(section, /instanceLabel\(row, regionName\)/);
+console.log("modelops: 두 종류 제한·등록 데이터셋 ID/hash 전달·입력 차단·노드/이력/로그/저장소 매핑·⑥ 운영 기록 콘솔·등록 모델 이름 PASS");

@@ -56,7 +56,6 @@ export default function OrchestratorPage() {
   const [pollError, setPollError] = useState(null); // { message, stopped } — 상태 폴링 실패(잠금 해제·다시 확인)
   const [selectedKey, setSelectedKey] = useState(null); // "modelops:<job>" | "legacy:<run>" — ②·⑤가 함께 본다
   const [legacyLogs, setLegacyLogs] = useState(null);
-  const [versionType, setVersionType] = useState("factor_analysis");
   const [versionInstanceId, setVersionInstanceId] = useState("");
   const [plPage, setPlPage] = useState(1);
   const [storePage, setStorePage] = useState(1);
@@ -166,7 +165,6 @@ export default function OrchestratorPage() {
           : `WARN: 학습 실패 — ${latest.id} (${latest.error ?? "원인 미기록"})`, false, latest.state === "failed");
         await reloadCatalog();
         if (!current()) return;
-        setVersionType(latest.model_type);
         setVersionInstanceId(latest.instance_id);
       } catch (error) {
         if (!current()) return;
@@ -616,18 +614,16 @@ export default function OrchestratorPage() {
         )}
       </Card>
 
-      <Card title="UI 활동 로그" icon="fa-list">
+      <Card title="UI 활동 로그" icon="fa-list" className="page-section">
         <ConsoleLog logs={consoleLogs} />
       </Card>
 
-      {/* ⑥ 모델 버전 관리 — 모델 종류별 등록 모델과 버전 활성화·이전 버전 복원 */}
+      {/* ⑥ 모델 버전 관리 — 등록 모델(종류·지역·학습 대상)별 버전 활성화·이전 버전 복원, 최근 운영 기록 */}
       <ModelVersionSection
         catalog={catalog}
         versions={versions}
         regionName={regionName}
         busy={locked}
-        selectedType={versionType}
-        onSelectType={setVersionType}
         instanceId={versionInstanceId}
         onSelectInstance={setVersionInstanceId}
         onActivate={(instanceId, version, rollback) => activate(instanceId, version, rollback, "versions")}

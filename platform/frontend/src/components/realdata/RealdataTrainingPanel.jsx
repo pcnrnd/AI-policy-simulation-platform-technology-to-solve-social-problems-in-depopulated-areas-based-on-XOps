@@ -7,7 +7,7 @@ import { useState } from "react";
 import Card from "../Card.jsx";
 import { apiGet, apiSend } from "../../lib/api.js";
 import { alertText } from "../../lib/alertText.js";
-import { JOB_STATE_NAMES, TARGET_LABELS, cardPipelineId, datasetMatchesInstance, typeName, versionStatus } from "../../lib/modelops.js";
+import { JOB_STATE_NAMES, cardPipelineId, datasetMatchesInstance, instanceLabel, typeName, versionStatus } from "../../lib/modelops.js";
 import { getRealdataToken } from "./realdataClient.jsx";
 
 const orDash = (v) => (v === null || v === undefined || v === "" ? "–" : v);
@@ -33,7 +33,6 @@ export default function RealdataTrainingPanel({ catalog, versions, demoVisible, 
   const candidates = versions.filter((row) => row.instance_id === instanceId);
   const instanceBusy = catalog.jobs.some((row) => row.instance_id === instanceId && (row.state === "queued" || row.state === "running"));
   const locked = busy || Boolean(working);
-  const instanceLabel = (row) => `${typeName(row.model_type)} · ${regionName(row.region_id)} · ${TARGET_LABELS[row.target] ?? row.target}`;
 
   const handleCreateSnapshot = async () => {
     if (!instance || locked) return;
@@ -121,7 +120,7 @@ export default function RealdataTrainingPanel({ catalog, versions, demoVisible, 
           <span>대상 모델</span>
           <select value={instanceId} onChange={(e) => { setSelectedInstanceId(e.target.value); setSelectedDatasetId(""); }} disabled={!catalog.instances.length}>
             {!catalog.instances.length && <option value="">등록된 모델 없음</option>}
-            {catalog.instances.map((row) => <option key={row.id} value={row.id}>{instanceLabel(row)}</option>)}
+            {catalog.instances.map((row) => <option key={row.id} value={row.id}>{instanceLabel(row, regionName)}</option>)}
           </select>
         </label>
 
