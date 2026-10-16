@@ -1,9 +1,10 @@
 import Card from "./Card.jsx";
 import ConsoleLog from "./ConsoleLog.jsx";
-import { TARGET_LABELS, auditLogLines, instanceLabel, typeName, versionStatus } from "../lib/modelops.js";
+import { TARGET_LABELS, auditLogLines, displayId, instanceLabel, typeName, versionStatus } from "../lib/modelops.js";
 
 const metric = (value) => Number.isFinite(value) ? value.toLocaleString("ko-KR", { maximumFractionDigits: 3 }) : "—";
 const head = (text, length) => <code title={text}>{String(text ?? "").slice(0, length)}</code>;
+const shortCode = (id) => <code title={id}>{displayId(id)}</code>;
 
 /**
  * 오케스트레이터 맨 아래 — 등록 모델(종류·지역·학습 대상)별 버전 활성화·이전 버전 복원과 최근 운영 기록.
@@ -27,12 +28,12 @@ export default function ModelVersionSection({ catalog, versions, regionName, bus
         </select></label>
       </div>
       {!selectedId && <p className="realdata-hint">학습데이터를 등록하고 파이프라인을 연결해 시작하세요.</p>}
-      {selectedInstance && <p className="realdata-hint">종류: {typeName(selectedInstance.model_type)} · 활성 버전: {selectedInstance.active_version ?? "—"} · 이전 버전: {selectedInstance.previous_version ?? "—"}</p>}
+      {selectedInstance && <p className="realdata-hint">종류: {typeName(selectedInstance.model_type)} · 활성 버전: {selectedInstance.active_version ? shortCode(selectedInstance.active_version) : "—"} · 이전 버전: {selectedInstance.previous_version ? shortCode(selectedInstance.previous_version) : "—"}</p>}
       {result && <p className={`async-feedback ${result.ok ? "is-success" : "is-error"}`} role={result.ok ? "status" : "alert"}>{result.message}</p>}
       <div className="table-container"><table><caption className="sr-only">선택한 모델의 학습 버전과 상태</caption>
         <thead><tr><th scope="col">버전</th><th scope="col">학습데이터·해시</th><th scope="col">지역·대상·기간</th><th scope="col" className="cell-num">MAE / 기준선</th><th scope="col">상태</th><th scope="col" className="cell-actions">동작</th></tr></thead>
-        <tbody>{rows.map((row) => <tr key={row.id}><td>{head(row.id, 20)}<div>학습: {head(row.job_id, 20)}</div></td>
-          <td>{head(row.dataset_id, 20)}<div>{head(row.dataset_hash, 12)}</div></td>
+        <tbody>{rows.map((row) => <tr key={row.id}><td>{shortCode(row.id)}<div>학습: {shortCode(row.job_id)}</div></td>
+          <td>{shortCode(row.dataset_id)}<div>{head(row.dataset_hash, 12)}</div></td>
           <td>{regionName(row.region_id)} · {TARGET_LABELS[row.target] ?? row.target}<div>{row.observed_from}~{row.observed_to}</div></td>
           <td className="cell-num">{metric(row.metrics.mae)} / {metric(row.baseline.mae)}</td>
           <td><span className="system-status" style={{ padding: "1px 8px", fontSize: 10, whiteSpace: "nowrap" }}>{versionStatus(row.status)}</span></td>

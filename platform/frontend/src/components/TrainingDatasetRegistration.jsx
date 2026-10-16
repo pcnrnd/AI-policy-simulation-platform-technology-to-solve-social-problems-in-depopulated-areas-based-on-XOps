@@ -37,12 +37,16 @@ export default function TrainingDatasetRegistration() {
     setFeedback(null);
     try {
       const token = await getRealdataToken();
-      await apiSend("POST", "/api/v3/modelops/datasets", { token, body: {
+      const registered = await apiSend("POST", "/api/v3/modelops/datasets", { token, body: {
         name: name.trim(), source_dataset_id: source.id, source_hash: source.content_hash
       } });
+      // 같은 원본·같은 내용은 서버가 기존 등록본을 돌려준다 — 새로 만든 것처럼 안내하지 않는다.
+      const reused = datasets.some((row) => row.id === registered.id);
       await load();
       setName("");
-      setFeedback("학습데이터를 등록했습니다. 오케스트레이터에서 파이프라인을 연결하세요.");
+      setFeedback(reused
+        ? `같은 내용의 학습데이터가 이미 등록되어 있습니다(${registered.name}). 오케스트레이터에서 그 학습데이터로 파이프라인을 연결하세요.`
+        : "학습데이터를 등록했습니다. 오케스트레이터에서 파이프라인을 연결하세요.");
     } catch (error) {
       setFeedback(alertText(error, "학습데이터를 등록하지 못했습니다. 확인한 뒤 다시 등록하세요."));
       addConsoleLog(`WARN: 학습데이터 등록 실패 — ${error?.message ?? error}`, false, true);

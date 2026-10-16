@@ -7,7 +7,7 @@ import { useState } from "react";
 import Card from "../Card.jsx";
 import { apiGet, apiSend } from "../../lib/api.js";
 import { alertText } from "../../lib/alertText.js";
-import { JOB_STATE_NAMES, cardPipelineId, datasetMatchesInstance, instanceLabel, typeName, versionStatus } from "../../lib/modelops.js";
+import { JOB_STATE_NAMES, cardPipelineId, datasetMatchesInstance, displayId, instanceLabel, typeName, versionStatus } from "../../lib/modelops.js";
 import { getRealdataToken } from "./realdataClient.jsx";
 
 const orDash = (v) => (v === null || v === undefined || v === "" ? "–" : v);
@@ -55,7 +55,7 @@ export default function RealdataTrainingPanel({ catalog, versions, demoVisible, 
       const registered = await apiSend("POST", "/api/v3/modelops/datasets", { token, body: { name: snapshotName(source), source_dataset_id: source.id, source_hash: source.content_hash } });
       await onReload();
       setSelectedDatasetId(registered.id);
-      onLog(`INFO: 학습데이터 스냅샷 등록 — ${registered.id} (${registered.observed_from}~${registered.observed_to})`);
+      onLog(`INFO: 학습데이터 스냅샷 등록 — ${displayId(registered.id)} (${registered.observed_from}~${registered.observed_to})`);
     } catch (err) {
       setError(alertText(err, "스냅샷을 만들지 못했습니다. 잠시 뒤 다시 시도하세요."));
       onLog(`WARN: 학습데이터 스냅샷 생성 실패 — ${err?.message ?? err}`);
@@ -111,7 +111,7 @@ export default function RealdataTrainingPanel({ catalog, versions, demoVisible, 
       sourceLabel={demoVisible ? "데모" : selectedDataset ? `실데이터 · ${selectedDataset.name}` : undefined}
       headerRight={
         <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
-          {demoVisible ? "데모 지역 시계열 · Ridge · 후보 승인 후 반영" : "남원 23동 실데이터 · Ridge 공동 학습 · 후보 승인 후 반영"}
+          {demoVisible ? "데모 지역 시계열 · 선형 회귀 · 후보 승인 후 반영" : "남원 23동 실데이터 · 선형 회귀 공동 학습 · 후보 승인 후 반영"}
         </span>
       }
     >

@@ -14,7 +14,7 @@ import { MODEL_REGISTRY } from "../constants/models.js";
 import { apiGet, apiSend } from "../lib/api.js";
 import { alertText } from "../lib/alertText.js";
 import {
-  JOB_STATE_NAMES, TARGET_LABELS, isLocked, jobLocks, jobLogLines, lastJobOf, mergeRunHistory, storeRows, typeName, versionsWithStatus
+  JOB_STATE_NAMES, TARGET_LABELS, displayId, isLocked, jobLocks, jobLogLines, lastJobOf, mergeRunHistory, storeRows, typeName, versionsWithStatus
 } from "../lib/modelops.js";
 
 const PAGE_SIZE = 5;
@@ -343,7 +343,7 @@ export default function OrchestratorPage() {
                     <td style={{ fontSize: 12 }}>
                       {typeName(p.model_type)} · {regionName(p.region_id)} · {TARGET_LABELS[p.target] ?? p.target}
                       <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
-                        활성 {orDash(instance?.active_version?.slice(0, 20) ?? "없음")} · {orDash(p.experiment)} · 학습데이터 {datasetName(p.dataset_id)}
+                        활성 <span title={instance?.active_version ?? undefined}>{instance?.active_version ? displayId(instance.active_version) : "없음"}</span> · {orDash(p.experiment)} · 학습데이터 {datasetName(p.dataset_id)}
                       </div>
                     </td>
                     <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>{orDash(p.trigger_policy)}</td>
@@ -505,11 +505,11 @@ export default function OrchestratorPage() {
                       <strong>{typeName(m.modelType)}</strong>
                       <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{regionName(m.regionId)} · {TARGET_LABELS[m.target] ?? m.target}</div>
                     </td>
-                    <td><code style={{ fontSize: 12, fontWeight: 600 }} title={m.version}>{m.version.slice(0, 16)}</code></td>
+                    <td><code style={{ fontSize: 12, fontWeight: 600 }} title={m.version}>{displayId(m.version)}</code></td>
                     <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>
                       {orDash(m.datasetName)}<div style={{ fontSize: 11 }} title={m.datasetHash}>{String(m.datasetHash ?? "").slice(0, 12)}</div>
                     </td>
-                    <td style={{ fontSize: 11, color: "var(--text-secondary)" }}>Ridge · 입력 피처 {m.featureCount}개</td>
+                    <td style={{ fontSize: 11, color: "var(--text-secondary)" }}>선형 회귀 · 입력 피처 {m.featureCount}개</td>
                     <td className="cell-num" style={{ fontWeight: 600 }}>MAE {metric(m.mae)} / {metric(m.baselineMae)}</td>
                     <td><span className="system-status" style={{ padding: "1px 8px", fontSize: 10, color: st.color, backgroundColor: st.bg }}>{st.label}</span></td>
                     <td style={{ fontSize: 11, color: "var(--text-muted)" }}>{orDash(day(m.createdAt))}</td>
@@ -574,7 +574,7 @@ export default function OrchestratorPage() {
                         <td style={{ fontSize: 12 }}>
                           {r.origin === "modelops" ? orDash(JOB_STATE_NAMES[r.state] ?? r.state) : orDash(LEGACY_RUN_STATE_LABEL[r.state] ?? r.state)}
                           <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
-                            {r.versionId ? `버전 ${r.versionId.slice(0, 20)}` : ""}
+                            {r.versionId ? <span title={r.versionId}>버전 {displayId(r.versionId)}</span> : ""}
                             {version ? ` · MAE ${metric(version.metrics?.mae)} / 기준선 ${metric(version.baseline?.mae)}` : ""}
                             {r.error ? ` · ${r.error}` : ""}
                           </div>
