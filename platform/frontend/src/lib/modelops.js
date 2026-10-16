@@ -1,17 +1,19 @@
+import { baselineName, formatUnitValue, targetUnit } from "./realSimulation.js";
+
 export const MODEL_TYPES = [{ id: "factor_analysis", name: "요인분석" }, { id: "simulation", name: "시뮬레이션" }];
 export const TARGET_LABELS = { nonlocal_visitors: "타지역 방문객", observed_sales_krw: "관측 소비", population_change_pct: "인구 변화율", living_population: "생활인구" };
 export const JOB_STATE_NAMES = { queued: "대기", running: "학습 중", saved: "등록 완료", failed: "실패" };
 export const EXPERIMENT_MAX = 64;
 /**
  * 화면용 짧은 ID — 서버·화면이 만든 버전·작업·등록본·카드 파이프라인 ID의 내부 접두사(modelops_·demo_factor_·
- * card-<종류>-)를 떼고 끝 6자만 "…881abc"처럼 보인다. 사용자가 지은 ID·과거 기록 ID·끝 조각이 짧은 ID는 그대로.
+ * card-<종류>-)를 떼고 끝 8자만 "…23456789"처럼 보인다(끝 조각이 6~7자면 그 전체). 사용자가 지은 ID·과거 기록 ID·끝 조각이 짧은 ID는 그대로.
  * 전체 ID는 title 로 함께 둔다(시뮬레이터·오케스트레이터 공용). ③ 계산 근거(ModelEvidence)만 전체 ID를 본문에 둔다.
  */
 const INTERNAL_ID = /^(?:modelops_|demo_factor_|card-[a-z_]+-)(.+)$/;
 export function displayId(id) {
   const text = String(id ?? "");
   const tail = text.match(INTERNAL_ID)?.[1] ?? "";
-  return tail.length >= 6 ? `…${tail.slice(-6)}` : text;
+  return tail.length >= 6 ? `…${tail.slice(-8)}` : text;
 }
 export const typeName = (id) => MODEL_TYPES.find((type) => type.id === id)?.name ?? id ?? "—";
 /** 등록 모델 이름 — 학습 카드·버전 관리의 "등록 모델 선택"이 같은 문구를 쓴다. */
@@ -134,8 +136,6 @@ export function mergeRunHistory(jobs = [], legacyRuns = [], demoVisible = false,
   return [...fresh, ...legacy].sort((a, b) => time(b.startedAt) - time(a.startedAt));
 }
 
-const metric = (value) => (Number.isFinite(value) ? String(Math.round(value * 1000) / 1000) : "–");
-
 /** 새 경로 작업의 로그 — 작업 레코드·버전·감사 기록에서 만든다(저장된 사실만). */
 export function jobLogLines(job, version, audit = []) {
   if (!job) return [];
@@ -143,7 +143,10 @@ export function jobLogLines(job, version, audit = []) {
     message: `학습 접수 — 파이프라인 ${displayId(job.pipeline_id)} · 학습데이터 ${displayId(job.dataset_id)}(${String(job.dataset_hash ?? "").slice(0, 12)})` }];
   if (job.started_at) lines.push({ ts: job.started_at, level: "INFO", message: "학습 시작" });
   if (job.state === "saved") {
-    const scores = version ? ` · MAE ${metric(version.metrics?.mae)} / 기준선 ${metric(version.baseline?.mae)}(${version.baseline?.name ?? "기준선"})` : "";
+    // MAE·기준선은 학습 대상 단위 규칙(formatUnitValue), 기준선 방법은 한글 이름(모르는 이름은 생략)
+    const unit = targetUnit(version?.target);
+    const method = baselineName(version?.baseline?.name);
+    const scores = version ? ` · MAE ${formatUnitValue(version.metrics?.mae, unit)} / 기준선 ${formatUnitValue(version.baseline?.mae, unit)} ${unit}${method ? ` (${method})` : ""}` : "";
     lines.push({ ts: job.finished_at, level: "INFO", message: `학습 결과 등록 — 버전 ${displayId(job.version_id)}${scores}` });
   }
   if (job.state === "failed") {

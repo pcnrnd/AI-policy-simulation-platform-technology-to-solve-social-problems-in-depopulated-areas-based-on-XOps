@@ -85,7 +85,16 @@ const audit = [{ action: "version_activated", version_id: "v9", actor: "api", cr
   { action: "version_activated", version_id: "other", actor: "api", created_at: "2026-10-15T04:00:00Z" }];
 const lines = jobLogLines(savedJob, { metrics: { mae: 1.5 }, baseline: { mae: 2, name: "leave_one_out_mean" } }, audit);
 assert.deepEqual(lines.map((row) => row.message.split(" — ")[0]), ["학습 접수", "학습 시작", "학습 결과 등록", "버전 활성화"]);
-assert.ok(lines[2].message.includes("MAE 1.5 / 기준선 2"));
+assert.ok(lines[2].message.endsWith("MAE 2 / 기준선 2 명 (검증 시점을 뺀 관측 평균)"), lines[2].message);
+// 실행 로그 MAE·기준선은 학습 대상 단위 규칙(명·원 정수 천 단위, % 소수 1~2), 기준선 방법은 한글 이름 — 내부 코드명 금지
+const BASELINE_CODES = /same_month_last_year|yoy_or_prev_month|leave_one_out_mean/;
+const scoreLine = (target, mae, base, name) => jobLogLines(savedJob, { target, metrics: { mae }, baseline: { mae: base, name } }, [])[2].message;
+assert.ok(scoreLine("living_population", 1224.215, 6020, "same_month_last_year").endsWith("MAE 1,224 / 기준선 6,020 명 (전년 같은 달 관측값)"));
+assert.ok(scoreLine("population_change_pct", 0.0512, 0.3, "yoy_or_prev_month").endsWith("MAE 0.05 / 기준선 0.3 % (전년 같은 달·전월 관측값)"));
+assert.ok(scoreLine("observed_sales_krw", 1890312.5, 2604410.3, "unknown_method").endsWith("MAE 1,890,313 / 기준선 2,604,410 원"));
+for (const [target, name] of [["living_population", "same_month_last_year"], ["living_population", "yoy_or_prev_month"], ["living_population", "leave_one_out_mean"]]) {
+  assert.doesNotMatch(scoreLine(target, 1, 2, name), BASELINE_CODES);
+}
 assert.equal(jobLogLines({ ...savedJob, state: "failed", error: "restart", started_at: undefined }, null, [])[1].message, "학습 중단 — 서버 재시작");
 
 // Model Store: 이전 고정 모델은 데모 ON에서만, 새 버전 뒤에 읽기 전용으로
@@ -123,9 +132,11 @@ assert.doesNotMatch(section, /MODEL_TYPES\.map|aria-label="모델 종류"|버전
 assert.equal(section.match(/<ConsoleLog /g)?.length, 1);
 assert.equal(section.match(/className="page-section/g)?.length, 2);
 assert.match(section, /instanceLabel\(row, regionName\)/);
-// 화면용 짧은 ID(공용) — 내부 접두사를 떼고 끝 6자, 접두사가 없거나 짧으면 그대로. ⑥·Model Store·실행 이력이 같은 함수를 쓰고 title 에 전체 ID.
-assert.equal(displayId("modelops_881abc0123456789abcdef0123456789"), "…456789");
-assert.equal(displayId("demo_factor_5f2e9a"), "…5f2e9a");
+// 화면용 짧은 ID(공용) — 내부 접두사를 떼고 끝 8자(끝 조각 6~7자면 그 전체), 접두사가 없거나 짧으면 그대로. ⑥·Model Store·실행 이력이 같은 함수를 쓰고 title 에 전체 ID.
+assert.equal(displayId("modelops_881abc0123456789abcdef0123456789"), "…23456789");
+assert.equal(displayId("demo_factor_5f2e9a"), "…5f2e9a");assert.equal(displayId("demo_factor_5f2e9a1"), "…5f2e9a1");
+// 끝 6자가 같던 두 ID(…1b9bfe)가 8자로는 갈린다
+assert.notEqual(displayId("modelops_00000000000000000000000ad71b9bfe"), displayId("modelops_00000000000000000000000c041b9bfe"));
 assert.equal(displayId("ver-sim-1"), "ver-sim-1");assert.equal(displayId("x_12"), "x_12");assert.equal(displayId(null), "");
 const orchestratorPage = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "pages", "OrchestratorPage.jsx"), "utf-8");
 const trainingPanel = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "components", "realdata", "RealdataTrainingPanel.jsx"), "utf-8");
@@ -133,21 +144,26 @@ assert.match(section, /<code title=\{id\}>\{displayId\(id\)\}<\/code>/);
 assert.match(orchestratorPage, /title=\{m\.version\}>\{displayId\(m\.version\)\}/);
 assert.doesNotMatch(orchestratorPage, /versionId\.slice|active_version\?\.slice|m\.version\.slice/);
 // 내부 접두사만 뗀다 — 카드 파이프라인은 card-<종류>-, 사용자 ID·과거 기록 ID는 그대로
-assert.equal(displayId(cardPipelineId("factor_analysis", "modelops_0123456789abcdef0123456789abcdef")), "…abcdef");
-assert.equal(displayId(cardPipelineId("simulation", "modelops_0123456789abcdef0123456789abcdef")), "…abcdef");
+assert.equal(displayId(cardPipelineId("factor_analysis", "modelops_0123456789abcdef0123456789abcdef")), "…89abcdef");
+assert.equal(displayId(cardPipelineId("simulation", "modelops_0123456789abcdef0123456789abcdef")), "…89abcdef");
 assert.equal(displayId("PL_namwon_retrain"), "PL_namwon_retrain");assert.equal(displayId("run-20261015-001"), "run-20261015-001");
 // 실행 로그·⑥ 운영 기록 줄도 짧은 표기
 const longJob = { ...savedJob, id: "modelops_aaaaaaaaaaaaaaaaaaaaaaaaaa111111", pipeline_id: "card-factor_analysis-bbbbbb222222",
   dataset_id: "modelops_cccccccccccccccccccccccccc333333", version_id: "modelops_dddddddddddddddddddddddddd444444" };
 const longLines = jobLogLines(longJob, null, [{ action: "version_activated", version_id: longJob.version_id, actor: "api", created_at: "2026-10-15T03:00:00Z" }]);
-assert.deepEqual([0, 2, 3].map((i) => longLines[i].message), [`학습 접수 — 파이프라인 …222222 · 학습데이터 …333333(${"b".repeat(12)})`,
-  "학습 결과 등록 — 버전 …444444", "버전 활성화 — …444444 · api"]);
+assert.deepEqual([0, 2, 3].map((i) => longLines[i].message), [`학습 접수 — 파이프라인 …bb222222 · 학습데이터 …cc333333(${"b".repeat(12)})`,
+  "학습 결과 등록 — 버전 …dd444444", "버전 활성화 — …dd444444 · api"]);
 assert.equal(auditLogLines([{ action: "version_activated", asset_id: "modelops_eeeeeeeeeeeeeeeeeeeeeeeeee555555", version_id: longJob.version_id, job_id: longJob.id, actor: "rnd", created_at: "bad" }])[0].message,
-  "버전 활성화 — …555555 · 버전 …444444 · 작업 …111111 · rnd");
+  "버전 활성화 — …ee555555 · 버전 …dd444444 · 작업 …aa111111 · rnd");
 // 소스 가드: 오케스트레이터·시뮬레이터 화면이 ID 값을 본문({x.id}·${x.version_id}·orDash(x.id)·x.id.slice(…)·?? x.id)에 그대로 내지 않는다.
 // title 속성(전체 ID)·키(modelops:${id})·과거 고정 모델 이름(model_id·modelId)·지역 코드(region.id)는 예외. ③ 계산 근거(ModelEvidence.jsx)는 근거 추적용으로 전체 ID를 두므로 대상에서 뺀다.
 const RAW_ID = /(?<![=:$\w-])(?:\$\{|\{)(?:[^{}`]*?\?\?\s*)?(?:orDash\()?[\w?.]+?(?:\.id|_id|Id|\.version|_version)(?:\.slice\([^)]*\))?\)?\}/g;
-const rawIds = (text) => (text.replace(/title=\{`[^`]*`\}/g, "").match(RAW_ID) ?? []).filter((hit) => !/(?:model_?[iI]d|[rR]egion\.id)\)?\}$/.test(hit));
+// 선택 키에서 잘라 낸 ID({selectedKey.slice(…indexOf(":")…)})는 slice 인자에 괄호가 들어 있어 RAW_ID 가 놓쳤다 — 키 slice 형태를 따로 잡는다.
+const KEY_SLICE = /(?<![=:$\w-])\{[\w?.]*Key\??\.slice\(/g;
+const rawIds = (text) => {
+  const body = text.replace(/title=\{`[^`]*`\}/g, "");
+  return [...(body.match(RAW_ID) ?? []).filter((hit) => !/(?:model_?[iI]d|[rR]egion\.id)\)?\}$/.test(hit)), ...(body.match(KEY_SLICE) ?? [])];
+};
 const src = (...parts) => readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", ...parts), "utf-8");
 const modelopsLib = src("lib", "modelops.js");
 const guarded = {
@@ -159,6 +175,11 @@ const guarded = {
 for (const [file, text] of Object.entries(guarded)) assert.deepEqual(rawIds(text), [], `${file}: ID는 displayId(…)로 보이고 전체 ID는 title 에 둔다`);
 // 가드가 실제로 잡는지 — 옛 직접 출력 형태 5종
 assert.equal(rawIds("<code>{job.id}</code>{orDash(last.id)}{c.id.slice(0, 20)}`후보 ${latest.version_id}`{name ?? proof.dataset_id}").length, 5);
+// 실행 로그 카드 제목의 옛 형태(D-1c)도 잡는다 — 지금은 displayId + title 전체 ID
+assert.equal(rawIds('<code style={{ marginLeft: 8 }}>{selectedKey.slice(selectedKey.indexOf(":") + 1)}</code>').length, 1);
+assert.match(orchestratorPage, /<code title=\{selectedRunId\}[^>]*>\{displayId\(selectedRunId\)\}<\/code>/);
+// 활동·실행 로그를 만드는 소스에 기준선 내부 코드명 금지(한글 이름은 realSimulation.baselineName 한 곳)
+for (const text of [orchestratorPage, modelopsLib]) assert.doesNotMatch(text, BASELINE_CODES);
 assert.deepEqual(rawIds("<code title={c.id}>{displayId(c.id)}</code> key={`modelops:${job.id}`} title={`${last.id} — 로그`}"), []);
 // ③ 계산 근거는 전체 ID 유지(예외)
 assert.match(src("components", "ModelEvidence.jsx"), /\{p\.version_id\}/);
@@ -166,6 +187,10 @@ assert.match(src("components", "ModelEvidence.jsx"), /\{p\.version_id\}/);
 for (const text of [orchestratorPage, section]) { assert.match(text, /formatUnitValue\(value, targetUnit\(target\)\)/); assert.doesNotMatch(text, /maximumFractionDigits: 3/); }
 assert.equal(orchestratorPage.match(/metric\([^)]*mae[^)]*, (?:m|version)\.target\)/gi)?.length, 4);
 assert.match(section, /metric\(row\.metrics\.mae, row\.target\)\} \/ \{metric\(row\.baseline\.mae, row\.target\)/);
+// 학습 카드 후보 버전 표도 같은 규칙 — MAE·RMSE·기준선은 대상 단위, WAPE는 비율(소수 2~3자리), 머리글에 단위
+assert.match(trainingPanel, /const fmtNum = \(v\) => formatUnitValue\(v, unit\)/);
+assert.doesNotMatch(trainingPanel, /toLocaleString\(undefined/);
+assert.match(trainingPanel, /MAE \/ RMSE \(\{unit\}\) \/ WAPE \(비율\)[\s\S]*기준선 MAE \(\{unit\}\)/);
 // 같은 내용 재등록은 서버가 기존 등록본을 돌려준다 — DataOps 안내는 "이미 등록" 문구로 구분한다.
 const registration = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "components", "TrainingDatasetRegistration.jsx"), "utf-8");
 assert.match(registration, /const reused = datasets\.some\(\(row\) => row\.id === registered\.id\);[\s\S]*이미 등록되어 있습니다/);

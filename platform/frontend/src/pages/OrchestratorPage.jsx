@@ -109,6 +109,7 @@ export default function OrchestratorPage() {
   const datasetName = (id) => catalog.datasets.find((row) => row.id === id)?.name ?? id;
 
   const selectedRow = history.find((row) => row.key === selectedKey) ?? null;
+  const selectedRunId = selectedKey ? selectedKey.slice(selectedKey.indexOf(":") + 1) : null; // 작업 ID 또는 과거 기록 실행 ID
   const selectedJob = selectedKey?.startsWith("modelops:")
     ? (liveJob && `modelops:${liveJob.id}` === selectedKey ? liveJob : catalog.jobs.find((row) => `modelops:${row.id}` === selectedKey) ?? null)
     : null;
@@ -602,7 +603,7 @@ export default function OrchestratorPage() {
 
       {/* ⑤ 선택한 실행의 로그 — 새 경로는 작업·버전·감사 기록에서, 이전 경로는 저장된 로그 라인에서 */}
       <Card
-        title={<>실행 로그{selectedKey ? <code style={{ marginLeft: 8, fontSize: 12, color: "var(--accent-purple-text)", fontWeight: 500 }}>{selectedKey.slice(selectedKey.indexOf(":") + 1)}</code> : null}</>}
+        title={<>실행 로그{selectedRunId ? <code title={selectedRunId} style={{ marginLeft: 8, fontSize: 12, color: "var(--accent-purple-text)", fontWeight: 500 }}>{displayId(selectedRunId)}</code> : null}</>}
         icon="fa-terminal"
         className="page-section orchestrator-live"
       >

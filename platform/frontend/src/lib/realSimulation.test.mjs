@@ -167,8 +167,8 @@ assert.equal(demoView.factors.length,9);assert.equal(demoView.more,0);assert.equ
 assert.deepEqual([demoView.split.positive.length,demoView.split.negative.length],[4,5]);
 assert.deepEqual([...demoView.split.positive,...demoView.split.negative].map((r)=>r.feature).sort(),[...FACTOR_PANEL_FEATURES].sort());
 assert.equal(demoView.sourceLabel,"데모");assert.match(demoView.basis,/^연계 데이터: 데모 요인 패널 · 남원 요인 패널$/);
-assert.equal(demoView.validation.baselineName,"전년 같은 달 관측값");assert.equal(demoView.model.version,"…123456");assert.equal(demoView.model.versionId,panelProof.version_id);
-assert.match(demoView.runInfo,/활성 버전 …123456$/);assert.deepEqual(demoView.rest,[]);
+assert.equal(demoView.validation.baselineName,"전년 같은 달 관측값");assert.equal(demoView.model.version,"…n_123456");assert.equal(demoView.model.versionId,panelProof.version_id);
+assert.match(demoView.runInfo,/활성 버전 …n_123456$/);assert.deepEqual(demoView.rest,[]);
 assert.match(demoView.validation.targets.join("|"),/생활인구 · 요인 9개\|관측 기간 2015-01~2024-12\|검증 기간 2024-01~2024-12/);
 const realView=factorAnalysisView({...panelResult,provenance:{...panelProof,mode:"real",source:"real",target:"observed_sales_krw"}},{demo:false,dataset:{name:"남원 관측 소비 스냅샷"},label:panelLabel});
 assert.equal(realView.basis,"현재 등록 데이터 기준 · 남원 관측 소비 스냅샷 (관측 2015-01~2024-12)");

@@ -113,7 +113,7 @@ export function contributionSplit(result, label) {
 }
 
 // 학습 시 비교한 기준선 방법 — 알려진 것만 한글로 보인다(모르는 이름은 표시하지 않는다).
-const BASELINE_NAMES = { yoy_or_prev_month: "전년 같은 달·전월 관측값", same_month_last_year: "전년 같은 달 관측값" };
+const BASELINE_NAMES = { yoy_or_prev_month: "전년 같은 달·전월 관측값", same_month_last_year: "전년 같은 달 관측값", leave_one_out_mean: "검증 시점을 뺀 관측 평균" };
 export const baselineName = (name) => BASELINE_NAMES[name];
 export const FACTOR_LIST_LIMIT = 10;
 

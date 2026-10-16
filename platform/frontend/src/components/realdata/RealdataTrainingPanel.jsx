@@ -8,10 +8,12 @@ import Card from "../Card.jsx";
 import { apiGet, apiSend } from "../../lib/api.js";
 import { alertText } from "../../lib/alertText.js";
 import { JOB_STATE_NAMES, cardPipelineId, datasetMatchesInstance, displayId, instanceLabel, typeName, versionStatus } from "../../lib/modelops.js";
+import { formatUnitValue, targetUnit } from "../../lib/realSimulation.js";
 import { getRealdataToken } from "./realdataClient.jsx";
 
 const orDash = (v) => (v === null || v === undefined || v === "" ? "–" : v);
-const fmtNum = (v) => (typeof v === "number" ? v.toLocaleString(undefined, { maximumFractionDigits: 3 }) : "–");
+// MAE·RMSE·기준선은 학습 대상 단위 규칙(명·원 정수 천 단위, % 소수 1~2), WAPE는 비율이라 소수 2~3자리
+const fmtWape = (v) => (Number.isFinite(v) ? v.toLocaleString("ko-KR", { minimumFractionDigits: 2, maximumFractionDigits: 3 }) : "—");
 
 function snapshotName(source) {
   const now = new Date();
@@ -31,6 +33,8 @@ export default function RealdataTrainingPanel({ catalog, versions, demoVisible, 
   const selectedDataset = matchingDatasets.find((row) => row.id === selectedDatasetId);
   const datasetReady = Boolean(selectedDataset);
   const candidates = versions.filter((row) => row.instance_id === instanceId);
+  const unit = targetUnit(instance?.target);
+  const fmtNum = (v) => formatUnitValue(v, unit);
   const instanceBusy = catalog.jobs.some((row) => row.instance_id === instanceId && (row.state === "queued" || row.state === "running"));
   const locked = busy || Boolean(working);
 
@@ -175,8 +179,8 @@ export default function RealdataTrainingPanel({ catalog, versions, demoVisible, 
           <thead>
             <tr>
               <th scope="col">버전</th>
-              <th scope="col" className="cell-num">MAE / RMSE / WAPE</th>
-              <th scope="col" className="cell-num">기준선 MAE</th>
+              <th scope="col" className="cell-num">MAE / RMSE ({unit}) / WAPE (비율)</th>
+              <th scope="col" className="cell-num">기준선 MAE ({unit})</th>
               <th scope="col">상태</th>
               <th scope="col" className="cell-actions">동작</th>
             </tr>
@@ -191,7 +195,7 @@ export default function RealdataTrainingPanel({ catalog, versions, demoVisible, 
               <tr key={c.id}>
                 <td><code title={c.id}>{displayId(c.id)}</code></td>
                 <td className="cell-num">
-                  {fmtNum(c.metrics?.mae)} / {fmtNum(c.metrics?.rmse)} / {fmtNum(c.metrics?.wape)}
+                  {fmtNum(c.metrics?.mae)} / {fmtNum(c.metrics?.rmse)} / {fmtWape(c.metrics?.wape)}
                 </td>
                 <td className="cell-num">{fmtNum(c.baseline?.mae)}</td>
                 <td>
