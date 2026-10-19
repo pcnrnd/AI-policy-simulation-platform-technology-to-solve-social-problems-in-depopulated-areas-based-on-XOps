@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import Card from "./Card.jsx";
-import { NO_DEMO_DATA } from "./PendingData.jsx";
+import { DEMO_ONLY_HINT } from "./PendingData.jsx";
 
 // 소멸위험지수(낮을수록 위험) → 등급/색상 매핑.
 function riskGrade(riskIndex) {
@@ -60,7 +60,7 @@ export default function RegionStatusCard({ regions, currentRegionId, onSelectReg
             {sorted.length === 0 && (
               <tr>
                 <td className="empty-table-cell" colSpan={6}>
-                  {NO_DEMO_DATA}
+                  {DEMO_ONLY_HINT}
                 </td>
               </tr>
             )}

@@ -6,7 +6,10 @@ import { useChartTheme } from "../hooks/useChartTheme.js";
 import StatCard from "../components/StatCard.jsx";
 import Card from "../components/Card.jsx";
 import RegionStatusCard from "../components/RegionStatusCard.jsx";
-import { ChartEmptyNote, NO_DEMO_DATA } from "../components/PendingData.jsx";
+import { ChartEmptyNote, DEMO_ONLY_HINT } from "../components/PendingData.jsx";
+
+// 실데이터 표시에서 데이터 소스 롤업이 비었을 때의 안내 — 값을 채우는 방법을 알린다.
+const SOURCE_EMPTY_HINT = "DataOps에서 데이터 소스를 등록하면 표시됩니다.";
 
 // 데이터 소스 수에 맞춰 순환 사용하는 색상 팔레트 —
 // 플랫폼 액센트(블루·시안·바이올렛·틸) 한 계열로 통일해 글래스모피즘 톤앤매너에 맞춘다.
@@ -230,7 +233,7 @@ export default function Overview() {
                 <span className="text-secondary">전분기 대비</span>
               </>
             ) : (
-              <span className="text-secondary">{NO_DEMO_DATA}</span>
+              <span className="text-secondary">{DEMO_ONLY_HINT}</span>
             )
           }
         />
@@ -269,7 +272,7 @@ export default function Overview() {
                 </span>
               </>
             ) : (
-              <span className="text-secondary">{NO_DEMO_DATA}</span>
+              <span className="text-secondary">{SOURCE_EMPTY_HINT}</span>
             )
           }
         />
@@ -292,7 +295,7 @@ export default function Overview() {
             <Doughnut ref={archiveChartRef} data={sourceData} options={doughnutOpts} />
             {sourceRowsEmpty && (
               <ChartEmptyNote>
-                {NO_DEMO_DATA}
+                {SOURCE_EMPTY_HINT}
               </ChartEmptyNote>
             )}
           </div>
@@ -308,7 +311,7 @@ export default function Overview() {
           </ul>
           <p className="chart-summary">
             {sourceRowsEmpty ? (
-              `${NO_DEMO_DATA} — 표시할 적재량이 없습니다.`
+              SOURCE_EMPTY_HINT
             ) : (
               <>
                 총 {sourceTotal.toLocaleString()}행 중 가장 큰 소스는 {largestSource?.label ?? "–"} {largestSource?.rows.toLocaleString() ?? 0}행입니다.
@@ -347,13 +350,13 @@ export default function Overview() {
             <Radar data={radarData} options={radarOpts} />
             {radarSummary === null && (
               <ChartEmptyNote>
-                {NO_DEMO_DATA}
+                {DEMO_ONLY_HINT}
               </ChartEmptyNote>
             )}
           </div>
           <p className="chart-summary">
             {radarSummary === null
-              ? NO_DEMO_DATA
+              ? DEMO_ONLY_HINT
               : `${currentRegion.name} 지표: ${radarSummary}.`}
           </p>
         </Card>

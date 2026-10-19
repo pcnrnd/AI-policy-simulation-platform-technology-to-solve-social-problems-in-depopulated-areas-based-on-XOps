@@ -1,7 +1,7 @@
 import { Fragment } from "react";
 import Card from "./Card.jsx";
 import { PIPELINE_NODES } from "../constants/pipeline.js";
-import { TARGET_LABELS, connectorStatusFrom, displayId, jobNodeStatuses, jobStatusLabel, typeName } from "../lib/modelops.js";
+import { TARGET_LABELS, auditTime, connectorStatusFrom, displayId, jobNodeStatuses, jobStatusLabel, typeName } from "../lib/modelops.js";
 
 const shortCode = (id) => <code title={id}>{displayId(id)}</code>;
 
@@ -126,8 +126,8 @@ export default function PipelineStatusCard({ target, regionName, onReset, anchor
             <span className="run-meta-item"><span className="run-meta-label">실행 ID</span>{shortCode(job.id)}</span>
             <span className="run-meta-item"><span className="run-meta-label">실험</span><code>{orDash(target.pipeline?.experiment)}</code></span>
             <span className="run-meta-item"><span className="run-meta-label">트리거</span>{orDash(target.pipeline?.trigger_policy ?? "수동")} · {orDash(job.actor)}</span>
-            <span className="run-meta-item"><span className="run-meta-label">시작</span>{orDash(logTime(job.started_at ?? job.created_at))}</span>
-            <span className="run-meta-item"><span className="run-meta-label">종료</span>{orDash(job.finished_at ? logTime(job.finished_at) : null)}</span>
+            <span className="run-meta-item"><span className="run-meta-label">시작</span>{orDash(auditTime(job.started_at ?? job.created_at))}</span>
+            <span className="run-meta-item"><span className="run-meta-label">종료</span>{orDash(job.finished_at ? auditTime(job.finished_at) : null)}</span>
           </div>
         )}
         {job && pollError && (
@@ -146,8 +146,8 @@ export default function PipelineStatusCard({ target, regionName, onReset, anchor
             <span className="run-meta-item"><span className="run-meta-label">대상 모델</span>{orDash(run.model_id)} → {orDash(displayId(run.active_version))} (과거 기록)</span>
             <span className="run-meta-item"><span className="run-meta-label">실행 ID</span>{shortCode(run.run_id)}</span>
             <span className="run-meta-item"><span className="run-meta-label">트리거</span>{orDash(run.trigger)}</span>
-            <span className="run-meta-item"><span className="run-meta-label">시작</span>{orDash(logTime(run.started_at))}</span>
-            <span className="run-meta-item"><span className="run-meta-label">종료</span>{orDash(run.finished_at ? logTime(run.finished_at) : null)}</span>
+            <span className="run-meta-item"><span className="run-meta-label">시작</span>{orDash(run.started_at ? auditTime(run.started_at) : null)}</span>
+            <span className="run-meta-item"><span className="run-meta-label">종료</span>{orDash(run.finished_at ? auditTime(run.finished_at) : null)}</span>
           </div>
         )}
         {!target && (

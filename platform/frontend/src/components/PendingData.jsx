@@ -8,9 +8,9 @@ export default function PendingData({ running = false, text }) {
   );
 }
 
-// 데모 표시 OFF에서 시드 파생 값 자리에 놓는 문구. 요소를 숨기지 않고 자리만 지킨다.
-// 내부 사정(시드·저장소·엔드포인트)은 사용자 관심사가 아니므로 사유를 덧붙이지 않는다.
-export const NO_DEMO_DATA = "데이터 없음";
+// 데모 표시 OFF에서 시드 파생 값 자리에 놓는 안내. 요소를 숨기지 않고 자리만 지킨다.
+// 이 값들은 예시 데이터로만 채워지므로 값을 보는 방법(데모 표시)만 알린다.
+export const DEMO_ONLY_HINT = "설정에서 '데모 데이터 표시'를 켜면 예시 값이 표시됩니다.";
 
 // 차트 캔버스 위에 겹치는 빈 상태 안내 — 캔버스를 없애지 않고 그 자리에 사유만 남긴다.
 // (MonitorPage가 같은 목적으로 쓰는 .monitor-empty-note 스타일을 그대로 쓴다.)

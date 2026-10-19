@@ -27,6 +27,7 @@ import { getRealdataToken } from "../components/realdata/realdataClient.jsx";
 import SourceChip from "../components/SourceChip.jsx";
 import { apiGet, apiSend } from "../lib/api.js";
 import { alertText } from "../lib/alertText.js";
+import { baselineName } from "../lib/realSimulation.js";
 
 // 데모 분포 표시 대상 — 인구이동 예측 모델(백엔드 시드 id).
 // PSI·이상값·예측 지연 값 자체는 이 모델 하나만 관측한다(대상 모델 선택과 무관, 값 확장은 별도 결정 사항).
@@ -43,7 +44,8 @@ const SEED_PSI_NORMAL = "0.045";
 
 // 값이 없을 때 쓰는 표기 — 요소를 감추지 않고 자리만 비운다(§10 UI-04).
 const NO_VALUE = "–";
-const EMPTY_HINT = "실데이터가 아직 없습니다";
+// 값이 비었을 때의 안내 — 상태가 아니라 값을 채우는 방법을 한 문장으로 알린다.
+const EMPTY_HINT = "DataOps에서 학습데이터를 등록하고 오케스트레이터에서 모델을 학습·활성화하면 표시됩니다.";
 
 // 차트 자리를 비우되 캔버스는 그대로 둔다 — 요소를 숨기지 않고 "값이 없다"만 알린다(§10 UI-04).
 function ChartEmptyNote({ children }) {
@@ -171,7 +173,7 @@ export default function MonitorPage() {
       .catch((err) => {
         if (!alive) return;
         setRealdataToken(null);
-        addConsoleLog(`WARN: 실데이터 토큰 발급 실패 — ${err?.message ?? "알 수 없는 오류"}`);
+        addConsoleLog(`WARN: 실데이터 토큰 발급 실패 — ${alertText(err, "인증 토큰을 받지 못했습니다. 잠시 뒤 다시 시도하세요.")}`);
       });
     return () => {
       alive = false;
@@ -192,7 +194,7 @@ export default function MonitorPage() {
       .catch((err) => {
         if (!alive) return;
         setRealdataModels([]);
-        addConsoleLog(`WARN: 실데이터 모델 목록 조회 실패 — ${err?.message ?? "알 수 없는 오류"}`);
+        addConsoleLog(`WARN: 실데이터 모델 목록 조회 실패 — ${alertText(err, "모델 목록을 불러오지 못했습니다. 잠시 뒤 다시 시도하세요.")}`);
       });
     return () => {
       alive = false;
@@ -254,7 +256,7 @@ export default function MonitorPage() {
         setMetricsResp(null);
         setShapResp(null);
         setMonitoringError(alertText(err, "모니터링 서버에 연결할 수 없습니다."));
-        addConsoleLog(`ERROR: 모니터링 지표 로드 실패 — ${err?.message ?? "알 수 없는 오류"}`);
+        addConsoleLog(`ERROR: 모니터링 지표 로드 실패 — ${alertText(err, "모니터링 서버에 연결할 수 없습니다.")}`);
       })
       .finally(() => {
         if (isCurrent()) setMonitoringLoading(false);
@@ -288,7 +290,7 @@ export default function MonitorPage() {
         if (!isCurrent()) return;
         setDriftResp(null);
         setDriftStatus("error");
-        addConsoleLog(`ERROR: 드리프트 조회 실패 — ${err.message}`);
+        addConsoleLog(`ERROR: 드리프트 조회 실패 — ${alertText(err, "드리프트 판정을 불러오지 못했습니다. 잠시 뒤 다시 시도하세요.")}`);
       });
   }, [driftInjected, addConsoleLog, mockDataVisible, modelTarget, realdataToken]);
 
@@ -380,7 +382,7 @@ export default function MonitorPage() {
       .catch((err) => {
         if (!alive) return;
         setOutlierResp(null);
-        addConsoleLog(`ERROR: 이상치 판정 실패 — ${err?.message ?? "알 수 없는 오류"}`);
+        addConsoleLog(`ERROR: 이상치 판정 실패 — ${alertText(err, "이상치 판정을 불러오지 못했습니다. 잠시 뒤 다시 시도하세요.")}`);
       });
     return () => {
       alive = false;
@@ -600,7 +602,7 @@ export default function MonitorPage() {
     ? `절대 기여도가 가장 큰 특징은 ${shapData.labels[topShapIndex]}이며 SHAP 값은 ${fmt3(topShapValue)}입니다. ${shapSignNote} 전체 값: ${shapData.labels
         .map((label, index) => `${label} ${fmt3(shapData.datasets[0].data[index])}`)
         .join(", ")}.`
-    : "표시할 특징 기여도 데이터가 없어 요약할 수 없습니다.";
+    : EMPTY_HINT;
 
   const vizMs = useRenderTiming([driftData, metricsData, shapData]);
 
@@ -620,11 +622,12 @@ export default function MonitorPage() {
     value === null ? NO_VALUE : Number(value).toLocaleString(undefined, { maximumFractionDigits: 1 });
   const accVal = isRealdata ? fmtAmount(metricValue("mae")) : fmtMetric(metricValue("accuracy"));
   const f1Val = isRealdata ? fmtAmount(metricValue("baseline_mae")) : fmtMetric(metricValue("f1"));
-  // 카드 수·배치는 그대로 두고 라벨·설명만 회귀 지표에 맞춘다.
+  // 카드 수·배치는 그대로 두고 라벨·설명만 회귀 지표에 맞춘다. 기준선 방법은 한글 이름, 모르면 "기준선"만.
+  const baselineLabel = baselineName(metricsUsable?.baseline?.name);
   const primaryCard = isRealdata
     ? {
         label: "Model MAE / 기준선 MAE",
-        tip: `선택한 실데이터 모델의 검증 MAE와 같은 구간 기준선(${metricsUsable?.baseline?.name ?? "yoy_or_prev_month"}) MAE입니다. MAE가 기준선보다 낮아야 학습 모델이 이긴 것입니다.`,
+        tip: `선택한 실데이터 모델의 검증 MAE와 같은 구간 ${baselineLabel ? `기준선(${baselineLabel})` : "기준선"} MAE입니다. MAE가 기준선보다 낮아야 학습 모델이 이긴 것입니다.`,
         trailing: `기준선: ${f1Val}`
       }
     : {
@@ -1079,8 +1082,7 @@ export default function MonitorPage() {
             <Bar data={driftData} options={AXIS_OPTS} />
             {driftData.labels.length === 0 && (
               <ChartEmptyNote>
-                {EMPTY_HINT} — 실 추론 입력 분포 수집 경로가 아직 없어 분포 비교를 표시할 수 없습니다.
-                아래 실데이터 연계 패널의 드리프트 판정을 사용하세요.
+                분포 비교는 아래 실데이터 모델 평가의 드리프트(PSI) 표에서 확인하세요.
               </ChartEmptyNote>
             )}
           </div>
@@ -1104,7 +1106,7 @@ export default function MonitorPage() {
                     <td colSpan={4} className="monitor-empty-cell">
                       {outlierMeasured || isRealdata
                         ? "실측 계열에서 이상치가 검출되지 않았습니다."
-                        : `${EMPTY_HINT} — 재학습을 실행하면 실측 지표 계열에 대한 이상치 판정이 표시됩니다.`}
+                        : EMPTY_HINT}
                     </td>
                   </tr>
                 )}
@@ -1141,7 +1143,7 @@ export default function MonitorPage() {
 
       <div className="grid-cols-2">
         {/* 차트 요약문은 카드 제목의 InfoTip으로 옮겼다(UI 피드백 #9·#10). 값은 현재 로드된
-            데이터(실데이터 또는 데모 시드)에서 읽고, 값이 없으면 '요약할 수 없습니다'로 표기한다.
+            데이터(실데이터 또는 데모 시드)에서 읽고, 값이 없으면 값을 채우는 방법(EMPTY_HINT)을 표기한다.
             데모 토글은 데이터 유무만 바꾸므로 트리거 자체는 토글과 무관하게 항상 렌더한다. */}
         <Card
           title={
@@ -1151,7 +1153,7 @@ export default function MonitorPage() {
                 text={
                   latestMetrics
                     ? `조회 구간 첫 값에서 최근 값까지의 변화: ${latestMetrics}.`
-                    : "표시할 지표 데이터가 없어 구간 변화를 요약할 수 없습니다."
+                    : EMPTY_HINT
                 }
                 label="지표 변화 요약 보기"
               />
@@ -1172,7 +1174,7 @@ export default function MonitorPage() {
             <Line data={metricsData} options={metricsChartOpts} />
             {!allSeriesUsable && (
               <ChartEmptyNote>
-                {EMPTY_HINT} — 재학습을 실행하면 학습 실행별 실측 6대 지표가 이 자리에 쌓입니다.
+                {EMPTY_HINT}
               </ChartEmptyNote>
             )}
           </div>
@@ -1199,7 +1201,7 @@ export default function MonitorPage() {
             <Bar data={shapData} options={shapOpts} />
             {!featuresUsable && (
               <ChartEmptyNote>
-                {EMPTY_HINT} — 승급된 학습 아티팩트가 있어야 학습된 모델의 특징 기여도를 읽을 수 있습니다.
+                {EMPTY_HINT}
               </ChartEmptyNote>
             )}
           </div>
@@ -1234,8 +1236,8 @@ export default function MonitorPage() {
         </div>
       </Card>
 
-      {/* 실데이터 연계(R4) — 남원 모델 검증/운영 평가·선형 SHAP·드리프트. 위 데모 지표와는 별개 경로. */}
-      {!mockDataVisible && <RealdataEvaluationPanel />}
+      {/* 실데이터 연계(R4) — 실데이터 모델 검증/운영 평가·선형 SHAP·드리프트. 위 데모 지표와는 별개 경로. */}
+      {!mockDataVisible && <RealdataEvaluationPanel regionName={(id) => appData.regions.find((row) => row.id === id)?.name ?? id} />}
     </>
   );
 }

@@ -1,4 +1,4 @@
-// 실데이터 모델 평가(남원) 패널 — Monitor 하단에 추가되는 신규 패널(기존 데모 경로는 불변).
+// 실데이터 모델 평가 패널 — Monitor 하단에 추가되는 신규 패널(기존 데모 경로는 불변).
 // R4: evaluation(validation/operational) · explain(선형 SHAP, 기존 Bar 차트 재사용) · drift(PSI).
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Bar } from "react-chartjs-2";
@@ -35,7 +35,7 @@ function StatusNote({ status, message }) {
   return <p className="realdata-hint mock-data-output">{STATUS_LABELS[status] ?? status}{message ? ` — ${message}` : ""}</p>;
 }
 
-export default function RealdataEvaluationPanel() {
+export default function RealdataEvaluationPanel({ regionName }) {
   const [token, setToken] = useState(null);
   const [authError, setAuthError] = useState(null);
 
@@ -57,7 +57,7 @@ export default function RealdataEvaluationPanel() {
   useEffect(() => {
     getRealdataToken()
       .then(setToken)
-      // 원문은 모니터 페이지의 토큰 발급 실패 로그에 남는다.
+      // 모니터 페이지도 같은 실패를 콘솔(WARN)에 사용자 문구로 남긴다.
       .catch((err) => setAuthError(alertText(err, "인증 토큰 발급에 실패했습니다. 잠시 뒤 다시 시도하세요.")));
   }, []);
 
@@ -125,9 +125,12 @@ export default function RealdataEvaluationPanel() {
       }
     : null;
 
+  // 제목 지역명은 선택한 모델의 지역에서 읽는다. 이름을 못 찾으면 지역 코드 대신 괄호째 생략.
+  const regionId = models.find((m) => m.model_id === selectedModelId)?.region_id;
+  const region = regionId ? regionName(regionId) : null;
   return (
     <Card
-      title="실데이터 모델 평가 (남원)"
+      title={region && region !== regionId ? `실데이터 모델 평가 (${region})` : "실데이터 모델 평가"}
       icon="fa-chart-line"
       className="page-section realdata-panel"
       dataSource="api"
@@ -239,7 +242,7 @@ export default function RealdataEvaluationPanel() {
 
       <StatusNote status={drift?.status} message={drift?.message} />
       {driftData && driftData.status === "none" && (
-        <p className="realdata-hint mock-data-output">드리프트 비교 구간이 아직 없습니다(관측·검증 구간 부족).</p>
+        <p className="realdata-hint mock-data-output">관측 기간이 더 긴 학습데이터로 다시 학습하면 드리프트 비교가 표시됩니다.</p>
       )}
       {driftData && driftData.status === "ok" && (
         <div className="table-container mock-data-output">
