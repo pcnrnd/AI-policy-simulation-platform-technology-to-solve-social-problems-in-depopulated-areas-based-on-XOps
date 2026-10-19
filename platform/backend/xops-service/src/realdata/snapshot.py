@@ -183,7 +183,7 @@ def _spec(target: str, spec_version: str, dong_map_sha256: str) -> dict[str, Any
 
 
 def _conn() -> sqlite3.Connection:
-    return db._conn()  # ponytail: db.py는 루트 소유 — rd_datasets용 공개 CRUD가 아직 없어 기존 연결만 재사용
+    return db._conn()  # db.py는 루트 소유 — rd_datasets용 공개 CRUD가 아직 없어 기존 연결만 재사용
 
 
 def _upsert_rd_dataset(record: DatasetRecord) -> str:

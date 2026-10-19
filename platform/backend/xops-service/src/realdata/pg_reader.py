@@ -70,7 +70,7 @@ def _connect() -> Any:
     if not settings.pg_dsn:
         raise RealdataUnavailable("XOPS_PG_DSN이 설정되지 않았습니다.")
     try:
-        import psycopg  # ponytail: 지연 import, 선택 의존성
+        import psycopg  # 지연 import, 선택 의존성
     except ImportError as exc:
         raise RealdataUnavailable("psycopg 미설치 — pip install psycopg[binary]") from exc
     return psycopg.connect(
@@ -91,7 +91,7 @@ def _rows_to_dicts(columns: Sequence[str], rows: Sequence[Sequence[Any]]) -> lis
 
 
 def _fetch_streaming(sql: str, params: Sequence[Any], columns: Sequence[str]) -> list[dict[str, Any]]:
-    # ponytail: 요청당 단발 연결(dataops.backends.SqlAdapter와 같은 방침).
+    # 요청당 단발 연결(dataops.backends.SqlAdapter와 같은 방침).
     # 동시성이 문제되면 psycopg_pool로 교체(인터페이스 불변).
     rows: list[dict[str, Any]] = []
     with _connect() as conn:

@@ -23,7 +23,7 @@ from src.dataops.safety import assert_safe_identifier
 
 _logger = get_logger("xops.dataops.liveness")
 
-# ponytail: 프로세스 내 dict + TTL. 워커가 여러 개면 워커마다 따로 데우지만 조회가 읽기 전용이라 무해하다.
+# 프로세스 내 dict + TTL. 워커가 여러 개면 워커마다 따로 데우지만 조회가 읽기 전용이라 무해하다.
 _CACHE_TTL_SECONDS = 60.0
 _cache: dict[str, tuple[float, int | None]] = {}
 
