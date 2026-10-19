@@ -14,7 +14,7 @@ import { MODEL_REGISTRY } from "../constants/models.js";
 import { apiGet, apiSend } from "../lib/api.js";
 import { alertText } from "../lib/alertText.js";
 import {
-  JOB_STATE_NAMES, TARGET_LABELS, displayId, isLocked, jobLocks, jobLogLines, lastJobOf, mergeRunHistory, storeRows, typeName, versionsWithStatus
+  JOB_STATE_NAMES, TARGET_LABELS, auditTime, displayId, isLocked, jobLocks, jobLogLines, lastJobOf, mergeRunHistory, storeRows, typeName, versionsWithStatus
 } from "../lib/modelops.js";
 import { formatUnitValue, targetUnit } from "../lib/realSimulation.js";
 
@@ -583,7 +583,7 @@ export default function OrchestratorPage() {
                           </div>
                         </td>
                         <td style={{ fontSize: 11, color: "var(--text-secondary)" }}>
-                          {orDash(r.startedAt ? logTime(r.startedAt) : null)} → {orDash(r.finishedAt ? logTime(r.finishedAt) : null)}
+                          {orDash(r.startedAt ? auditTime(r.startedAt) : null)} → {orDash(r.finishedAt ? auditTime(r.finishedAt) : null)}
                         </td>
                         <td className="cell-actions">
                           <button className="btn btn-secondary" style={{ padding: "4px 12px", fontSize: 12 }} onClick={() => setSelectedKey(r.key)} aria-label={`${displayId(r.id)} 실행 로그 보기`}>

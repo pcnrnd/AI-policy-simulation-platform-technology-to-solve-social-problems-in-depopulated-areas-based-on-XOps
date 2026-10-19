@@ -188,4 +188,17 @@ assert.throws(() => activeModelPair({mode:"real",source:"real",instances:[]},"na
 const hook=read("hooks","useRealSimulation.js");
 assert.doesNotMatch(hook,/set(?:Feedback|LoadFailed)\([^)]*(?:error|err)\b/);
 assert.doesNotMatch(hook,/runAnalysis|factor_analysis/);
+// ③·④ 수치도 ①과 같은 단위 규칙 — 원·명은 정수 천 단위(소수 3자리 원문 금지), 데모 ③·④도 같은 함수를 지난다.
+const fracView=sensitivityRecommendation([{feature:"y_lag1",from:405844595.289,to:406455718.59,delta:611123.301}],label,"원","관측 소비");
+assert.equal(fracView.items[0].scoreText,"+611,123");assert.deepEqual(fracView.items[0].cells,["405,844,595 → 406,455,719","611,123"]);
+assert.equal(formatUnitValue(425891010.194,"원"),"425,891,010");assert.equal(formatUnitValue(1234.6,"점"),"1,235");
+assert.doesNotMatch(read("lib","realSimulation.js"),/formatValue|maximumFractionDigits: 3/);
+const forecastCard=read("components","RealForecastResult.jsx"),recoPanel=read("components","PolicyRecommendation.jsx");
+assert.match(forecastCard,/const value = \(number\) => formatUnitValue\(number, unit\);/);assert.equal(forecastCard.match(/\{value\(/g)?.length,6);
+assert.equal(evidence.match(/formatUnitValue\([^)]*, unit\)/g)?.length,3);
+assert.match(recoPanel,/formatUnitValue\(s\.reach, "명"\)/);assert.match(recoPanel,/s\.scoreText \?\? formatUnitValue\(s\.score, scoreUnit\)/);
+assert.match(page,/모델 예측상 변화 \+\$\{formatUnitValue\(ranking\[0\]\.delta, unit\)\}/);assert.match(page,/점수 \$\{formatUnitValue\(ranked\[0\]\.score, "점"\)\}/);
+assert.equal(page.match(/formatUnitValue\((?:finalPop|baseFinalPop|policyDifference), "명"\)/g)?.length,4);
+for (const text of [forecastCard,evidence,recoPanel,page]) { assert.doesNotMatch(text,/formatValue|maximumFractionDigits: 3/); }
+for (const text of [forecastCard,recoPanel]) assert.doesNotMatch(text,/\.toLocaleString\(\)/);
 console.log("realSimulation: 활성 시뮬레이션 선택·추론 합계·근거 전달·관측 민감도 순위·③④ 독립·①② 제목 동일·안내/알림 금지어·모드 분기 없음·요인분석 두 모드 매핑·③ 근거 기여도 제거 PASS");

@@ -57,9 +57,11 @@ export default function RealdataTrainingPanel({ catalog, versions, demoVisible, 
         : sources.filter((row) => datasetMatchesInstance(row, instance)).sort((a, b) => String(b.observed_to).localeCompare(String(a.observed_to)))[0];
       if (!source) throw new Error("선택한 모델의 지역·학습 대상에 맞는 원본 데이터가 없습니다.");
       const registered = await apiSend("POST", "/api/v3/modelops/datasets", { token, body: { name: snapshotName(source), source_dataset_id: source.id, source_hash: source.content_hash } });
+      // 같은 원천·내용이면 서버가 기존 등록본을 돌려준다 — 호출 전 목록(이 렌더의 catalog)에 같은 ID가 있었는지로 가른다.
+      const reused = catalog.datasets.some((row) => row.id === registered.id);
       await onReload();
       setSelectedDatasetId(registered.id);
-      onLog(`INFO: 학습데이터 스냅샷 등록 — ${displayId(registered.id)} (${registered.observed_from}~${registered.observed_to})`);
+      onLog(`INFO: ${reused ? "기존 등록본 사용" : "학습데이터 스냅샷 등록"} — ${displayId(registered.id)} (${registered.observed_from}~${registered.observed_to})`);
     } catch (err) {
       setError(alertText(err, "스냅샷을 만들지 못했습니다. 잠시 뒤 다시 시도하세요."));
       onLog(`WARN: 학습데이터 스냅샷 생성 실패 — ${err?.message ?? err}`);
