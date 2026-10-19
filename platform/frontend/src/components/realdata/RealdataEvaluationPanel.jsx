@@ -1,11 +1,10 @@
 // 실데이터 모델 평가 패널 — Monitor 하단에 추가되는 신규 패널(기존 데모 경로는 불변).
-// R4: evaluation(validation/operational) · explain(선형 SHAP, 기존 Bar 차트 재사용) · drift(PSI).
+// 검증·운영 평가와 선형 SHAP. 분포 비교는 Monitor 상단에서 표시한다.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Bar } from "react-chartjs-2";
 import Card from "../Card.jsx";
 import {
   getCandidates,
-  getDrift,
   getEvaluation,
   getExplain,
   getModels,
@@ -35,7 +34,7 @@ function StatusNote({ status, message }) {
   return <p className="realdata-hint mock-data-output">{STATUS_LABELS[status] ?? status}{message ? ` — ${message}` : ""}</p>;
 }
 
-export default function RealdataEvaluationPanel({ regionName }) {
+export default function RealdataEvaluationPanel() {
   const [token, setToken] = useState(null);
   const [authError, setAuthError] = useState(null);
 
@@ -46,7 +45,6 @@ export default function RealdataEvaluationPanel({ regionName }) {
   const [selectedVersion, setSelectedVersion] = useState("");
 
   const [evaluation, setEvaluation] = useState(null);
-  const [drift, setDrift] = useState(null);
   const [explain, setExplain] = useState(null);
   const [explainStatus, setExplainStatus] = useState(null);
   const [baseYm, setBaseYm] = useState("");
@@ -88,13 +86,10 @@ export default function RealdataEvaluationPanel({ regionName }) {
   useEffect(() => {
     if (!token || !selectedModelId || !selectedVersion) return;
     const requestId = ++requestRef.current;
-    Promise.all([
-      getEvaluation(token, selectedModelId, selectedVersion),
-      getDrift(token, selectedModelId, selectedVersion)
-    ]).then(([evalRes, driftRes]) => {
+    setEvaluation(null);
+    getEvaluation(token, selectedModelId, selectedVersion).then((evalRes) => {
       if (requestId !== requestRef.current) return;
       setEvaluation(evalRes);
-      setDrift(driftRes);
     });
     setExplain(null);
     setExplainStatus(null);
@@ -110,7 +105,6 @@ export default function RealdataEvaluationPanel({ regionName }) {
 
   const validation = evaluation?.data?.validation;
   const operational = evaluation?.data?.operational;
-  const driftData = drift?.data;
 
   const chartData = explain
     ? {
@@ -125,17 +119,14 @@ export default function RealdataEvaluationPanel({ regionName }) {
       }
     : null;
 
-  // 제목 지역명은 선택한 모델의 지역에서 읽는다. 이름을 못 찾으면 지역 코드 대신 괄호째 생략.
-  const regionId = models.find((m) => m.model_id === selectedModelId)?.region_id;
-  const region = regionId ? regionName(regionId) : null;
   return (
     <Card
-      title={region && region !== regionId ? `실데이터 모델 평가 (${region})` : "실데이터 모델 평가"}
+      title="실데이터 모델 평가"
       icon="fa-chart-line"
       className="page-section realdata-panel"
       dataSource="api"
       headerRight={
-        <span style={{ fontSize: 11, color: "var(--text-muted)" }}>검증·운영 평가 · 선형 SHAP · 드리프트(PSI)</span>
+        <span style={{ fontSize: 11, color: "var(--text-muted)" }}>검증·운영 평가 · 선형 SHAP</span>
       }
     >
       {authError && <p className="realdata-error">{authError}</p>}
@@ -240,43 +231,6 @@ export default function RealdataEvaluationPanel({ regionName }) {
         </div>
       )}
 
-      <StatusNote status={drift?.status} message={drift?.message} />
-      {driftData && driftData.status === "none" && (
-        <p className="realdata-hint mock-data-output">관측 기간이 더 긴 학습데이터로 다시 학습하면 드리프트 비교가 표시됩니다.</p>
-      )}
-      {driftData && driftData.status === "ok" && (
-        <div className="table-container mock-data-output">
-          <table>
-            <caption className="sr-only">피처·타깃 드리프트(PSI)</caption>
-            <thead>
-              <tr>
-                <th scope="col">항목</th>
-                <th scope="col" className="cell-num">PSI</th>
-                <th scope="col">구간 종류</th>
-                <th scope="col" className="cell-num">표본(기준/현재)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {driftData.features.map((f) => (
-                <tr key={f.feature}>
-                  <td>{f.feature}</td>
-                  <td className="cell-num">{fmtNum(f.psi, 4)}</td>
-                  <td>{driftData.kind}</td>
-                  <td className="cell-num">{f.n_reference} / {f.n_current}</td>
-                </tr>
-              ))}
-              {driftData.target && (
-                <tr>
-                  <td>타깃(y)</td>
-                  <td className="cell-num">{fmtNum(driftData.target.psi, 4)}</td>
-                  <td>{driftData.kind}</td>
-                  <td className="cell-num">{driftData.target.n_reference} / {driftData.target.n_current}</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
     </Card>
   );
 }

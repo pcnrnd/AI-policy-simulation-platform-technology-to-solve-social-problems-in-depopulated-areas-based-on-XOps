@@ -67,7 +67,7 @@ export default function PolicyRecommendation({ region, ranked: riceRanked, view 
 
   return (
     <Card
-      title={view ? `${region.name} 맞춤 정책 추천 (예측 민감도 근거)` : `${region.name} 맞춤 정책 추천 (RICE 기반)`}
+        title={view ? `${region.name} 맞춤 정책 추천 (예측 민감도 근거)` : `${region.name} 맞춤 정책 추천`}
       icon="fa-lightbulb"
       style={{ marginTop: 24 }}
       headerRight={<PerfBadge ms={vizMs} />}

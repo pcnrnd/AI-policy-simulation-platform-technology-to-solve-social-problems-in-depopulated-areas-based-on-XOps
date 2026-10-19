@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { retainRealAlerts, retainModeIndependentAlerts, notificationFromAlert, unreadNotifications, detectDemoDrift } from "./demoAlerts.js";
+import { retainRealAlerts, retainModeIndependentAlerts, notificationFromAlert, unreadNotifications, detectDemoDrift, runDemoDriftCheck } from "./demoAlerts.js";
 import { setDataMode, dataModeEpoch } from "./dataMode.js";
 
 const demo = { id: 1, source: "demo", title: "드리프트", unread: true };
@@ -74,3 +74,61 @@ finish(calculated);
 await pending;
 await detectDemoDrift({ loadDrift: () => assert.fail("real 모드에서 mock 요청"), isCurrent: () => false, onDetected: () => assert.fail("real 경보") });
 console.log("demoAlerts: 데모 OFF에서 데모 경보만 제거·실측 경보와 읽음 상태 보존 PASS");
+
+const deferred = () => {
+  let resolve, reject;
+  const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
+  return { promise, resolve, reject };
+};
+// Sidebar/Settings는 모드 전환 때 유지된다. 실제 Context가 사용하는 guard를 같은 ref로 계속 호출한다.
+for (const oldOutcome of ["success", "failure"]) {
+  setDataMode("mock");
+  let enabled = true, checking = false, injected = false, requests = 0;
+  const requestEpochRef = { current: null };
+  const alerts = [], errors = [];
+  const invoke = (response) => {
+    const epoch = dataModeEpoch();
+    return runDemoDriftCheck({ requestEpochRef, epoch,
+      isCurrent: () => enabled && epoch === dataModeEpoch(),
+      onChecking: (value) => { checking = value; },
+      loadDrift: () => { requests += 1; return response.promise; },
+      onDetected: (_, alert) => { injected = true; alerts.push(alert); },
+      onError: (error) => errors.push(error)
+    });
+  };
+  const oldResponse = deferred();
+  const oldRequest = invoke(oldResponse);
+  assert.equal(checking, true);
+  assert.equal(requests, 1);
+  await invoke(deferred());
+  assert.equal(requests, 1, "동일 epoch 연타는 중복 요청을 시작하지 않는다");
+  // 기존 Context의 mode toggle과 같은 reset. 유지된 Settings에는 별도 boolean 잠금이 없다.
+  setDataMode("real"); enabled = false; requestEpochRef.current = null; checking = false;
+  await invoke(deferred());
+  assert.equal(requests, 1, "OFF에서 요청하지 않는다");
+  setDataMode("mock"); enabled = true;
+  const newResponse = deferred();
+  const newRequest = invoke(newResponse);
+  const newEpoch = dataModeEpoch();
+  assert.equal(requests, 2, "이전 요청이 지연 중이어도 새 ON epoch 요청은 시작한다");
+  assert.equal(checking, true);
+  if (oldOutcome === "success") oldResponse.resolve(calculated);
+  else oldResponse.reject(new Error("old epoch failure"));
+  await oldRequest;
+  assert.equal(requestEpochRef.current, newEpoch, "이전 finally가 새 잠금을 해제하지 않는다");
+  assert.equal(checking, true);
+  assert.equal(injected, false);
+  assert.deepEqual(alerts, []);
+  assert.deepEqual(errors, []);
+  await invoke(deferred());
+  assert.equal(requests, 2, "이전 finally 뒤에도 새 epoch 중복 요청을 차단한다");
+  newResponse.resolve(calculated);
+  await newRequest;
+  assert.equal(requestEpochRef.current, null);
+  assert.equal(checking, false);
+  assert.equal(injected, true);
+  assert.equal(alerts.length, 1);
+  assert.equal(alerts[0].source, "demo");
+  assert.deepEqual(errors, []);
+}
+console.log("PASS: persistent Context epoch guard, ON→OFF→ON, same-epoch duplicate and late success/error/finally isolation");

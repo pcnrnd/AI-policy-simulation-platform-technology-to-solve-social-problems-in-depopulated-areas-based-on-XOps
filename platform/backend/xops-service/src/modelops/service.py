@@ -46,6 +46,12 @@ def register_pipeline(mode: str, body: dict[str, Any], actor: str) -> dict[str, 
         return _register_pipeline(mode, body, actor)
 
 
+def delete_dataset(mode: str, dataset_id: str, actor: str) -> dict[str, Any]:
+    # 파이프라인의 데이터 확인→참조 저장과 등록본 삭제가 서로 끼어들지 않게 한다.
+    with _register_lock:
+        return datasets.delete(mode, dataset_id, actor)
+
+
 def _register_pipeline(mode: str, body: dict[str, Any], actor: str) -> dict[str, Any]:
     existing = next((row for row in store.list_assets(mode, "pipeline") if row["id"] == body["id"]), None)
     if existing is not None:

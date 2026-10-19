@@ -36,6 +36,27 @@ export function activeModelPair(catalog, region, target, mode = "real") {
   return { factor: candidates.find((row) => row.model_type === "factor_analysis" && row.active_version),
     simulation: candidates.find((row) => row.model_type === "simulation" && row.active_version) };
 }
+/** 선택한 활성 요인 모델은 모드·지역·대상·버전이 모두 일치해야 한다. */
+export function selectedFactorModel(catalog, id, region, target, mode) {
+  if (catalog?.mode !== mode || catalog?.source !== mode) return undefined;
+  return catalog.instances?.find((row) => row.id === id && row.mode === mode && row.region_id === region
+    && row.target === target && row.model_type === "factor_analysis" && row.active_version
+    && catalog.versions?.some((version) => version.mode === mode && version.id === row.active_version && version.instance_id === row.id));
+}
+/** 선택이 바뀐 직후에도 이전 조건의 추론 결과를 표시·재사용하지 않는다. */
+export function inferenceMatches(result, { mode, region, target, modelId, versionId, dong }) {
+  const proof = result?.provenance;
+  return Boolean(modelId && versionId && proof?.mode === mode && proof.source === mode
+    && proof.region_id === region && proof.target === target
+    && proof.instance_id === modelId && proof.version_id === versionId
+    && (!dong || proof.dong_code === dong));
+}
+/** 추천의 계산 조건: 모드·선택 모델과 실제 추론 버전/데이터가 바뀌면 이전 추천은 낡았다. */
+export function inferenceContextKey({ mode, region, target, dong, factorModel, simulationProof }) {
+  return JSON.stringify([mode, region, target, dong || "", factorModel?.id ?? null, factorModel?.active_version ?? null,
+    simulationProof?.instance_id ?? null, simulationProof?.version_id ?? null,
+    simulationProof?.dataset_id ?? null, simulationProof?.dataset_hash ?? null]);
+}
 export function inferenceRequest(context, changes = {}) {
   const p = context.provenance;
   return { region_id: p.region_id, target: p.target, dataset_id: p.dataset_id, dataset_hash: p.dataset_hash,
@@ -164,7 +185,7 @@ export function realSliderControls(context, label, unit) {
   return (context?.controls ?? []).map((row) => {
     const span = row.max - row.min;
     return { key: row.feature, label: label(row.feature), min: row.min, max: row.max, default: row.default ?? context.inputs?.[row.feature],
-      step: sliderStep(span), unit, locked: !(span > 0) };
+      step: sliderStep(span), unit, exactValue: true, locked: !(span > 0) };
   });
 }
 

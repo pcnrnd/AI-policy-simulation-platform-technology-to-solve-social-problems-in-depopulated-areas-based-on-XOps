@@ -77,6 +77,11 @@ def register_dataset(body: DatasetRegistration, auth: Write, mode: Mode = "real"
     return datasets.register(mode, body.model_dump(), _actor(auth))
 
 
+@router.delete("/datasets/{dataset_id}")
+def delete_dataset(dataset_id: str, auth: Write, mode: Mode = "real") -> dict[str, Any]:
+    return service.delete_dataset(mode, dataset_id, _actor(auth))
+
+
 @router.post("/instances", status_code=201)
 def register_instance(body: InstanceRegistration, auth: Write, mode: Mode = "real") -> dict[str, Any]:
     return service.register_instance(mode, body.model_dump(), _actor(auth))

@@ -11,24 +11,26 @@ export default function GaugeChart({
   goodThreshold = 0.85,
   lowerIsBetter = false,
   displayText,
+  neutral = false,
+  statusText,
   ...rest
 }) {
   const { isDark } = useTheme();
   // 측정값이 없으면(데모 표시 OFF·미수집) 0으로 강제해 판정하지 않는다 — value ?? 0 으로 두면
   // 값이 없는 게이지가 "위험"(또는 lowerIsBetter에서 "정상")이라고 단정해 버린다.
   const measured = Number.isFinite(value);
-  const ratio = measured ? Math.max(0, Math.min(1, value)) : 0;
+  const ratio = measured && !neutral ? Math.max(0, Math.min(1, value)) : 0;
   const ok = measured && (lowerIsBetter ? ratio <= goodThreshold : ratio >= goodThreshold);
   const warn = measured && (lowerIsBetter ? ratio <= Math.min(1, goodThreshold + 0.2) : ratio >= 0.6);
-  const color = !measured
+  const color = !measured || neutral
     ? (isDark ? "rgba(255, 255, 255, 0.10)" : "rgba(15, 23, 42, 0.12)")
     : ok
       ? "rgba(16, 185, 129, 1)"
       : warn
         ? "rgba(245, 158, 11, 1)"
         : "rgba(239, 68, 68, 1)";
-  const status = !measured
-    ? { label: "판정 없음", icon: "fa-minus", color: "var(--text-muted)" }
+  const status = !measured || neutral
+    ? { label: statusText ?? "판정 없음", icon: "fa-minus", color: "var(--text-muted)" }
     : ok
       ? { label: "정상", icon: "fa-circle-check", color: "var(--accent-teal)" }
       : warn

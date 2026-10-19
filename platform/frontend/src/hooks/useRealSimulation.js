@@ -3,7 +3,7 @@ import { getRealdataToken } from "../components/realdata/realdataClient.jsx";
 import { apiGet, apiSend } from "../lib/api.js";
 import { dataModeEpoch } from "../lib/dataMode.js";
 import {
-  activeModelPair, inferenceRequest, validateInference, createRequestGate,
+  activeModelPair, inferenceMatches, inferenceRequest, validateInference, createRequestGate,
   REAL_LOAD_FAILED_TEXT, REAL_PREDICT_FAILED_TEXT, REAL_VERSION_CHANGED_TEXT
 } from "../lib/realSimulation.js";
 
@@ -40,6 +40,8 @@ export function useRealSimulation({ enabled, region, target, dong, log }) {
 
   const model = enabled ? activeModelPair(catalog, region, target).simulation : undefined;
   const modelKey = `${model?.id}|${model?.active_version}`;
+  const currentContext = enabled && inferenceMatches(context, { mode: "real", region, target,
+    modelId: model?.id, versionId: model?.active_version, dong }) ? context : null;
 
   // 페이지 진입·지역·학습 대상·행정동 변경·활성 버전 변경(409)·다시 확인 때 목록과 관측 입력을 다시 읽는다.
   useEffect(() => {
@@ -76,15 +78,15 @@ export function useRealSimulation({ enabled, region, target, dong, log }) {
 
   // 시뮬레이션 추론(읽기 전용 계산) — 늦게 온 이전 응답은 버린다.
   const simulate = useCallback(async (changes) => {
-    if (!context || !model) return null;
+    if (!currentContext || !model) return null;
     const current = guard(predictGate);
     // 다시 계산하는 동안 이전 실패 문구 대신 계산 중으로 보인다(활성 버전 변경 안내는 남긴다).
     setFeedback((value) => (value === REAL_PREDICT_FAILED_TEXT ? null : value));
     try {
       const token = await getRealdataToken();
-      const result = await apiSend("POST", endpoint(model) + "/predict", { token, body: inferenceRequest(context, changes) });
+      const result = await apiSend("POST", endpoint(model) + "/predict", { token, body: inferenceRequest(currentContext, changes) });
       if (!current()) return null;
-      const checked = validateInference(result, context);
+      const checked = validateInference(result, currentContext);
       conflictKey.current = null;
       // 새 버전으로 다시 계산했으면 "활성 버전이 바뀌었습니다" 안내를 거둔다(기록은 활동 로그에 남아 있다).
       setFeedback((value) => (value === REAL_VERSION_CHANGED_TEXT ? null : value));
@@ -102,14 +104,14 @@ export function useRealSimulation({ enabled, region, target, dong, log }) {
       return null;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [context, modelKey, reload]);
+  }, [currentContext, modelKey, reload]);
 
   const datasetName = (id) => catalog.datasets?.find((row) => row.id === id || row.dataset_id === id)?.name ?? id;
-  const ready = Boolean(enabled && context && model);
+  const ready = Boolean(enabled && currentContext && model);
   // 모델이 실제로 없을 때만 "준비" 안내를 띄운다(조회 실패는 고정 실패 문구로 알린다).
   const missing = Boolean(enabled && !loading && !ready && !loadFailed);
   return {
-    catalog, context, loading, ready, missing, loadFailed: Boolean(enabled && loadFailed),
+    catalog, context: currentContext, loading, ready, missing, loadFailed: Boolean(enabled && loadFailed),
     predictFailed: feedback === REAL_PREDICT_FAILED_TEXT,
     feedback: enabled && loadFailed ? REAL_LOAD_FAILED_TEXT : feedback,
     revision, datasetName, simulate, reload

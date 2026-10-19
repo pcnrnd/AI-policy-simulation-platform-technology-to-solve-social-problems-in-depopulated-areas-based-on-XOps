@@ -73,7 +73,7 @@ assert.match(reporterPage, /ERROR: 보고서 저장 실패 \(\$\{fmt\.label\}\) 
 // 모니터 콘솔 줄(토큰 발급·모델 목록·지표·드리프트·이상치 실패)도 같은 규칙 — 접두와 작업 이름은 유지
 const monitorSource = readFileSync(join(srcRoot, "pages", "MonitorPage.jsx"), "utf-8");
 assert.doesNotMatch(monitorSource, /err\??\.message/);
-for (const line of ["WARN: 실데이터 토큰 발급 실패", "WARN: 실데이터 모델 목록 조회 실패", "ERROR: 모니터링 지표 로드 실패", "ERROR: 드리프트 조회 실패", "ERROR: 이상치 판정 실패"]) {
+for (const line of ["WARN: 실데이터 토큰 발급 실패", "WARN: 모델 목록 조회 실패", "ERROR: 모니터링 지표 로드 실패", "ERROR: 드리프트 조회 실패", "ERROR: 이상치 판정 실패"]) {
   assert.ok(monitorSource.includes(`${line} — \${alertText(err, "`), line);
 }
 // 개요·모니터의 빈 상태는 값을 채우는 방법을 한 문장으로 알린다 — 상태만 알리던 옛 문구 금지

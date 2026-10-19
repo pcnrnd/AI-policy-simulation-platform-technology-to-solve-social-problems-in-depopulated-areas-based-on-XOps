@@ -288,3 +288,121 @@ def test_failed_job_records_failed_stage(client, auth_headers, monkeypatch):
     monkeypatch.setattr(service.datasets, "load", load_once)
     job = wait_job(client, h, client.post(BASE + "/pipelines/" + p["id"] + "/run", headers=h).json()["id"])
     assert job["failed_stage"] == "preparing"
+
+
+@pytest.mark.parametrize("mode", ["mock", "real"])
+def test_delete_unused_dataset_only_managed_copy(client, auth_headers, tmp_path, mode):
+    from src.core.settings import get_settings
+
+    raw = tmp_path / "source.json"
+    raw.write_text('{"original":true}', encoding="utf-8")
+    managed = get_settings().model_artifact_dir / "modelops" / mode / "datasets" / "delete_fixture.json"
+    managed.parent.mkdir(parents=True, exist_ok=True)
+    managed.write_bytes(raw.read_bytes())
+    store.save(mode, "dataset", {"id": "delete_fixture", "private_path": str(managed),
+        "source_dataset_id": "source-kept", "content_hash": "a" * 64}, create=True)
+    response = client.delete(BASE + "/datasets/delete_fixture", headers=headers(auth_headers, mode))
+    assert response.status_code == 200
+    assert response.json() == {"deleted": "delete_fixture", "mode": mode, "managed_copy_removed": True}
+    assert raw.read_text(encoding="utf-8") == '{"original":true}'
+    assert not managed.exists()
+    assert not store.list_assets(mode, "dataset")
+    assert store.list_assets(mode, "audit")[0]["action"] == "dataset_deleted"
+    assert client.delete(BASE + "/datasets/delete_fixture", headers=headers(auth_headers, mode)).status_code == 404
+
+
+@pytest.mark.parametrize("kind", ["pipeline", "version", "job"])
+def test_delete_dataset_rejects_each_reference(client, auth_headers, kind):
+    ds = register(client, auth_headers)
+    path = Path(ds["private_path"])
+    before = path.read_bytes()
+    store.save("mock", kind, {"id": "protect_" + kind, "dataset_id": ds["id"]}, create=True)
+    audits = len(store.list_assets("mock", "audit"))
+    response = client.delete(BASE + "/datasets/" + ds["id"], headers=headers(auth_headers, "mock"))
+    assert response.status_code == 409
+    assert store.get("mock", "dataset", ds["id"])["id"] == ds["id"]
+    assert store.get("mock", kind, "protect_" + kind)["dataset_id"] == ds["id"]
+    assert path.read_bytes() == before
+    assert len(store.list_assets("mock", "audit")) == audits
+
+
+def test_delete_dataset_mode_and_write_permission(client, auth_headers):
+    from src.auth.jwt import issue_jwt
+
+    ds = register(client, auth_headers)
+    url = BASE + "/datasets/" + ds["id"]
+    assert client.delete(url, headers=headers(auth_headers, "real")).status_code == 404
+    assert client.delete(url, headers=headers(auth_headers, "invalid")).status_code == 400
+    assert client.delete(url, headers={"X-Data-Mode": "mock"}).status_code == 401
+    readonly = {"Authorization": "Bearer " + issue_jwt(scope="data:read"), "X-Data-Mode": "mock"}
+    assert client.delete(url, headers=readonly).status_code == 401
+    assert Path(ds["private_path"]).exists()
+    assert store.get("mock", "dataset", ds["id"])
+
+
+def test_delete_dataset_rejects_unmanaged_path(client, auth_headers, tmp_path):
+    ds = register(client, auth_headers)
+    managed = Path(ds["private_path"])
+    original = tmp_path / "raw.json"
+    original.write_text("raw-kept", encoding="utf-8")
+    store.save("mock", "dataset", {**ds, "private_path": str(original)})
+    response = client.delete(BASE + "/datasets/" + ds["id"], headers=headers(auth_headers, "mock"))
+    assert response.status_code == 409
+    assert original.read_text(encoding="utf-8") == "raw-kept"
+    assert managed.exists()
+    assert store.get("mock", "dataset", ds["id"])
+
+
+def test_delete_dataset_database_failure_restores_copy(client, auth_headers, monkeypatch):
+    from src.modelops import datasets
+
+    ds = register(client, auth_headers)
+    original = Path(ds["private_path"])
+    before = original.read_bytes()
+    conn = _conn()
+
+    class FailAudit:
+        def execute(self, sql, args=()):
+            if sql.startswith("INSERT INTO mo_assets"):
+                raise RuntimeError("isolated audit failure")
+            return conn.execute(sql, args)
+
+        def commit(self):
+            conn.commit()
+
+        def rollback(self):
+            conn.rollback()
+
+    monkeypatch.setattr(datasets, "_conn", lambda: FailAudit())
+    with pytest.raises(RuntimeError, match="isolated audit failure"):
+        service.delete_dataset("mock", ds["id"], "fixture")
+    assert original.read_bytes() == before
+    assert store.get("mock", "dataset", ds["id"])
+    assert not list(original.parent.glob(ds["id"] + ".delete-*"))
+
+
+def test_delete_dataset_does_not_cross_mode_reference(client, auth_headers):
+    ds = register(client, auth_headers)
+    store.save("real", "version", {"id": "other_mode", "dataset_id": ds["id"]}, create=True)
+    response = client.delete(BASE + "/datasets/" + ds["id"], headers=headers(auth_headers, "mock"))
+    assert response.status_code == 200
+    assert store.get("real", "version", "other_mode")["dataset_id"] == ds["id"]
+
+
+def test_delete_dataset_serializes_with_pipeline_registration(client, auth_headers):
+    ds = register(client, auth_headers)
+    h = headers(auth_headers, "mock")
+    body = {"id": "delete_race", "name": "경합 검증", "model_type": "factor_analysis",
+            "dataset_id": ds["id"], "dataset_hash": ds["content_hash"]}
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        registered = pool.submit(client.post, BASE + "/pipelines", headers=h, json=body)
+        deleted = pool.submit(client.delete, BASE + "/datasets/" + ds["id"], headers=h)
+        created, removed = registered.result(), deleted.result()
+    if created.status_code == 201:
+        assert removed.status_code == 409
+        assert Path(ds["private_path"]).exists()
+        assert store.get("mock", "pipeline", "delete_race")["dataset_id"] == ds["id"]
+    else:
+        assert created.status_code == 404
+        assert removed.status_code == 200
+        assert not Path(ds["private_path"]).exists()

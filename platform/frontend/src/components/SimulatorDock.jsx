@@ -21,6 +21,7 @@ export default function SimulatorDock({
   regionInfo,
   searchText,
   onClearSearch,
+  districtControl,
   hint,
   fixed,
   controls,
@@ -77,6 +78,7 @@ export default function SimulatorDock({
             </div>
           )}
         </div>
+        {districtControl}
       </div>
 
       <div className="sim-dock-section">
@@ -112,6 +114,7 @@ export default function SimulatorDock({
               min={c.min}
               max={c.max}
               step={c.step ?? 1}
+              exactValue={c.exactValue}
               unit={c.unit}
               locked={c.locked}
             />
@@ -156,7 +159,7 @@ export default function SimulatorDock({
 }
 
 // locked: 값은 보이되 조정하지 않는다(aria-disabled — 포커스·낭독은 유지, 변경은 무시).
-function Slider({ label, value, onChange, min = 0, max = 100, step = 1, unit = "%", locked = false, lockTitle }) {
+function Slider({ label, value, onChange, min = 0, max = 100, step = 1, unit = "%", locked = false, lockTitle, exactValue = false }) {
   const inputId = useId();
   const rangeDescriptionId = `${inputId}-range-description`;
   const shown = sliderValueText(value, unit, step);
@@ -175,7 +178,7 @@ function Slider({ label, value, onChange, min = 0, max = 100, step = 1, unit = "
       <span id={rangeDescriptionId} className="sr-only">
         조절 범위: {rangeText(min)}
         {unit}부터 {rangeText(max)}
-        {unit}까지, {rangeText(step)}
+        {unit}까지, {exactValue ? "키보드 조절 " : ""}{rangeText(step)}
         {unit} 단위
       </span>
       <input
@@ -183,12 +186,21 @@ function Slider({ label, value, onChange, min = 0, max = 100, step = 1, unit = "
         type="range"
         min={min}
         max={max}
-        step={step}
+        step={exactValue ? "any" : step}
         value={Number.isFinite(value) ? value : min}
         aria-valuetext={`${shown}${unit}`}
         aria-describedby={rangeDescriptionId}
         aria-disabled={locked || undefined}
         title={locked ? lockTitle : undefined}
+        onKeyDown={(event) => {
+          if (!exactValue) return;
+          const direction = { ArrowRight: 1, ArrowUp: 1, ArrowLeft: -1, ArrowDown: -1 }[event.key];
+          if (!direction && event.key !== "Home" && event.key !== "End") return;
+          event.preventDefault();
+          if (locked) return;
+          const next = event.key === "Home" ? min : event.key === "End" ? max : value + direction * step;
+          onChange(Math.max(min, Math.min(max, next)));
+        }}
         // 실데이터 입력은 소수 단위가 있어 Number 로 읽는다(정수 슬라이더도 그대로 정수).
         onChange={(e) => { if (!locked) onChange(Number(e.target.value)); }}
       />
