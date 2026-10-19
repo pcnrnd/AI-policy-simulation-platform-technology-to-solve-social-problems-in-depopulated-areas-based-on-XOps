@@ -21,7 +21,7 @@ import { rankStrategies } from "../constants/policyStrategies.js";
 import { YEAR_LABELS, computeTrends, budgetToFactor, controlBoostOf, ANALYSIS_STEPS } from "../lib/simulation.js";
 import {
   REAL_TARGETS, REAL_GUIDE_TEXT, REAL_CONTROLS_LOCK_TEXT, FACTOR_GUIDE_TEXT, FACTOR_PENDING_TEXT, FACTOR_RUN_LOCK_TEXT, FACTOR_IDLE_TEXT,
-  FACTOR_DIAGNOSIS_TEXT, DEMO_FACTOR_TARGET, realUnavailableText, activeModelPair, factorAnalysisView,
+  FACTOR_DIAGNOSIS_TEXT, DEMO_FACTOR_TARGET, realUnavailableText, selectedFactorModel, inferenceMatches, inferenceContextKey, factorAnalysisView,
   observedFeatureLabel, rankSensitivity, targetUnit, formatUnitValue, formatMonth,
   realSliderControls, forecastSeries, sensitivityRecommendation, regionRealStatus
 } from "../lib/realSimulation.js";
@@ -31,7 +31,7 @@ const SIM_DEBOUNCE_MS = 500;
 const STAGE_IDS = ["stage-factor", "stage-result", "stage-sim", "stage-report"];
 
 // 정책 시뮬레이터 — 기준선 4단계 구조 하나를 두 모드가 함께 쓴다(모드는 데이터 출처만 바꾼다).
-// ①·②: 두 모드 모두 활성 요인분석 모델의 결과(useFactorAnalysis). 데모 표시는 합성 요인 패널 모델을 자동 준비한다.
+// ①·②: 두 모드 모두 선택한 기존 활성 요인분석 모델의 결과(useFactorAnalysis).
 // ③·④: 데모는 지역 사례(mock_data.json)와 화면 예시 계산, 실데이터는 같은 지역·학습 대상의 활성 시뮬레이션 버전
 // 추론(useRealSimulation) — 실데이터 ③·④는 ① 실행과 무관하다. 실데이터 대응이 없는 요소는 같은 자리에 행동 안내를 둔다.
 export default function SimulatorPage() {
@@ -53,8 +53,27 @@ export default function SimulatorPage() {
   const real = useRealSimulation({ enabled: !demo, region: currentRegion.id, target, dong, log: (message) => addConsoleLog(message, false, true) });
   // STAGE ① 요인분석 — 두 모드 같은 흐름. 데모는 합성 요인 패널(생활인구), 실데이터는 선택한 학습 대상의 요인분석 모델.
   const factorTarget = demo ? DEMO_FACTOR_TARGET : target;
+  const mode = demo ? "mock" : "real";
+  const factorContext = `${mode}|${currentRegion.id}|${factorTarget}`;
+  const [modelPick, setModelPick] = useState(null);
+  const picked = modelPick?.context === factorContext ? modelPick : null;
   const factor = useFactorAnalysis({ demo, region: currentRegion.id, target: factorTarget, dong: demo ? "" : dong,
+    modelId: picked?.id, versionId: picked?.version,
     log: (message) => addConsoleLog(message, false, message.startsWith("WARN")) });
+  const factorModels = factor.catalog?.mode === mode && factor.catalog?.source === mode
+    ? factor.catalog.instances.filter((row) => appData.regions.some((r) => r.id === row.region_id)
+      && (demo ? row.target === DEMO_FACTOR_TARGET : Object.hasOwn(REAL_TARGETS, row.target))
+      && selectedFactorModel(factor.catalog, row.id, row.region_id, row.target, mode)) : [];
+  const factorModel = selectedFactorModel(factor.catalog, picked?.id, currentRegion.id, factorTarget, mode);
+  useEffect(() => {
+    if (factor.loading || factor.loadFailed) return;
+    const chosen = factorModels.find((row) => row.id === picked?.id);
+    if (picked?.explicit && !chosen) return;
+    const model = chosen ?? factorModels.find((row) => row.region_id === currentRegion.id && row.target === factorTarget);
+    const next = model ? { context: factorContext, id: model.id, version: model.active_version, explicit: picked?.explicit ?? false } : null;
+    setModelPick((previous) => previous?.context === next?.context && previous?.id === next?.id
+      && previous?.version === next?.version ? previous : next);
+  }, [factor.catalog, factor.loading, factor.loadFailed, factorContext]);
   // 실데이터 모델이 준비되지 않아 잠근 컨트롤의 사유 — 조회 중·조회 실패·모델 없음을 구분한다.
   const realLockTitle = demo || real.ready ? null
     : real.loading ? "모델과 관측 입력을 확인하는 중입니다." : real.loadFailed ? "모델 정보를 불러오지 못했습니다. [정책 추천 도출]을 눌러 다시 확인하세요." : "시뮬레이션 활성 모델을 먼저 준비하세요.";
@@ -70,7 +89,8 @@ export default function SimulatorPage() {
 
   // 조절변수(x) — 데모는 지역 사례의 시설 변수, 실데이터는 시뮬레이션 모델의 조정 가능한 관측 입력. 바뀌면 기본값으로.
   const controls = demo ? currentRegion.case.simulation.controls ?? [] : realSliderControls(real.context, label, unit);
-  const controlsKey = `${currentRegion.id}|${controls.map((c) => `${c.key}:${c.default}`).join(",")}`;
+  const controlsKey = [mode, currentRegion.id, demo ? factorModel?.active_version : simProof?.version_id,
+    controls.map((c) => `${c.key}:${c.default}`).join(",")].join("|");
   const defaultValues = () => Object.fromEntries(controls.map((c) => [c.key, c.default]));
   const [controlValues, setControlValues] = useState(defaultValues);
   useEffect(() => {
@@ -87,7 +107,9 @@ export default function SimulatorPage() {
   const [recoSig, setRecoSig] = useState("");
   const [recoSim, setRecoSim] = useState(null);
   const controlSig = controls.map((c) => `${c.key}:${controlValues[c.key] ?? c.default}`).join(",");
-  const currentSig = `${currentRegion.id}|${target}|${dong}|${welfareWeight}|${industryWeight}|${housingWeight}|${budgetTotal}|${controlSig}`;
+  const contextKey = inferenceContextKey({ mode, region: currentRegion.id, target: factorTarget, dong: demo ? "" : dong,
+    factorModel, simulationProof: demo ? null : simProof });
+  const currentSig = `${contextKey}|${welfareWeight}|${industryWeight}|${housingWeight}|${budgetTotal}|${controlSig}`;
   const recoStale = recommendation !== null && recoSig !== currentSig;
 
   // 단계 접기/펼치기 상태 (기본 전부 펼침)
@@ -100,16 +122,17 @@ export default function SimulatorPage() {
   };
 
   // STAGE① 요인분석 실행 상태 — idle(미실행) → running(단계 진행) → done(결과 공개). 두 모드 같은 훅(useFactorAnalysis).
-  const analysisStatus = factor.status;
+  const factorResult = inferenceMatches(factor.result?.analysis, { mode, region: currentRegion.id, target: factorTarget,
+    modelId: factorModel?.id, versionId: factorModel?.active_version, dong: demo ? "" : dong }) ? factor.result : null;
+  const analysisStatus = factor.status === "done" && !factorResult ? "idle" : factor.status;
   const [simResult, setSimResult] = useState(null); // 실데이터 시뮬레이션 추론 결과
   const [simSig, setSimSig] = useState("");
   // 실데이터는 같은 지역·학습 대상의 요인분석 활성 모델이 있어야 실행된다(데모는 자동 준비). 조회 중·실패·모델 없음을 구분한다.
-  const factorModel = demo ? null : activeModelPair(real.catalog, currentRegion.id, target).factor;
   // 조회 실패면 잠그지 않고 [요인분석 실행]이 목록·입력을 다시 읽는다(재시도).
-  const factorRetry = !demo && real.loadFailed && !factorModel;
-  const factorLockTitle = demo || factorModel || factorRetry ? null
-    : real.loading ? "모델 목록을 확인하는 중입니다." : FACTOR_RUN_LOCK_TEXT;
-  const factorMissing = !demo && !real.loading && !real.loadFailed && (!factorModel || factor.missing);
+  const factorRetry = factor.loadFailed && !factorModel;
+  const factorLockTitle = factorModel || factorRetry ? null
+    : factor.loading ? "모델 목록을 확인하는 중입니다." : FACTOR_RUN_LOCK_TEXT;
+  const factorMissing = !factor.loading && !factor.loadFailed && (!factorModel || factor.missing);
 
   // 지역·학습 대상·행정동 변경 시 결과 초기화 (지역별 요인분석은 별도 실행 — 요인분석 상태는 훅이 비운다)
   useEffect(() => {
@@ -120,10 +143,10 @@ export default function SimulatorPage() {
     setRecoSig("");
     setRecoSim(null);
     // real.revision: 활성 버전이 바뀌거나(409) 다시 확인해 입력을 다시 읽으면 이전 결과를 비운다.
-  }, [currentRegion.id, target, dong, real.revision]);
+  }, [demo, currentRegion.id, target, dong, real.revision]);
 
   const handleRunAnalysis = async () => {
-    if (factorRetry) { real.reload(); return; }
+    if (factorRetry) { factor.reload(); return; }
     // 실행할 수 없으면(버튼 aria-disabled + 사유 title) 클릭을 무시한다.
     if (analysisStatus === "running" || factorLockTitle) return;
     setOpenStages((s) => ({ ...s, "stage-factor": true }));
@@ -163,7 +186,7 @@ export default function SimulatorPage() {
     simTimerRef.current = setTimeout(runSimulation, SIM_DEBOUNCE_MS);
     return () => clearTimeout(simTimerRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [demo, real.ready, controlSig]);
+  }, [demo, real.ready, contextKey, controlSig]);
 
   const handleRecommend = async () => {
     // 조회 실패면 [정책 추천 도출]이 목록·입력을 다시 읽는다(재시도).
@@ -224,7 +247,9 @@ export default function SimulatorPage() {
     () => computeTrends(currentRegion, welfareWeight, industryWeight, housingWeight, budgetFactor, controlBoost),
     [currentRegion, welfareWeight, industryWeight, housingWeight, budgetFactor, controlBoost]
   );
-  const series = demo ? null : forecastSeries(real.context, simResult);
+  const currentSimulation = !demo && inferenceMatches(simResult, { mode: "real", region: currentRegion.id, target,
+    modelId: simProof?.instance_id, versionId: simProof?.version_id, dong }) ? simResult : null;
+  const series = demo ? null : forecastSeries(real.context, currentSimulation);
   const chartData = useMemo(
     () => ({
       labels: demo ? YEAR_LABELS : series.labels,
@@ -330,7 +355,7 @@ export default function SimulatorPage() {
   const resultsReady = demo && analysisDone;
   const recoReady = (!demo || analysisDone) && recommendation && !recoStale;
   // 관측 입력을 바꾼 뒤 재계산이 실패하면 이전 입력의 예측을 현재 값처럼 두지 않는다(계산 대기 중에는 그대로 둔다).
-  const simShown = simResult && (simSig === currentSig || !real.predictFailed) ? simResult : null;
+  const simShown = currentSimulation && (simSig === currentSig || !real.predictFailed) ? currentSimulation : null;
 
   // 스텝퍼 완료 표시: ①② 요인분석 완료, ③④ 정책 추천 도출 완료 기준
   const doneStages = [
@@ -342,15 +367,13 @@ export default function SimulatorPage() {
   const guide = (text) => (
     <div className="real-flow-guide" data-guide>
       <p>{text}</p>
-      <button type="button" className="btn btn-secondary" onClick={() => navigateToTab("tab-dataops")}>DataOps에서 학습데이터 등록</button>{" "}
-      <button type="button" className="btn btn-primary" onClick={() => navigateToTab("tab-mlops-orch")}>오케스트레이터에서 학습·활성화</button>
     </div>
   );
   // ③ 자리의 시뮬레이션 모델 대기 문구 — 모델 없음(전문)·조회 중·조회 실패를 구분한다.
   const realPending = <PendingData running={real.loading} text={real.missing ? REAL_GUIDE_TEXT : realLockTitle} />;
   // ①·② 요인분석 — 두 모드 같은 매핑(factorAnalysisView). 실데이터 모델 없음이면 안내(전문은 ① 첫 카드 한 곳, 나머지는 한 줄).
-  const factorLabel = (feature) => observedFeatureLabel(feature, factorTarget, factor.result?.analysis.dong_options ?? dongOptions);
-  const factorView = factor.result ? factorAnalysisView(factor.result.analysis, { demo, dataset: factor.result.dataset, label: factorLabel }) : null;
+  const factorLabel = (feature) => observedFeatureLabel(feature, factorTarget, factorResult?.analysis.dong_options ?? dongOptions);
+  const factorView = factorResult ? factorAnalysisView(factorResult.analysis, { demo, dataset: factorResult.dataset, label: factorLabel }) : null;
   const factorLine = <PendingData text={FACTOR_PENDING_TEXT} />;
   const factorIdle = <PendingData running={analysisRunning} text={FACTOR_IDLE_TEXT} />;
   const factorPlaceholders = factorMissing ? [guide(FACTOR_GUIDE_TEXT), factorLine, factorLine] : [factorIdle, factorIdle, factorIdle];
@@ -380,23 +403,30 @@ export default function SimulatorPage() {
         </select>
       </label>
       <label>
-        행정동
+        요인분석 모델
         <select
-          aria-label="행정동"
-          value={demo ? "all" : dong || simProof?.dong_code || ""}
-          disabled={analysisRunning}
-          aria-disabled={(!demo && !real.context) || undefined}
-          title={!demo && !real.context ? realLockTitle ?? undefined : undefined}
-          onChange={(e) => { if (!demo && real.context) setDong(e.target.value); }}
+          aria-label="요인분석 모델"
+          value={factorModel?.id ?? ""}
+          disabled={analysisRunning || factor.loading || !factorModels.length}
+          title={factor.loadFailed ? "모델 목록 조회 실패: 요인분석 실행을 눌러 다시 확인하세요." : factorLockTitle ?? undefined}
+          onChange={(event) => {
+            const model = factorModels.find((row) => row.id === event.target.value);
+            const region = appData.regions.find((row) => row.id === model?.region_id);
+            if (!model || !region) return;
+            setModelPick({ context: [mode, model.region_id, model.target].join("|"), id: model.id, version: model.active_version, explicit: true });
+            setDongPick({ regionId: region.id, code: "" });
+            if (!demo) setTarget(model.target);
+            setCurrentRegion(region);
+          }}
         >
-          {demo && <option value="all">전체</option>}
-          {!demo && !real.context && <option value="">모델 준비 후 선택</option>}
-          {!demo && dongOptions.map((row) => <option key={row.code} value={row.code}>{row.name}</option>)}
+          {!factorModel && <option value="">{factor.loading ? "모델 확인 중…" : factor.loadFailed ? "모델 목록 조회 실패" : "이 지역·대상의 활성 모델 없음"}</option>}
+          {factorModels.map((row) => <option key={row.id} value={row.id}>{row.name} · {appData.regions.find((r) => r.id === row.region_id)?.name} · {demo ? "생활인구" : REAL_TARGETS[row.target]}</option>)}
         </select>
       </label>
       {!demo && real.loading && <p role="status">모델과 관측 입력 확인 중…</p>}
       {!demo && real.feedback && <p className="async-feedback is-error" role="alert">{real.feedback}</p>}
       {factor.feedback && <p className="async-feedback is-error" role="alert">{factor.feedback}</p>}
+      {factor.loadFailed && <p role="alert">모델 목록을 불러오지 못했습니다. 요인분석 실행을 눌러 다시 확인하세요.</p>}
     </div>
   );
 
@@ -435,8 +465,8 @@ export default function SimulatorPage() {
         conditions={conditions}
         runLockTitle={factorLockTitle}
         runTitle={factorRetry ? "다시 확인" : null}
-        evidence={<ModelEvidence slot="sim.factor.evidence" result={factor.result?.analysis} regions={regions} label={factorLabel}
-          datasetName={() => factor.result?.dataset?.name ?? factor.result?.analysis.provenance.dataset_id}
+        evidence={<ModelEvidence slot="sim.factor.evidence" result={factorResult?.analysis} regions={regions} label={factorLabel}
+          datasetName={() => factorResult?.dataset?.name ?? factorResult?.analysis.provenance.dataset_id}
           emptyText={factorMissing ? FACTOR_PENDING_TEXT : "[요인분석 실행] 후 모델·학습데이터 근거가 표시됩니다."} />}
       />
 
@@ -513,6 +543,15 @@ export default function SimulatorPage() {
             regionInfo={regionInfo}
             searchText={searchText}
             onClearSearch={() => setSearchText("")}
+            districtControl={<label className="sim-dock-hint">행정동
+              <select aria-label="행정동" value={demo ? "all" : dong || simProof?.dong_code || ""}
+                disabled={analysisRunning || (!demo && !real.context)}
+                title={!demo && !real.context ? realLockTitle ?? undefined : undefined}
+                onChange={(event) => { if (!demo && real.context) setDong(event.target.value); }}>
+                {demo ? <option value="all">전체</option> : !real.context ? <option value="">모델 준비 후 선택</option>
+                  : dongOptions.map((row) => <option key={row.code} value={row.code}>{row.name}</option>)}
+              </select>
+            </label>}
             hint={demo ? "예산·정책 강조·시설 변수를 조정하면 10년 인구 예측이 실시간 갱신됩니다." : "관측 입력을 조정하면 다음 달 예측이 갱신됩니다."}
             fixed={{
               budgetTotal, setBudgetTotal, welfare: welfareWeight, setWelfare: setWelfareWeight,
@@ -644,6 +683,12 @@ export default function SimulatorPage() {
         open={openStages["stage-report"]}
         onToggle={() => toggleStage("stage-report")}
       >
+        <button type="button" className="btn btn-primary"
+          onClick={() => { if (demo ? analysisDone : real.ready || real.loadFailed) handleRecommend(); }}
+          aria-disabled={(demo ? !analysisDone : !real.ready && !real.loadFailed) || undefined}
+          title={demo ? !analysisDone ? "요인분석을 먼저 실행하세요." : undefined : realLockTitle ?? undefined}>
+          <i className="fa-solid fa-lightbulb" aria-hidden="true"></i> 정책 추천 도출
+        </button>
         {recoReady && (demo || recommendation.items.length > 0) ? (
           demo
             ? <PolicyRecommendation region={currentRegion} ranked={recommendation} />
@@ -673,7 +718,7 @@ export default function SimulatorPage() {
           summary="추천 근거"
           demo={demo}
           state={evidenceState}
-          result={recoSim ?? simShown ?? real.context}
+          result={(recoReady ? recoSim : null) ?? simShown ?? real.context}
           regions={regions}
           datasetName={real.datasetName}
           label={label}

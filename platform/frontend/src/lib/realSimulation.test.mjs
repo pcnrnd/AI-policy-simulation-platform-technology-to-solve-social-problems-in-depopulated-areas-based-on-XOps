@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { activeModelPair, inferenceRequest, validateInference, rankSensitivity, observedFeatureLabel, createRequestGate,
+import { activeModelPair, selectedFactorModel, inferenceMatches, inferenceContextKey, inferenceRequest, validateInference, rankSensitivity, observedFeatureLabel, createRequestGate,
   contributionFactors, contributionSplit, realSliderControls, forecastSeries, sensitivityRecommendation, regionRealStatus,
   REAL_GUIDE_TEXT, FACTOR_GUIDE_TEXT, FACTOR_PENDING_TEXT, FACTOR_RUN_LOCK_TEXT, REAL_LOAD_FAILED_TEXT, REAL_PREDICT_FAILED_TEXT, REAL_VERSION_CHANGED_TEXT,
   FACTOR_IDLE_TEXT, FACTOR_FAILED_TEXT, FACTOR_VERSION_CHANGED_TEXT, FACTOR_DIAGNOSIS_TEXT, FACTOR_EXPLAIN_TEXT, FACTOR_FOOTNOTE, CORRELATION_BASIS_TEXT,
@@ -105,11 +105,11 @@ for (const src of [page,factorStage,resultStage]) assert.doesNotMatch(src,/입�
 assert.match(page,/steps=\{ANALYSIS_STEPS\}/);
 assert.match(page,/conditions=\{conditions\}/);
 assert.match(page,/runLockTitle=\{factorLockTitle\}/);
-assert.match(page,/const factorLockTitle = demo \|\| factorModel \|\| factorRetry \? null/);
+assert.match(page,/const factorLockTitle = factorModel \|\| factorRetry \? null/);
 assert.match(factorStage,/aria-disabled=\{runLockTitle \? true : undefined\}/);
 // 실데이터 조회 실패면 [요인분석 실행]이 잠기지 않고 재시도(목록·입력 다시 읽기)가 된다 — title "다시 확인".
-assert.match(page,/const factorRetry = !demo && real\.loadFailed && !factorModel;/);
-assert.match(page,/if \(factorRetry\) \{ real\.reload\(\); return; \}/);
+assert.match(page,/const factorRetry = factor\.loadFailed && !factorModel;/);
+assert.match(page,/if \(factorRetry\) \{ factor\.reload\(\); return; \}/);
 assert.match(page,/runTitle=\{factorRetry \? "다시 확인" : null\}/);
 assert.match(factorStage,/title=\{runLockTitle \?\? runTitle \?\? undefined\}/);
 // ①-1 10행 밖 요인은 같은 카드 안 펼침(접힘 기본)으로 — 삭제된 계산 근거 행을 가리키지 않는다.
@@ -118,9 +118,9 @@ assert.match(factorStage,/<details className="pl-stat-baseline">[\s\S]*외 \{vie
 // 단위별 반올림(공용 포맷) — 카드 수치는 formatUnitValue 로만, 활성 버전은 짧은 ID + title 전체 ID.
 assert.doesNotMatch(factorStage,/formatValue/);
 assert.match(factorStage,/const versionTitle = view\?\.model\.versionId;/);assert.equal(factorStage.match(/title=\{versionTitle\}/g)?.length,2);
-// 데모 준비 중 학습 요청 409(다른 화면이 먼저 시작) → 진행 중 작업을 이어 폴링한다.
+// 활성 버전 변경(추론 409)은 다시 실행 안내로 처리하며 자동 학습으로 우회하지 않는다.
 const hookSource=read("hooks","useFactorAnalysis.js");
-assert.match(hookSource,/if \(error\?\.status !== 409\) throw error;\s*job = runningJob\(await at\(apiGet\(`\$\{BASE\}\/catalog`/);
+assert.match(hookSource,/phase === "predict" && error\?\.status === 409/);
 assert.doesNotMatch(hookSource,/shortId|slice\(0, 12\)/);
 // ③ 계산 근거는 검증 오차·기준선·버전·데이터셋만 — 기여도 3행은 ① 카드로 옮겼다. "요인" 표현도 쓰지 않는다.
 const evidence=read("components","ModelEvidence.jsx");
@@ -131,10 +131,10 @@ assert.doesNotMatch(factorStage,/region\.case|c\.factorAnalysis|aiModel|analysis
 assert.doesNotMatch(page,/ANALYSIS_STEP_MS|setAnalysisStep|DEMO_ANALYSIS_STEPS/);
 assert.equal(page.match(/useFactorAnalysis\(/g)?.length,1);
 assert.doesNotMatch(page,/useFactorAnalysis\(\{[^}]*enabled/);
-// 훅의 모드 차이는 데모 자동 준비 한 곳뿐이다.
+// 선택한 기존 활성 버전만 읽기 추론한다. 등록·학습·활성화 자동 실행은 금지한다.
 const factorHook=read("hooks","useFactorAnalysis.js");
-assert.equal(factorHook.match(/await ensureDemoFactorModel\(/g)?.length,1);
-assert.match(factorHook,/if \(!model && demo\) \{/);
+assert.doesNotMatch(factorHook,/ensureDemoFactorModel|\/activate|\/pipelines|available-datasets/);
+assert.match(factorHook,/selectedFactorModel\(catalog, modelId, region, target, mode\)/);
 assert.doesNotMatch(factorHook,/set(?:Feedback|Missing)\([^)]*(?:error|err)\b/);
 // ② 상관관계는 ① 기여도 부호, 진단은 데모 서사/실데이터 안내.
 assert.match(page,/split=\{factorView\?\.split\}/);
@@ -208,3 +208,46 @@ assert.equal(sliderValueText(8.934,"%",0.01),"8.93");assert.equal(sliderValueTex
 const dock=read("components","SimulatorDock.jsx");
 assert.doesNotMatch(dock,/maximumFractionDigits: 3/);assert.match(dock,/const shown = sliderValueText\(value, unit, step\);/);assert.equal(dock.match(/\{rangeText\((?:min|max|step)\)\}/g)?.length,3);
 console.log("realSimulation: 활성 시뮬레이션 선택·추론 합계·근거 전달·관측 민감도 순위·③④ 독립·①② 제목 동일·안내/알림 금지어·모드 분기 없음·요인분석 두 모드 매핑·③ 근거 기여도 제거 PASS");
+
+// 활성 모델의 이름 대신 ID·지역·대상·모드·정확 버전 소유권을 검증한다.
+const chosen={id:"chosen",mode:"real",model_type:"factor_analysis",region_id:"namwon",target:"observed_sales_krw",active_version:"active"};
+const selectionCatalog={mode:"real",source:"real",instances:[chosen],versions:[{id:"active",instance_id:"chosen",mode:"real"}]};
+assert.equal(selectedFactorModel(selectionCatalog,"chosen","namwon","observed_sales_krw","real"),chosen);
+for (const [id,region,target,mode] of [["other","namwon","observed_sales_krw","real"],["chosen","shinan","observed_sales_krw","real"],["chosen","namwon","nonlocal_visitors","real"],["chosen","namwon","observed_sales_krw","mock"]]) {
+  assert.equal(selectedFactorModel(selectionCatalog,id,region,target,mode),undefined);
+}
+assert.equal(selectedFactorModel({...selectionCatalog,versions:[{id:"active",instance_id:"other",mode:"real"}]},"chosen","namwon","observed_sales_krw","real"),undefined);
+assert.equal(selectedFactorModel({...selectionCatalog,versions:[]},"chosen","namwon","observed_sales_krw","real"),undefined);
+// min/step 격자에 맞추려고 관측 기본값을 변형하면 기준 예측이 달라진다.
+const exact=realSliderControls({controls:[{feature:"y_lag1",min:255018260,max:668114408,default:403738634.457}],inputs:{}},label,"원")[0];
+assert.equal(exact.default,403738634.457);
+assert.equal(exact.exactValue,true);
+assert.equal(exact.step,4100000);
+
+// 실제 화면/추론 훅이 공유하는 경계: 이전 모드·선택·버전의 결과는 노출하거나 다시 계산에 쓰지 않는다.
+const expectedContext={mode:"real",region:"namwon",target:"observed_sales_krw",dong:"45190250",modelId:"factor",versionId:"v1"};
+assert.equal(inferenceMatches({provenance:proof},expectedContext),true);
+for(const changed of [{mode:"mock"},{region:"shinan"},{target:"nonlocal_visitors"},{modelId:"other"},{versionId:"v2"},{dong:"other"}]) {
+  assert.equal(inferenceMatches({provenance:proof},{...expectedContext,...changed}),false);
+}
+assert.equal(inferenceMatches({provenance:{...proof,source:"mock"}},expectedContext),false);
+assert.equal(inferenceMatches(null,expectedContext),false);
+const recommendationContext={mode:"real",region:"namwon",target:"observed_sales_krw",dong:"45190250",factorModel:chosen,simulationProof:sim.provenance};
+const savedRecommendationKey=inferenceContextKey(recommendationContext);
+assert.equal(inferenceContextKey({...recommendationContext,factorModel:{...chosen},simulationProof:{...sim.provenance}}),savedRecommendationKey);
+for(const changed of [{mode:"mock"},{region:"shinan"},{target:"nonlocal_visitors"},{dong:"other"},
+  {factorModel:{...chosen,id:"new-factor"}},{factorModel:{...chosen,active_version:"new-factor-version"}},
+  {simulationProof:{...sim.provenance,instance_id:"new-sim"}},{simulationProof:{...sim.provenance,version_id:"new-sim-version"}},
+  {simulationProof:{...sim.provenance,dataset_hash:"c".repeat(64)}}]) {
+  assert.notEqual(inferenceContextKey({...recommendationContext,...changed}),savedRecommendationKey);
+}
+// 늦은 응답은 gate가 취소하고, 렌더 전환 시에도 같은 provenance 경계가 다른 선택의 결과를 배제한다.
+let releaseOld;
+const late=new Promise((resolve)=>{releaseOld=resolve;});
+const lateGate=createRequestGate(()=>1);
+const oldRequest=lateGate.begin();
+const oldResponse=late.then((payload)=>oldRequest()&&inferenceMatches(payload,{...expectedContext,versionId:"new-active"}));
+lateGate.cancel();
+releaseOld({provenance:proof});
+assert.equal(await oldResponse,false);
+console.log("PASS: current mode/model/version/district provenance, recommendation identity and late response isolation");

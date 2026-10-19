@@ -27,17 +27,14 @@ import { getRealdataToken } from "../components/realdata/realdataClient.jsx";
 import SourceChip from "../components/SourceChip.jsx";
 import { apiGet, apiSend } from "../lib/api.js";
 import { alertText } from "../lib/alertText.js";
-import { baselineName } from "../lib/realSimulation.js";
+import { monitorInstances, monitorActiveVersion, legacyMonitorId, regressionMetricText } from "../lib/monitorModels.js";
+import { TARGET_LABELS, typeName, displayId } from "../lib/modelops.js";
+import { baselineName, targetUnit } from "../lib/realSimulation.js";
 
 // 데모 분포 표시 대상 — 인구이동 예측 모델(백엔드 시드 id).
-// PSI·이상값·예측 지연 값 자체는 이 모델 하나만 관측한다(대상 모델 선택과 무관, 값 확장은 별도 결정 사항).
+// 등록 모델과 매핑된 이력만 조회하며, 설정의 데모 예시 판정은 별도 동작이다.
 const DRIFT_MODEL_ID = "population-forecast";
 
-// 예측 지연 게이지 — 자동 롤백 임계(200ms) 대비 비율로 표시한다.
-const LATENCY_ROLLBACK_MS = 200;
-// 데모 시드 지연. 실측(학습 시 측정한 1건 추론 지연)이 없고 데모 표시가 켜져 있을 때만 쓴다.
-const SEED_LATENCY_NORMAL_MS = 120;
-const SEED_LATENCY_DRIFTED_MS = 178;
 // 데모 시드 PSI — 위와 같은 조건에서만 쓴다.
 const SEED_PSI_DRIFTED = "0.384";
 const SEED_PSI_NORMAL = "0.045";
@@ -115,57 +112,41 @@ const REALDATA_DATASETS = [
 // 단위는 관측 개수다. 실측 지표는 학습 실행 단위로 생기므로 시간 라벨을 붙이지 않는다.
 const WINDOW_OPTIONS = [3, 6, 10];
 
-/**
- * 학습 시 측정한 1건 추론 지연을 표시 문자열로 바꾼다.
- * 1ms 이상은 ms 정수, 1ms 미만은 μs다. 같은 프로세스 안 1행 predict는 보통 1ms 미만이라
- * "0.001ms"로 적으면 값이 잘린 것처럼 읽힌다.
- * @param {number|null} latencyMs 밀리초. 측정이 없으면 null.
- * @returns {string}
- */
-function formatLatency(latencyMs) {
-  if (latencyMs === null) return "측정 없음";
-  if (latencyMs >= 1) return `${latencyMs.toFixed(0)}ms`;
-  const microseconds = latencyMs * 1000;
-  return `${microseconds.toFixed(microseconds >= 10 ? 0 : 1)}μs`;
-}
-
 export default function MonitorPage() {
   const {
     appData,
     driftInjected,
     metricOverrides,
-    modelStore,
-    driftChecking,
-    injectDrift,
-    navigateToTab,
     addConsoleLog,
     setMonitorCollectStatus,
-    modelCandidates,
     mockDataVisible
   } = useAppState();
   const ct = useChartTheme();
 
   // 데모 표시 토글은 화면 구조가 아니라 **데이터 유무**만 바꾼다. OFF에서는 시드(mock_data.json)
   // 유래 값이 실값 자리에 들어가지 않도록 여기 데이터 계층에서 차단하고, 빈 자리는 "–"로 남긴다.
-  const allowSeed = mockDataVisible;
+  const mode = mockDataVisible ? "mock" : "real";
+  const [catalog, setCatalog] = useState(null);
+  const [modelPick, setModelPick] = useState(null);
+  const [realdataModels, setRealdataModels] = useState([]);
+  const selectableModels = monitorInstances(catalog, mode);
+  const selectedInstance = selectableModels.find((row) => modelPick?.mode === mode && row.id === modelPick.id)
+    ?? selectableModels.find((row) => monitorActiveVersion(catalog, row, mode)) ?? selectableModels[0] ?? null;
+  const selectedVersion = monitorActiveVersion(catalog, selectedInstance, mode);
+  const modelTarget = legacyMonitorId(selectedInstance, realdataModels, mode) ?? "";
+  // 매핑 없는 공통 모델에 다른 데모 모델의 이력을 폴백하지 않는다.
+  const allowSeed = mockDataVisible && Boolean(modelTarget);
 
   // 모니터링 옵션 — 운영 모델 레지스트리에서 대상 모델 선택 + 조회 구간. 지표 추이 차트에 반영된다.
   // 대상 모델은 실측 지표 조회 키이기도 하므로 로더보다 먼저 선언한다.
-  const [modelTarget, setModelTarget] = useState(MODEL_REGISTRY[0].id);
   const [windowHours, setWindowHours] = useState(10);
 
   // 실데이터(rd_*) 접근 토큰 — 백엔드는 `data:read` 토큰이 있는 호출에만 실데이터를 싣는다.
   // undefined = 아직 확인 전(요청을 보내지 않는다), null = 발급 실패, 문자열 = 발급 완료.
   const [realdataToken, setRealdataToken] = useState(allowSeed ? null : undefined);
   // 데모 OFF의 대상 모델 목록 — 백엔드가 확인해 준 실데이터 모델(이름·표시 버전)만 쓴다.
-  const [realdataModels, setRealdataModels] = useState([]);
 
   useEffect(() => {
-    if (allowSeed) {
-      // 데모 ON은 시드 경로만 쓰므로 토큰이 필요 없다(있어도 서버가 시드를 내려준다).
-      setRealdataToken(null);
-      return undefined;
-    }
     let alive = true;
     setRealdataToken(undefined);
     getRealdataToken()
@@ -178,33 +159,35 @@ export default function MonitorPage() {
     return () => {
       alive = false;
     };
-  }, [allowSeed, addConsoleLog]);
+  }, [mockDataVisible, addConsoleLog]);
 
   useEffect(() => {
-    if (allowSeed || !realdataToken) {
-      setRealdataModels([]);
-      return undefined;
-    }
+    setCatalog(null); setRealdataModels([]);
+    if (!realdataToken) return undefined;
     let alive = true;
-    apiGet("/api/v3/orchestration/models", { token: realdataToken, params: { include_seed: false } })
-      .then((rows) => {
-        if (!alive) return;
-        setRealdataModels(Array.isArray(rows) ? rows.filter((m) => m.metrics_source === "realdata") : []);
-      })
-      .catch((err) => {
-        if (!alive) return;
-        setRealdataModels([]);
-        addConsoleLog(`WARN: 실데이터 모델 목록 조회 실패 — ${alertText(err, "모델 목록을 불러오지 못했습니다. 잠시 뒤 다시 시도하세요.")}`);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [allowSeed, realdataToken, addConsoleLog]);
+    const epoch = dataModeEpoch();
+    const current = () => alive && epoch === dataModeEpoch();
+    Promise.all([
+      apiGet("/api/v3/modelops/catalog", { token: realdataToken }),
+      mockDataVisible ? Promise.resolve([]) : apiGet("/api/v3/orchestration/models", { token: realdataToken, params: { include_seed: false } })
+    ]).then(([data, rows]) => {
+      if (!current()) return;
+      if (data.mode !== mode || data.source !== mode) throw new Error("모델 목록의 데이터 모드를 확인하세요.");
+      setCatalog(data);
+      setRealdataModels(Array.isArray(rows) ? rows.filter((row) => row.metrics_source === "realdata") : []);
+    }).catch((err) => {
+      if (current()) addConsoleLog(`WARN: 모델 목록 조회 실패 — ${alertText(err, "모델 목록을 불러오지 못했습니다.")}`);
+    });
+    return () => { alive = false; };
+  }, [mockDataVisible, realdataToken, addConsoleLog]);
 
   // 백엔드(/api/v3/monitoring) 실데이터 — 없으면 mock으로 폴백해 로딩 중에도 렌더.
-  const [metricsResp, setMetricsResp] = useState(null);
-  const [shapResp, setShapResp] = useState(null);
-  const [driftResp, setDriftResp] = useState(null);
+  const [metricsResult, setMetricsResp] = useState(null);
+  const metricsResp = metricsResult?.model === modelTarget && metricsResult?.epoch === dataModeEpoch() ? metricsResult.data : null;
+  const [shapResult, setShapResp] = useState(null);
+  const shapResp = shapResult?.model === modelTarget && shapResult?.epoch === dataModeEpoch() ? shapResult.data : null;
+  const [driftResult, setDriftResp] = useState(null);
+  const driftResp = driftResult?.model === modelTarget && driftResult?.epoch === dataModeEpoch() ? driftResult.data : null;
   const [monitoringLoading, setMonitoringLoading] = useState(true);
   const [monitoringError, setMonitoringError] = useState(null);
   // 드리프트 판정 수집 상태("pending" | "ok" | "error") — 요청이 끝났는지를 payload 진위와 분리한다
@@ -222,7 +205,6 @@ export default function MonitorPage() {
   const driftRequestRef = useRef(0);
   const retryRef = useRef(null);
   const retryBusyRef = useRef(false);
-  const driftBusyRef = useRef(false);
   const collectRef = useRef(null);
 
   const loadMonitoringData = useCallback(() => {
@@ -231,6 +213,8 @@ export default function MonitorPage() {
     const isCurrent = () => requestId === monitoringRequestRef.current && epoch === dataModeEpoch();
     setMonitoringLoading(true);
     setMonitoringError(null);
+    setMetricsResp(null); setShapResp(null);
+    if (!modelTarget) { setMonitoringLoading(false); setLastCollected(null); return Promise.resolve(); }
     // model_id 를 함께 보내 백엔드가 실측(SQLite 실행 이력·학습 아티팩트)을 먼저 찾게 한다.
     // 실측이 없을 때의 시드 폴백은 데모 표시 ON 에서만 받는다 — OFF 에서는 시드 수치가
     // 네트워크 응답에도 남지 않게 서버가 빈 응답(`source: null`)을 내려준다.
@@ -247,8 +231,8 @@ export default function MonitorPage() {
     ])
       .then(([m, s]) => {
         if (!isCurrent()) return;
-        setMetricsResp(m);
-        setShapResp(s);
+        setMetricsResp({ model: modelTarget, epoch, data: m });
+        setShapResp({ model: modelTarget, epoch, data: s });
         setLastCollected(new Date());
       })
       .catch((err) => {
@@ -271,6 +255,7 @@ export default function MonitorPage() {
     const isCurrent = () => requestId === driftRequestRef.current && epoch === dataModeEpoch();
     setDriftResp(null);
     setDriftStatus("pending");
+    if (!modelTarget) { setDriftStatus("ok"); return Promise.resolve(); }
     return apiGet("/api/v3/monitoring/drift", {
       // 시드 분포 판정은 데모 표시 ON 전용 — 실 추론 입력 수집 경로가 아직 없다.
       // 데모 OFF에서는 선택한 실데이터 모델의 학습 구간 vs 검증/이후 구간 PSI를 받는다.
@@ -283,7 +268,7 @@ export default function MonitorPage() {
     })
       .then((d) => {
         if (!isCurrent()) return;
-        setDriftResp(d);
+        setDriftResp({ model: modelTarget, epoch, data: d });
         setDriftStatus("ok");
       })
       .catch((err) => {
@@ -389,28 +374,6 @@ export default function MonitorPage() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- measuredLabels는 같은 응답에서 온다
   }, [measuredAccuracy, addConsoleLog]);
-  // 표시 버전은 백엔드 레지스트리의 현행 운영 버전을 따르고, 응답 전에만 Model Store·상수로 폴백한다
-  // (승급 후 프런트 상수와 어긋나지 않게).
-  const servingVersionOf = (modelId, fallback) =>
-    realdataModels.find((m) => m.model_id === modelId)?.version ??
-    modelCandidates?.[modelId]?.version ??
-    modelStore?.find((m) => m.modelId === modelId && m.status === "운영")?.version ??
-    fallback;
-
-  // 대상 모델 선택지 — 데모 OFF에서는 백엔드가 내려준 모델(시드 지표 제외)만 남긴다.
-  // 상수 레지스트리(MODEL_REGISTRY)는 시드 모델명·버전이라 옵션 텍스트로도 내보내지 않는다.
-  const selectableModels = allowSeed
-    ? MODEL_REGISTRY
-    : realdataModels.map((m) => ({ id: m.model_id, name: m.name ?? m.model_id, version: m.version }));
-
-  // 선택 중인 모델이 목록에 없으면 첫 항목으로 되돌린다(데모 ON↔OFF 전환 직후).
-  useEffect(() => {
-    if (selectableModels.length === 0) return;
-    if (selectableModels.some((m) => m.id === modelTarget)) return;
-    setModelTarget(selectableModels[0].id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- selectableModels는 매 렌더 새 배열이라 id 목록으로 비교한다
-  }, [selectableModels.map((m) => m.id).join("|"), modelTarget]);
-
   const AXIS_OPTS = {
     responsive: true,
     maintainAspectRatio: false,
@@ -697,45 +660,8 @@ export default function MonitorPage() {
         : NO_VALUE;
   const outlierAlerting = outlierMeasured ? measuredOutlierRows.length > 0 : allowSeed && driftInjected;
   const outlierCountColor = outlierAlerting ? "var(--accent-red)" : "var(--text-primary)";
-  // 예측 지연 — 학습 시 실측한 1건 추론 지연(백엔드 training.latency_ms)을 우선한다.
-  // 실측이 없고 데모 표시가 켜져 있을 때만 시드 상수로 내려가고, OFF에서는 "측정 없음"으로 둔다.
-  // 드리프트는 인구이동 예측에만 주입되므로 다른 모델에 드리프트 지연을 붙이지 않는다.
-  const measuredLatency = metricsMeasured ? metricsResp?.latency_ms : null;
-  const latencyMs = Number.isFinite(measuredLatency)
-    ? measuredLatency
-    : allowSeed
-      ? driftInjected && modelTarget === DRIFT_MODEL_ID
-        ? SEED_LATENCY_DRIFTED_MS
-        : SEED_LATENCY_NORMAL_MS
-      : null;
-  const latencyText = formatLatency(latencyMs);
-
   // 수집 상태 — 성능·설명 API 결과와 문구를 일치시킨다(실패 시 데이터 소스 정상 수신을 주장하지 않음).
   // 색상 외 아이콘 형태로도 상태를 구분한다(§9 A11Y-06 · §10 UI-01).
-  // 시드 분포의 PSI/KL 판정만 재현한다. 기존 seed 모델을 재학습·승급하지 않는다.
-  const driftAction = !allowSeed
-    ? { icon: "fa-vial-circle-check", label: "이상 시나리오 재현 (데모 전용)", locked: true,
-        title: "설정에서 데모 데이터 표시를 켜면 실행할 수 있습니다." }
-    : driftChecking
-      ? { icon: "fa-hourglass-half", label: "데모 분포 판정 중...", locked: true,
-          title: "백엔드에서 데모 분포의 PSI/KL을 계산하고 있습니다." }
-      : driftInjected
-        ? { icon: "fa-diagram-project", label: "등록 파이프라인 확인", locked: false,
-            run: () => navigateToTab("tab-mlops-orch"),
-            title: "등록한 모델과 학습데이터를 확인한 뒤 실행할 파이프라인을 선택하세요." }
-        : { icon: "fa-vial-circle-check", label: "이상 시나리오 재현 (드리프트 시뮬레이션)", locked: false,
-            run: injectDrift, title: "데모 분포의 PSI/KL 판정과 경보를 확인합니다." };
-
-  // 진행 중에도 마운트를 유지해야 키보드 초점이 버튼에 남는다(native disabled는 초점을 body로 떨어뜨림).
-  // ref 가드: 같은 틱의 연타가 데모 판정 요청을 중복해서 보내지 않게 한다.
-  const handleDriftAction = () => {
-    if (driftAction.locked || driftBusyRef.current) return;
-    driftBusyRef.current = true;
-    Promise.resolve(driftAction.run()).finally(() => {
-      driftBusyRef.current = false;
-    });
-  };
-
   // HTTP 200이라도 쓸 수 있는 값이 없으면 화면은 데모 시드로 폴백한다(modelSeries·shapData·psiVal).
   // 그 상태에서 '정상 수신'을 주장하지 않도록, 폴백이 실제로 일어난 소스만 골라낸다.
   // 판정 시작점은 payload 진위가 아니라 '요청이 끝났는가'다(lastCollected·driftStatus) —
@@ -856,8 +782,6 @@ export default function MonitorPage() {
   const metricFromApi = (key) => seriesUsable(key) || Number.isFinite(selectedMetricOverride[key]);
   const primaryMetricKeys = isRealdata ? ["mae", "baseline_mae"] : ["accuracy", "f1"];
   const accF1Src = srcOf(primaryMetricKeys.every(metricFromApi));
-  const precisionSrc = srcOf(metricFromApi("precision"));
-  const recallSrc = srcOf(metricFromApi("recall"));
   const metricsChartSrc = srcOf(allSeriesUsable);
   // 소비자가 실제로 읽는 값(shapUsable) 기준이어야 한다 — 원본 응답(shapResp)으로 판정하면
   // 시드 응답이 왔을 때 빈 카드에 "api" 표기가 붙는다.
@@ -888,16 +812,12 @@ export default function MonitorPage() {
         <div className="monitor-options">
           <label className="compact-select-field">
             <span>대상 모델</span>
-            <select className="select-control mock-data-output" value={modelTarget} onChange={(e) => setModelTarget(e.target.value)}>
-              {/* 데모 OFF에서는 백엔드가 확인해 준 모델(실측 지표 보유)만 고를 수 있다. 상수 레지스트리
-                  이름·버전은 시드라 옵션 텍스트로도 내보내지 않는다. */}
-              {selectableModels.length === 0 ? (
-                <option value={modelTarget}>운영 모델 없음</option>
-              ) : (
-                selectableModels.map((m) => (
-                  <option key={m.id} value={m.id}>{m.name} {servingVersionOf(m.id, m.version)}</option>
-                ))
-              )}
+            <select className="select-control" aria-label="대상 모델" value={selectedInstance?.id ?? ""}
+              onChange={(event) => setModelPick({ mode, id: event.target.value })}>
+              {!selectableModels.length && <option value="">등록 모델 없음</option>}
+              {selectableModels.map((model) => <option key={model.id} value={model.id}>
+                {model.name} · {appData.regions.find((row) => row.id === model.region_id)?.name ?? "지역 미확인"} · {TARGET_LABELS[model.target] ?? "학습 대상 미확인"} · {typeName(model.model_type)}
+              </option>)}
             </select>
           </label>
           <label className="compact-select-field">
@@ -909,18 +829,6 @@ export default function MonitorPage() {
             </select>
           </label>
         </div>
-        {/* 조작 버튼이라 데모 OFF에서도 눌러야 한다 — mock-data-output(가림 대상)에서 제외한다. */}
-        <button
-          type="button"
-          className="btn btn-secondary"
-          style={{ padding: "6px 14px", fontSize: 12 }}
-          onClick={handleDriftAction}
-          aria-disabled={driftAction.locked}
-          aria-busy={driftChecking}
-          title={driftAction.title}
-        >
-          <i className={`fa-solid ${driftAction.icon}`} aria-hidden="true"></i> {driftAction.label}
-        </button>
         </div>
       </div>
       {/* 상태 안내 슬롯 — 배너가 붙고 떨어져도 아래 지표 카드가 위아래로 밀리지 않도록 높이를 예약한다(§11 상태 전환) */}
@@ -1074,7 +982,7 @@ export default function MonitorPage() {
 
       <div className="grid-details-split">
         <Card
-          title="데이터 분포 변화 시각화 (참조 vs 최근유입)"
+          title="데이터 분포 변화 시각화"
           icon="fa-chart-area"
           headerRight={<PerfBadge ms={vizMs} />}
           data-values-source={driftChartSrc}
@@ -1083,7 +991,7 @@ export default function MonitorPage() {
             <Bar data={driftData} options={AXIS_OPTS} />
             {driftData.labels.length === 0 && (
               <ChartEmptyNote>
-                분포 비교는 아래 실데이터 모델 평가의 드리프트(PSI) 표에서 확인하세요.
+                선택 모델에 연결된 분포 비교 데이터가 없습니다. 모델과 학습데이터를 확인하세요.
               </ChartEmptyNote>
             )}
           </div>
@@ -1209,36 +1117,33 @@ export default function MonitorPage() {
         </Card>
       </div>
 
-      {/* 상단 stat 카드(Accuracy·F1)·6대 지표 차트와 중복되지 않는 지표만 게이지로 표시 */}
-      <Card
-        title={
-          <>
-            모델 신뢰도 게이지 (실시간)
-            {/* 카드마다 제목 옆 트리거 1개만 둔다 — 기존 설명 툴팁에 표시 값 기준(피드백 #11)을 덧붙인다.
-                데모 토글은 값의 유무만 바꾸므로 툴팁 자체는 토글과 무관하게 항상 같은 내용을 낸다. */}
-            <InfoTip text="운영 모델의 Precision·Recall과 예측 지연을 표시합니다. 예측 지연이 자동 롤백 임계 200ms를 초과하면 직전 버전으로 자동 롤백됩니다. 1ms 미만은 μs로 표시하며, 학습 시 측정한 1건 추론 시간입니다." />
-          </>
-        }
-        icon="fa-gauge-high"
-      >
+      <Card title={<>
+        모델 신뢰도 게이지
+        <InfoTip text="선택한 등록 모델의 현재 활성 버전 검증 MAE·RMSE·WAPE입니다. MAE와 RMSE는 예측 오차의 크기이며 낮을수록 좋습니다. WAPE는 절대 오차 비율입니다. 신뢰 확률이나 정규화 판정 기준이 아니므로 색상 판정을 하지 않습니다. 위 차트는 별도 이력 자료입니다." />
+      </>} icon="fa-gauge-high">
+        <p className="realdata-hint" role="status">
+          {selectedInstance ? selectedVersion
+            ? `${selectedInstance.name} · 활성 버전 ${displayId(selectedVersion.id)}`
+            : `${selectedInstance.name} · 활성 버전이 없습니다.` : "등록 모델을 확인하세요."}
+          {modelTarget ? ` · 위 차트: ${realdataModels.find((row) => row.model_id === modelTarget)?.name}의 별도 학습 이력`
+            : " · 위 차트에 연결된 이력 자료가 없습니다."}
+        </p>
         <div className="grid-cols-3" style={{ marginBottom: 0 }}>
-          {/* 값이 없으면 null 을 그대로 넘긴다 — 0으로 바꿔 넘기면 게이지가 "위험"/"정상"을 단정한다. */}
-          <GaugeChart value={metricValue("precision")} label="Precision" data-values-source={precisionSrc} />
-          <GaugeChart value={metricValue("recall")} label="Recall" data-values-source={recallSrc} />
-          {/* 실측 지연(학습 시 측정한 1건 추론 지연)이 있으면 api, 없으면 시드 상수 또는 '측정 없음'. */}
-          <GaugeChart
-            value={latencyMs === null ? null : latencyMs / LATENCY_ROLLBACK_MS}
-            displayText={latencyText}
-            label="예측 지연"
-            goodThreshold={0.75}
-            lowerIsBetter
-            data-values-source={srcOf(Number.isFinite(measuredLatency))}
-          />
+          {[{ key: "mae", label: "MAE", unit: targetUnit(selectedInstance?.target) },
+            { key: "rmse", label: "RMSE", unit: targetUnit(selectedInstance?.target) },
+            { key: "wape", label: "WAPE", unit: "%", percent: true }].map((metric) => {
+              const raw = selectedVersion?.metrics?.[metric.key];
+              const value = Number.isFinite(raw) && raw >= 0 ? raw : null;
+              return <GaugeChart key={metric.key} neutral value={value} label={metric.label}
+                displayText={regressionMetricText(value, metric.unit, metric.percent)}
+                statusText={value === null ? selectedVersion ? "측정값 없음" : "활성 버전 없음" : "정규화 판정 없음"}
+                data-values-source={value === null ? "empty" : "api"} />;
+            })}
         </div>
       </Card>
 
       {/* 실데이터 연계(R4) — 실데이터 모델 검증/운영 평가·선형 SHAP·드리프트. 위 데모 지표와는 별개 경로. */}
-      {!mockDataVisible && <RealdataEvaluationPanel regionName={(id) => appData.regions.find((row) => row.id === id)?.name ?? id} />}
+      {!mockDataVisible && <RealdataEvaluationPanel />}
     </>
   );
 }

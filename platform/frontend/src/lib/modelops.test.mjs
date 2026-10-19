@@ -217,10 +217,10 @@ assert.match(monitorPage, /\$\{baselineLabel \? `기준선\(\$\{baselineLabel\}\
 assert.doesNotMatch(trainingPanel, /남원|23동/);
 assert.match(trainingPanel, /const regionId = selectedDataset\?\.region_id \?\? instance\?\.region_id;/);
 assert.match(trainingPanel, /`\$\{realScope\} · 선형 회귀 공동 학습 · 후보 승인 후 반영`/);
-// 모니터 실데이터 모델 평가 카드 제목도 선택 모델의 지역에서 읽는다 — 이름을 못 찾으면 괄호째 생략
+// 실데이터 평가 제목은 지역·모델 선택과 무관하게 고정한다(M03).
 const evaluationPanel = src("components", "realdata", "RealdataEvaluationPanel.jsx");
 assert.doesNotMatch(evaluationPanel, /title="실데이터 모델 평가 \(/);
-assert.match(evaluationPanel, /title=\{region && region !== regionId \? `실데이터 모델 평가 \(\$\{region\}\)` : "실데이터 모델 평가"\}/);
+assert.match(evaluationPanel,/title="실데이터 모델 평가"/);
 // 내부 알고리즘명 대신 "선형 회귀"
 for (const src of [orchestratorPage, trainingPanel]) { assert.doesNotMatch(src, /Ridge|릿지/); assert.match(src, /선형 회귀/); }
 console.log("modelops: 두 종류 제한·등록 데이터셋 ID/hash 전달·입력 차단·노드/이력/로그/저장소 매핑·⑥ 운영 기록 콘솔·등록 모델 이름·짧은 ID·선형 회귀 표기 PASS");

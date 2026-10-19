@@ -1,0 +1,23 @@
+import assert from "node:assert/strict";
+import { monitorInstances, monitorActiveVersion, legacyMonitorId, regressionMetricText } from "./monitorModels.js";
+
+const model = { id: "common-instance", mode: "real", region_id: "namwon", target: "observed_sales_krw", active_version: "active" };
+const active = { id: "active", instance_id: model.id, mode: "real", metrics: { mae: 0, rmse: 12, wape: 0.1 } };
+const candidate = { id: "newer-candidate", instance_id: model.id, mode: "real", metrics: { mae: 999 } };
+const catalog = { mode: "real", source: "real", instances: [model], versions: [candidate, active] };
+const history = [{ model_id: "namwon-observed-sales-next-month", metrics_source: "realdata" }];
+assert.equal(monitorActiveVersion(catalog, model, "real"), active);
+assert.equal(monitorActiveVersion({ ...catalog, versions: [candidate] }, model, "real"), null);
+assert.equal(monitorActiveVersion({ ...catalog, versions: [{ ...active, instance_id: "different" }] }, model, "real"), null);
+assert.equal(monitorActiveVersion({ ...catalog, instances: [{ ...model, active_version: null }] }, model, "real"), null);
+assert.deepEqual(monitorInstances(catalog, "mock"), []);
+assert.equal(monitorActiveVersion(catalog, model, "mock"), null);
+assert.equal(legacyMonitorId(model, history, "real"), history[0].model_id);
+assert.equal(legacyMonitorId({ ...model, region_id: "shinan" }, history, "real"), null);
+assert.equal(legacyMonitorId({ ...model, target: "nonlocal_visitors" }, history, "real"), null);
+assert.equal(legacyMonitorId(model, [], "real"), null);
+assert.equal(legacyMonitorId(model, history, "mock"), null);
+assert.equal(regressionMetricText(active.metrics.mae, "원"), "0원");
+assert.equal(regressionMetricText(active.metrics.wape, "%", true), "10%");
+for (const invalid of [null, undefined, NaN, Infinity, -1]) assert.equal(regressionMetricText(invalid, "명"), "–");
+console.log("PASS: exact active metrics, zero/missing, explicit legacy mapping and mode isolation");

@@ -4,11 +4,18 @@ import { useAppState } from "../context/AppStateContext.jsx";
 
 export default function SettingsPanel() {
   const { isDark, toggleTheme } = useTheme();
-  const { mockDataVisible, toggleMockDataVisible } = useAppState();
+  const { mockDataVisible, toggleMockDataVisible, driftInjected, driftChecking, injectDrift, navigateToTab } = useAppState();
   const [open, setOpen] = useState(false);
   const containerRef = useRef(null);
   const triggerRef = useRef(null);
   const firstControlRef = useRef(null);
+  const driftBusyRef = useRef(false);
+  const handleDrift = () => {
+    if (!mockDataVisible || driftChecking || driftBusyRef.current) return;
+    if (driftInjected) { close(); navigateToTab("tab-mlops-orch"); return; }
+    driftBusyRef.current = true;
+    Promise.resolve(injectDrift()).finally(() => { driftBusyRef.current = false; });
+  };
 
   const close = useCallback(() => setOpen(false), []);
 
@@ -90,7 +97,14 @@ export default function SettingsPanel() {
           <p id="mock-data-switch-desc" className="settings-row-desc">
             켜면 예시 데이터로 모든 화면을 채웁니다. 끄면 실데이터만 표시합니다.
           </p>
-
+          {mockDataVisible && <div className="settings-row">
+            <button type="button" className="btn btn-secondary" onClick={handleDrift}
+              aria-disabled={driftChecking} aria-busy={driftChecking}
+              title={driftInjected ? "등록한 파이프라인을 확인하고 수동 실행합니다." : "인구이동 예측의 데모 예시 분포로 PSI/KL 판정과 경보를 확인합니다. 선택 모델의 실측 평가와는 별개입니다."}>
+              <i className={`fa-solid ${driftChecking ? "fa-hourglass-half" : driftInjected ? "fa-diagram-project" : "fa-vial-circle-check"}`} aria-hidden="true"></i>{" "}
+              {driftChecking ? "데모 분포 판정 중…" : driftInjected ? "등록 파이프라인 확인" : "이상 시나리오 재현"}
+            </button>
+          </div>}
         </div>
       )}
 

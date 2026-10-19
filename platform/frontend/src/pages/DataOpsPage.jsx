@@ -46,7 +46,8 @@ function degradeReasonOf(body) {
 const DATAOPS_STAGES = [
   { id: "dstep-source", no: "①", label: "데이터 소스 선택", icon: "fa-layer-group" },
   { id: "dstep-schema", no: "②", label: "스키마 확인", icon: "fa-table-columns" },
-  { id: "dstep-builder", no: "③", label: "API 빌드·호출", icon: "fa-code" }
+  { id: "dstep-builder", no: "③", label: "API 빌드·호출", icon: "fa-code" },
+  { id: "dstep-training", no: "④", label: "학습데이터 관리", icon: "fa-database" }
 ];
 
 // HTTP 메서드 칩은 테마별 액센트 토큰을 사용한다.
@@ -304,12 +305,13 @@ export default function DataOpsPage() {
   const [openStages, setOpenStages] = useState({
     "dstep-source": true,
     "dstep-schema": true,
-    "dstep-builder": true
+    "dstep-builder": true,
+    "dstep-training": true
   });
   const toggleStage = (id) => setOpenStages((s) => ({ ...s, [id]: !s[id] }));
   const allOpen = Object.values(openStages).every(Boolean);
   const setAllStages = (open) =>
-    setOpenStages({ "dstep-source": open, "dstep-schema": open, "dstep-builder": open });
+    setOpenStages(Object.fromEntries(DATAOPS_STAGES.map(({ id }) => [id, open])));
   const jumpToStage = (id) => {
     setOpenStages((s) => ({ ...s, [id]: true }));
     setTimeout(() => {
@@ -704,27 +706,40 @@ export default function DataOpsPage() {
     }
   };
 
+  const trainingStage = (
+    <CollapsibleStage id="dstep-training" no="STEP ④" title="학습데이터 관리"
+      open={openStages["dstep-training"]} onToggle={() => toggleStage("dstep-training")}>
+      <TrainingDatasetRegistration />
+    </CollapsibleStage>
+  );
+
   if (loading) {
     return (
-      <Card>
-        <p role="status" aria-live="polite" style={{ fontSize: 13, color: "var(--text-secondary)" }}>
-          <i className="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> 메타데이터 카탈로그를 불러오는 중…
-        </p>
-      </Card>
+      <>
+        <Card>
+          <p role="status" aria-live="polite" style={{ fontSize: 13, color: "var(--text-secondary)" }}>
+            <i className="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> 메타데이터 카탈로그를 불러오는 중…
+          </p>
+        </Card>
+        {trainingStage}
+      </>
     );
   }
 
   if (catalogError) {
     return (
-      <Card title="메타데이터 카탈로그">
-        <div className="empty-state" role="alert">
-          <i className="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
-          <p>카탈로그를 불러오지 못했습니다. {catalogError}</p>
-          <button type="button" className="btn btn-primary" onClick={retryCatalog}>
-            <i className="fa-solid fa-rotate" aria-hidden="true"></i> 다시 시도
-          </button>
-        </div>
-      </Card>
+      <>
+        <Card title="메타데이터 카탈로그">
+          <div className="empty-state" role="alert">
+            <i className="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+            <p>카탈로그를 불러오지 못했습니다. {catalogError}</p>
+            <button type="button" className="btn btn-primary" onClick={retryCatalog}>
+              <i className="fa-solid fa-rotate" aria-hidden="true"></i> 다시 시도
+            </button>
+          </div>
+        </Card>
+        {trainingStage}
+      </>
     );
   }
 
@@ -761,6 +776,7 @@ export default function DataOpsPage() {
             />
           )}
         </Card>
+        {trainingStage}
       </>
     );
   }
@@ -807,7 +823,6 @@ export default function DataOpsPage() {
 
   return (
     <>
-      <TrainingDatasetRegistration />
       <p className="dataops-page-sub">
         <i className="fa-solid fa-box-archive" aria-hidden="true"></i> 데이터 라이프사이클 관리
         기술(DataOps) — 빅데이터 관리 아카이빙 · 메타데이터 기반 다기종 데이터 관리
@@ -1513,6 +1528,8 @@ export default function DataOpsPage() {
           )}
         </Card>
       </CollapsibleStage>
+
+      {trainingStage}
 
       {/* API 발급까지 끝나면 다음 단계 — 이 데이터로 학습된 모델의 성능 모니터링.
           조건은 설계대로 '발급 성공'(handleBuildApi)이다. 호출 성공(responseOk)은 STEP ③ 완료 표시용이라

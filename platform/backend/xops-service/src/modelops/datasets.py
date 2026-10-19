@@ -10,6 +10,7 @@ from typing import Any
 
 from fastapi import HTTPException
 
+from src.core.db import _conn
 from src.core.seed import get_seed
 from src.core.settings import get_settings
 from src.modelops import factor_panel, store
@@ -17,6 +18,46 @@ from src.realdata import snapshot
 from src.realdata.features import feature_names
 
 _register_lock = threading.Lock()
+
+
+def delete(mode: str, dataset_id: str, actor: str) -> dict[str, Any]:
+    """미참조 등록본과 그 관리 복사본만 삭제한다. 원본 스냅샷은 읽지도 않는다."""
+    with _register_lock:
+        conn = _conn()
+        moved = None
+        original = None
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            dataset = store.get(mode, "dataset", dataset_id)
+            for kind in ("pipeline", "version", "job"):
+                if any(row.get("dataset_id") == dataset_id for row in store.list_assets(mode, kind)):
+                    raise HTTPException(409, "파이프라인·모델 버전·학습 작업에서 사용 중인 학습데이터는 삭제할 수 없습니다.")
+            root = (get_settings().model_artifact_dir / "modelops" / mode / "datasets").resolve()
+            original = Path(dataset["private_path"])
+            expected = root / (dataset_id + ".json")
+            if original.is_symlink() or original.resolve() != expected or expected.parent != root:
+                raise HTTPException(409, "관리 복사본의 경로를 확인할 수 없어 삭제하지 않았습니다.")
+            if original.exists():
+                moved = root / (dataset_id + ".delete-" + store.new_id() + ".json")
+                original.replace(moved)
+            conn.execute("DELETE FROM mo_assets WHERE mode=? AND kind='dataset' AND id=?", (mode, dataset_id))
+            audit = {"id": store.new_id(), "created_at": store.now(), "mode": mode, "source": mode,
+                     "action": "dataset_deleted", "asset_id": dataset_id, "actor": actor}
+            conn.execute("INSERT INTO mo_assets(mode,kind,id,body_json,created_at) VALUES (?,'audit',?,?,?)",
+                         (mode, audit["id"], json.dumps(audit, ensure_ascii=False), audit["created_at"]))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            if moved is not None and moved.exists():
+                moved.replace(original)
+            raise
+        removed = True
+        if moved is not None:
+            try:
+                moved.unlink()
+            except OSError:
+                removed = False
+        return {"deleted": dataset_id, "mode": mode, "managed_copy_removed": removed}
 
 def _hash(value: Any) -> str:
     return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode()).hexdigest()
