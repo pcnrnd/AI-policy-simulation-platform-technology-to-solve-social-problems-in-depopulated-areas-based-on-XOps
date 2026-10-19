@@ -16,6 +16,7 @@ import {
   downloadBlob
 } from "../lib/reportExport.js";
 import { fetchReportData } from "../lib/dataopsApi.js";
+import { alertText } from "../lib/alertText.js";
 
 const EXPORT_FORMATS = [
   { id: "docx", label: "Word (.docx)", icon: "fa-file-word", ext: "docx" },
@@ -180,7 +181,7 @@ export default function ReporterPage() {
         if (requestId !== refreshRequestRef.current) return;
         // 조회 실패도 빈 상태로 둔다(화면 사유 문구 없음). 원인은 콘솔 기록으로만 남긴다.
         setBindingFeedback(null);
-        addConsoleLog(`ERROR: 리포트 데이터 바인딩 실패 - ${err?.message ?? "알 수 없는 오류"}`);
+        addConsoleLog(`ERROR: 리포트 데이터 바인딩 실패 - ${alertText(err, "지표 데이터를 불러오지 못했습니다. 잠시 후 다시 갱신하세요.")}`);
       } finally {
         if (requestId === refreshRequestRef.current) setRefreshing(false);
       }
@@ -281,9 +282,9 @@ export default function ReporterPage() {
     } catch (err) {
       setReportFeedback({
         tone: "error",
-        message: `보고서를 저장하지 못했습니다. ${err?.message ?? "파일 형식을 확인하고 다시 시도하세요."}`
+        message: `보고서를 저장하지 못했습니다. ${alertText(err, "파일 형식을 확인하고 다시 시도하세요.")}`
       });
-      addConsoleLog(`ERROR: 보고서 저장 실패 (${fmt.label}) - ${err?.message ?? "알 수 없는 오류"}`);
+      addConsoleLog(`ERROR: 보고서 저장 실패 (${fmt.label}) - ${alertText(err, "파일 형식을 확인하고 다시 시도하세요.")}`);
     }
   };
 

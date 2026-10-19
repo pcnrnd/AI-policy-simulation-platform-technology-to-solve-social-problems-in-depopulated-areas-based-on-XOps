@@ -64,6 +64,12 @@ const rawHits = readdirSync(srcRoot, { recursive: true })
   .filter((file) => /\.jsx?$/.test(file) && !/ReporterPage\.jsx$/.test(file))
   .flatMap((file) => readFileSync(join(srcRoot, file), "utf-8").split("\n").filter((line) => RAW_INTO_STATE.test(line)).map((line) => `${file}: ${line.trim()}`));
 assert.deepEqual(rawHits, []);
+// 리포터 탭 피드백 배너·콘솔 줄도 오류 원문 대신 alertText(사용자 문구)
+const reporterPage = readFileSync(join(srcRoot, "pages", "ReporterPage.jsx"), "utf-8");
+assert.doesNotMatch(reporterPage, /err\??\.message/);
+assert.equal(reporterPage.match(/alertText\(err, "[^"]+"\)/g)?.length, 3);
+assert.match(reporterPage, /ERROR: 리포트 데이터 바인딩 실패 - \$\{alertText\(err,/);
+assert.match(reporterPage, /ERROR: 보고서 저장 실패 \(\$\{fmt\.label\}\) - \$\{alertText\(err,/);
 // 개요·모니터의 빈 상태는 값을 채우는 방법을 한 문장으로 알린다 — 상태만 알리던 옛 문구 금지
 const srcText = (file) => readFileSync(join(srcRoot, file), "utf-8");
 const STATE_ONLY = /실데이터가 아직 없습니다|요약할 수 없습니다|NO_DEMO_DATA|"데이터 없음"|비교 구간이 아직 없습니다|표시할 적재량이 없습니다|수집 경로가 아직 없어/;
