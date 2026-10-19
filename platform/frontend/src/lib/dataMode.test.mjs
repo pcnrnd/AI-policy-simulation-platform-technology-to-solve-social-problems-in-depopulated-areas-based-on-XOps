@@ -70,6 +70,12 @@ assert.doesNotMatch(reporterPage, /err\??\.message/);
 assert.equal(reporterPage.match(/alertText\(err, "[^"]+"\)/g)?.length, 3);
 assert.match(reporterPage, /ERROR: 리포트 데이터 바인딩 실패 - \$\{alertText\(err,/);
 assert.match(reporterPage, /ERROR: 보고서 저장 실패 \(\$\{fmt\.label\}\) - \$\{alertText\(err,/);
+// 모니터 콘솔 줄(토큰 발급·모델 목록·지표·드리프트·이상치 실패)도 같은 규칙 — 접두와 작업 이름은 유지
+const monitorSource = readFileSync(join(srcRoot, "pages", "MonitorPage.jsx"), "utf-8");
+assert.doesNotMatch(monitorSource, /err\??\.message/);
+for (const line of ["WARN: 실데이터 토큰 발급 실패", "WARN: 실데이터 모델 목록 조회 실패", "ERROR: 모니터링 지표 로드 실패", "ERROR: 드리프트 조회 실패", "ERROR: 이상치 판정 실패"]) {
+  assert.ok(monitorSource.includes(`${line} — \${alertText(err, "`), line);
+}
 // 개요·모니터의 빈 상태는 값을 채우는 방법을 한 문장으로 알린다 — 상태만 알리던 옛 문구 금지
 const srcText = (file) => readFileSync(join(srcRoot, file), "utf-8");
 const STATE_ONLY = /실데이터가 아직 없습니다|요약할 수 없습니다|NO_DEMO_DATA|"데이터 없음"|비교 구간이 아직 없습니다|표시할 적재량이 없습니다|수집 경로가 아직 없어/;

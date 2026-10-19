@@ -173,7 +173,7 @@ export default function MonitorPage() {
       .catch((err) => {
         if (!alive) return;
         setRealdataToken(null);
-        addConsoleLog(`WARN: 실데이터 토큰 발급 실패 — ${err?.message ?? "알 수 없는 오류"}`);
+        addConsoleLog(`WARN: 실데이터 토큰 발급 실패 — ${alertText(err, "인증 토큰을 받지 못했습니다. 잠시 뒤 다시 시도하세요.")}`);
       });
     return () => {
       alive = false;
@@ -194,7 +194,7 @@ export default function MonitorPage() {
       .catch((err) => {
         if (!alive) return;
         setRealdataModels([]);
-        addConsoleLog(`WARN: 실데이터 모델 목록 조회 실패 — ${err?.message ?? "알 수 없는 오류"}`);
+        addConsoleLog(`WARN: 실데이터 모델 목록 조회 실패 — ${alertText(err, "모델 목록을 불러오지 못했습니다. 잠시 뒤 다시 시도하세요.")}`);
       });
     return () => {
       alive = false;
@@ -256,7 +256,7 @@ export default function MonitorPage() {
         setMetricsResp(null);
         setShapResp(null);
         setMonitoringError(alertText(err, "모니터링 서버에 연결할 수 없습니다."));
-        addConsoleLog(`ERROR: 모니터링 지표 로드 실패 — ${err?.message ?? "알 수 없는 오류"}`);
+        addConsoleLog(`ERROR: 모니터링 지표 로드 실패 — ${alertText(err, "모니터링 서버에 연결할 수 없습니다.")}`);
       })
       .finally(() => {
         if (isCurrent()) setMonitoringLoading(false);
@@ -290,7 +290,7 @@ export default function MonitorPage() {
         if (!isCurrent()) return;
         setDriftResp(null);
         setDriftStatus("error");
-        addConsoleLog(`ERROR: 드리프트 조회 실패 — ${err.message}`);
+        addConsoleLog(`ERROR: 드리프트 조회 실패 — ${alertText(err, "드리프트 판정을 불러오지 못했습니다. 잠시 뒤 다시 시도하세요.")}`);
       });
   }, [driftInjected, addConsoleLog, mockDataVisible, modelTarget, realdataToken]);
 
@@ -382,7 +382,7 @@ export default function MonitorPage() {
       .catch((err) => {
         if (!alive) return;
         setOutlierResp(null);
-        addConsoleLog(`ERROR: 이상치 판정 실패 — ${err?.message ?? "알 수 없는 오류"}`);
+        addConsoleLog(`ERROR: 이상치 판정 실패 — ${alertText(err, "이상치 판정을 불러오지 못했습니다. 잠시 뒤 다시 시도하세요.")}`);
       });
     return () => {
       alive = false;
@@ -1236,8 +1236,8 @@ export default function MonitorPage() {
         </div>
       </Card>
 
-      {/* 실데이터 연계(R4) — 남원 모델 검증/운영 평가·선형 SHAP·드리프트. 위 데모 지표와는 별개 경로. */}
-      {!mockDataVisible && <RealdataEvaluationPanel />}
+      {/* 실데이터 연계(R4) — 실데이터 모델 검증/운영 평가·선형 SHAP·드리프트. 위 데모 지표와는 별개 경로. */}
+      {!mockDataVisible && <RealdataEvaluationPanel regionName={(id) => appData.regions.find((row) => row.id === id)?.name ?? id} />}
     </>
   );
 }
