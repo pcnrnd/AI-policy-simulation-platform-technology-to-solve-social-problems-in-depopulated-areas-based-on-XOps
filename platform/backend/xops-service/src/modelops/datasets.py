@@ -42,7 +42,7 @@ def register(mode: str, body: dict[str, Any], actor: str) -> dict[str, Any]:
     if source["content_hash"] != body["source_hash"]:
         raise HTTPException(409, "데이터가 갱신됐습니다. 목록을 다시 확인하세요.")
     # 같은 원천·같은 내용(해시)은 한 번만 등록한다 — 동시 요청(두 화면의 첫 실행)도 같은 등록본을 돌려받는다.
-    # ponytail: 프로세스 안 잠금이라 단일 서버 프로세스 기준이다. 여러 프로세스로 띄우면 DB 유일 제약으로 옮긴다.
+    # 프로세스 안 잠금이라 단일 서버 프로세스 기준이다. 여러 프로세스로 띄우면 DB 유일 제약으로 옮긴다.
     with _register_lock:
         existing = next((row for row in store.list_assets(mode, "dataset")
                          if row.get("source_dataset_id") == source["id"] and row.get("content_hash") == source["content_hash"]

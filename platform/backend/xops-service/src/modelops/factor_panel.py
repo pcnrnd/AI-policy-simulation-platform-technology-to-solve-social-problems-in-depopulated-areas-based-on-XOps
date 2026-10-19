@@ -39,7 +39,7 @@ _PARAMS = {
 
 
 def _params(region: dict[str, Any]) -> dict[str, Any]:
-    # ponytail: 파라미터가 없는 지역은 남원 값을 인구 규모 비율로 쓴다 — 지역별 표가 필요해지면 _PARAMS에 추가.
+    # 파라미터가 없는 지역은 남원 값을 인구 규모 비율로 쓴다 — 지역별 표가 필요해지면 _PARAMS에 추가.
     if region["id"] in _PARAMS:
         return _PARAMS[region["id"]]
     base, scale = _PARAMS["namwon"], region["history"][-1] / 77200
