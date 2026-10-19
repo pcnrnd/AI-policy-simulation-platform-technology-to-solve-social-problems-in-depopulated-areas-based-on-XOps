@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import threading
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -11,10 +12,11 @@ from fastapi import HTTPException
 
 from src.core.seed import get_seed
 from src.core.settings import get_settings
-from src.modelops import store
+from src.modelops import factor_panel, store
 from src.realdata import snapshot
 from src.realdata.features import feature_names
 
+_register_lock = threading.Lock()
 
 def _hash(value: Any) -> str:
     return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode()).hexdigest()
@@ -22,10 +24,11 @@ def _hash(value: Any) -> str:
 
 def available(mode: str) -> list[dict[str, Any]]:
     if mode == "mock":
+        regions = get_seed()["regions"]
         return [{"id": "mock_" + region["id"], "name": region["name"] + " 인구 추이",
                  "region_id": region["id"], "target": "population_change_pct", "source": "mock",
                  "content_hash": _hash(region), "observed_from": 0, "observed_to": len(region["history"]) - 1}
-                for region in get_seed()["regions"]]
+                for region in regions] + [factor_panel.source(region, _hash(factor_panel.generate(region))) for region in regions]
     return [{"id": ds["dataset_id"], "name": "남원 " + ("방문객" if ds["spec"]["target"] == "nonlocal_visitors" else "관측 소비"),
              "region_id": "namwon", "target": ds["spec"]["target"], "source": "real",
              "content_hash": ds["content_hash"], "observed_from": ds["observed_from"], "observed_to": ds["observed_to"]}
@@ -38,7 +41,32 @@ def register(mode: str, body: dict[str, Any], actor: str) -> dict[str, Any]:
         raise HTTPException(400, "현재 모드에서 사용할 학습데이터를 선택하세요.")
     if source["content_hash"] != body["source_hash"]:
         raise HTTPException(409, "데이터가 갱신됐습니다. 목록을 다시 확인하세요.")
-    if mode == "mock":
+    # 같은 원천·같은 내용(해시)은 한 번만 등록한다 — 동시 요청(두 화면의 첫 실행)도 같은 등록본을 돌려받는다.
+    # 프로세스 안 잠금이라 단일 서버 프로세스 기준이다. 여러 프로세스로 띄우면 DB 유일 제약으로 옮긴다.
+    with _register_lock:
+        existing = next((row for row in store.list_assets(mode, "dataset")
+                         if row.get("source_dataset_id") == source["id"] and row.get("content_hash") == source["content_hash"]
+                         and _intact(row)), None)
+        return existing or _register(mode, source, body, actor)
+
+
+def _intact(dataset: dict[str, Any]) -> bool:
+    """등록본 파일이 그대로인지 — 손상된 등록본은 재사용하지 않고 새로 등록한다."""
+    path = Path(dataset.get("private_path", ""))
+    return path.is_file() and hashlib.sha256(path.read_bytes()).hexdigest() == dataset.get("private_hash")
+
+
+def _register(mode: str, source: dict[str, Any], body: dict[str, Any], actor: str) -> dict[str, Any]:
+    if mode == "mock" and source["id"].startswith(factor_panel.SOURCE_PREFIX):
+        region = next(region for region in get_seed()["regions"] if factor_panel.SOURCE_PREFIX + region["id"] == source["id"])
+        rows = factor_panel.generate(region)
+        if [row["base_ym"] for row in rows] != factor_panel.MONTHS or not all(
+                math.isfinite(row[name]) for row in rows for name in [*factor_panel.FEATURES, "y"]):
+            raise HTTPException(400, "학습에 필요한 기간과 수치를 확인하세요.")
+        document = {"panel": {"rows": rows, "features": factor_panel.FEATURES, "target": factor_panel.TARGET}}
+        features = list(factor_panel.FEATURES)
+        row_count = len(rows)
+    elif mode == "mock":
         region = next(region for region in get_seed()["regions"] if "mock_" + region["id"] == source["id"])
         if len(region["history"]) < 6 or not all(isinstance(v, (int, float)) and math.isfinite(v) and v > 0 for v in region["history"]):
             raise HTTPException(400, "학습에 필요한 기간과 수치를 확인하세요.")

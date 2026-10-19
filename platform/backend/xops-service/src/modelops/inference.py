@@ -53,6 +53,13 @@ def _context(mode: str, instance_id: str, version_id: str, dong_code: str | None
         range_provenance = {"scope": "selected_dong_training_rows", "from": min((row["base_ym"] for row in observed), default=None),
             "to": max((row["base_ym"] for row in observed), default=None), "row_count": len(observed)}
         adjustable = _REAL_ADJUSTABLE - ({"y_yoy"} if not selected or not selected["has_yoy"] else set())
+    elif "panel" in document:  # 데모 요인 패널 — 최근 관측월 행을 입력으로 쓴다
+        observed = document["panel"]["rows"]
+        selected = observed[-1] if observed and dong_code in (None, "all") else None
+        options = [{"code": "all", "name": "전체"}]
+        period = dataset["observed_to"]
+        adjustable = set(names)
+        range_provenance = {"scope": "mock_training_rows", "from": dataset["observed_from"], "to": dataset["observed_to"], "row_count": len(observed)}
     else:
         training = build_dataset([document["region"]], horizon=1, max_lag=2, decline_threshold_pct=1.0)
         training_names, matrix = training.select(2)

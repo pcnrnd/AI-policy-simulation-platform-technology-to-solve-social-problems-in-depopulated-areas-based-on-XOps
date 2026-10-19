@@ -24,7 +24,9 @@ import { MODEL_REGISTRY } from "../constants/models.js";
 import InfoTip from "../components/InfoTip.jsx";
 import RealdataEvaluationPanel from "../components/realdata/RealdataEvaluationPanel.jsx";
 import { getRealdataToken } from "../components/realdata/realdataClient.jsx";
+import SourceChip from "../components/SourceChip.jsx";
 import { apiGet, apiSend } from "../lib/api.js";
+import { alertText } from "../lib/alertText.js";
 
 // 데모 분포 표시 대상 — 인구이동 예측 모델(백엔드 시드 id).
 // PSI·이상값·예측 지연 값 자체는 이 모델 하나만 관측한다(대상 모델 선택과 무관, 값 확장은 별도 결정 사항).
@@ -251,7 +253,7 @@ export default function MonitorPage() {
         if (!isCurrent()) return;
         setMetricsResp(null);
         setShapResp(null);
-        setMonitoringError(err?.message ?? "모니터링 서버에 연결할 수 없습니다.");
+        setMonitoringError(alertText(err, "모니터링 서버에 연결할 수 없습니다."));
         addConsoleLog(`ERROR: 모니터링 지표 로드 실패 — ${err?.message ?? "알 수 없는 오류"}`);
       })
       .finally(() => {
@@ -956,7 +958,7 @@ export default function MonitorPage() {
         <div className="card" style={{ padding: "var(--space-xl)" }} data-values-source={accF1Src}>
           <div className="stat-label">
             {primaryCard.label}
-            <InfoTip text={primaryCard.tip} />
+            <InfoTip text={primaryCard.tip} /> <SourceChip dataSource={accF1Src} />
           </div>
           <div
             style={{
@@ -984,7 +986,7 @@ export default function MonitorPage() {
               text={
                 driftUsable?.source === "realdata"
                   ? `실데이터 대표 피처 ${driftUsable.feature}의 학습 구간 대비 ${driftUsable.kind === "operational" ? "학습 이후 관측" : "검증"} 구간 PSI입니다. 0.2를 초과하면 분포 변화로 판정합니다.`
-                  : "PSI는 기준 분포와 현재 분포의 차이를 계산합니다. 데모 입력은 시드 분포이며, PSI/KL 임계 초과 경보를 확인한 뒤 등록한 파이프라인을 선택해 수동 실행합니다."
+                  : "PSI는 기준 분포와 현재 분포의 차이를 계산합니다. 데모 입력은 예시 분포이며, PSI/KL 임계 초과 경보를 확인한 뒤 등록한 파이프라인을 선택해 수동 실행합니다."
               }
             />
           </div>

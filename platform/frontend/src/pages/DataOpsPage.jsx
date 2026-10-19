@@ -15,6 +15,8 @@ import { apiGet, apiSend } from "../lib/api.js";
 import { filterValidationMessage } from "../lib/filterExpression.js";
 import { HTTP_METHODS, AUTH_METHODS, adapterOf, buildQuery } from "../lib/dataopsApi.js";
 import { getScrollBehavior } from "../lib/motion.js";
+import { alertText } from "../lib/alertText.js";
+import SourceChip from "../components/SourceChip.jsx";
 
 const READY_RESPONSE = `// [POST·GET·PUT·PATCH·DELETE] 요청을 전송하면 표준 REST 응답이 표시됩니다.`;
 const CATALOG_URL = "/api/v3/dataops/catalog";
@@ -239,7 +241,7 @@ export default function DataOpsPage() {
       })
       .catch((err) => {
         if (!alive) return;
-        setCatalogError(err?.message ?? "카탈로그 서버에 연결할 수 없습니다.");
+        setCatalogError(alertText(err, "카탈로그 서버에 연결할 수 없습니다."));
         addConsoleLog(`ERROR: 카탈로그 로드 실패 — ${err.message}`);
         setLoading(false);
       });
@@ -291,7 +293,7 @@ export default function DataOpsPage() {
       const list = await refreshCatalog();
       setSourceId((current) => current ?? list[0]?.id ?? null);
     } catch (err) {
-      setCatalogError(err?.message ?? "카탈로그 서버에 연결할 수 없습니다.");
+      setCatalogError(alertText(err, "카탈로그 서버에 연결할 수 없습니다."));
       addConsoleLog(`ERROR: 카탈로그 다시 불러오기 실패 — ${err?.message ?? "알 수 없는 오류"}`);
     } finally {
       setLoading(false);
@@ -404,7 +406,7 @@ export default function DataOpsPage() {
     } catch (err) {
       addConsoleLog(`WARN: 아카이브 삭제 실패 — ${err.message}`, false, true);
       if (!discardTokenOn401(err)) {
-        setAsyncFeedback({ tone: "error", message: `아카이브를 삭제하지 못했습니다. ${err.message}` });
+        setAsyncFeedback({ tone: "error", message: `아카이브를 삭제하지 못했습니다. ${alertText(err, "잠시 뒤 다시 시도하세요.")}` });
       }
       throw err;
     }
@@ -419,7 +421,7 @@ export default function DataOpsPage() {
       setAsyncFeedback({ tone: "success", message: `${authMethod} 토큰을 발급했습니다.` });
     } catch (err) {
       addConsoleLog(`WARN: 토큰 발급 실패 — ${err.message}`, false, true);
-      setAsyncFeedback({ tone: "error", message: `토큰을 발급하지 못했습니다. ${err.message}` });
+      setAsyncFeedback({ tone: "error", message: `토큰을 발급하지 못했습니다. ${alertText(err, "잠시 뒤 다시 시도하세요.")}` });
     } finally {
       setPendingAction(null);
     }
@@ -547,7 +549,7 @@ export default function DataOpsPage() {
     } catch (err) {
       addConsoleLog(`WARN: Data API 빌드·등록 실패 — ${err.message}`, false, true);
       if (!discardTokenOn401(err)) {
-        setAsyncFeedback({ tone: "error", message: `API 구성을 등록하지 못했습니다. ${err.message}` });
+        setAsyncFeedback({ tone: "error", message: `API 구성을 등록하지 못했습니다. ${alertText(err, "잠시 뒤 다시 시도하세요.")}` });
       }
     } finally {
       setPendingAction(null);
@@ -629,7 +631,7 @@ export default function DataOpsPage() {
     } catch (err) {
       addConsoleLog(`WARN: 발급 API 삭제 실패 — ${err.message}`, false, true);
       if (!discardTokenOn401(err)) {
-        setAsyncFeedback({ tone: "error", message: `발급 API를 삭제하지 못했습니다. ${err.message}` });
+        setAsyncFeedback({ tone: "error", message: `발급 API를 삭제하지 못했습니다. ${alertText(err, "잠시 뒤 다시 시도하세요.")}` });
       }
       throw err;
     }
@@ -923,6 +925,7 @@ export default function DataOpsPage() {
 
           {/* 카탈로그 선택 UI는 데모 토글과 무관하게 같은 모습으로 남는다(가림 예외는 layout.css). */}
           <div className="catalog-live-region">
+          <div className="table-source"><SourceChip dataSource={catalogSrc} /></div>
           <div className="table-container" data-values-source={catalogSrc}>
             <table id="dataops-catalog-table" className="catalog-table" tabIndex="-1">
               <caption className="sr-only">메타데이터 카탈로그의 데이터 소스 목록. 선택한 정렬 기준으로 표시합니다.</caption>

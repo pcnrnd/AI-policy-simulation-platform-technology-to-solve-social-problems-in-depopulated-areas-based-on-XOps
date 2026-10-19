@@ -33,6 +33,49 @@
   margin-bottom: 20px;
 }
 
+/* 제목 오른쪽 묶음: 출처 칩 + 호출부 headerRight */
+.card-title-side {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* 카드가 아닌 표 위에 붙는 출처 칩 자리 */
+.table-source {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 6px;
+}
+
+/* 카드·값 출처 칩 — 데모(주황)/실데이터(청록). 문구가 함께 바뀌어 색만으로 구분하지 않는다. */
+.source-chip {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.4;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.source-chip.is-demo {
+  color: var(--accent-orange);
+  background-color: rgba(var(--accent-orange-rgb), 0.12);
+}
+.source-chip.is-real {
+  color: var(--accent-teal);
+  background-color: rgba(var(--accent-teal-rgb), 0.12);
+}
+/* 라이트 테마의 데모 배지·칩 글자 — 주황 틴트 위 소형 글자 대비 4.5:1 이상(#92400e: 헤더 배지 5.87, 카드 칩 5.93). */
+:root[data-theme="light"] .source-chip.is-demo,
+:root[data-theme="light"] .mode-badge.is-demo {
+  color: #92400e;
+}
+
 .card-title {
   font-size: 16px;
   font-weight: 600;

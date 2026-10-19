@@ -7,12 +7,14 @@
 ## 등록과 학습
 
 1. `GET /api/v3/modelops/available-datasets`에서 현재 모드의 원본 ID/hash·지역·target·기간을 확인한다.
-2. `POST /modelops/datasets`에 name, source_dataset_id, source_hash를 전달한다. 서버는 원본을 수정하지 않고 private 등록본을 생성한다. 등록 결과는 dataset_id, content_hash, source_dataset_id, mode/source, region_id, target, observed_from/to, features, row_count, private_hash와 재현 가능한 저장 경로를 포함한다.
-3. `GET /modelops/datasets`로 등록 결과를 재조회한다. `POST /modelops/pipelines`는 id, name, model_type, dataset_id, dataset_hash와 trigger_policy를 받는다. 서버에서 hash·모드·원본 참조를 확인해 인스턴스를 연결한다. 같은 모드/종류/지역/target 인스턴스는 여러 등록본 버전을 가질 수 있다.
-4. `POST /modelops/pipelines/{id}/run`으로 실제 학습을 접수한다. `GET /modelops/jobs/{id}`에서 queued/running → saved/failed를 확인한다. saved는 버전·아티팩트·감사 기록이 저장됐다는 뜻이며 활성화를 뜻하지 않는다. 활성화는 별도 요청이다.
+2. `POST /modelops/datasets`에 name, source_dataset_id, source_hash를 전달한다. 서버는 원본을 수정하지 않고 private 등록본을 생성한다. 등록 결과는 dataset_id, content_hash, source_dataset_id, mode/source, region_id, target, observed_from/to, features, row_count, private_hash와 재현 가능한 저장 경로를 포함한다. 같은 모드에 같은 원본(source_dataset_id)·같은 content_hash 등록본이 이미 있으면 새로 만들지 않고 그 등록본을 돌려준다(동시 요청 포함).
+3. `GET /modelops/datasets`로 등록 결과를 재조회한다. `POST /modelops/pipelines`는 id, name, model_type, dataset_id, dataset_hash와 trigger_policy, 선택 experiment(실험 ID, 64자 이하)를 받는다. 서버에서 hash·모드·원본 참조를 확인해 인스턴스를 연결한다. 이미 있는 id는 model_type·dataset_id·dataset_hash가 같으면 기존 파이프라인을 돌려주고, 다르면 409다. 같은 모드/종류/지역/target 인스턴스는 여러 등록본 버전을 가질 수 있다.
+4. `POST /modelops/pipelines/{id}/run`으로 실제 학습을 접수한다. `GET /modelops/jobs/{id}`에서 queued/running → saved/failed를 확인한다. saved는 버전·아티팩트·감사 기록이 저장됐다는 뜻이며 활성화를 뜻하지 않는다. 활성화는 별도 요청이다. failed 작업은 멈춘 단계를 `failed_stage`(preparing/training/registering)로 남기며, 재기동으로 마감된 작업은 `error: restart`다. `GET /modelops/catalog`는 같은 모드의 instances·datasets·versions·pipelines·jobs·audit을 함께 반환한다(versions의 status(active/previous/candidate)는 `GET /modelops/instances/{id}/versions`와 같은 규칙으로 instance의 활성·이전 버전에서 파생해 반환하며, 저장 원본의 생성 시점 값을 그대로 내보내지 않는다).
 5. `POST /modelops/instances/{id}/versions/{version}/activate`는 완료 job·dataset hash·아티팩트 hash와 기준선보다 개선된 MAE를 확인한다. `rollback`은 해당 인스턴스의 이전 활성 버전에만 적용한다. 기존 레거시 활성 모델은 변경하지 않는다.
 
 새 기록은 모드+종류+ID로 분리한 `mo_assets`에 추가한다. private 학습 입력과 아티팩트는 app model storage 아래 modelops/mock 또는 modelops/real 경로에 저장하며 Git 추적 대상이 아니다. real 학습은 등록본의 관측행과 기존 Ridge·순차 평가 함수를 사용하고, mock 학습은 seed 지역 시계열과 교차 검증을 사용한다. 실패를 다른 모드의 수치로 대체하지 않는다.
+
+mock 원본에는 지역마다 데모 요인 패널(`mock_factor_<지역>`, target `living_population`)도 있다. `src/modelops/factor_panel.py`가 seed 인구 추이를 바탕으로 결정적으로 생성하는 합성값(2015-01~2024-12 월 120행, 인구 구조·시설 지표 9개)이며 실제 관측이 아니다. 이 등록본은 앞 108개월로 학습해 마지막 12개월로 검증하고, 기준선은 전년 같은 달 관측값(`same_month_last_year`)이다. 추론 입력은 마지막 관측월 행이고 기여도의 `feature`는 패널 변수 키다.
 
 ## Phase C에서 사용할 버전 인터페이스
 
@@ -39,7 +41,7 @@
 
 반환 `prediction`은 artifact 수식으로 계산하고 `intercept + Σ contributions.value`와 일치한다. `baseline_inputs`/`baseline_prediction` 대비 조정 `inputs`/`prediction`의 `delta`, 기여도의 입력/계수/평균/표준편차와 실제 값, 관측 범위 밖 입력 목록을 함께 반환한다. 시뮬레이션 응답 `recommendations`는 각 조정 가능한 관측 입력을 선택 행정동 학습 범위의 1%만큼 증가/감소한 단일 변경 시나리오의 실제 prediction/delta다. 전년 관측이 없으면 기존 feature 규칙대로 전월 값의 파생 대체 입력을 함께 갱신한다.
 
-real UI는 두 활성 모델의 지역·target·원 내용 hash·입력 좌표/기간·feature가 같을 때 연결하며 등록본 ID가 다르면 각 ID를 명시한다. 기여도 → 입력 가정 예측 → **예측 민감도 기반 검토 우선순위**로 표시한다. 현재 관측 lag에는 정책 변수가 없으므로 정책 효과나 RICE 점수를 제시하지 않는다. 실제 외생 정책 입력을 가진 등록·학습 스키마는 후속 범위다. 활성/대응 자료가 없으면 등록→학습→활성화 안내만 제공한다.
+real UI는 두 활성 모델의 지역·target·원 내용 hash·입력 좌표/기간·feature가 같을 때 연결하며 등록본 ID가 다르면 각 ID를 명시한다. 기여도 → 입력 가정 예측 → **정책 추천**(근거: 관측 지표의 예측 민감도)으로 표시하며, 데모 표시와 같은 시뮬레이터 4단계 화면의 같은 자리(① 요인분석·③ 시뮬레이션·④ 추천)에 채운다. 추천은 예측 민감도이며 정책 효과나 RICE 점수를 제시하지 않는다. 실제 외생 정책 입력을 가진 등록·학습 스키마는 후속 범위다. 활성/대응 자료가 없으면 등록→학습→활성화 안내만 제공한다.
 
 실데이터 진단 UI는 제거했고 `GET /realdata/analysis`는 인증 유지·deprecated·410으로 퇴역했다. 진단 계산 모듈/원 기록과 모니터의 별도 evaluation/explain/drift 평가 패널은 보존한다.
 

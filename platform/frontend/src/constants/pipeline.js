@@ -37,6 +37,6 @@ export const PIPELINE_NODES = [
   { id: "node-prep", label: "2. Data Prep", icon: "fa-gears" },
   { id: "node-train", label: "3. Retraining", icon: "fa-brain" },
   { id: "node-eval", label: "4. Evaluation", icon: "fa-square-poll-vertical" },
-  { id: "node-deploy", label: "5. Canary Deploy", icon: "fa-rocket" },
-  { id: "node-rollback", label: "6. SOTA Promoted", icon: "fa-shield-halved" }
+  { id: "node-deploy", label: "5. Model Registry", icon: "fa-rocket" },
+  { id: "node-rollback", label: "6. Activation", icon: "fa-shield-halved" }
 ];

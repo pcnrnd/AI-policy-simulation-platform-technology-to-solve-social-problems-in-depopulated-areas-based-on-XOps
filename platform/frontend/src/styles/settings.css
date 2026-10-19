@@ -96,6 +96,13 @@
   color: var(--text-primary);
 }
 
+.settings-row-desc {
+  margin: 2px 0 6px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
 /* 세로 스택 행(버튼 + 설명) — 고대비 라이트 모드 */
 .settings-row-stack {
   flex-direction: column;

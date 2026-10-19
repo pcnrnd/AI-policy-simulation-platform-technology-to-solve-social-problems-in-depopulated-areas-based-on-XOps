@@ -259,6 +259,42 @@
   font-weight: 700;
 }
 
+.header-title-area {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* 상시 모드 배지 — 아이콘·문구·색이 함께 바뀐다. 전환 직후 1.2초 강조(모션 축소 시 없음). */
+.mode-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  white-space: nowrap;
+  animation: mode-badge-flash 1.2s ease-out;
+}
+.mode-badge.is-demo {
+  color: var(--accent-orange);
+  background-color: rgba(var(--accent-orange-rgb), 0.12);
+}
+.mode-badge.is-real {
+  color: var(--accent-teal);
+  background-color: rgba(var(--accent-teal-rgb), 0.12);
+}
+@keyframes mode-badge-flash {
+  0% { box-shadow: 0 0 0 4px currentColor; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mode-badge { animation: none; }
+}
+
 .header-controls {
   display: flex;
   align-items: center;

@@ -33,6 +33,7 @@ class PipelineRegistration(InstanceRegistration):
     id: str = Field(min_length=3, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")
     name: str = Field(min_length=1, max_length=120)
     trigger_policy: str = Field(default="수동", max_length=120)
+    experiment: str = Field(default="", max_length=64)
 
 
 class PredictionInput(BaseModel):
@@ -57,7 +58,7 @@ def recover_jobs() -> None:
 @router.get("/catalog")
 def catalog(auth: Read, mode: Mode = "real") -> dict[str, Any]:
     return {"mode": mode, "source": mode, "types": [{"model_type": key, "name": name} for key, name in store.MODEL_TYPES.items()],
-            "instances": service.instances(mode), "datasets": store.list_assets(mode, "dataset"),
+            "instances": service.instances(mode), "datasets": store.list_assets(mode, "dataset"), "versions": service.versions(mode),
             "pipelines": store.list_assets(mode, "pipeline"), "jobs": store.list_assets(mode, "job"), "audit": store.list_assets(mode, "audit")}
 
 

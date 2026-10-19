@@ -4,6 +4,7 @@ import hashlib
 import json
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict
 from pathlib import Path
 
@@ -203,3 +204,87 @@ def test_duplicate_pipeline_does_not_create_extra_instance(client, auth_headers)
     body = {"id": p["id"], "name": "다른 모델", "model_type": "simulation", "dataset_id": ds["id"], "dataset_hash": ds["content_hash"]}
     assert client.post(BASE + "/pipelines", headers=h, json=body).status_code == 409
     assert client.get(BASE + "/catalog", headers=h).json()["instances"] == before
+
+
+def test_same_source_registration_and_same_pipeline_definition_are_reused(client, auth_headers):
+    # 두 화면이 동시에 첫 실행을 해도 같은 원천·해시는 등록본 1벌, 같은 ID·정의는 파이프라인 1벌이다.
+    h = headers(auth_headers, "mock")
+    first = register(client, auth_headers)
+    with ThreadPoolExecutor(4) as pool:
+        again = list(pool.map(lambda _: register(client, auth_headers), range(4)))
+    assert {row["id"] for row in again} == {first["id"]}
+    p = pipeline(client, auth_headers, first)
+    assert pipeline(client, auth_headers, first)["id"] == p["id"]
+    catalog = client.get(BASE + "/catalog", headers=h).json()
+    assert len(catalog["datasets"]) == 1 and len(catalog["pipelines"]) == 1 and len(catalog["instances"]) == 1
+    assert [row["action"] for row in catalog["audit"]].count("dataset_registered") == 1
+    # 등록본 파일이 손상되면 재사용하지 않고 새로 등록한다.
+    Path(first["private_path"]).write_text("{}", encoding="utf-8")
+    assert register(client, auth_headers)["id"] != first["id"]
+
+
+def test_factor_panel_registration_checks_row_count_and_continuous_period(client, auth_headers, monkeypatch):
+    from src.modelops import factor_panel
+    h = headers(auth_headers, "mock")
+    source = next(row for row in client.get(BASE + "/available-datasets", headers=h).json()["data"] if row["id"].startswith("mock_factor_"))
+    generate = factor_panel.generate
+    for broken in (lambda rows: rows[:-1], lambda rows: rows[:60] + rows[61:] + rows[-1:]):
+        monkeypatch.setattr(factor_panel, "generate", lambda region, broken=broken: broken(generate(region)))
+        monkeypatch.setattr("src.modelops.datasets._hash", lambda value: source["content_hash"])
+        response = client.post(BASE + "/datasets", headers=h, json={"name": "x", "source_dataset_id": source["id"], "source_hash": source["content_hash"]})
+        assert response.status_code == 400
+
+
+def test_pipeline_experiment_is_saved_and_bounded(client, auth_headers):
+    ds = register(client, auth_headers)
+    h = headers(auth_headers, "mock")
+    body = {"id": "test_exp", "name": "실험 학습", "model_type": "factor_analysis", "dataset_id": ds["id"], "dataset_hash": ds["content_hash"], "experiment": "EXP-POP-DECLINE-031"}
+    assert client.post(BASE + "/pipelines", headers=h, json=body).status_code == 201
+    assert client.get(BASE + "/catalog", headers=h).json()["pipelines"][0]["experiment"] == "EXP-POP-DECLINE-031"
+    assert client.post(BASE + "/pipelines", headers=h, json={**body, "id": "test_exp2", "experiment": "x" * 65}).status_code == 422
+    plain = pipeline(client, auth_headers, ds, "simulation")
+    assert plain["experiment"] == ""
+
+
+def test_catalog_lists_versions_in_current_mode_only(client, auth_headers):
+    ds = register(client, auth_headers)
+    p = pipeline(client, auth_headers, ds)
+    h = headers(auth_headers, "mock")
+    job = wait_job(client, h, client.post(BASE + "/pipelines/" + p["id"] + "/run", headers=h).json()["id"])
+    versions = client.get(BASE + "/catalog", headers=h).json()["versions"]
+    assert [row["id"] for row in versions] == [job["version_id"]]
+    assert versions[0]["instance_id"] == p["instance_id"]
+    assert versions[0]["status"] == "candidate"
+    assert client.get(BASE + "/catalog", headers=headers(auth_headers, "real")).json()["versions"] == []
+
+
+def test_catalog_versions_status_follows_activation(client, auth_headers):
+    ds = register(client, auth_headers)
+    p = pipeline(client, auth_headers, ds)
+    h = headers(auth_headers, "mock")
+    job = wait_job(client, h, client.post(BASE + "/pipelines/" + p["id"] + "/run", headers=h).json()["id"])
+    url = BASE + "/instances/" + p["instance_id"] + "/versions/" + job["version_id"] + "/activate"
+    assert client.post(url, headers=h).status_code == 200
+    versions = client.get(BASE + "/catalog", headers=h).json()["versions"]
+    assert [row["status"] for row in versions if row["id"] == job["version_id"]] == ["active"]
+
+
+def test_failed_job_records_failed_stage(client, auth_headers, monkeypatch):
+    ds = register(client, auth_headers)
+    p = pipeline(client, auth_headers, ds)
+    h = headers(auth_headers, "mock")
+    def failing(*args):
+        raise ValueError("invalid input")
+    monkeypatch.setattr(service, "_train", failing)
+    job = wait_job(client, h, client.post(BASE + "/pipelines/" + p["id"] + "/run", headers=h).json()["id"])
+    assert job["state"] == "failed" and job["failed_stage"] == "training"
+    original = service.datasets.load
+    calls = []
+    def load_once(*args):
+        calls.append(args)
+        if len(calls) > 1:
+            raise ValueError("tampered")
+        return original(*args)
+    monkeypatch.setattr(service.datasets, "load", load_once)
+    job = wait_job(client, h, client.post(BASE + "/pipelines/" + p["id"] + "/run", headers=h).json()["id"])
+    assert job["failed_stage"] == "preparing"

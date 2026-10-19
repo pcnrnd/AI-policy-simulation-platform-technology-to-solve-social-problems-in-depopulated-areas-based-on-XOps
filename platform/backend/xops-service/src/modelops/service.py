@@ -11,11 +11,12 @@ from fastapi import HTTPException
 from src.core.settings import get_settings
 from src.mlops.training.dataset import build_dataset
 from src.mlops.training.model import RidgeRegressor
-from src.modelops import datasets, store
+from src.modelops import datasets, factor_panel, store
 from src.realdata import evaluate, models, snapshot
 
 _guard = threading.Lock()
 _locks: dict[tuple[str, str], threading.Lock] = {}
+_register_lock = threading.Lock()  # 파이프라인 ID 확인과 저장 사이 경합을 막는다(단일 서버 프로세스 기준)
 
 
 def instances(mode: str) -> list[dict[str, Any]]:
@@ -41,7 +42,16 @@ def register_instance(mode: str, body: dict[str, Any], actor: str) -> dict[str, 
 
 
 def register_pipeline(mode: str, body: dict[str, Any], actor: str) -> dict[str, Any]:
-    if any(row["id"] == body["id"] for row in store.list_assets(mode, "pipeline")):
+    with _register_lock:
+        return _register_pipeline(mode, body, actor)
+
+
+def _register_pipeline(mode: str, body: dict[str, Any], actor: str) -> dict[str, Any]:
+    existing = next((row for row in store.list_assets(mode, "pipeline") if row["id"] == body["id"]), None)
+    if existing is not None:
+        # 같은 ID·같은 정의(종류·학습데이터·해시)의 재등록은 기존 파이프라인을 돌려준다(동시 첫 실행). 정의가 다르면 충돌이다.
+        if all(existing.get(key) == body[key] for key in ("model_type", "dataset_id", "dataset_hash")):
+            return existing
         raise HTTPException(409, "이미 등록된 파이프라인 ID입니다.")
     dataset, _ = datasets.load(mode, body["dataset_id"], body["dataset_hash"])
     instance = register_instance(mode, body, actor)
@@ -60,6 +70,8 @@ def _train(mode: str, dataset: dict[str, Any], document: dict[str, Any], version
         outcome = models.train(record.model_id, record.dataset_id, version_id, dataset=record)
         artifact = json.loads(Path(outcome.artifact_path).read_text(encoding="utf-8"))
         return artifact, outcome.metrics, outcome.baseline
+    if "panel" in document:  # 데모 요인 패널(이름 있는 변수) — 기존 지역 인구 추이 등록본은 아래 경로 그대로
+        return factor_panel.train(document["panel"]["rows"])
     training = build_dataset([document["region"]], horizon=1, max_lag=2, decline_threshold_pct=1.0)
     if len(training.rows) < 3:
         raise HTTPException(400, "학습에 필요한 관측 기간을 확인하세요.")
@@ -101,11 +113,14 @@ def start_job(mode: str, pipeline_id: str, actor: str) -> dict[str, Any]:
 
 
 def _run_job(mode: str, job: dict[str, Any], lock: threading.Lock) -> None:
+    stage = "preparing"  # 실패 시 어느 단계에서 멈췄는지 화면 노드에 표시한다.
     try:
         job = store.save(mode, "job", {**job, "state": "running", "started_at": store.now()})
         dataset, document = datasets.load(mode, job["dataset_id"], job["dataset_hash"])
         instance = store.get(mode, "instance", job["instance_id"])
+        stage = "training"
         artifact, metrics, baseline = _train(mode, dataset, document, job["version_id"])
+        stage = "registering"
         artifact.update({"model_id": instance["id"], "model_type": instance["model_type"],
             "mode": mode, "source": mode, "region_id": instance["region_id"], "target": instance["target"],
             "version": job["version_id"], "dataset_id": dataset["id"], "content_hash": dataset["content_hash"],
@@ -122,16 +137,24 @@ def _run_job(mode: str, job: dict[str, Any], lock: threading.Lock) -> None:
         store.audit(mode, "training_saved", instance["id"], job["actor"], job_id=job["id"], version_id=job["version_id"], dataset_hash=dataset["content_hash"])
         job = store.save(mode, "job", {**job, "state": "saved", "finished_at": store.now(), "artifact_path": str(path)})
     except Exception as exc:
-        store.save(mode, "job", {**job, "state": "failed", "finished_at": store.now(), "error": type(exc).__name__})
+        store.save(mode, "job", {**job, "state": "failed", "finished_at": store.now(), "error": type(exc).__name__, "failed_stage": stage})
         store.audit(mode, "training_failed", job["instance_id"], job["actor"], job_id=job["id"], reason=type(exc).__name__)
     finally:
         lock.release()
 
 
-def versions(mode: str, instance_id: str) -> list[dict[str, Any]]:
-    instance = store.get(mode, "instance", instance_id)
-    return [{**version, "status": "active" if version["id"] == instance["active_version"] else "previous" if version["id"] == instance["previous_version"] else "candidate"}
-            for version in store.list_assets(mode, "version") if version["instance_id"] == instance_id]
+def versions(mode: str, instance_id: str | None = None) -> list[dict[str, Any]]:
+    """버전 목록 — status는 저장값이 아니라 instance의 활성·이전 버전으로 파생한다. instance_id가 없으면 모드 전체."""
+    if instance_id is not None:
+        store.get(mode, "instance", instance_id)
+    instances = {row["id"]: row for row in store.list_assets(mode, "instance")}
+
+    def status(version: dict[str, Any]) -> str:
+        instance = instances.get(version["instance_id"], {})
+        return "active" if version["id"] == instance.get("active_version") else "previous" if version["id"] == instance.get("previous_version") else "candidate"
+
+    return [{**version, "status": status(version)} for version in store.list_assets(mode, "version")
+            if instance_id is None or version["instance_id"] == instance_id]
 
 
 def load_artifact(mode: str, instance_id: str, version_id: str) -> dict[str, Any]:

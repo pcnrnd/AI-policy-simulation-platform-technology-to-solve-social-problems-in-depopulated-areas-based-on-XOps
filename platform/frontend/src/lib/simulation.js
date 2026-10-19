@@ -4,6 +4,14 @@ export const YEAR_LABELS = ["2026", "2027", "2028", "2029", "2030", "2031", "203
 export const NATURAL_DECLINE = 0.98;
 export const BASELINE_BUDGET = 600; // 억 — budgetFactor=1 기준 예산
 
+// 정책 시뮬레이터 STAGE① 요인분석 실행 단계 칩 — 두 모드 공용. 칩은 실제 요청 진행(useFactorAnalysis)에 맞춰 움직인다.
+export const ANALYSIS_STEPS = [
+  { key: "collect", label: "연계 데이터 수집", icon: "fa-database" },
+  { key: "dl", label: "딥러닝 모델 추론", icon: "fa-microchip" },
+  { key: "xai", label: "XAI 기여도 분해", icon: "fa-magnifying-glass-chart" },
+  { key: "fusion", label: "통계 분석 융합", icon: "fa-layer-group" }
+];
+
 // 총 예산(제약요소) → 체감수익 곡선 스케일 팩터.
 export function budgetToFactor(budgetTotal) {
   return Math.sqrt(budgetTotal / BASELINE_BUDGET);

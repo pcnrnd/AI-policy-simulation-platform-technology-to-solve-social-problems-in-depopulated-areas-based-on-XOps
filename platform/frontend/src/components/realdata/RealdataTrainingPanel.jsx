@@ -1,321 +1,222 @@
-// 실데이터 학습(남원) 패널 — Orchestrator 하단에 추가되는 신규 패널(기존 데모 경로는 불변).
-// R3: 스냅샷 생성 → 학습 실행(job 폴링) → 후보 표 → 반영/복원.
-import { useCallback, useEffect, useRef, useState } from "react";
+// 실데이터 학습 카드 — 한 모델을 빠르게 학습·반영하는 단축 경로.
+// 뒷단은 /api/v3/modelops/*(등록 학습데이터·인스턴스·파이프라인·작업·버전)이고, 카탈로그와 작업 폴링은
+// 오케스트레이터 페이지가 소유한다(파이프라인 목록·하단 버전 관리와 같은 상태를 쓴다).
+// [스냅샷 생성]은 현재 모드의 원본을 동결한 등록 학습데이터를 만든다. 실데이터 모드에서는 먼저
+// 남원 실데이터 스냅샷(POST /realdata/datasets)을 만들어 그 최신 관측을 원본으로 쓴다.
+import { useState } from "react";
 import Card from "../Card.jsx";
-import { datasetMatchesModel, mergeDatasets } from "../../lib/trainingDatasets.js";
-import {
-  applyCandidate,
-  createDataset,
-  getCandidates,
-  getDatasets,
-  getModels,
-  getTrainingRun,
-  getRealdataToken,
-  restoreCandidate,
-  startTrainingRun
-} from "./realdataClient.jsx";
-
-const MODEL_LABELS = {
-  "namwon-nonlocal-visitors-next-month": "남원 타지역 방문객 (익월)",
-  "namwon-observed-sales-next-month": "남원 관측 소비 (익월)"
-};
-
-const JOB_POLL_MS = 3000;
-const TERMINAL_STATES = new Set(["saved", "failed", "cancelled"]);
+import { apiGet, apiSend } from "../../lib/api.js";
+import { alertText } from "../../lib/alertText.js";
+import { JOB_STATE_NAMES, cardPipelineId, datasetMatchesInstance, displayId, instanceLabel, typeName, versionStatus } from "../../lib/modelops.js";
+import { formatUnitValue, targetUnit } from "../../lib/realSimulation.js";
+import { getRealdataToken } from "./realdataClient.jsx";
 
 const orDash = (v) => (v === null || v === undefined || v === "" ? "–" : v);
-const fmtNum = (v) => (typeof v === "number" ? v.toLocaleString(undefined, { maximumFractionDigits: 3 }) : "–");
+// MAE·RMSE·기준선은 학습 대상 단위 규칙(명·원 정수 천 단위, % 소수 1~2), WAPE는 비율이라 소수 2~3자리
+const fmtWape = (v) => (Number.isFinite(v) ? v.toLocaleString("ko-KR", { minimumFractionDigits: 2, maximumFractionDigits: 3 }) : "—");
 
-export default function RealdataTrainingPanel() {
-  const [token, setToken] = useState(null);
-  const [authError, setAuthError] = useState(null);
+function snapshotName(source) {
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${source.name} 스냅샷 ${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+}
 
-  const [models, setModels] = useState([]);
-  const [modelsError, setModelsError] = useState(null);
-  const [selectedModelId, setSelectedModelId] = useState("");
-
-  const [datasets, setDatasets] = useState([]);
-  const [datasetsError, setDatasetsError] = useState(null);
+export default function RealdataTrainingPanel({ catalog, versions, demoVisible, regionName, busy, job, onReload, onRunPipeline, onActivate, onLog, versionResult, onClearResult }) {
+  const [selectedInstanceId, setSelectedInstanceId] = useState("");
   const [selectedDatasetId, setSelectedDatasetId] = useState("");
+  const [working, setWorking] = useState(null); // "snapshot" | "train"
+  const [error, setError] = useState(null);
 
-  const [candidates, setCandidates] = useState([]);
-  const [candidatesStatus, setCandidatesStatus] = useState(null);
+  const instance = catalog.instances.find((row) => row.id === selectedInstanceId) ?? catalog.instances[0];
+  const instanceId = instance?.id ?? "";
+  const matchingDatasets = catalog.datasets.filter((row) => datasetMatchesInstance(row, instance));
+  const selectedDataset = matchingDatasets.find((row) => row.id === selectedDatasetId);
+  const datasetReady = Boolean(selectedDataset);
+  const candidates = versions.filter((row) => row.instance_id === instanceId);
+  const unit = targetUnit(instance?.target);
+  const fmtNum = (v) => formatUnitValue(v, unit);
+  const instanceBusy = catalog.jobs.some((row) => row.instance_id === instanceId && (row.state === "queued" || row.state === "running"));
+  const locked = busy || Boolean(working);
 
-  const [job, setJob] = useState(null);
-  const [jobError, setJobError] = useState(null);
-  const [snapshotBusy, setSnapshotBusy] = useState(false);
-  const [decisionBusy, setDecisionBusy] = useState(null); // version 문자열 — 반영/복원 진행 중 표시
-
-  const pollRef = useRef(null);
-  const candidatesRequestRef = useRef(0);
-
-  // ── 토큰 발급(자동, 1회) ─────────────────────────────────
-  useEffect(() => {
-    getRealdataToken()
-      .then(setToken)
-      .catch((err) => setAuthError(err.message || "인증 토큰 발급에 실패했습니다."));
-  }, []);
-
-  // ── 모델 목록 ────────────────────────────────────────────
-  const loadModels = useCallback(() => {
-    if (!token) return;
-    getModels(token)
-      .then((res) => {
-        const list = res.data ?? [];
-        setModels(list);
-        setModelsError(res.status !== "ok" ? res.message ?? "모델 목록을 불러오지 못했습니다." : null);
-        setSelectedModelId((current) => current || list[0]?.model_id || "");
-      })
-      .catch((err) => setModelsError(err.message || "모델 목록 조회 실패"));
-  }, [token]);
-
-  useEffect(() => {
-    loadModels();
-  }, [loadModels]);
-
-  // ── 데이터셋 목록(A 라우트 GET /realdata/datasets → data:{datasets:[...]}) ─────────
-  useEffect(() => {
-    if (!token) return;
-    getDatasets(token)
-      .then((res) => {
-        const list = res.data?.datasets ?? [];
-        setDatasets(mergeDatasets(list));
-        setDatasetsError(res.status !== "ok" ? res.message ?? "등록된 데이터셋이 없습니다." : null);
-      })
-      .catch((err) => setDatasetsError(err.message || "데이터셋 조회 라우트를 사용할 수 없습니다 (작성자 A 담당)."));
-  }, [token]);
-
-  // ── 후보 표(선택 모델 변경 시 재조회) ─────────────────────
-  const loadCandidates = useCallback(() => {
-    if (!token || !selectedModelId) return;
-    const requestId = ++candidatesRequestRef.current;
-    getCandidates(token, selectedModelId)
-      .then((res) => {
-        if (requestId !== candidatesRequestRef.current) return;
-        setCandidates(res.data ?? []);
-        setCandidatesStatus(res.status);
-      })
-      .catch((err) => {
-        if (requestId !== candidatesRequestRef.current) return;
-        setCandidatesStatus("error");
-        setJobError(err.message || "후보 조회 실패");
-      });
-  }, [token, selectedModelId]);
-
-  useEffect(() => {
-    loadCandidates();
-  }, [loadCandidates]);
-
-  // ── job 폴링 ─────────────────────────────────────────────
-  useEffect(() => {
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
-  }, []);
-
-  const pollJob = useCallback(
-    (jobId) => {
-      if (pollRef.current) clearInterval(pollRef.current);
-      pollRef.current = setInterval(() => {
-        getTrainingRun(token, jobId)
-          .then((res) => {
-            setJob(res.data);
-            if (res.data && TERMINAL_STATES.has(res.data.state)) {
-              clearInterval(pollRef.current);
-              pollRef.current = null;
-              loadModels();
-              loadCandidates();
-            }
-          })
-          .catch((err) => setJobError(err.message || "작업 상태 조회 실패"));
-      }, JOB_POLL_MS);
-    },
-    [token, loadModels, loadCandidates]
-  );
-
-  const handleCreateSnapshot = () => {
-    if (!token || !selectedModelId || snapshotBusy) return;
-    setSnapshotBusy(true);
-    setDatasetsError(null);
-    createDataset(token, selectedModelId)
-      .then((res) => {
-        if (res.status !== "ok") {
-          setDatasetsError(res.message ?? "스냅샷 생성에 실패했습니다.");
-          return;
-        }
-        setDatasets((prev) => mergeDatasets([res.data], prev));
-        setSelectedDatasetId(res.data?.dataset_id ?? "");
-      })
-      .catch((err) => setDatasetsError(err.message || "스냅샷 생성 라우트를 사용할 수 없습니다 (작성자 A 담당)."))
-      .finally(() => setSnapshotBusy(false));
-  };
-
-  const handleStartTraining = () => {
-    if (!token || !selectedModelId || !selectedDatasetId) return;
-    if (!datasetMatchesModel(datasets.find((d) => d.dataset_id === selectedDatasetId), models.find((m) => m.model_id === selectedModelId))) {
-      setJobError("대상 모델에 맞는 데이터셋을 선택하세요.");
-      return;
+  const handleCreateSnapshot = async () => {
+    if (!instance || locked) return;
+    setWorking("snapshot");
+    setError(null);
+    onClearResult();
+    try {
+      const token = await getRealdataToken();
+      let sourceId = null;
+      if (!demoVisible) {
+        const created = await apiSend("POST", "/api/v3/realdata/datasets", { token, body: { target: instance.target } });
+        if (created.status !== "ok") throw new Error(created.message ?? "실데이터 스냅샷 생성에 실패했습니다.");
+        sourceId = created.data?.dataset_id ?? null;
+      }
+      const sources = (await apiGet("/api/v3/modelops/available-datasets", { token })).data ?? [];
+      const source = sourceId
+        ? sources.find((row) => row.id === sourceId)
+        : sources.filter((row) => datasetMatchesInstance(row, instance)).sort((a, b) => String(b.observed_to).localeCompare(String(a.observed_to)))[0];
+      if (!source) throw new Error("선택한 모델의 지역·학습 대상에 맞는 원본 데이터가 없습니다.");
+      const registered = await apiSend("POST", "/api/v3/modelops/datasets", { token, body: { name: snapshotName(source), source_dataset_id: source.id, source_hash: source.content_hash } });
+      await onReload();
+      setSelectedDatasetId(registered.id);
+      onLog(`INFO: 학습데이터 스냅샷 등록 — ${displayId(registered.id)} (${registered.observed_from}~${registered.observed_to})`);
+    } catch (err) {
+      setError(alertText(err, "스냅샷을 만들지 못했습니다. 잠시 뒤 다시 시도하세요."));
+      onLog(`WARN: 학습데이터 스냅샷 생성 실패 — ${err?.message ?? err}`);
     }
-    setJobError(null);
-    setJob(null);
-    startTrainingRun(token, selectedModelId, selectedDatasetId)
-      .then((res) => {
-        setJob(res.data);
-        pollJob(res.data.job_id);
-      })
-      .catch((err) => setJobError(err.status === 409 ? "이미 활성 학습 작업이 있습니다." : err.message || "학습 실행 요청 실패"));
+    finally { setWorking(null); }
   };
 
-  const handleApply = (version) => {
-    if (!token || decisionBusy) return;
-    if (!window.confirm(`후보 ${version}을(를) 반영하시겠습니까? 현재 활성 모델을 교체합니다.`)) return;
-    setDecisionBusy(version);
-    applyCandidate(token, selectedModelId, version)
-      .then(() => {
-        loadModels();
-        loadCandidates();
-      })
-      .catch((err) => {
-        const reasons = err.body?.detail?.reasons;
-        setJobError(reasons ? `반영 조건 미충족: ${reasons.join(" / ")}` : err.message || "반영 실패");
-      })
-      .finally(() => setDecisionBusy(null));
+  const handleStartTraining = async () => {
+    if (!instance || !datasetReady || locked || instanceBusy) return;
+    const dataset = matchingDatasets.find((row) => row.id === selectedDatasetId);
+    setWorking("train");
+    setError(null);
+    onClearResult();
+    try {
+      let pipeline = catalog.pipelines.find((row) => row.instance_id === instance.id && row.dataset_id === dataset.id);
+      if (!pipeline) {
+        // 연결 파이프라인이 없으면 결정적 ID로 등록한다 — ① 목록에 보이고, 같은 조합이면 다시 쓴다.
+        const token = await getRealdataToken();
+        pipeline = await apiSend("POST", "/api/v3/modelops/pipelines", { token, body: {
+          id: cardPipelineId(instance.model_type, dataset.id), name: `${typeName(instance.model_type)} 학습 (실데이터 학습 카드)`,
+          model_type: instance.model_type, dataset_id: dataset.id, dataset_hash: dataset.content_hash, trigger_policy: "수동(학습 카드)"
+        } });
+        onLog(`INFO: 학습 카드 파이프라인 등록 — ${displayId(pipeline.id)}`);
+        await onReload();
+      }
+      await onRunPipeline(pipeline);
+    } catch (err) {
+      setError(err.status === 409 ? "이미 활성 학습 작업이 있습니다." : alertText(err, "학습을 실행하지 못했습니다. 잠시 뒤 다시 시도하세요."));
+      onLog(`WARN: 학습 카드 실행 실패 — ${err?.message ?? err}`);
+    }
+    finally { setWorking(null); }
   };
 
-  const handleRestore = (version) => {
-    if (!token || decisionBusy) return;
-    if (!window.confirm(`후보 ${version}을(를) 복원하시겠습니까? 현재 활성 모델을 대체합니다.`)) return;
-    setDecisionBusy(version);
-    restoreCandidate(token, selectedModelId, version)
-      .then(() => {
-        loadModels();
-        loadCandidates();
-      })
-      .catch((err) => setJobError(err.message || "복원 실패"))
-      .finally(() => setDecisionBusy(null));
+  const decide = async (version, rollback) => {
+    if (locked) return;
+    const question = rollback
+      ? `이전 버전 ${displayId(version.id)}(으)로 되돌리시겠습니까? 현재 운영 버전은 '이전'으로 바뀝니다.`
+      : `후보 ${displayId(version.id)}을(를) 반영하시겠습니까? 현재 활성 모델을 교체합니다.`;
+    if (!window.confirm(question)) return;
+    setError(null);
+    onClearResult();
+    // 결과 문구는 페이지 공유 상태(versionResult)로 돌아온다 — ⑥에서 새 동작이 일어나면 여기 문구는 사라진다.
+    await onActivate(instanceId, version, rollback);
   };
 
-  const selectedModel = models.find((m) => m.model_id === selectedModelId);
-  const matchingDatasets = datasets.filter((d) => datasetMatchesModel(d, selectedModel));
-  const datasetReady = matchingDatasets.some((d) => d.dataset_id === selectedDatasetId);
-  const jobDone = !job || TERMINAL_STATES.has(job.state);
-
+  const cardJob = job && job.instance_id === instanceId ? job : null;
   return (
     <Card
-      title="실데이터 학습"
+      title={demoVisible ? "학습 실행 (데모 데이터)" : "실데이터 학습"}
       icon="fa-flask-vial"
       className="page-section realdata-panel"
       dataSource="api"
+      sourceLabel={demoVisible ? "데모" : selectedDataset ? `실데이터 · ${selectedDataset.name}` : undefined}
       headerRight={
         <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
-          남원 23동 실데이터 · Ridge 공동 학습 · 후보 승인 후 반영
+          {demoVisible ? "데모 지역 시계열 · 선형 회귀 · 후보 승인 후 반영" : "남원 23동 실데이터 · 선형 회귀 공동 학습 · 후보 승인 후 반영"}
         </span>
       }
     >
-      {authError && <p className="realdata-error">{authError}</p>}
-
       <div className="realdata-controls">
         <label className="realdata-field">
           <span>대상 모델</span>
-          <select value={selectedModelId} onChange={(e) => { setSelectedModelId(e.target.value); setSelectedDatasetId(""); }}>
-            {models.map((m) => (
-              <option key={m.model_id} value={m.model_id}>
-                {MODEL_LABELS[m.model_id] ?? m.model_id}
-              </option>
-            ))}
+          <select value={instanceId} onChange={(e) => { setSelectedInstanceId(e.target.value); setSelectedDatasetId(""); }} disabled={!catalog.instances.length}>
+            {!catalog.instances.length && <option value="">등록된 모델 없음</option>}
+            {catalog.instances.map((row) => <option key={row.id} value={row.id}>{instanceLabel(row, regionName)}</option>)}
           </select>
         </label>
 
         <label className="realdata-field">
           <span>데이터셋</span>
-          <select
-            value={selectedDatasetId}
-            onChange={(e) => setSelectedDatasetId(e.target.value)}
-            disabled={matchingDatasets.length === 0}
-          >
+          <select value={selectedDatasetId} onChange={(e) => setSelectedDatasetId(e.target.value)} disabled={matchingDatasets.length === 0}>
             <option value="">선택하세요</option>
             {matchingDatasets.map((d) => (
-              <option key={d.dataset_id} value={d.dataset_id}>
-                {d.dataset_id} ({orDash(d.observed_from)}~{orDash(d.observed_to)})
+              <option key={d.id} value={d.id}>
+                {displayId(d.id)} ({orDash(d.observed_from)}~{orDash(d.observed_to)}) · {d.name}
               </option>
             ))}
           </select>
         </label>
 
-        <button className="btn btn-secondary" onClick={handleCreateSnapshot} aria-disabled={!token || snapshotBusy}>
-          <i className={`fa-solid ${snapshotBusy ? "fa-spinner fa-spin" : "fa-camera"}`}></i> 스냅샷 생성
+        <button className="btn btn-secondary" onClick={handleCreateSnapshot} aria-disabled={!instance || locked}
+          title={!instance ? "위 목록에서 파이프라인을 먼저 등록하세요." : "현재 원본을 동결한 학습데이터를 등록합니다."}>
+          <i className={`fa-solid ${working === "snapshot" ? "fa-spinner fa-spin" : "fa-camera"}`}></i> 스냅샷 생성
         </button>
         <button
           className="btn btn-primary"
           onClick={handleStartTraining}
-          aria-disabled={!token || !selectedModelId || !datasetReady || !jobDone}
-          title={!datasetReady ? "대상 모델에 맞는 스냅샷을 생성하거나 데이터셋을 선택하세요." : !jobDone ? "현재 실행 중인 학습이 끝난 뒤 실행할 수 있습니다" : "선택한 데이터셋으로 학습을 실행합니다"}
+          aria-disabled={!instance || !datasetReady || locked || instanceBusy}
+          title={!datasetReady ? "대상 모델에 맞는 스냅샷을 생성하거나 데이터셋을 선택하세요." : instanceBusy ? "현재 실행 중인 학습이 끝난 뒤 실행할 수 있습니다" : "선택한 데이터셋으로 학습을 실행합니다"}
         >
           <i className="fa-solid fa-play"></i> 학습 실행
         </button>
       </div>
 
-      {datasetsError && <p className="realdata-hint mock-data-output">{datasetsError}</p>}
-
-      {selectedModel && (
-        <p className="realdata-hint mock-data-output">
-          활성 버전: <code>{orDash(selectedModel.active_version)}</code>
-          {selectedModel.retrain_needed && <span className="realdata-badge realdata-badge-warn">재학습 필요</span>}
+      {!instance && <p className="realdata-hint">위 [파이프라인 등록]으로 대상 모델을 먼저 등록하세요.</p>}
+      {instance && (
+        <p className="realdata-hint">
+          활성 버전: <code title={instance.active_version ?? undefined}>{orDash(displayId(instance.active_version))}</code>
         </p>
       )}
-
-      {job && (
-        <p className="realdata-hint mock-data-output">
-          작업 <code>{job.job_id}</code> — 상태 <strong>{job.state}</strong>
-          {job.error && ` (${job.error})`}
+      {cardJob && (
+        <p className="realdata-hint" role="status">
+          작업 <code title={cardJob.id}>{displayId(cardJob.id)}</code> — 상태 <strong>{JOB_STATE_NAMES[cardJob.state] ?? cardJob.state}</strong>
+          {cardJob.error && ` (${cardJob.error})`}
         </p>
       )}
-      {jobError && <p className="realdata-error mock-data-output">{jobError}</p>}
+      {error && <p className="realdata-error" role="alert">{error}</p>}
+      {versionResult?.origin === "card" && (
+        versionResult.ok
+          ? <p className="realdata-hint" role="status">{versionResult.message}</p>
+          : <p className="realdata-error" role="alert">{versionResult.message}</p>
+      )}
 
-      <div className="table-container mock-data-output">
+      <div className="table-container">
         <table>
           <caption className="sr-only">모델 후보 버전과 지표, 반영·복원 동작</caption>
           <thead>
             <tr>
               <th scope="col">버전</th>
-              <th scope="col" className="cell-num">MAE / RMSE / WAPE</th>
-              <th scope="col" className="cell-num">기준선 MAE</th>
+              <th scope="col" className="cell-num">MAE / RMSE ({unit}) / WAPE (비율)</th>
+              <th scope="col" className="cell-num">기준선 MAE ({unit})</th>
               <th scope="col">상태</th>
               <th scope="col" className="cell-actions">동작</th>
             </tr>
           </thead>
           <tbody>
-            {candidatesStatus === "empty" && (
+            {instance && candidates.length === 0 && (
               <tr>
                 <td colSpan={5} style={{ color: "var(--text-muted)" }}>등록된 후보가 없습니다.</td>
               </tr>
             )}
             {candidates.map((c) => (
-              <tr key={c.version}>
-                <td><code>{c.version}</code></td>
+              <tr key={c.id}>
+                <td><code title={c.id}>{displayId(c.id)}</code></td>
                 <td className="cell-num">
-                  {fmtNum(c.metrics?.mae)} / {fmtNum(c.metrics?.rmse)} / {fmtNum(c.metrics?.wape)}
+                  {fmtNum(c.metrics?.mae)} / {fmtNum(c.metrics?.rmse)} / {fmtWape(c.metrics?.wape)}
                 </td>
                 <td className="cell-num">{fmtNum(c.baseline?.mae)}</td>
                 <td>
                   <span className="system-status" style={{ padding: "1px 8px", fontSize: 10 }}>
-                    {orDash(c.status)}
+                    {versionStatus(c.status)}
                   </span>
                 </td>
                 <td className="cell-actions">
                   <button
                     className="btn btn-secondary"
                     style={{ padding: "4px 10px", fontSize: 11 }}
-                    onClick={() => handleApply(c.version)}
-                    aria-disabled={c.status !== "candidate" || Boolean(decisionBusy)}
+                    onClick={() => (c.status === "candidate" ? decide(c, false) : undefined)}
+                    aria-disabled={c.status !== "candidate" || locked}
                   >
                     반영
                   </button>{" "}
                   <button
                     className="btn btn-secondary"
                     style={{ padding: "4px 10px", fontSize: 11 }}
-                    onClick={() => handleRestore(c.version)}
-                    aria-disabled={!["applied", "superseded"].includes(c.status) || Boolean(decisionBusy)}
+                    onClick={() => (c.status === "previous" ? decide(c, true) : undefined)}
+                    aria-disabled={c.status !== "previous" || locked}
                   >
                     복원
                   </button>

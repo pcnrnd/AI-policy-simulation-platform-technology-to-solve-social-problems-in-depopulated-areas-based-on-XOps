@@ -2,7 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { Line } from "react-chartjs-2";
 import Card from "./Card.jsx";
 import ConfirmDialog from "./ConfirmDialog.jsx";
-import { ChartEmptyNote, NO_DEMO_DATA } from "./PendingData.jsx";
+import { ChartEmptyNote } from "./PendingData.jsx";
+
+// 실데이터 표시에서는 저장 시나리오별 추이를 미리 계산하지 않는다 — 적용 후 추천 도출로 예측을 확인한다.
+const REAL_SCENARIO_NOTE = "저장한 시나리오를 적용한 뒤 [정책 추천 도출]을 누르면 예측을 확인할 수 있습니다.";
 import { useChartTheme } from "../hooks/useChartTheme.js";
 import { YEAR_LABELS, computeTrends, computeScenarioTrend, budgetToFactor, controlBoostOf } from "../lib/simulation.js";
 import { scenarioStorageKey } from "../lib/dataMode.js";
@@ -210,10 +213,14 @@ export default function ScenarioCompare({ region, snapshot, onApply, addConsoleL
         titleId="scenario-comparison-title"
         titleTabIndex={-1}
         icon="fa-code-compare"
+        dataSource={allowSeed ? "mock" : "api"}
+        data-slot="sim.scenario"
       >
         <p style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 14 }}>
-          현재 예산·정책 강조·시설 변수 조합을 시나리오로 저장하고, 10개년 인구 추이를 나란히 비교합니다.
-          저장된 시나리오는 브라우저 저장소가 허용된 환경에서 보존됩니다.
+          {allowSeed
+            ? "현재 예산·정책 강조·시설 변수 조합을 시나리오로 저장하고, 10개년 인구 추이를 나란히 비교합니다."
+            : "현재 관측 입력 조합을 시나리오로 저장하고, 다시 적용해 다음 달 예측을 나란히 비교합니다."}
+          {" "}저장된 시나리오는 브라우저 저장소가 허용된 환경에서 보존됩니다.
         </p>
 
         {/* 저장 입력 */}
@@ -256,9 +263,7 @@ export default function ScenarioCompare({ region, snapshot, onApply, addConsoleL
             <div style={{ position: "relative", height: 220, width: "100%" }}>
               <Line data={displayChartData} options={chartOpts} />
               {!allowSeed && (
-                <ChartEmptyNote>
-                  {NO_DEMO_DATA} — 표시할 계열이 없습니다.
-                </ChartEmptyNote>
+                <ChartEmptyNote>{REAL_SCENARIO_NOTE}</ChartEmptyNote>
               )}
             </div>
             <p className="chart-summary">
@@ -271,7 +276,7 @@ export default function ScenarioCompare({ region, snapshot, onApply, addConsoleL
                     : " 비교할 저장 시나리오를 선택하면 추이가 함께 표시됩니다."}
                 </>
               ) : (
-                `${NO_DEMO_DATA} — 예측 인구·증감률이 비어 있습니다.`
+                REAL_SCENARIO_NOTE
               )}
             </p>
 

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useAppState } from "../context/AppStateContext.jsx";
+import { modeBadge } from "../lib/dataMode.js";
 
 const SEVERITY_ICONS = {
   warn: { icon: "fa-triangle-exclamation", color: "var(--accent-red)" },
@@ -27,8 +28,10 @@ export default function Header({ title, onToggleSidebar, sidebarOpen, menuButton
     monitorCollectStatus,
     notifications,
     unreadCount,
-    markNotificationsRead
+    markNotificationsRead,
+    mockDataVisible
   } = useAppState();
+  const badge = modeBadge(mockDataVisible);
 
   // 알림 벨 드롭다운 — 열 때 읽음 처리, 외부 클릭 시 닫힘
   const [notifOpen, setNotifOpen] = useState(false);
@@ -100,6 +103,13 @@ export default function Header({ title, onToggleSidebar, sidebarOpen, menuButton
         </button>
         <div className="header-title-area">
           <h2>{title}</h2>
+          {/* 바깥 live 영역은 유지하고(전환 문구를 낭독), 안쪽만 key 로 다시 그려 강조 애니메이션을 한 번 돌린다. */}
+          <span role="status" aria-live="polite">
+            <span key={badge.tone} className={`mode-badge is-${badge.tone}`} title={badge.title}>
+              <i className={`fa-solid ${badge.icon}`} aria-hidden="true"></i>
+              {badge.text}
+            </span>
+          </span>
         </div>
       </div>
       <div className="header-controls">

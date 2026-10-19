@@ -1,4 +1,5 @@
 import { useId, useRef, useState } from "react";
+import { alertText } from "../lib/alertText.js";
 
 // 신규 아카이브 등록 폼 — DataOps 라이프사이클의 "메타데이터 등록" 단계를 사용자 조작으로 실증.
 // 저장소 유형 선택에 따라 Adapter·쿼리 언어(SQL/MQL)가 자동 결정되며,
@@ -211,7 +212,8 @@ export default function ArchiveRegisterForm({ onRegister, onCancel, onSubmitting
       await onRegister(schema);
       setForm({ ...INITIAL_FORM, columns: [{ ...EMPTY_COLUMN }] });
     } catch (error) {
-      setSubmitError(error?.message || "등록하지 못했습니다. 입력값을 확인한 뒤 다시 시도하세요.");
+      // 원문은 호출부(DataOps)가 활동 로그에 남긴다 — 알림에는 사용자 문구만.
+      setSubmitError(alertText(error, "등록하지 못했습니다. 입력값을 확인한 뒤 다시 시도하세요."));
       requestAnimationFrame(() => errorSummaryRef.current?.focus());
     } finally {
       setSubmitting(false);

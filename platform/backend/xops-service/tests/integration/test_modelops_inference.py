@@ -143,3 +143,34 @@ def test_missing_year_observation_keeps_existing_fallback_and_overflow_is_error(
     assert inference._calculate(stable,{"x":1e200})[0] == 1e200
     with pytest.raises(HTTPException):
         inference._difference(1e308,-1e308)
+
+
+def test_mock_factor_panel_trains_activates_and_explains_with_named_factors(client, auth_headers):
+    from src.modelops import factor_panel
+    h = {**auth_headers, "X-Data-Mode": "mock"}
+    sources = client.get(BASE+"/available-datasets", headers=h).json()["data"]
+    source = next(row for row in sources if row["id"] == "mock_factor_namwon")
+    assert sources[0]["id"] == "mock_namwon"  # 기존 지역 인구 추이 원천은 그대로 앞에 있다
+    ds = client.post(BASE+"/datasets", headers=h, json={"name": "요인 패널", "source_dataset_id": source["id"], "source_hash": source["content_hash"]}).json()
+    assert ds["features"] == factor_panel.FEATURES and ds["row_count"] == 120 and ds["target"] == "living_population"
+    p = client.post(BASE+"/pipelines", headers=h, json={"id": "test_factor_panel", "name": "요인 패널 학습", "model_type": "factor_analysis",
+        "dataset_id": ds["id"], "dataset_hash": ds["content_hash"]}).json()
+    job = client.post(BASE+"/pipelines/"+p["id"]+"/run", headers=h).json()
+    deadline = time.monotonic()+10
+    while time.monotonic() < deadline and job["state"] not in ("saved", "failed"):
+        job = client.get(BASE+"/jobs/"+job["id"], headers=h).json()
+    assert job["state"] == "saved"
+    url = BASE+"/instances/"+p["instance_id"]+"/versions/"+job["version_id"]
+    assert client.post(url+"/activate", headers=h).status_code == 200  # MAE < 기준선
+    context = client.get(url+"/inputs", headers=h).json()
+    assert context["dong_options"] == [{"code": "all", "name": "전체"}] and len(context["controls"]) == 9
+    proof = context["provenance"]
+    assert proof["evaluation_period"] == {"from": 202401, "to": 202412, "n": 12} and proof["prediction_period"] == 202412
+    assert proof["baseline"]["name"] == "same_month_last_year" and proof["metrics"]["mae"] < proof["baseline"]["mae"]
+    result = client.post(url+"/predict", headers=h, json=body(context)).json()
+    assert [row["feature"] for row in result["contributions"]] == factor_panel.FEATURES
+    assert result["intercept"]+sum(row["value"] for row in result["contributions"]) == pytest.approx(result["prediction"])
+    assert result["recommendations"] == []
+    # 기존 지역 인구 추이 원천의 학습·추론 경로는 그대로다(공존).
+    legacy = client.post(BASE+"/datasets", headers=h, json={"name": "인구 추이", "source_dataset_id": "mock_namwon", "source_hash": sources[0]["content_hash"]}).json()
+    assert legacy["features"] == ["rate_t-1", "riskIndex", "birthRate", "agingIndex"]
