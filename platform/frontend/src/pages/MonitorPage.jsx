@@ -581,11 +581,12 @@ export default function MonitorPage() {
     .map((dataset) => {
       const first = dataset.data[0];
       const last = dataset.data.at(-1);
-      if (first === undefined || last === undefined) return `${dataset.label} –`;
+      if (!Number.isFinite(first) || !Number.isFinite(last)) return null;
       const difference = Number(last) - Number(first);
       const direction = difference > 0 ? "상승" : difference < 0 ? "하락" : "변화 없음";
       return `${dataset.label} ${fmt3(first)}→${fmt3(last)} (${direction} ${difference > 0 ? "+" : ""}${fmt3(difference)})`;
     })
+    .filter(Boolean)
     .join(", ");
   const topShapIndex = shapData.datasets[0].data.reduce(
     (best, value, index, values) => (Math.abs(value) > Math.abs(values[best]) ? index : best),
