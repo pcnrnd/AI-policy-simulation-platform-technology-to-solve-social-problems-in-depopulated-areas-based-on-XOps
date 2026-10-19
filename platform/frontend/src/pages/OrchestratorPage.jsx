@@ -357,7 +357,7 @@ export default function OrchestratorPage() {
                             {displayId(last.id)}
                           </button>
                           <div style={{ color: "var(--text-muted)" }}>
-                            {orDash(last.finished_at ? logTime(last.finished_at) : null)} · {orDash(JOB_STATE_NAMES[last.state] ?? last.state)}
+                            {orDash(last.finished_at ? auditTime(last.finished_at) : null)} · {orDash(JOB_STATE_NAMES[last.state] ?? last.state)}
                           </div>
                         </>
                       ) : "실행 이력 없음"}

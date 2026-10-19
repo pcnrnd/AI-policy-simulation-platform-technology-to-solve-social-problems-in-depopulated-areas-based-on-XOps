@@ -239,7 +239,7 @@ export default function RealdataEvaluationPanel() {
 
       <StatusNote status={drift?.status} message={drift?.message} />
       {driftData && driftData.status === "none" && (
-        <p className="realdata-hint mock-data-output">드리프트 비교 구간이 아직 없습니다(관측·검증 구간 부족).</p>
+        <p className="realdata-hint mock-data-output">관측 기간이 더 긴 학습데이터로 다시 학습하면 드리프트 비교가 표시됩니다.</p>
       )}
       {driftData && driftData.status === "ok" && (
         <div className="table-container mock-data-output">

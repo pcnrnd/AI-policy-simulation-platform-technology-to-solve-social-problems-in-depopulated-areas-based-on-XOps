@@ -201,6 +201,22 @@ assert.match(trainingPanel, /\$\{reused \? "기존 등록본 사용" : "학습�
 assert.equal(auditTime(new Date(2026, 9, 19, 10, 53, 51).toISOString()), "10-19 10:53:51");
 assert.match(orchestratorPage, /auditTime\(r\.startedAt\)[\s\S]{0,80}auditTime\(r\.finishedAt\)/);
 assert.doesNotMatch(orchestratorPage, /logTime\(r\.(?:startedAt|finishedAt)\)/);
+// ② 선택 실행 시작·종료와 ① 마지막 실행 시각도 같은 형식, ⑤ 실행 로그 줄 앞은 시각만(logTime) 유지
+const statusCard = src("components", "PipelineStatusCard.jsx");
+assert.equal(statusCard.match(/auditTime\((?:job|run)\.(?:started_at|finished_at)/g)?.length, 4);
+assert.doesNotMatch(statusCard, /logTime\((?:job|run)\./);
+assert.match(orchestratorPage, /auditTime\(last\.finished_at\)/);
+assert.doesNotMatch(orchestratorPage, /logTime\(last\./);
+assert.match(orchestratorPage, /time: logTime\(entry\.ts\)/);
+// 모니터 KPI 도움말의 기준선도 한글 이름(모르면 "기준선") — 코드명 금지
+const monitorPage = src("pages", "MonitorPage.jsx");
+assert.doesNotMatch(monitorPage, BASELINE_CODES);
+assert.match(monitorPage, /const baselineLabel = baselineName\(metricsUsable\?\.baseline\?\.name\);/);
+assert.match(monitorPage, /\$\{baselineLabel \? `기준선\(\$\{baselineLabel\}\)` : "기준선"\} MAE/);
+// 학습 카드 머리글 지역은 선택 데이터·대상 모델에서 읽는다 — 지역명·동 수 고정 문구 금지
+assert.doesNotMatch(trainingPanel, /남원|23동/);
+assert.match(trainingPanel, /const regionId = selectedDataset\?\.region_id \?\? instance\?\.region_id;/);
+assert.match(trainingPanel, /`\$\{realScope\} · 선형 회귀 공동 학습 · 후보 승인 후 반영`/);
 // 내부 알고리즘명 대신 "선형 회귀"
 for (const src of [orchestratorPage, trainingPanel]) { assert.doesNotMatch(src, /Ridge|릿지/); assert.match(src, /선형 회귀/); }
 console.log("modelops: 두 종류 제한·등록 데이터셋 ID/hash 전달·입력 차단·노드/이력/로그/저장소 매핑·⑥ 운영 기록 콘솔·등록 모델 이름·짧은 ID·선형 회귀 표기 PASS");

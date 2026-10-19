@@ -64,4 +64,19 @@ const rawHits = readdirSync(srcRoot, { recursive: true })
   .filter((file) => /\.jsx?$/.test(file) && !/ReporterPage\.jsx$/.test(file))
   .flatMap((file) => readFileSync(join(srcRoot, file), "utf-8").split("\n").filter((line) => RAW_INTO_STATE.test(line)).map((line) => `${file}: ${line.trim()}`));
 assert.deepEqual(rawHits, []);
+// 개요·모니터의 빈 상태는 값을 채우는 방법을 한 문장으로 알린다 — 상태만 알리던 옛 문구 금지
+const srcText = (file) => readFileSync(join(srcRoot, file), "utf-8");
+const STATE_ONLY = /실데이터가 아직 없습니다|요약할 수 없습니다|NO_DEMO_DATA|"데이터 없음"|비교 구간이 아직 없습니다|표시할 적재량이 없습니다|수집 경로가 아직 없어/;
+for (const file of ["pages/MonitorPage.jsx", "pages/Overview.jsx", "components/RegionStatusCard.jsx", "components/PendingData.jsx", "components/realdata/RealdataEvaluationPanel.jsx"]) {
+  assert.doesNotMatch(srcText(file), STATE_ONLY, file);
+}
+const emptyHints = [
+  srcText("pages/MonitorPage.jsx").match(/const EMPTY_HINT = "([^"]+)";/)?.[1],
+  srcText("pages/Overview.jsx").match(/const SOURCE_EMPTY_HINT = "([^"]+)";/)?.[1],
+  srcText("components/PendingData.jsx").match(/export const DEMO_ONLY_HINT = "([^"]+)";/)?.[1]
+];
+for (const text of emptyHints) {
+  assert.match(text ?? "", /면 [^.]*표시됩니다\.$/, text);
+  assert.doesNotMatch(text, /미구현|구현되지 않|지원하지 않|제한|mock|seed|시드|경로|\/api\//i, text);
+}
 console.log("dataMode: 전환 요청 취소·epoch 격리·추천 저장키·mock 보고서 실측 호출 0·real 보고서 시드 값 차단·모드 배지·출처 칩·화면 문구 금지어·알림 원문 차단 PASS");

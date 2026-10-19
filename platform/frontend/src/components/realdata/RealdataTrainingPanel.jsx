@@ -2,7 +2,7 @@
 // 뒷단은 /api/v3/modelops/*(등록 학습데이터·인스턴스·파이프라인·작업·버전)이고, 카탈로그와 작업 폴링은
 // 오케스트레이터 페이지가 소유한다(파이프라인 목록·하단 버전 관리와 같은 상태를 쓴다).
 // [스냅샷 생성]은 현재 모드의 원본을 동결한 등록 학습데이터를 만든다. 실데이터 모드에서는 먼저
-// 남원 실데이터 스냅샷(POST /realdata/datasets)을 만들어 그 최신 관측을 원본으로 쓴다.
+// 실데이터 스냅샷(POST /realdata/datasets)을 만들어 그 최신 관측을 원본으로 쓴다.
 import { useState } from "react";
 import Card from "../Card.jsx";
 import { apiGet, apiSend } from "../../lib/api.js";
@@ -108,6 +108,10 @@ export default function RealdataTrainingPanel({ catalog, versions, demoVisible, 
   };
 
   const cardJob = job && job.instance_id === instanceId ? job : null;
+  // 머리글 지역명은 선택한 등록 데이터(없으면 대상 모델)의 지역에서 읽는다. 이름을 못 찾으면 지역 코드 대신 생략.
+  const regionId = selectedDataset?.region_id ?? instance?.region_id;
+  const region = regionId ? regionName(regionId) : null;
+  const realScope = `${region && region !== regionId ? `${region} ` : ""}행정동 실데이터`;
   return (
     <Card
       title={demoVisible ? "학습 실행 (데모 데이터)" : "실데이터 학습"}
@@ -117,7 +121,7 @@ export default function RealdataTrainingPanel({ catalog, versions, demoVisible, 
       sourceLabel={demoVisible ? "데모" : selectedDataset ? `실데이터 · ${selectedDataset.name}` : undefined}
       headerRight={
         <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
-          {demoVisible ? "데모 지역 시계열 · 선형 회귀 · 후보 승인 후 반영" : "남원 23동 실데이터 · 선형 회귀 공동 학습 · 후보 승인 후 반영"}
+          {demoVisible ? "데모 지역 시계열 · 선형 회귀 · 후보 승인 후 반영" : `${realScope} · 선형 회귀 공동 학습 · 후보 승인 후 반영`}
         </span>
       }
     >

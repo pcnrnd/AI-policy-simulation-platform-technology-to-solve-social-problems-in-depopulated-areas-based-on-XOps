@@ -165,7 +165,7 @@ export function jobLogLines(job, version, audit = []) {
 export const ACTION_NAMES = { dataset_registered: "학습데이터 등록", instance_registered: "모델 등록", pipeline_registered: "파이프라인 등록", training_saved: "학습 완료", training_failed: "학습 실패", version_activated: "버전 활성화", version_rolled_back: "이전 버전 복원", pipeline_deleted: "파이프라인 삭제" };
 const AUDIT_LEVELS = { training_failed: "ERROR", training_saved: "SUCCESS", version_activated: "SUCCESS", version_rolled_back: "SUCCESS" };
 const pad = (n) => String(n).padStart(2, "0");
-/** 운영 기록·실행 이력 시각 — 여러 날에 걸치므로 MM-DD HH:MM:SS(로컬, 24시간). 해석할 수 없으면 원문. */
+/** 운영 기록·실행 이력·선택 실행·마지막 실행 시각 — 여러 날에 걸치므로 MM-DD HH:MM:SS(로컬, 24시간). 해석할 수 없으면 원문. */
 export function auditTime(ts) {
   const at = new Date(ts);
   if (Number.isNaN(at.getTime())) return String(ts ?? "");
