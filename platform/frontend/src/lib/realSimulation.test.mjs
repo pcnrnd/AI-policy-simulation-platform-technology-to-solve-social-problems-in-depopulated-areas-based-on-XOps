@@ -6,7 +6,7 @@ import { activeModelPair, inferenceRequest, validateInference, rankSensitivity, 
   contributionFactors, contributionSplit, realSliderControls, forecastSeries, sensitivityRecommendation, regionRealStatus,
   REAL_GUIDE_TEXT, FACTOR_GUIDE_TEXT, FACTOR_PENDING_TEXT, FACTOR_RUN_LOCK_TEXT, REAL_LOAD_FAILED_TEXT, REAL_PREDICT_FAILED_TEXT, REAL_VERSION_CHANGED_TEXT,
   FACTOR_IDLE_TEXT, FACTOR_FAILED_TEXT, FACTOR_VERSION_CHANGED_TEXT, FACTOR_DIAGNOSIS_TEXT, FACTOR_EXPLAIN_TEXT, FACTOR_FOOTNOTE, CORRELATION_BASIS_TEXT,
-  DEMO_FACTOR_TARGET, FACTOR_PANEL_FEATURES, FACTOR_LIST_LIMIT, factorAnalysisView, featureUnit, targetUnit, formatUnitValue } from "./realSimulation.js";
+  DEMO_FACTOR_TARGET, FACTOR_PANEL_FEATURES, FACTOR_LIST_LIMIT, factorAnalysisView, featureUnit, targetUnit, formatUnitValue, sliderValueText } from "./realSimulation.js";
 const proof={instance_id:"factor",model_type:"factor_analysis",version_id:"v1",job_id:"job1",dataset_id:"registered1",dataset_hash:"a".repeat(64),region_id:"namwon",target:"observed_sales_krw",dong_code:"45190250",prediction_period:202401,features:["y_lag1"],mode:"real",source:"real"};
 const sim={provenance:{...proof,instance_id:"sim",model_type:"simulation",dataset_id:"registered2",version_id:"v2",job_id:"job2"}};
 const request=inferenceRequest(sim,{y_lag1:100});
@@ -201,4 +201,10 @@ assert.match(page,/모델 예측상 변화 \+\$\{formatUnitValue\(ranking\[0\]\.
 assert.equal(page.match(/formatUnitValue\((?:finalPop|baseFinalPop|policyDifference), "명"\)/g)?.length,4);
 for (const text of [forecastCard,evidence,recoPanel,page]) { assert.doesNotMatch(text,/formatValue|maximumFractionDigits: 3/); }
 for (const text of [forecastCard,recoPanel]) assert.doesNotMatch(text,/\.toLocaleString\(\)/);
+// 슬라이더 현재값 — 데모 정수 칸 표시는 그대로, 실데이터 원은 정수(소수 3자리 원문 금지), 1 미만 칸만 단위 규칙.
+assert.deepEqual([sliderValueText(50,"%",1),sliderValueText(1000,"억",50),sliderValueText(18,"㏊",1),sliderValueText(300,"호",50),sliderValueText(60,"명",5)],["50","1,000","18","300","60"]);
+assert.equal(sliderValueText(405844595.289,"원",4100000),"405,844,595");assert.equal(sliderValueText(405844595.289,"원",0.5),"405,844,595");
+assert.equal(sliderValueText(8.934,"%",0.01),"8.93");assert.equal(sliderValueText(NaN,"원",1),"—");
+const dock=read("components","SimulatorDock.jsx");
+assert.doesNotMatch(dock,/maximumFractionDigits: 3/);assert.match(dock,/const shown = sliderValueText\(value, unit, step\);/);assert.equal(dock.match(/\{rangeText\((?:min|max|step)\)\}/g)?.length,3);
 console.log("realSimulation: 활성 시뮬레이션 선택·추론 합계·근거 전달·관측 민감도 순위·③④ 독립·①② 제목 동일·안내/알림 금지어·모드 분기 없음·요인분석 두 모드 매핑·③ 근거 기여도 제거 PASS");
