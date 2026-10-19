@@ -1,4 +1,5 @@
 import { useId } from "react";
+import { sliderValueText } from "../lib/realSimulation.js";
 
 // 정책 시뮬레이터 STAGE ③ 우측 독 — 분석 대상 지자체 목록 + 시뮬레이션 변수.
 // 두 모드가 같은 컨트롤을 쓴다. 실데이터 대응이 없는 예산·가중치는 표시는 유지하고 잠근다(lockText 로 안내).
@@ -158,7 +159,9 @@ export default function SimulatorDock({
 function Slider({ label, value, onChange, min = 0, max = 100, step = 1, unit = "%", locked = false, lockTitle }) {
   const inputId = useId();
   const rangeDescriptionId = `${inputId}-range-description`;
-  const shown = Number.isFinite(value) ? value.toLocaleString("ko-KR", { maximumFractionDigits: 3 }) : "—";
+  const shown = sliderValueText(value, unit, step);
+  // 조절 범위 — 한 칸이 1 미만이면 원문(소수 칸 그대로), 아니면 값과 같은 표기.
+  const rangeText = (n) => step < 1 ? n.toLocaleString() : sliderValueText(n, unit, step);
 
   return (
     <div className="slider-container">
@@ -170,9 +173,9 @@ function Slider({ label, value, onChange, min = 0, max = 100, step = 1, unit = "
         </output>
       </div>
       <span id={rangeDescriptionId} className="sr-only">
-        조절 범위: {min.toLocaleString()}
-        {unit}부터 {max.toLocaleString()}
-        {unit}까지, {step.toLocaleString()}
+        조절 범위: {rangeText(min)}
+        {unit}부터 {rangeText(max)}
+        {unit}까지, {rangeText(step)}
         {unit} 단위
       </span>
       <input

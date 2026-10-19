@@ -22,7 +22,7 @@ import { YEAR_LABELS, computeTrends, budgetToFactor, controlBoostOf, ANALYSIS_ST
 import {
   REAL_TARGETS, REAL_GUIDE_TEXT, REAL_CONTROLS_LOCK_TEXT, FACTOR_GUIDE_TEXT, FACTOR_PENDING_TEXT, FACTOR_RUN_LOCK_TEXT, FACTOR_IDLE_TEXT,
   FACTOR_DIAGNOSIS_TEXT, DEMO_FACTOR_TARGET, realUnavailableText, activeModelPair, factorAnalysisView,
-  observedFeatureLabel, rankSensitivity, targetUnit, formatValue, formatMonth,
+  observedFeatureLabel, rankSensitivity, targetUnit, formatUnitValue, formatMonth,
   realSliderControls, forecastSeries, sensitivityRecommendation, regionRealStatus
 } from "../lib/realSimulation.js";
 
@@ -179,7 +179,7 @@ export default function SimulatorPage() {
       );
       setRecommendation(ranked);
       setRecoSig(currentSig);
-      addConsoleLog(`INFO: ${currentRegion.name} 정책 추천 도출 완료 — 1순위 '${ranked[0].name}' (점수 ${ranked[0].score.toLocaleString()}).`);
+      addConsoleLog(`INFO: ${currentRegion.name} 정책 추천 도출 완료 — 1순위 '${ranked[0].name}' (점수 ${formatUnitValue(ranked[0].score, "점")}).`);
     } else {
       // 대기 중인 자동 계산이 이 요청을 밀어내지 않게 먼저 끈다.
       clearTimeout(simTimerRef.current);
@@ -190,7 +190,7 @@ export default function SimulatorPage() {
       setRecoSim(sim);
       setRecoSig(currentSig);
       addConsoleLog(ranking.length
-        ? `INFO: ${currentRegion.name} 정책 추천 도출 완료 — 1순위 '${label(ranking[0].feature)} ${ranking[0].to > ranking[0].from ? "증가" : "감소"}' (모델 예측상 변화 +${formatValue(ranking[0].delta)}${unit}).`
+        ? `INFO: ${currentRegion.name} 정책 추천 도출 완료 — 1순위 '${label(ranking[0].feature)} ${ranking[0].to > ranking[0].from ? "증가" : "감소"}' (모델 예측상 변화 +${formatUnitValue(ranking[0].delta, unit)}${unit}).`
         : `WARN: ${currentRegion.name} 정책 추천 도출 — 관측 범위 안에서 증가 예측을 만든 조정 항목이 없습니다.`);
     }
     // 결과는 STAGE ④에 렌더되므로 — 펼친 뒤 화면으로 이동해 즉시 보이게 한다
@@ -364,7 +364,7 @@ export default function SimulatorPage() {
       ? {
           objective: `다음 달 ${targetName} 예측 (예측월 ${formatMonth(simProof.prediction_period)})`,
           demand: `${targetName} 관측 · ${dongName}`,
-          supply: simResult ? `기준 예측 ${formatValue(simResult.baseline_prediction)} ${unit}` : "–",
+          supply: simResult ? `기준 예측 ${formatUnitValue(simResult.baseline_prediction, unit)} ${unit}` : "–",
           adjust: `관측 입력 ${controls.length}개 (${controls.map((c) => c.label).join("·")})`,
           constraint: `학습 구간 관측 범위 안 조정 · ${formatMonth(rangeProof?.from)}~${formatMonth(rangeProof?.to)}`
         }
@@ -559,7 +559,7 @@ export default function SimulatorPage() {
                   <div>
                     <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>시뮬레이션 인구 (10년 후)</div>
                     <div className="mock-data-output" style={{ fontSize: 18, fontWeight: 700, color: "var(--accent-blue)" }}>
-                      {finalPop.toLocaleString()}명
+                      {formatUnitValue(finalPop, "명")}명
                     </div>
                   </div>
                   <div>
@@ -571,8 +571,8 @@ export default function SimulatorPage() {
                   </div>
                 </div>
                 <p className="chart-summary">
-                  자연감소 기준 10년 후 {baseFinalPop.toLocaleString()}명, 정책 적용 시 {finalPop.toLocaleString()}명으로
-                  기준 대비 {policyDifference >= 0 ? "+" : ""}{policyDifference.toLocaleString()}명입니다.
+                  자연감소 기준 10년 후 {formatUnitValue(baseFinalPop, "명")}명, 정책 적용 시 {formatUnitValue(finalPop, "명")}명으로
+                  기준 대비 {policyDifference >= 0 ? "+" : ""}{formatUnitValue(policyDifference, "명")}명입니다.
                 </p>
               </>
             ) : !demo && simShown ? (

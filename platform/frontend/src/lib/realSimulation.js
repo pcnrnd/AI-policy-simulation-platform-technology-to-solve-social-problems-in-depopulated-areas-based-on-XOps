@@ -89,14 +89,18 @@ export const REAL_PREDICT_FAILED_TEXT = "예측을 계산하지 못했습니다.
 export const REAL_VERSION_CHANGED_TEXT = "활성 버전이 바뀌었습니다. 새 활성 버전의 관측 입력으로 예측을 다시 계산합니다.";
 
 export const targetUnit = (target) => ({ observed_sales_krw: "원", population_change_pct: "%" })[target] ?? "명";
-export const formatValue = (value) => Number.isFinite(value) ? value.toLocaleString("ko-KR", { maximumFractionDigits: 3 }) : "—";
-// 단위별 반올림 — 인원·금액·개수(명·원·개소·명/월)는 정수(천 단위 구분), 비율·지수·밀도는 소수 1~2자리, 단위 없음은 최대 2자리.
-const COUNT_UNITS = new Set(["명", "원", "개소", "명/월"]);
+// 단위별 반올림 — 인원·금액·개수·점수(명·원·억·개소·호·명/월·점)는 정수(천 단위 구분), 비율·지수·밀도는 소수 1~2자리, 단위 없음은 최대 2자리.
+// 시뮬레이터 ①~④·오케스트레이터가 모두 이 함수로 수치를 보인다.
+const COUNT_UNITS = new Set(["명", "원", "억", "개소", "호", "명/월", "점"]);
+const integerText = (value) => (Math.round(value) || 0).toLocaleString("ko-KR");
 export function formatUnitValue(value, unit) {
   if (!Number.isFinite(value)) return "—";
-  if (COUNT_UNITS.has(unit)) return (Math.round(value) || 0).toLocaleString("ko-KR");
+  if (COUNT_UNITS.has(unit)) return integerText(value);
   return value.toLocaleString("ko-KR", unit ? { minimumFractionDigits: 1, maximumFractionDigits: 2 } : { maximumFractionDigits: 2 });
 }
+// 슬라이더 값 — 한 칸이 1 이상이면 정수 천 단위(데모 '50%'·'18㏊' 그대로), 1 미만이면 단위 규칙.
+export const sliderValueText = (value, unit, step = 1) =>
+  step >= 1 && Number.isFinite(value) ? integerText(value) : formatUnitValue(value, unit);
 export const formatMonth = (value) => value ? `${String(value).slice(0, 4)}-${String(value).slice(4)}` : "—";
 
 /** 예측 입력 기여도 → |값| 내림차순 목록(부호는 direction). */
@@ -179,8 +183,8 @@ export function forecastSeries(context, simulation) {
 export function sensitivityRecommendation(ranking, label, unit, targetName) {
   const items = ranking.map((row) => ({
     id: row.feature, name: `${label(row.feature)} ${row.to > row.from ? "증가" : "감소"}`, category: "관측 입력 가정",
-    score: row.delta, scoreText: `+${formatValue(row.delta)}`,
-    cells: [`${formatValue(row.from)} → ${formatValue(row.to)}`, formatValue(row.delta)]
+    score: row.delta, scoreText: `+${formatUnitValue(row.delta, unit)}`,
+    cells: [`${formatUnitValue(row.from, unit)} → ${formatUnitValue(row.to, unit)}`, formatUnitValue(row.delta, unit)]
   }));
   return {
     items,

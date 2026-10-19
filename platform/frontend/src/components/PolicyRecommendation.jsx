@@ -5,6 +5,7 @@ import InfoTip from "./InfoTip.jsx";
 import PerfBadge from "./PerfBadge.jsx";
 import { useChartTheme } from "../hooks/useChartTheme.js";
 import { useRenderTiming } from "../lib/perf.js";
+import { formatUnitValue } from "../lib/realSimulation.js";
 
 const MEDAL = ["🥇", "🥈", "🥉"];
 const RICE_COLUMNS = [
@@ -27,8 +28,8 @@ export default function PolicyRecommendation({ region, ranked: riceRanked, view 
   const scoreLabel = view ? view.scoreLabel : "정책 추천 점수";
   const scoreUnit = view ? view.scoreUnit : "점";
   const columns = view ? view.columns : [{ label: "정책 전략" }, { label: "대응 유형" }, ...RICE_COLUMNS];
-  const cellsOf = (s) => view ? [s.name, ...s.cells] : [s.name, s.category, s.reach.toLocaleString(), s.adjImpact, s.confidence, s.effort];
-  const scoreText = (s) => s.scoreText ?? s.score.toLocaleString();
+  const cellsOf = (s) => view ? [s.name, ...s.cells] : [s.name, s.category, formatUnitValue(s.reach, "명"), s.adjImpact, s.confidence, s.effort];
+  const scoreText = (s) => s.scoreText ?? formatUnitValue(s.score, scoreUnit);
 
   const chartData = useMemo(
     () => ({
@@ -135,7 +136,7 @@ export default function PolicyRecommendation({ region, ranked: riceRanked, view 
                 ))}
                 {!view && (
                   <td className="cell-num" style={{ fontWeight: 700, color: "var(--accent-blue)" }}>
-                    {s.score.toLocaleString()}
+                    {scoreText(s)}
                   </td>
                 )}
                 <td>

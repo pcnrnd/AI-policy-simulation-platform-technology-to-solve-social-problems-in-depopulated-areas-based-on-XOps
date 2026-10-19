@@ -6,7 +6,7 @@ import { activeModelPair, inferenceRequest, validateInference, rankSensitivity, 
   contributionFactors, contributionSplit, realSliderControls, forecastSeries, sensitivityRecommendation, regionRealStatus,
   REAL_GUIDE_TEXT, FACTOR_GUIDE_TEXT, FACTOR_PENDING_TEXT, FACTOR_RUN_LOCK_TEXT, REAL_LOAD_FAILED_TEXT, REAL_PREDICT_FAILED_TEXT, REAL_VERSION_CHANGED_TEXT,
   FACTOR_IDLE_TEXT, FACTOR_FAILED_TEXT, FACTOR_VERSION_CHANGED_TEXT, FACTOR_DIAGNOSIS_TEXT, FACTOR_EXPLAIN_TEXT, FACTOR_FOOTNOTE, CORRELATION_BASIS_TEXT,
-  DEMO_FACTOR_TARGET, FACTOR_PANEL_FEATURES, FACTOR_LIST_LIMIT, factorAnalysisView, featureUnit, targetUnit, formatUnitValue } from "./realSimulation.js";
+  DEMO_FACTOR_TARGET, FACTOR_PANEL_FEATURES, FACTOR_LIST_LIMIT, factorAnalysisView, featureUnit, targetUnit, formatUnitValue, sliderValueText } from "./realSimulation.js";
 const proof={instance_id:"factor",model_type:"factor_analysis",version_id:"v1",job_id:"job1",dataset_id:"registered1",dataset_hash:"a".repeat(64),region_id:"namwon",target:"observed_sales_krw",dong_code:"45190250",prediction_period:202401,features:["y_lag1"],mode:"real",source:"real"};
 const sim={provenance:{...proof,instance_id:"sim",model_type:"simulation",dataset_id:"registered2",version_id:"v2",job_id:"job2"}};
 const request=inferenceRequest(sim,{y_lag1:100});
@@ -188,4 +188,23 @@ assert.throws(() => activeModelPair({mode:"real",source:"real",instances:[]},"na
 const hook=read("hooks","useRealSimulation.js");
 assert.doesNotMatch(hook,/set(?:Feedback|LoadFailed)\([^)]*(?:error|err)\b/);
 assert.doesNotMatch(hook,/runAnalysis|factor_analysis/);
+// ③·④ 수치도 ①과 같은 단위 규칙 — 원·명은 정수 천 단위(소수 3자리 원문 금지), 데모 ③·④도 같은 함수를 지난다.
+const fracView=sensitivityRecommendation([{feature:"y_lag1",from:405844595.289,to:406455718.59,delta:611123.301}],label,"원","관측 소비");
+assert.equal(fracView.items[0].scoreText,"+611,123");assert.deepEqual(fracView.items[0].cells,["405,844,595 → 406,455,719","611,123"]);
+assert.equal(formatUnitValue(425891010.194,"원"),"425,891,010");assert.equal(formatUnitValue(1234.6,"점"),"1,235");
+assert.doesNotMatch(read("lib","realSimulation.js"),/formatValue|maximumFractionDigits: 3/);
+const forecastCard=read("components","RealForecastResult.jsx"),recoPanel=read("components","PolicyRecommendation.jsx");
+assert.match(forecastCard,/const value = \(number\) => formatUnitValue\(number, unit\);/);assert.equal(forecastCard.match(/\{value\(/g)?.length,6);
+assert.equal(evidence.match(/formatUnitValue\([^)]*, unit\)/g)?.length,3);
+assert.match(recoPanel,/formatUnitValue\(s\.reach, "명"\)/);assert.match(recoPanel,/s\.scoreText \?\? formatUnitValue\(s\.score, scoreUnit\)/);
+assert.match(page,/모델 예측상 변화 \+\$\{formatUnitValue\(ranking\[0\]\.delta, unit\)\}/);assert.match(page,/점수 \$\{formatUnitValue\(ranked\[0\]\.score, "점"\)\}/);
+assert.equal(page.match(/formatUnitValue\((?:finalPop|baseFinalPop|policyDifference), "명"\)/g)?.length,4);
+for (const text of [forecastCard,evidence,recoPanel,page]) { assert.doesNotMatch(text,/formatValue|maximumFractionDigits: 3/); }
+for (const text of [forecastCard,recoPanel]) assert.doesNotMatch(text,/\.toLocaleString\(\)/);
+// 슬라이더 현재값 — 데모 정수 칸 표시는 그대로, 실데이터 원은 정수(소수 3자리 원문 금지), 1 미만 칸만 단위 규칙.
+assert.deepEqual([sliderValueText(50,"%",1),sliderValueText(1000,"억",50),sliderValueText(18,"㏊",1),sliderValueText(300,"호",50),sliderValueText(60,"명",5)],["50","1,000","18","300","60"]);
+assert.equal(sliderValueText(405844595.289,"원",4100000),"405,844,595");assert.equal(sliderValueText(405844595.289,"원",0.5),"405,844,595");
+assert.equal(sliderValueText(8.934,"%",0.01),"8.93");assert.equal(sliderValueText(NaN,"원",1),"—");
+const dock=read("components","SimulatorDock.jsx");
+assert.doesNotMatch(dock,/maximumFractionDigits: 3/);assert.match(dock,/const shown = sliderValueText\(value, unit, step\);/);assert.equal(dock.match(/\{rangeText\((?:min|max|step)\)\}/g)?.length,3);
 console.log("realSimulation: 활성 시뮬레이션 선택·추론 합계·근거 전달·관측 민감도 순위·③④ 독립·①② 제목 동일·안내/알림 금지어·모드 분기 없음·요인분석 두 모드 매핑·③ 근거 기여도 제거 PASS");

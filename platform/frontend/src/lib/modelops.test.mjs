@@ -194,6 +194,13 @@ assert.match(trainingPanel, /MAE \/ RMSE \(\{unit\}\) \/ WAPE \(비율\)[\s\S]*�
 // 같은 내용 재등록은 서버가 기존 등록본을 돌려준다 — DataOps 안내는 "이미 등록" 문구로 구분한다.
 const registration = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "components", "TrainingDatasetRegistration.jsx"), "utf-8");
 assert.match(registration, /const reused = datasets\.some\(\(row\) => row\.id === registered\.id\);[\s\S]*이미 등록되어 있습니다/);
+// [스냅샷 생성]도 호출 전 목록에 같은 ID가 있었으면 "기존 등록본 사용"으로 적는다(서버 응답 코드에 기대지 않음).
+assert.match(trainingPanel, /const reused = catalog\.datasets\.some\(\(row\) => row\.id === registered\.id\);\s*(?:\/\/.*\s*)?await onReload\(\);/);
+assert.match(trainingPanel, /\$\{reused \? "기존 등록본 사용" : "학습데이터 스냅샷 등록"\} — \$\{displayId\(registered\.id\)\} \(/);
+// ④ 실행 이력 시각은 ⑥ 운영 기록과 같은 MM-DD HH:MM:SS — 다른 날 실행이 섞여도 구분된다.
+assert.equal(auditTime(new Date(2026, 9, 19, 10, 53, 51).toISOString()), "10-19 10:53:51");
+assert.match(orchestratorPage, /auditTime\(r\.startedAt\)[\s\S]{0,80}auditTime\(r\.finishedAt\)/);
+assert.doesNotMatch(orchestratorPage, /logTime\(r\.(?:startedAt|finishedAt)\)/);
 // 내부 알고리즘명 대신 "선형 회귀"
 for (const src of [orchestratorPage, trainingPanel]) { assert.doesNotMatch(src, /Ridge|릿지/); assert.match(src, /선형 회귀/); }
 console.log("modelops: 두 종류 제한·등록 데이터셋 ID/hash 전달·입력 차단·노드/이력/로그/저장소 매핑·⑥ 운영 기록 콘솔·등록 모델 이름·짧은 ID·선형 회귀 표기 PASS");

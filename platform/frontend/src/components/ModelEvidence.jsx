@@ -1,5 +1,5 @@
 import { typeName } from "../lib/modelops.js";
-import { observedFeatureLabel, targetName, targetUnit, formatValue, formatMonth, baselineName } from "../lib/realSimulation.js";
+import { observedFeatureLabel, targetName, targetUnit, formatUnitValue, formatMonth, baselineName } from "../lib/realSimulation.js";
 
 // 계산 근거 접이식 — 두 모드에 같은 자리로 둔다. demo 는 화면 예시 계산이라는 사실만, 모델 결과는 모델·학습데이터·버전 근거를 보인다.
 // 기여도는 STAGE ① 첫 카드가 보인다(여기서는 검증 오차·기준선·버전·데이터셋 근거만).
@@ -49,9 +49,9 @@ export default function ModelEvidence({ summary = "계산 근거", demo = false,
         <dt>데이터 내용 해시</dt><dd>{p.dataset_hash}</dd>
         <dt>모델 파일 해시</dt><dd>{p.artifact_hash}</dd>
         <dt>관측 기간 / 예측월</dt><dd>{formatMonth(p.observed_from)}~{formatMonth(p.observed_to)} / {formatMonth(p.prediction_period)}</dd>
-        <dt>검증 기간 / 평균 절대 오차</dt><dd>{evaluation ? `${formatMonth(evaluation.from)}~${formatMonth(evaluation.to)}` : "—"} / {formatValue(p.metrics?.mae)} {unit} (기준선 {formatValue(p.baseline?.mae)} {unit}{baseline ? ` · ${baseline}` : ""})</dd>
+        <dt>검증 기간 / 평균 절대 오차</dt><dd>{evaluation ? `${formatMonth(evaluation.from)}~${formatMonth(evaluation.to)}` : "—"} / {formatUnitValue(p.metrics?.mae, unit)} {unit} (기준선 {formatUnitValue(p.baseline?.mae, unit)} {unit}{baseline ? ` · ${baseline}` : ""})</dd>
         <dt>입력 항목</dt><dd>{(p.features ?? []).map(label).join(", ")}</dd>
-        {result.inference_id && <><dt>추론 / 예측 출력</dt><dd>{result.inference_id} / {formatValue(result.prediction)} {unit}</dd></>}
+        {result.inference_id && <><dt>추론 / 예측 출력</dt><dd>{result.inference_id} / {formatUnitValue(result.prediction, unit)} {unit}</dd></>}
       </dl>
     </details>
   );
