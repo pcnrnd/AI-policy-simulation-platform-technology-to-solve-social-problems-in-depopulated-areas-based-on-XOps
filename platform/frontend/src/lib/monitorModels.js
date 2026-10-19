@@ -27,5 +27,5 @@ export function legacyMonitorId(instance, rows, mode) {
 export function regressionMetricText(value, unit, percent = false) {
   if (!Number.isFinite(value) || value < 0) return "–";
   const shown = percent ? value * 100 : value;
-  return `${shown.toLocaleString("ko-KR", { maximumFractionDigits: percent ? 2 : 0 })}${unit}`;
+  return `${shown.toLocaleString("ko-KR", { maximumFractionDigits: percent || unit === "%" ? 2 : 0 })}${unit}`;
 }

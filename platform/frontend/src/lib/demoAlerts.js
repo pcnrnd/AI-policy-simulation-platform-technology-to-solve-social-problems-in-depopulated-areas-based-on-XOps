@@ -36,3 +36,20 @@ export async function detectDemoDrift({ loadDrift, isCurrent, onDetected }) {
     });
   }
 }
+
+// Context가 유지하는 epoch ref를 단일 잠금으로 쓴다. 이전 요청은 새 epoch의 잠금을 해제하지 않는다.
+export async function runDemoDriftCheck({ requestEpochRef, epoch, isCurrent, onChecking, loadDrift, onDetected, onError }) {
+  if (!isCurrent() || requestEpochRef.current !== null) return;
+  requestEpochRef.current = epoch;
+  onChecking(true);
+  try {
+    await detectDemoDrift({ loadDrift, isCurrent, onDetected });
+  } catch (error) {
+    if (isCurrent()) onError(error);
+  } finally {
+    if (requestEpochRef.current === epoch) {
+      requestEpochRef.current = null;
+      if (isCurrent()) onChecking(false);
+    }
+  }
+}

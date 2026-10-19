@@ -5,7 +5,7 @@ import { RETRAIN_PIPELINES, MODEL_STORE } from "../constants/models.js";
 import { apiGet, apiSend } from "../lib/api.js";
 import { MOCK_DATA_STORAGE_KEY, readMockDataVisible } from "../lib/demoVisibility.js";
 import { consumeSessionExpired } from "../lib/sessionGate.js";
-import { retainRealAlerts, retainModeIndependentAlerts, notificationFromAlert, unreadNotifications, detectDemoDrift } from "../lib/demoAlerts.js";
+import { retainRealAlerts, retainModeIndependentAlerts, notificationFromAlert, unreadNotifications, runDemoDriftCheck } from "../lib/demoAlerts.js";
 import { setDataMode, dataModeEpoch, modeSwitchLog } from "../lib/dataMode.js";
 import { alertText } from "../lib/alertText.js";
 import { getRealdataToken } from "../components/realdata/realdataClient.jsx";
@@ -625,34 +625,26 @@ export function AppStateProvider({ children }) {
   ]);
 
   const injectDrift = useCallback(async () => {
-    if (!demoVisibleRef.current || driftCheckEpochRef.current !== null) return;
     const epoch = dataModeEpoch();
     const isCurrent = () => demoVisibleRef.current && epoch === dataModeEpoch();
-    driftCheckEpochRef.current = epoch;
-    setDriftChecking(true);
-    try {
-      await detectDemoDrift({
-        isCurrent,
-        loadDrift: async () => {
-          const token = await getRealdataToken();
-          if (!isCurrent()) return null;
-          return apiGet("/api/v3/monitoring/drift", { token, params: {
-            drifted: true, include_seed: true, auto_retrain: false
-          } });
-        },
-        onDetected: (result, alert) => {
-          setDriftInjected(true);
-          addConsoleLog(`WARN: 데모 분포 드리프트 감지 — PSI ${result.psi} / 임계 ${result.psi_threshold} · KL ${result.kl} / 임계 ${result.kl_threshold}`);
-          addConsoleLog("INFO: 오케스트레이터에서 등록한 모델과 파이프라인을 선택해 수동 실행하세요.");
-          showAlert(alert);
-        }
-      });
-    } catch (error) {
-      if (isCurrent()) addConsoleLog(`ERROR: 데모 분포 판정 실패 — ${error.message}`);
-    } finally {
-      if (isCurrent()) setDriftChecking(false);
-      if (driftCheckEpochRef.current === epoch) driftCheckEpochRef.current = null;
-    }
+    await runDemoDriftCheck({
+      requestEpochRef: driftCheckEpochRef, epoch, onChecking: setDriftChecking,
+      isCurrent,
+      loadDrift: async () => {
+        const token = await getRealdataToken();
+        if (!isCurrent()) return null;
+        return apiGet("/api/v3/monitoring/drift", { token, params: {
+          drifted: true, include_seed: true, auto_retrain: false
+        } });
+      },
+      onDetected: (result, alert) => {
+        setDriftInjected(true);
+        addConsoleLog(`WARN: 데모 분포 드리프트 감지 — PSI ${result.psi} / 임계 ${result.psi_threshold} · KL ${result.kl} / 임계 ${result.kl_threshold}`);
+        addConsoleLog("INFO: 오케스트레이터에서 등록한 모델과 파이프라인을 선택해 수동 실행하세요.");
+        showAlert(alert);
+      },
+      onError: (error) => addConsoleLog(`ERROR: 데모 분포 판정 실패 — ${error.message}`)
+    });
   }, [addConsoleLog, showAlert]);
 
   // 지자체를 선택하고 지정 탭으로 이동(예: 현황 테이블 → 정책 시뮬레이터).

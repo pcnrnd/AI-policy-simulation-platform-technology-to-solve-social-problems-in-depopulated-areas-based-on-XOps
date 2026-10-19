@@ -9,12 +9,11 @@ export default function SettingsPanel() {
   const containerRef = useRef(null);
   const triggerRef = useRef(null);
   const firstControlRef = useRef(null);
-  const driftBusyRef = useRef(false);
   const handleDrift = () => {
-    if (!mockDataVisible || driftChecking || driftBusyRef.current) return;
+    if (!mockDataVisible || driftChecking) return;
     if (driftInjected) { close(); navigateToTab("tab-mlops-orch"); return; }
-    driftBusyRef.current = true;
-    Promise.resolve(injectDrift()).finally(() => { driftBusyRef.current = false; });
+    // 공유 Context의 동기 epoch guard가 연타와 이전 모드 요청을 함께 관리한다.
+    void injectDrift();
   };
 
   const close = useCallback(() => setOpen(false), []);

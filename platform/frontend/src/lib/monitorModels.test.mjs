@@ -20,4 +20,24 @@ assert.equal(legacyMonitorId(model, history, "mock"), null);
 assert.equal(regressionMetricText(active.metrics.mae, "원"), "0원");
 assert.equal(regressionMetricText(active.metrics.wape, "%", true), "10%");
 for (const invalid of [null, undefined, NaN, Infinity, -1]) assert.equal(regressionMetricText(invalid, "명"), "–");
+// 실제 mock catalog의 인구 변화율 활성 값: 원 단위의 %를 유지하며 WAPE에만 100을 곱한다.
+const percentInstances = ["namwon", "shinan"].map((region) => ({ id: region, mode: "mock",
+  region_id: region, target: "population_change_pct", active_version: region + "-active" }));
+const percentVersions = [
+  { id: "namwon-active", instance_id: "namwon", mode: "mock", metrics: { mae: 0.227835, rmse: 0.271744 } },
+  { id: "shinan-active", instance_id: "shinan", mode: "mock", metrics: { mae: 0.431562, rmse: 0.538476 } }
+];
+const percentCatalog = { mode: "mock", source: "mock", instances: percentInstances, versions: percentVersions };
+const displayedErrors = percentInstances.map((instance) => {
+  const version = monitorActiveVersion(percentCatalog, instance, "mock");
+  return [regressionMetricText(version.metrics.mae, "%"), regressionMetricText(version.metrics.rmse, "%")];
+});
+assert.deepEqual(displayedErrors, [["0.23%", "0.27%"], ["0.43%", "0.54%"]]);
+assert.equal(regressionMetricText(0.097818, "%", true), "9.78%");
+for (const unit of ["원", "명", "%"]) assert.equal(regressionMetricText(0, unit), `0${unit}`);
+assert.equal(regressionMetricText(0, "%", true), "0%");
+for (const invalid of [null, undefined, NaN, Infinity, -0.1]) {
+  assert.equal(regressionMetricText(invalid, "%"), "–");
+  assert.equal(regressionMetricText(invalid, "%", true), "–");
+}
 console.log("PASS: exact active metrics, zero/missing, explicit legacy mapping and mode isolation");

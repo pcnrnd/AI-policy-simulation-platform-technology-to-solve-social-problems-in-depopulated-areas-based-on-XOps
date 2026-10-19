@@ -403,7 +403,7 @@ export default function SimulatorPage() {
         </select>
       </label>
       <label>
-        요인분석 모델
+        모델 선택
         <select
           aria-label="요인분석 모델"
           value={factorModel?.id ?? ""}
