@@ -390,7 +390,7 @@ export function toReportIndicators(region, model, evaluationResponse, driftRespo
  */
 export async function fetchReportData(region) {
   if (currentDataMode() === "mock") return null;
-  // ponytail: realdataClient 는 .jsx 라 node 테스트가 정적 import 를 읽지 못한다 → 호출 시점 import.
+  // realdataClient 는 .jsx 라 node 테스트가 정적 import 를 읽지 못한다 → 호출 시점 import.
   // 정적 import 로 되돌리면 reportIndicators.test.mjs 가 깨진다(빌드의 혼합 import 경고는 무해 —
   // 다른 화면이 이미 정적으로 물고 있어 같은 청크에 남는다).
   const { getRealdataToken, getModels, getDatasets, getEvaluation, getDrift, getExplain } =

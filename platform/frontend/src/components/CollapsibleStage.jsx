@@ -9,7 +9,7 @@ export default function CollapsibleStage({ id, no, title, sub, subTip, open = tr
     <section id={id} className={"pl-stage" + (open ? "" : " collapsed")}>
       {/* 머리글은 flex 컨테이너일 뿐이고 접기 조작은 끝의 토글 버튼이 맡는다. 머리글 자체를
           role=button 으로 두면 안에 놓인 InfoTip 버튼이 버튼 안의 버튼이 되어 초점·역할이 깨진다.
-          ponytail: 아무 데나 눌러도 접히던 기존 조작감은 컨테이너 onClick으로 남긴다(마우스 전용
+          아무 데나 눌러도 접히던 기존 조작감은 컨테이너 onClick으로 남긴다(마우스 전용
           보조 수단이고, 키보드 경로는 아래 토글 버튼이 네이티브로 처리한다). */}
       <div className="pl-stage-head" onClick={onToggle}>
         <span className="pl-stage-badge">{no}</span>

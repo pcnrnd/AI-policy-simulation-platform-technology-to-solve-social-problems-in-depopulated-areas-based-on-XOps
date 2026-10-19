@@ -22,8 +22,8 @@ from src.core.exceptions import UnsafeQueryError
 _FILTER_RE = re.compile(r"^(\w+)\s*(>=|<=|!=|=|>|<)\s*('[^';]*'|\"[^\";]*\"|-?\d+(?:\.\d+)?|\w+)$")
 _IDENT_RE = re.compile(r"^\w+$")
 # 조건 결합은 AND 만 — 공백으로 둘러싸인 `AND`(대소문자 무시)에서만 나눈다.
-# ponytail: 따옴표 안의 ` AND ` 도 분리 대상이 되어 `name = 'a AND b'` 는 400으로 거부된다.
-#           값에 AND 가 필요해지면 그때 따옴표 인식 토크나이저로 올린다.
+# 따옴표 안의 ` AND ` 도 분리 대상이 되어 `name = 'a AND b'` 는 400으로 거부된다.
+# 값에 AND 가 필요해지면 그때 따옴표 인식 토크나이저로 올린다.
 _AND_SPLIT_RE = re.compile(r"\s+AND\s+", re.IGNORECASE)
 # 한 요청이 조립할 수 있는 조건 수 상한.
 MAX_FILTER_CONDITIONS = 5

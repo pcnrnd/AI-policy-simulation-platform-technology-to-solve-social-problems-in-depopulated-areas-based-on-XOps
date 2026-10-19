@@ -24,7 +24,7 @@ from src.dataops.safety import (
 
 _logger = get_logger("xops.dataops")
 
-# ponytail: 실제 Adapter 연결 전까지 총 행수는 결정적 스텁(프론트 계약값과 동일). 실 연결 시 COUNT(*)로 대체.
+# 실제 Adapter 연결 전까지 총 행수는 결정적 스텁(프론트 계약값과 동일). 실 연결 시 COUNT(*)로 대체.
 _TOTAL_ROWS = 1248
 
 

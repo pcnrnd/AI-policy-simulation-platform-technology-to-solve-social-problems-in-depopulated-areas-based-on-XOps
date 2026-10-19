@@ -54,7 +54,7 @@ class SqlAdapter:
             import psycopg
         except ImportError as exc:
             raise DriverUnavailableError("psycopg 미설치 — pip install -e .[db]") from exc
-        # ponytail: 요청당 단발 연결. 동시성이 문제되면 psycopg_pool 로 교체(인터페이스 불변).
+        # 요청당 단발 연결. 동시성이 문제되면 psycopg_pool 로 교체(인터페이스 불변).
         return psycopg.connect(self._dsn, connect_timeout=int(self._timeout))
 
     def execute(self, request: ExecutionRequest) -> ExecutionResult:
