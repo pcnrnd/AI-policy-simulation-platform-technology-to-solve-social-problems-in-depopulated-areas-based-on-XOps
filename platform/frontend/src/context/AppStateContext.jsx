@@ -647,6 +647,17 @@ export function AppStateProvider({ children }) {
     });
   }, [addConsoleLog, showAlert]);
 
+  /**
+   * 데모 이상 시나리오를 화면 상태에서만 해제한다(설정 스위치 OFF).
+   * - 판정 중에는 무시한다(진행 중 요청은 injectDrift의 epoch 가드가 관리).
+   * - 알림 이력·파이프라인 이력·서버 저장 상태는 삭제하지 않는다.
+   */
+  const clearDrift = useCallback(() => {
+    if (!demoVisibleRef.current || driftCheckEpochRef.current !== null) return;
+    setDriftInjected(false);
+    addConsoleLog("INFO: 데모 이상 시나리오 해제 — 지표 표시를 정상 분포로 되돌렸습니다.");
+  }, [addConsoleLog]);
+
   // 지자체를 선택하고 지정 탭으로 이동(예: 현황 테이블 → 정책 시뮬레이터).
   const focusRegion = useCallback((region, tabId = "tab-simulator") => {
     setCurrentRegion(region);
@@ -699,7 +710,8 @@ export function AppStateProvider({ children }) {
     markNotificationsRead,
     startPipeline,
     resetPipeline,
-    injectDrift
+    injectDrift,
+    clearDrift
   };
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;

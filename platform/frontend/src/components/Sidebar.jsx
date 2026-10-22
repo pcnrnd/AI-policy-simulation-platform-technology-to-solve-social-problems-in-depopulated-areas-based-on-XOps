@@ -172,13 +172,6 @@ export default function Sidebar({ sidebarRef, sections, activeTab, onSelect, ope
       </nav>
 
       <SettingsPanel />
-
-      <div className="sidebar-footer">
-        <p>인구감소 R&D R-Center</p>
-        <p className="sidebar-version">
-          v3.1.0 (React + Vite)
-        </p>
-      </div>
     </aside>
   );
 }

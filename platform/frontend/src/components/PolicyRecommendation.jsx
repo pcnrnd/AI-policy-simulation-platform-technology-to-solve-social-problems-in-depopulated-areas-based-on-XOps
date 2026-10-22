@@ -19,9 +19,9 @@ const RICE_COLUMNS = [
  * 정책 추천 결과 패널 — Top3 요약 + 막대 차트 + 상세 표.
  * 데모 표시: 시뮬레이터 입력(지자체 + 정책 변수)으로 도출된 RICE 랭킹(ranked).
  * 실데이터 표시: view(sensitivityRecommendation 결과) — 같은 형식에 모델 예측상 변화를 넣고 RICE·점수는 쓰지 않는다.
- * @param {{ region: object, ranked?: object[], view?: object, sourceLabel?: string }} props
+ * @param {{ region: object, ranked?: object[], view?: object }} props
  */
-export default function PolicyRecommendation({ region, ranked: riceRanked, view = null, sourceLabel }) {
+export default function PolicyRecommendation({ region, ranked: riceRanked, view = null }) {
   const ct = useChartTheme();
   const ranked = view ? view.items : riceRanked;
   const vizMs = useRenderTiming([ranked]);
@@ -72,7 +72,6 @@ export default function PolicyRecommendation({ region, ranked: riceRanked, view 
       style={{ marginTop: 24 }}
       headerRight={<PerfBadge ms={vizMs} />}
       dataSource={view ? "api" : "mock"}
-      sourceLabel={sourceLabel}
       data-slot="sim.report.panel"
     >
       <p style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 16 }}>

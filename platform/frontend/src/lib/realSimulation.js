@@ -144,7 +144,7 @@ export const FACTOR_LIST_LIMIT = 10;
 
 /**
  * 요인분석 추론 결과 → STAGE ①(카드 3개)·②(상관관계) 표시 데이터. 두 모드가 같은 함수를 쓰고,
- * 모드는 출처 문구(basis·sourceLabel)만 바꾼다. dataset: 결과의 등록 학습데이터(카탈로그 행, 없으면 ID로 표기).
+ * 모드는 출처 문구(basis)만 바꾼다. dataset: 결과의 등록 학습데이터(카탈로그 행, 없으면 ID로 표기).
  */
 export function factorAnalysisView(result, { demo, dataset, label }) {
   const p = result.provenance;
@@ -159,7 +159,6 @@ export function factorAnalysisView(result, { demo, dataset, label }) {
     unit, factors, rest: all.slice(FACTOR_LIST_LIMIT), more: all.length - factors.length,
     split: { positive: factors.filter((row) => row.value > 0), negative: factors.filter((row) => row.value < 0) },
     basis: demo ? `연계 데이터: 데모 요인 패널 · ${name}` : `현재 등록 데이터 기준 · ${name} (관측 ${observed})`,
-    sourceLabel: demo ? "데모" : `실데이터 · ${name}`,
     runInfo: `학습데이터 ${name} · 요인분석 활성 버전 ${displayId(p.version_id)}`,
     model: { version: displayId(p.version_id), versionId: p.version_id, intercept: result.intercept, prediction: result.prediction,
       features: (p.features ?? []).map(label) },

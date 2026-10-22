@@ -9,7 +9,7 @@ import { CORRELATION_BASIS_TEXT } from "../lib/realSimulation.js";
 // split: { positive, negative } — ① 카드에 보인 요인 행. diagnosis: 진단 문구 배열(데모) 또는 null.
 // diagnosisNote: 실데이터 진단 자리 안내(실행 여부와 무관). pendingText: 잠금 중 대신 보일 문구(예: 모델 준비 안내).
 export default function FactorResultStage({ open, onToggle, locked = false, running = false, split = null, diagnosis = null,
-  diagnosisNote = null, pendingText = null, sourceLabel, showDerive = false }) {
+  diagnosisNote = null, pendingText = null, showDerive = false }) {
   const list = (rows) => rows.length ? rows.map((row) => <li key={row.feature}>{row.label}</li>) : <li>해당 요인 없음</li>;
   return (
     <CollapsibleStage
@@ -21,7 +21,7 @@ export default function FactorResultStage({ open, onToggle, locked = false, runn
       onToggle={onToggle}
     >
       <div className="pl-flow-grid pl-flow-2">
-        <Card title="상관관계 분석" icon="fa-scale-balanced" dataSource="api" sourceLabel={sourceLabel} data-slot="sim.result.card-1">
+        <Card title="상관관계 분석" icon="fa-scale-balanced" dataSource="api" data-slot="sim.result.card-1">
           {!locked && split ? (
             <>
               <div className="pl-corr-grid">

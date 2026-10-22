@@ -21,7 +21,6 @@ export default function FactorAnalysisStage({
   onRun,
   view = null,
   placeholders = [],
-  sourceLabel,
   conditions = null,
   evidence = null,
   runLockTitle = null,
@@ -30,7 +29,7 @@ export default function FactorAnalysisStage({
   const running = status === "running";
   const done = status === "done";
   const card = (index, title, body) => (
-    <Card title={title} icon={CARD_ICONS[index]} dataSource="api" sourceLabel={sourceLabel} data-slot={`sim.factor.card-${index + 1}`}>
+    <Card title={title} icon={CARD_ICONS[index]} dataSource="api" data-slot={`sim.factor.card-${index + 1}`}>
       {view ? body : placeholders[index] ?? <PendingData running={running} />}
     </Card>
   );

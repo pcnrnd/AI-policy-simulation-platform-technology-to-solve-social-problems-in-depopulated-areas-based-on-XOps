@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { setDataMode, beginDataRequest, dataModeEpoch, scenarioStorageKey, modeBadge, modeSwitchLog, sourceChipText } from "./dataMode.js";
+import { setDataMode, beginDataRequest, dataModeEpoch, scenarioStorageKey, modeBadge, modeSwitchLog } from "./dataMode.js";
 import { REAL_GUIDE_TEXT, REAL_CONTROLS_LOCK_TEXT, FACTOR_GUIDE_TEXT, FACTOR_PENDING_TEXT, realUnavailableText } from "./realSimulation.js";import { fetchReportData } from "./dataopsApi.js";
 import { alertText } from "./alertText.js";
 import { buildReportBlocks, buildReportRows } from "./reportContent.js";
@@ -28,20 +28,9 @@ assert.equal(buildReportRows(region, template, extra).some((row) => row.includes
 assert.deepEqual([modeBadge(true).text, modeBadge(true).tone], ["데모 데이터 표시 중", "demo"]);
 assert.deepEqual([modeBadge(false).text, modeBadge(false).tone], ["실데이터 표시 중", "real"]);
 assert.notEqual(modeBadge(true).icon, modeBadge(false).icon);
-// 출처 칩 규칙(설계 §1-2 표 전 조합)
-assert.equal(sourceChipText(true, "mock"), "데모");
-assert.equal(sourceChipText(true, "api"), "데모 포함");
-assert.equal(sourceChipText(true, "realdata"), "데모 포함");
-assert.equal(sourceChipText(false, "api"), "실데이터");
-assert.equal(sourceChipText(false, "realdata"), "실데이터");
-assert.equal(sourceChipText(false, "mock"), null); // 실데이터 표시의 데모 출처(값 숨김) 카드에는 칩 없음
-assert.equal(sourceChipText(false, undefined), null);
-assert.equal(sourceChipText(true, "api", "데모"), "데모");
-assert.equal(sourceChipText(false, undefined, "실데이터 · 등록본"), "실데이터 · 등록본");
 // 화면 문구에 내부 구현명·제약 표현 금지
 const FORBIDDEN = /mock|seed|시드|경로|modelops|\/api\/|정책 변수|VITE_|_KEY/i;
-const shown = [true, false].flatMap((on) => [modeBadge(on).text, modeBadge(on).title, modeSwitchLog(on),
-  ...["mock", "api", "realdata"].map((src) => sourceChipText(on, src)).filter(Boolean)]);
+const shown = [true, false].flatMap((on) => [modeBadge(on).text, modeBadge(on).title, modeSwitchLog(on)]);
 const guides = [REAL_GUIDE_TEXT, realUnavailableText("지자체 비교 분포는"), REAL_CONTROLS_LOCK_TEXT, FACTOR_GUIDE_TEXT, FACTOR_PENDING_TEXT];
 for (const text of [...shown, ...guides]) assert.doesNotMatch(text, FORBIDDEN, text);
 // 알림 문구: 서버·브라우저 원문은 고정 문구로, 사용자용 한글 안내(4xx·화면 코드)는 그대로
@@ -91,4 +80,4 @@ for (const text of emptyHints) {
   assert.match(text ?? "", /면 [^.]*표시됩니다\.$/, text);
   assert.doesNotMatch(text, /미구현|구현되지 않|지원하지 않|제한|mock|seed|시드|경로|\/api\//i, text);
 }
-console.log("dataMode: 전환 요청 취소·epoch 격리·추천 저장키·mock 보고서 실측 호출 0·real 보고서 시드 값 차단·모드 배지·출처 칩·화면 문구 금지어·알림 원문 차단 PASS");
+console.log("dataMode: 전환 요청 취소·epoch 격리·추천 저장키·mock 보고서 실측 호출 0·real 보고서 시드 값 차단·모드 배지 문구·화면 문구 금지어·알림 원문 차단 PASS");

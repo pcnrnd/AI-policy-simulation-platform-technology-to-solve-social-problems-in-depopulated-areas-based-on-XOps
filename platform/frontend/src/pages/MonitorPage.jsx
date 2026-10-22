@@ -22,9 +22,7 @@ import { useChartTheme } from "../hooks/useChartTheme.js";
 import { useRenderTiming } from "../lib/perf.js";
 import { MODEL_REGISTRY } from "../constants/models.js";
 import InfoTip from "../components/InfoTip.jsx";
-import RealdataEvaluationPanel from "../components/realdata/RealdataEvaluationPanel.jsx";
 import { getRealdataToken } from "../components/realdata/realdataClient.jsx";
-import SourceChip from "../components/SourceChip.jsx";
 import { apiGet, apiSend } from "../lib/api.js";
 import { alertText } from "../lib/alertText.js";
 import { monitorInstances, monitorActiveVersion, legacyMonitorId, regressionMetricText } from "../lib/monitorModels.js";
@@ -870,8 +868,7 @@ export default function MonitorPage() {
         <div className="card" style={{ padding: "var(--space-xl)" }} data-values-source={accF1Src}>
           <div className="stat-label">
             {primaryCard.label}
-            <InfoTip text={primaryCard.tip} /> <SourceChip dataSource={accF1Src} />
-          </div>
+            <InfoTip text={primaryCard.tip} />          </div>
           <div
             style={{
               display: "flex",
@@ -1141,9 +1138,6 @@ export default function MonitorPage() {
             })}
         </div>
       </Card>
-
-      {/* 실데이터 연계(R4) — 실데이터 모델 검증/운영 평가·선형 SHAP·드리프트. 위 데모 지표와는 별개 경로. */}
-      {!mockDataVisible && <RealdataEvaluationPanel />}
     </>
   );
 }
