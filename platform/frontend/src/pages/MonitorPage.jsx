@@ -20,18 +20,18 @@ import { useAppState } from "../context/AppStateContext.jsx";
 import { dataModeEpoch } from "../lib/dataMode.js";
 import { useChartTheme } from "../hooks/useChartTheme.js";
 import { useRenderTiming } from "../lib/perf.js";
-import { MODEL_REGISTRY } from "../constants/models.js";
+import { MODEL_REGISTRY, REALDATA_MODEL_LABELS } from "../constants/models.js";
 import InfoTip from "../components/InfoTip.jsx";
 import { getRealdataToken } from "../components/realdata/realdataClient.jsx";
 import { apiGet, apiSend } from "../lib/api.js";
 import { alertText } from "../lib/alertText.js";
-import { monitorInstances, monitorActiveVersion, legacyMonitorId, regressionMetricText } from "../lib/monitorModels.js";
-import { TARGET_LABELS, typeName, displayId } from "../lib/modelops.js";
+import { monitorInstances, monitorActiveVersion, legacyMonitorId, regressionMetricText, DEMO_MONITOR_ID } from "../lib/monitorModels.js";
+import { displayId, instanceLabel } from "../lib/modelops.js";
 import { baselineName, targetUnit } from "../lib/realSimulation.js";
+import TablePager, { usePager } from "../components/TablePager.jsx";
 
-// 데모 분포 표시 대상 — 인구이동 예측 모델(백엔드 시드 id).
-// 등록 모델과 매핑된 이력만 조회하며, 설정의 데모 예시 판정은 별도 동작이다.
-const DRIFT_MODEL_ID = "population-forecast";
+// 데모 분포 표시 대상 — 인구이동 예측 예시 모델(백엔드 시드 id). 지표·설명 이력도 같은 모델을 본다.
+const DRIFT_MODEL_ID = DEMO_MONITOR_ID;
 
 // 데모 시드 PSI — 위와 같은 조건에서만 쓴다.
 const SEED_PSI_DRIFTED = "0.384";
@@ -128,6 +128,7 @@ export default function MonitorPage() {
   const [modelPick, setModelPick] = useState(null);
   const [realdataModels, setRealdataModels] = useState([]);
   const selectableModels = monitorInstances(catalog, mode);
+  const regionName = (id) => appData.regions.find((row) => row.id === id)?.name ?? "지역 미확인";
   const selectedInstance = selectableModels.find((row) => modelPick?.mode === mode && row.id === modelPick.id)
     ?? selectableModels.find((row) => monitorActiveVersion(catalog, row, mode)) ?? selectableModels[0] ?? null;
   const selectedVersion = monitorActiveVersion(catalog, selectedInstance, mode);
@@ -330,7 +331,7 @@ export default function MonitorPage() {
   const targetModel =
     MODEL_REGISTRY.find((m) => m.id === modelTarget) ??
     // 실데이터 모델은 시드 오프셋(accDelta/errRatio)이 없다 — 이름만 쓰고 보정은 적용하지 않는다.
-    { id: modelTarget, name: realdataModels.find((m) => m.model_id === modelTarget)?.name ?? modelTarget, accDelta: 0, errRatio: 1 };
+    { id: modelTarget, name: realdataModels.find((m) => m.model_id === modelTarget)?.name ?? REALDATA_MODEL_LABELS[modelTarget] ?? modelTarget, accDelta: 0, errRatio: 1 };
 
   // 데모 표시 OFF의 데이터 계층 차단 — 응답이 실측(source="measured")일 때만 값으로 받아들인다.
   // 백엔드는 토글을 모르고 항상 같은 응답을 주므로, 시드 유래 응답을 걸러내는 곳은 여기 한 군데다.
@@ -644,6 +645,7 @@ export default function MonitorPage() {
     outlier: true
   }));
   const outlierRows = measuredOutlierRows ?? (allowSeed ? seedOutlierRows : []);
+  const outlierList = usePager(outlierRows);
   const outlierMeasured = measuredOutlierRows != null;
   const outlierCount = outlierMeasured
     ? `${measuredOutlierRows.length}건`
@@ -813,9 +815,7 @@ export default function MonitorPage() {
             <select className="select-control" aria-label="대상 모델" value={selectedInstance?.id ?? ""}
               onChange={(event) => setModelPick({ mode, id: event.target.value })}>
               {!selectableModels.length && <option value="">등록 모델 없음</option>}
-              {selectableModels.map((model) => <option key={model.id} value={model.id}>
-                {model.name} · {appData.regions.find((row) => row.id === model.region_id)?.name ?? "지역 미확인"} · {TARGET_LABELS[model.target] ?? "학습 대상 미확인"} · {typeName(model.model_type)}
-              </option>)}
+              {selectableModels.map((model) => <option key={model.id} value={model.id}>{instanceLabel(model, regionName)}</option>)}
             </select>
           </label>
           <label className="compact-select-field">
@@ -1016,8 +1016,8 @@ export default function MonitorPage() {
                     </td>
                   </tr>
                 )}
-                {outlierRows.map((row, idx) => (
-                  <tr key={idx}>
+                {outlierList.pageRows.map((row, idx) => (
+                  <tr key={outlierList.offset + idx}>
                     <td
                       style={{
                         color: row.outlier ? "var(--accent-red)" : "var(--text-secondary)"
@@ -1044,6 +1044,7 @@ export default function MonitorPage() {
               </tbody>
             </table>
           </div>
+          <TablePager {...outlierList.pager} />
         </Card>
       </div>
 
@@ -1118,13 +1119,15 @@ export default function MonitorPage() {
         모델 신뢰도 게이지
         <InfoTip text="선택한 등록 모델의 현재 활성 버전 검증 MAE·RMSE·WAPE입니다. MAE와 RMSE는 예측 오차의 크기이며 낮을수록 좋습니다. WAPE는 절대 오차 비율입니다. 신뢰 확률이나 정규화 판정 기준이 아니므로 색상 판정을 하지 않습니다. 위 차트는 별도 이력 자료입니다." />
       </>} icon="fa-gauge-high">
-        <p className="realdata-hint" role="status">
-          {selectedInstance ? selectedVersion
-            ? `${selectedInstance.name} · 활성 버전 ${displayId(selectedVersion.id)}`
-            : `${selectedInstance.name} · 활성 버전이 없습니다.` : "등록 모델을 확인하세요."}
-          {modelTarget ? ` · 위 차트: ${realdataModels.find((row) => row.model_id === modelTarget)?.name}의 별도 학습 이력`
-            : " · 위 차트에 연결된 이력 자료가 없습니다."}
-        </p>
+        {/* 모델·버전 설명은 한 문장 대신 라벨+값 칩으로 — 내부 이름 대신 종류·지역·학습 대상, 버전은 짧은 표기(전체는 title). */}
+        <div className="run-meta monitor-model-meta" role="status">
+          <span className="run-meta-item"><span className="run-meta-label">대상 모델</span>
+            {selectedInstance ? instanceLabel(selectedInstance, regionName) : "등록 모델 없음"}</span>
+          <span className="run-meta-item"><span className="run-meta-label">활성 버전</span>
+            {selectedVersion ? <code title={selectedVersion.id}>{displayId(selectedVersion.id)}</code> : "없음"}</span>
+          <span className="run-meta-item"><span className="run-meta-label">위 차트 이력</span>
+            {modelTarget ? targetModel.name : "연결된 이력 없음"}</span>
+        </div>
         <div className="grid-cols-3" style={{ marginBottom: 0 }}>
           {[{ key: "mae", label: "MAE", unit: targetUnit(selectedInstance?.target) },
             { key: "rmse", label: "RMSE", unit: targetUnit(selectedInstance?.target) },

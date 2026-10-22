@@ -9,6 +9,33 @@
   margin-bottom: 12px;
 }
 
+/* 재학습 파이프라인 카드 안의 빠른 학습 구획 */
+.quick-train {
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--surface-hover);
+}
+.quick-train-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+.quick-train-head i {
+  color: var(--accent-blue);
+}
+.quick-train-scope {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.quick-train .realdata-controls {
+  margin-bottom: 4px;
+}
+
 .realdata-panel .realdata-field {
   display: flex;
   flex-direction: column;

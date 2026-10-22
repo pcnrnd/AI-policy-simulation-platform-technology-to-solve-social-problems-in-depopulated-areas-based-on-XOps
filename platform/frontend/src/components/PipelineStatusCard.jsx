@@ -86,7 +86,7 @@ export default function PipelineStatusCard({ target, regionName, onReset, anchor
   const busy = status.tone === "busy";
   const job = target?.kind === "modelops" ? target.job : null;
   const run = target?.kind === "legacy" ? target.run : null;
-  const titleName = job ? target.pipeline?.name ?? job.pipeline_id : run?.pipeline_id ?? run?.model_id;
+  const titleName = job ? target.pipeline?.name ?? "등록 해제된 파이프라인" : run?.pipeline_id ?? run?.model_id;
   const titleId = job ? job.pipeline_id : run?.run_id;
   const instance = target?.instance;
 
@@ -94,16 +94,14 @@ export default function PipelineStatusCard({ target, regionName, onReset, anchor
     // tabIndex=-1: [실행] 직후 결과 영역으로 초점을 옮기기 위한 프로그램 초점 대상
     <div id="pipeline-status-anchor" ref={anchorRef} tabIndex={-1}>
       <Card
-        title={target ? <>파이프라인 실행 상태 — {orDash(titleName)}{" "}
-          <code style={{ fontSize: 12, color: "var(--accent-purple-text)", fontWeight: 500 }} title={titleId}>{displayId(titleId)}</code></> : <>파이프라인 실행 상태 — 대기 중</>}
+        // 상태는 제목 뒤 "— 상태" 문구가 아니라 태그로 — 문구·색이 tone 별로 갈린다(대기·진행 중·완료·실패).
+        title={<>파이프라인 실행 상태<span className="title-tag" data-tone={status.tone} style={{ ...TONE_STYLE[status.tone], borderColor: "currentColor" }}>
+          {status.label}</span></>}
         icon="fa-diagram-project"
         className="page-section orchestrator-live"
         dataSource={target ? "api" : undefined}
         headerRight={
           <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
-            <span className="system-status" style={{ padding: "2px 10px", fontSize: 11, ...TONE_STYLE[status.tone] }}>
-              {status.label}
-            </span>
             <button
               className="btn btn-secondary"
               onClick={(event) => { if (!target) { event.preventDefault(); return; } onReset(); }}
@@ -117,6 +115,9 @@ export default function PipelineStatusCard({ target, regionName, onReset, anchor
       >
         {job && (
           <div className="run-meta" data-values-source="api">
+            <span className="run-meta-item">
+              <span className="run-meta-label">파이프라인</span>{orDash(titleName)} <code title={titleId}>{displayId(titleId)}</code>
+            </span>
             <span className="run-meta-item">
               <span className="run-meta-label">대상 모델</span>
               {typeName(job.model_type)}{instance ? ` · ${regionName(instance.region_id)} · ${TARGET_LABELS[instance.target] ?? instance.target}` : ""}{" "}
@@ -142,6 +143,7 @@ export default function PipelineStatusCard({ target, regionName, onReset, anchor
         )}
         {run && (
           <div className="run-meta" data-values-source="api">
+            <span className="run-meta-item"><span className="run-meta-label">파이프라인</span>{orDash(titleName)}</span>
             <span className="run-meta-item"><span className="run-meta-label">대상 모델</span>{orDash(run.model_id)} → {orDash(displayId(run.active_version))} (과거 기록)</span>
             <span className="run-meta-item"><span className="run-meta-label">실행 ID</span>{shortCode(run.run_id)}</span>
             <span className="run-meta-item"><span className="run-meta-label">트리거</span>{orDash(run.trigger)}</span>
