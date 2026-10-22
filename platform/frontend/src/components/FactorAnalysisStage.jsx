@@ -1,6 +1,7 @@
 import Card from "./Card.jsx";
 import CollapsibleStage from "./CollapsibleStage.jsx";
 import PendingData from "./PendingData.jsx";
+import TablePager, { usePager } from "./TablePager.jsx";
 import { formatUnitValue, FACTOR_EXPLAIN_TEXT, FACTOR_FOOTNOTE } from "../lib/realSimulation.js";
 import { displayId } from "../lib/modelops.js";
 
@@ -28,6 +29,8 @@ export default function FactorAnalysisStage({
 }) {
   const running = status === "running";
   const done = status === "done";
+  // ①-1 요인 목록은 전체(상위 10 + 나머지)를 5개씩 넘겨 본다 — 카드 높이가 옆 카드와 맞는다.
+  const factorList = usePager(view ? [...view.factors, ...view.rest] : []);
   const card = (index, title, body) => (
     <Card title={title} icon={CARD_ICONS[index]} dataSource="api" data-slot={`sim.factor.card-${index + 1}`}>
       {view ? body : placeholders[index] ?? <PendingData running={running} />}
@@ -107,14 +110,8 @@ export default function FactorAnalysisStage({
         {/* AI + 인구학적 요인 분석 결과 — 요인 기여도(±, |값| 내림차순) */}
         {card(0, "AI + 인구학적 요인 분석 결과", view && (
             <>
-              <ul className="pl-factor-list">{view.factors.map(factorRow)}</ul>
-              {/* 10행 밖 요인은 같은 카드 안에서 펼쳐 본다(접힘 기본) */}
-              {view.more > 0 && (
-                <details className="pl-stat-baseline">
-                  <summary style={{ cursor: "pointer" }}>외 {view.more}개 요인 모두 보기</summary>
-                  <ul className="pl-factor-list">{view.rest.map(factorRow)}</ul>
-                </details>
-              )}
+              <ul className="pl-factor-list">{factorList.pageRows.map(factorRow)}</ul>
+              <TablePager {...factorList.pager} />
               <div className="pl-source-note">
                 <i className="fa-solid fa-database" aria-hidden="true"></i> {view.basis}
               </div>

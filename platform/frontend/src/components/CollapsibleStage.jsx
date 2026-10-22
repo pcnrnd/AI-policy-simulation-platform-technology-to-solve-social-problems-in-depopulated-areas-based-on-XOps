@@ -4,7 +4,8 @@ import InfoTip from "./InfoTip.jsx";
 // 주의: body는 항상 DOM에 두고 CSS로만 숨긴다(언마운트 금지) — STAGE③ Leaflet
 // 지도 인스턴스가 재생성되며 깨지는 것을 방지하기 위함.
 // subTip: sub와 같은 보조 설명을 본문 대신 제목 옆 툴팁으로 보여 준다(둘 중 하나만 쓴다).
-export default function CollapsibleStage({ id, no, title, sub, subTip, open = true, onToggle, children }) {
+// action: 제목 줄 오른쪽(접기 버튼 앞)에 두는 단계 실행 버튼.
+export default function CollapsibleStage({ id, no, title, sub, subTip, action, open = true, onToggle, children }) {
   return (
     <section id={id} className={"pl-stage" + (open ? "" : " collapsed")}>
       {/* 머리글은 flex 컨테이너일 뿐이고 접기 조작은 끝의 토글 버튼이 맡는다. 머리글 자체를
@@ -21,6 +22,8 @@ export default function CollapsibleStage({ id, no, title, sub, subTip, open = tr
           </span>
         )}
         {sub && <p className="pl-stage-sub">{sub}</p>}
+        {/* 버튼 클릭이 머리글로 올라가 단계가 접히지 않게 막는다. */}
+        {action && <span className="pl-stage-action" onClick={(e) => e.stopPropagation()}>{action}</span>}
         {/* onClick을 달지 않는다 — 버튼 클릭(마우스·Enter·Space 모두)이 머리글로 버블링되어
             컨테이너 onClick 한 번만 실행된다. 양쪽에 달면 한 번 눌러 두 번 토글된다. */}
         <button

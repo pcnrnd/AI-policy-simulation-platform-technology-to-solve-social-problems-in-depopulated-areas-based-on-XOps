@@ -21,7 +21,7 @@ import { rankStrategies } from "../constants/policyStrategies.js";
 import { YEAR_LABELS, computeTrends, budgetToFactor, controlBoostOf, ANALYSIS_STEPS } from "../lib/simulation.js";
 import {
   REAL_TARGETS, REAL_GUIDE_TEXT, REAL_CONTROLS_LOCK_TEXT, FACTOR_GUIDE_TEXT, FACTOR_PENDING_TEXT, FACTOR_RUN_LOCK_TEXT, FACTOR_IDLE_TEXT,
-  FACTOR_DIAGNOSIS_TEXT, DEMO_FACTOR_TARGET, realUnavailableText, selectedFactorModel, inferenceMatches, inferenceContextKey, factorAnalysisView,
+  factorDiagnosis, DEMO_FACTOR_TARGET, realUnavailableText, selectedFactorModel, inferenceMatches, inferenceContextKey, factorAnalysisView,
   observedFeatureLabel, rankSensitivity, targetUnit, formatUnitValue, formatMonth,
   realSliderControls, forecastSeries, sensitivityRecommendation, regionRealStatus
 } from "../lib/realSimulation.js";
@@ -472,8 +472,7 @@ export default function SimulatorPage() {
         locked={analysisStatus !== "done"}
         running={analysisRunning}
         split={factorView?.split}
-        diagnosis={demo ? currentRegion.case.problemDiagnosis : null}
-        diagnosisNote={demo ? null : FACTOR_DIAGNOSIS_TEXT}
+        diagnosis={demo ? currentRegion.case.problemDiagnosis : factorDiagnosis(factorView)}
         pendingText={factorMissing ? FACTOR_PENDING_TEXT : null}
         showDerive={demo}
       />
@@ -671,16 +670,19 @@ export default function SimulatorPage() {
         no="STAGE ④"
         // reportFocus 는 데모 사례 정의의 문장이라 실데이터 표시에서는 쓰지 않는다.
         title="추천"
-        sub={demo ? currentRegion.case.reportFocus : real.ready ? "관측 지표의 예측 민감도를 근거로 한 추천" : null}
+        // 부제는 제목 옆 툴팁으로만 — 제목 줄에는 [정책 추천 도출]이 오른쪽에 붙는다.
+        subTip={demo ? currentRegion.case.reportFocus : real.ready ? "관측 지표의 예측 민감도를 근거로 한 추천" : null}
+        action={
+          <button type="button" className="btn btn-primary"
+            onClick={() => { if (demo ? analysisDone : real.ready || real.loadFailed) handleRecommend(); }}
+            aria-disabled={(demo ? !analysisDone : !real.ready && !real.loadFailed) || undefined}
+            title={demo ? !analysisDone ? "요인분석을 먼저 실행하세요." : undefined : realLockTitle ?? undefined}>
+            <i className="fa-solid fa-lightbulb" aria-hidden="true"></i> 정책 추천 도출
+          </button>
+        }
         open={openStages["stage-report"]}
         onToggle={() => toggleStage("stage-report")}
       >
-        <button type="button" className="btn btn-primary"
-          onClick={() => { if (demo ? analysisDone : real.ready || real.loadFailed) handleRecommend(); }}
-          aria-disabled={(demo ? !analysisDone : !real.ready && !real.loadFailed) || undefined}
-          title={demo ? !analysisDone ? "요인분석을 먼저 실행하세요." : undefined : realLockTitle ?? undefined}>
-          <i className="fa-solid fa-lightbulb" aria-hidden="true"></i> 정책 추천 도출
-        </button>
         {recoReady && (demo || recommendation.items.length > 0) ? (
           demo
             ? <PolicyRecommendation region={currentRegion} ranked={recommendation} />

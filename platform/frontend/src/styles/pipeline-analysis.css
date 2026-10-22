@@ -129,6 +129,19 @@
   cursor: pointer;
   color: inherit;
 }
+/* 단계 실행 버튼 — 제목 줄 오른쪽 끝(접기 토글 바로 앞)에 붙는다. */
+.pl-stage-action {
+  margin-left: auto;
+  align-self: center;
+  cursor: default;
+}
+.pl-stage-action + .pl-stage-toggle {
+  margin-left: 0;
+}
+.pl-stage-action .btn {
+  padding: 8px 16px;
+  font-size: 13px;
+}
 .pl-stage-toggle:focus-visible {
   outline: 2px solid var(--accent-blue);
   outline-offset: 4px;
@@ -180,10 +193,11 @@
 }
 
 /* 흐름 그리드 */
+/* 같은 줄 카드는 같은 높이 — 긴 내용(XAI 입력 칩)은 카드 안에서 스크롤한다. */
 .pl-flow-grid {
   display: grid;
   gap: 20px;
-  align-items: start;
+  align-items: stretch;
 }
 .pl-flow-3 {
   grid-template-columns: repeat(3, 1fr);
@@ -361,6 +375,7 @@
 .pl-model-box strong {
   color: var(--text-primary);
   font-size: 14px;
+  overflow-wrap: anywhere;
 }
 .pl-model-box p {
   font-size: 12px;
@@ -371,6 +386,9 @@
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  margin-top: 8px;
+  max-height: 168px;
+  overflow-y: auto;
 }
 .pl-chip {
   font-size: 12px;

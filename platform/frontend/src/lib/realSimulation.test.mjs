@@ -5,8 +5,8 @@ import { fileURLToPath } from "node:url";
 import { activeModelPair, selectedFactorModel, inferenceMatches, inferenceContextKey, inferenceRequest, validateInference, rankSensitivity, observedFeatureLabel, createRequestGate,
   contributionFactors, contributionSplit, realSliderControls, forecastSeries, sensitivityRecommendation, regionRealStatus,
   REAL_GUIDE_TEXT, FACTOR_GUIDE_TEXT, FACTOR_PENDING_TEXT, FACTOR_RUN_LOCK_TEXT, REAL_LOAD_FAILED_TEXT, REAL_PREDICT_FAILED_TEXT, REAL_VERSION_CHANGED_TEXT,
-  FACTOR_IDLE_TEXT, FACTOR_FAILED_TEXT, FACTOR_VERSION_CHANGED_TEXT, FACTOR_DIAGNOSIS_TEXT, FACTOR_EXPLAIN_TEXT, FACTOR_FOOTNOTE, CORRELATION_BASIS_TEXT,
-  DEMO_FACTOR_TARGET, FACTOR_PANEL_FEATURES, FACTOR_LIST_LIMIT, factorAnalysisView, featureUnit, targetUnit, formatUnitValue, sliderValueText } from "./realSimulation.js";
+  FACTOR_IDLE_TEXT, FACTOR_FAILED_TEXT, FACTOR_VERSION_CHANGED_TEXT, FACTOR_EXPLAIN_TEXT, FACTOR_FOOTNOTE, CORRELATION_BASIS_TEXT,
+  DEMO_FACTOR_TARGET, FACTOR_PANEL_FEATURES, FACTOR_LIST_LIMIT, factorAnalysisView, factorDiagnosis, featureUnit, targetUnit, formatUnitValue, sliderValueText } from "./realSimulation.js";
 const proof={instance_id:"factor",model_type:"factor_analysis",version_id:"v1",job_id:"job1",dataset_id:"registered1",dataset_hash:"a".repeat(64),region_id:"namwon",target:"observed_sales_krw",dong_code:"45190250",prediction_period:202401,features:["y_lag1"],mode:"real",source:"real"};
 const sim={provenance:{...proof,instance_id:"sim",model_type:"simulation",dataset_id:"registered2",version_id:"v2",job_id:"job2"}};
 const request=inferenceRequest(sim,{y_lag1:100});
@@ -67,7 +67,7 @@ assert.equal(regionRealStatus({instances:[statusCatalog.instances[0]]},"namwon",
 // 안내·알림 문구에 내부 사유·구현명·서버/브라우저 원문 금지
 const INTERNAL=/세종대|미수신|릿지|ridge|lag|XGBoost|SHAP|HTTP|fetch|Failed|Error|mock|seed|시드|modelops|\/api\//i;
 const guideTexts=[REAL_GUIDE_TEXT,FACTOR_GUIDE_TEXT,FACTOR_PENDING_TEXT,FACTOR_RUN_LOCK_TEXT,REAL_LOAD_FAILED_TEXT,REAL_PREDICT_FAILED_TEXT,REAL_VERSION_CHANGED_TEXT,
-  FACTOR_IDLE_TEXT,FACTOR_FAILED_TEXT,FACTOR_VERSION_CHANGED_TEXT,FACTOR_DIAGNOSIS_TEXT,FACTOR_EXPLAIN_TEXT,FACTOR_FOOTNOTE,CORRELATION_BASIS_TEXT];
+  FACTOR_IDLE_TEXT,FACTOR_FAILED_TEXT,FACTOR_VERSION_CHANGED_TEXT,FACTOR_EXPLAIN_TEXT,FACTOR_FOOTNOTE,CORRELATION_BASIS_TEXT];
 // 인과로 과장하는 표현 금지 — 각주의 "인과 효과가 아닙니다"만 허용한다.
 const CAUSAL=/효과가 있|때문에|유발|원인|덕분/;
 for (const text of guideTexts) { assert.doesNotMatch(text,INTERNAL,text); assert.doesNotMatch(text,CAUSAL,text); }
@@ -112,9 +112,9 @@ assert.match(page,/const factorRetry = factor\.loadFailed && !factorModel;/);
 assert.match(page,/if \(factorRetry\) \{ factor\.reload\(\); return; \}/);
 assert.match(page,/runTitle=\{factorRetry \? "다시 확인" : null\}/);
 assert.match(factorStage,/title=\{runLockTitle \?\? runTitle \?\? undefined\}/);
-// ①-1 10행 밖 요인은 같은 카드 안 펼침(접힘 기본)으로 — 삭제된 계산 근거 행을 가리키지 않는다.
-assert.doesNotMatch(factorStage,/계산 근거에서 확인/);
-assert.match(factorStage,/<details className="pl-stat-baseline">[\s\S]*외 \{view\.more\}개 요인 모두 보기[\s\S]*view\.rest\.map\(factorRow\)/);
+// ①-1 요인 목록은 전체(상위 10 + 나머지)를 5개씩 페이지로 넘겨 본다 — 삭제된 계산 근거 행을 가리키지 않는다.
+assert.doesNotMatch(factorStage,/계산 근거에서 확인|<details/);
+assert.match(factorStage,/usePager\(view \? \[\.\.\.view\.factors, \.\.\.view\.rest\] : \[\]\)[\s\S]*factorList\.pageRows\.map\(factorRow\)[\s\S]*<TablePager \{\.\.\.factorList\.pager\} \/>/);
 // 단위별 반올림(공용 포맷) — 카드 수치는 formatUnitValue 로만, 활성 버전은 짧은 ID + title 전체 ID.
 assert.doesNotMatch(factorStage,/formatValue/);
 assert.match(factorStage,/const versionTitle = view\?\.model\.versionId;/);assert.equal(factorStage.match(/title=\{versionTitle\}/g)?.length,2);
@@ -138,7 +138,9 @@ assert.match(factorHook,/selectedFactorModel\(catalog, modelId, region, target, 
 assert.doesNotMatch(factorHook,/set(?:Feedback|Missing)\([^)]*(?:error|err)\b/);
 // ② 상관관계는 ① 기여도 부호, 진단은 데모 서사/실데이터 안내.
 assert.match(page,/split=\{factorView\?\.split\}/);
-assert.match(page,/diagnosisNote=\{demo \? null : FACTOR_DIAGNOSIS_TEXT\}/);
+// 실데이터 진단은 제약 문구 대신 ① 결과에서 읽은 신호 — 화면에 "등록 후 제공" 같은 문구가 없다.
+assert.match(page,/diagnosis=\{demo \? currentRegion\.case\.problemDiagnosis : factorDiagnosis\(factorView\)\}/);
+assert.doesNotMatch(page+resultStage+read("lib","realSimulation.js"),/등록 후 제공|diagnosisNote/);
 // ④ 추천 전 안내는 실데이터에서 "관측 입력"
 assert.match(page,/\{demo \? "정책 변수를" : "관측 입력을"\}/);
 // ── 요인분석 매핑(두 모드 같은 함수) ──
@@ -173,6 +175,17 @@ assert.match(demoView.validation.targets.join("|"),/생활인구 · 요인 9개\
 const realView=factorAnalysisView({...panelResult,provenance:{...panelProof,mode:"real",source:"real",target:"observed_sales_krw"}},{demo:false,dataset:{name:"남원 관측 소비 스냅샷"},label:panelLabel});
 assert.equal(realView.basis,"현재 등록 데이터 기준 · 남원 관측 소비 스냅샷 (관측 2015-01~2024-12)");
 assert.equal(realView.unit,"원");
+// 문제 유형 진단(실데이터 ②) — 추정 대 전년 같은 달로 유형, 행정동 제외 최대 하방·상방 요인, 계절 비중.
+const salesLabel=(feature) => observedFeatureLabel(feature,"observed_sales_krw",[{code:"1",name:"운봉읍"}]);
+const diagOf=(contributions,prediction) => factorDiagnosis(factorAnalysisView({provenance:{...proof,metrics:{},baseline:{}},intercept:0,prediction,contributions},{demo:false,dataset:null,label:salesLabel}));
+const salesRows=[{feature:"dong_1",input:0,value:-90},{feature:"y_yoy",input:100,value:40},{feature:"month_cos",input:0.5,value:-30},{feature:"has_yoy",input:1,value:0},{feature:"y_lag1",input:80,value:-20}];
+assert.deepEqual(diagOf(salesRows,90),["유형: 감소형 — 다음 달 추정값이 전년 같은 달 관측보다 10.0% 낮습니다.",
+  "주된 하방 요인: 월별 계절성 2 (기여도 -30 원)","주된 상방 요인: 전년 같은 달 관측 소비 (기여도 +40 원)","계절 영향: 월별 계절성이 전체 기여의 17%를 차지합니다."]);
+assert.match(diagOf(salesRows,103)[0],/^유형: 정체형 — .*3\.0% 높습니다\.$/);
+// 전년 관측이 없으면 유형을 단정하지 않는다(요인 줄만), 결과가 없으면 null.
+assert.doesNotMatch(diagOf(salesRows.map((r)=>r.feature==="has_yoy"?{...r,input:0}:r),90).join("|"),/유형:/);
+assert.equal(factorDiagnosis(null),null);
+for (const line of diagOf(salesRows,90)) { assert.doesNotMatch(line,INTERNAL,line); assert.doesNotMatch(line,CAUSAL,line); }
 const many={...panelResult,contributions:Array.from({length:14},(_,i)=>({feature:`dong_${i}`,input:1,value:i-7}))};
 const manyView=factorAnalysisView(many,{demo:false,dataset:null,label:(f)=>f});
 assert.equal(manyView.factors.length,FACTOR_LIST_LIMIT);assert.equal(manyView.more,4);
