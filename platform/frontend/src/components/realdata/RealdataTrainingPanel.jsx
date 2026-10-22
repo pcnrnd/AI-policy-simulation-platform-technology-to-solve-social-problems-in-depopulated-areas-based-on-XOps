@@ -114,11 +114,10 @@ export default function RealdataTrainingPanel({ catalog, versions, demoVisible, 
   const realScope = `${region && region !== regionId ? `${region} ` : ""}행정동 실데이터`;
   return (
     <Card
-      title={demoVisible ? "학습 실행 (데모 데이터)" : "실데이터 학습"}
+      title={demoVisible ? "학습 실행 (데모 데이터)" : "데이터 학습"}
       icon="fa-flask-vial"
       className="page-section realdata-panel"
       dataSource="api"
-      sourceLabel={demoVisible ? "데모" : selectedDataset ? `실데이터 · ${selectedDataset.name}` : undefined}
       headerRight={
         <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
           {demoVisible ? "데모 지역 시계열 · 선형 회귀 · 후보 승인 후 반영" : `${realScope} · 선형 회귀 공동 학습 · 후보 승인 후 반영`}

@@ -93,7 +93,7 @@ export default function TrainingDatasetRegistration() {
     }
   };
   // 학습 자산은 모드별로 분리돼 데모 표시의 목록은 전부 예시다("데모 포함"이 아니라 "데모").
-  return <Card title="학습데이터 등록" icon="fa-database" dataSource="api" sourceLabel={mockDataVisible ? "데모" : undefined}>
+  return <Card title="학습데이터 등록" icon="fa-database" dataSource="api">
     <form className="pipeline-register" onSubmit={submit} aria-label="학습데이터 등록">
       <div className="pipeline-register-grid">
         <label><span>원본 데이터 선택</span><select value={sourceId} onChange={(event) => setSourceId(event.target.value)} required>

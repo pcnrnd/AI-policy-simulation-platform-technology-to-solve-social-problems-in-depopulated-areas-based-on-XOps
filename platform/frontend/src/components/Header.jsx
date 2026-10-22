@@ -103,13 +103,8 @@ export default function Header({ title, onToggleSidebar, sidebarOpen, menuButton
         </button>
         <div className="header-title-area">
           <h2>{title}</h2>
-          {/* 바깥 live 영역은 유지하고(전환 문구를 낭독), 안쪽만 key 로 다시 그려 강조 애니메이션을 한 번 돌린다. */}
-          <span role="status" aria-live="polite">
-            <span key={badge.tone} className={`mode-badge is-${badge.tone}`} title={badge.title}>
-              <i className={`fa-solid ${badge.icon}`} aria-hidden="true"></i>
-              {badge.text}
-            </span>
-          </span>
+          {/* 데이터 모드 배지는 화면에서 제거했다. 데모 표시 전환 문구는 화면 낭독용(sr-only) live 영역으로만 남긴다. */}
+          <span className="sr-only" role="status" aria-live="polite">{badge.text}</span>
         </div>
       </div>
       <div className="header-controls">

@@ -76,7 +76,7 @@ function announcement(nodes, status, target) {
  * target: { kind: "modelops", job, version, instance, pipeline } | { kind: "legacy", run } | null
  * pollError: { message, stopped } — 이 작업의 상태 폴링 실패(화면 잠금은 풀려 있다). onRecheck 로 다시 폴링한다.
  */
-export default function PipelineStatusCard({ target, regionName, onReset, anchorRef, pollError, onRecheck, sourceLabel }) {
+export default function PipelineStatusCard({ target, regionName, onReset, anchorRef, pollError, onRecheck }) {
   const nodes = !target ? jobNodeStatuses(null)
     : target.kind === "legacy" ? PIPELINE_NODES.map((_, index) => legacyNodeStatus(index, target.run))
       : jobNodeStatuses(target.job, target.version);
@@ -99,7 +99,6 @@ export default function PipelineStatusCard({ target, regionName, onReset, anchor
         icon="fa-diagram-project"
         className="page-section orchestrator-live"
         dataSource={target ? "api" : undefined}
-        sourceLabel={target ? sourceLabel : undefined}
         headerRight={
           <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
             <span className="system-status" style={{ padding: "2px 10px", fontSize: 11, ...TONE_STYLE[status.tone] }}>

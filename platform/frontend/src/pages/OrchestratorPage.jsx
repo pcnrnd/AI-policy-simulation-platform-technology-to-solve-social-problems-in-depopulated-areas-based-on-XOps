@@ -43,8 +43,6 @@ export default function OrchestratorPage() {
   // 데모 표시는 화면 구조가 아니라 데이터만 바꾼다. 새 경로는 X-Data-Mode(mock|real)로 모드별 자산을 받고,
   // 이전 경로(옛 시드 파이프라인·고정 모델 3개)의 과거 기록은 데모 ON에서만 읽기 전용으로 붙인다.
   const demo = mockDataVisible;
-  // 출처 칩: 학습 자산은 모드별로 분리돼 데모 표시의 값은 전부 예시다("데모 포함"이 아니라 "데모").
-  const chipLabel = demo ? "데모" : undefined;
   const [catalog, setCatalog] = useState(EMPTY);
   const [catalogLoaded, setCatalogLoaded] = useState(false);
   const [catalogError, setCatalogError] = useState(null);
@@ -275,7 +273,6 @@ export default function OrchestratorPage() {
         icon="fa-list-check"
         className="page-section orchestrator-live"
         dataSource="api"
-        sourceLabel={chipLabel}
         headerRight={
           <span style={{ display: "inline-flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
@@ -430,7 +427,6 @@ export default function OrchestratorPage() {
         anchorRef={statusAnchorRef}
         pollError={liveJob && selectedJob?.id === liveJob.id ? pollError : null}
         onRecheck={() => liveJob && pollJob(liveJob.id, 0)}
-        sourceLabel={chipLabel}
       />
 
       {/* 활성화된 버전의 다음 단계 — 시뮬레이터는 활성 버전으로 추론한다. */}
@@ -452,7 +448,6 @@ export default function OrchestratorPage() {
         icon="fa-boxes-stacked"
         className="page-section"
         dataSource="api"
-        sourceLabel={chipLabel}
         headerRight={<span style={{ fontSize: 11, color: "var(--text-muted)" }}>학습데이터·모델 파일 해시로 버전 추적</span>}
       >
         <div className="promotion-criteria" aria-labelledby="promotion-criteria-title">
@@ -531,7 +526,6 @@ export default function OrchestratorPage() {
         icon="fa-clock-rotate-left"
         className="page-section orchestrator-live"
         dataSource="api"
-        sourceLabel={chipLabel}
         headerRight={<span style={{ fontSize: 11, color: "var(--text-muted)" }}>{history.length}건 · 학습 작업 저장소{demo ? " + 과거 기록" : ""}</span>}
       >
         {history.length === 0 ? (
@@ -632,7 +626,6 @@ export default function OrchestratorPage() {
         onActivate={(instanceId, version, rollback) => activate(instanceId, version, rollback, "versions")}
         versionResult={versionResult}
         onClearResult={clearVersionResult}
-        sourceLabel={chipLabel}
       />
     </>
   );

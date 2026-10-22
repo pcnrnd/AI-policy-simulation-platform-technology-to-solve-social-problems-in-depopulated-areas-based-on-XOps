@@ -85,8 +85,6 @@ export default function SimulatorPage() {
   const regions = appData.regions.map(({ id, name }) => ({ id, name }));
   const simProof = real.context?.provenance;
   const dongName = dongOptions.find((row) => row.code === simProof?.dong_code)?.name ?? simProof?.dong_code ?? "—";
-  const realSourceLabel = real.ready ? `실데이터 · ${real.datasetName(simProof.dataset_id)}` : undefined;
-
   // 조절변수(x) — 데모는 지역 사례의 시설 변수, 실데이터는 시뮬레이션 모델의 조정 가능한 관측 입력. 바뀌면 기본값으로.
   const controls = demo ? currentRegion.case.simulation.controls ?? [] : realSliderControls(real.context, label, unit);
   const controlsKey = [mode, currentRegion.id, demo ? factorModel?.active_version : simProof?.version_id,
@@ -379,7 +377,6 @@ export default function SimulatorPage() {
   const factorPlaceholders = factorMissing ? [guide(FACTOR_GUIDE_TEXT), factorLine, factorLine] : [factorIdle, factorIdle, factorIdle];
   const factorRunInfo = factorView ? factorView.runInfo
     : demo ? "인구 구조·시설 지표 9개 요인 · 학습 대상 생활인구" : `등록 학습데이터 기준 · 학습 대상 ${targetName}`;
-  const factorSourceLabel = factorView?.sourceLabel ?? (demo ? "데모" : undefined);
   const rangeProof = simProof?.range_provenance;
   const frame = demo
     ? { objective: sim.objective, demand: sim.factors.demand, supply: sim.factors.supply, adjust: sim.factors.adjust, constraint: `${sim.constraint} · ${budgetTotal.toLocaleString()}억` }
@@ -426,7 +423,6 @@ export default function SimulatorPage() {
       {!demo && real.loading && <p role="status">모델과 관측 입력 확인 중…</p>}
       {!demo && real.feedback && <p className="async-feedback is-error" role="alert">{real.feedback}</p>}
       {factor.feedback && <p className="async-feedback is-error" role="alert">{factor.feedback}</p>}
-      {factor.loadFailed && <p role="alert">모델 목록을 불러오지 못했습니다. 요인분석 실행을 눌러 다시 확인하세요.</p>}
     </div>
   );
 
@@ -461,7 +457,6 @@ export default function SimulatorPage() {
         onRun={handleRunAnalysis}
         view={factorView}
         placeholders={factorPlaceholders}
-        sourceLabel={factorSourceLabel}
         conditions={conditions}
         runLockTitle={factorLockTitle}
         runTitle={factorRetry ? "다시 확인" : null}
@@ -477,7 +472,6 @@ export default function SimulatorPage() {
         locked={analysisStatus !== "done"}
         running={analysisRunning}
         split={factorView?.split}
-        sourceLabel={factorSourceLabel}
         diagnosis={demo ? currentRegion.case.problemDiagnosis : null}
         diagnosisNote={demo ? null : FACTOR_DIAGNOSIS_TEXT}
         pendingText={factorMissing ? FACTOR_PENDING_TEXT : null}
@@ -489,7 +483,6 @@ export default function SimulatorPage() {
         id="stage-sim"
         no="STAGE ③"
         title="시뮬레이션"
-        sub="복잡계 기반 강화학습 — 조절변수(x)·상관변수(y)·제약요소(예산)"
         open={openStages["stage-sim"]}
         onToggle={() => toggleStage("stage-sim")}
       >
@@ -533,7 +526,7 @@ export default function SimulatorPage() {
             allowSeed={demo}
             searchText={searchText}
             onSearch={setSearchText}
-            overlayNote={demo ? null : `${realUnavailableText("위험등급·인구밀도·시설물 지도는")} 지역은 오른쪽 목록에서 선택하세요.`}
+            overlayNote={null}
             resizeKey={`${openStages["stage-sim"]}|${analysisStatus}`}
           />
           <SimulatorDock
@@ -586,7 +579,6 @@ export default function SimulatorPage() {
             title={demo ? "10개년 인구 예측 시뮬레이션 결과" : `다음 달 ${targetName} 예측 결과`}
             icon="fa-wand-magic-sparkles"
             dataSource={cardSource}
-            sourceLabel={demo ? undefined : realSourceLabel}
             data-slot="sim.sim.forecast"
           >
             {demo && resultsReady ? (
@@ -692,7 +684,7 @@ export default function SimulatorPage() {
         {recoReady && (demo || recommendation.items.length > 0) ? (
           demo
             ? <PolicyRecommendation region={currentRegion} ranked={recommendation} />
-            : <PolicyRecommendation region={currentRegion} view={recommendation} sourceLabel={realSourceLabel} />
+            : <PolicyRecommendation region={currentRegion} view={recommendation} />
         ) : (
           <Card title="맞춤 정책 추천" icon="fa-lightbulb" dataSource={cardSource} data-slot="sim.report.panel">
             <div style={{ textAlign: "center", padding: "32px 16px", color: "var(--text-secondary)", fontSize: 13 }}>
