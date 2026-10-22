@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Card from "./Card.jsx";
 import ConfirmDialog from "./ConfirmDialog.jsx";
+import TablePager, { usePager } from "./TablePager.jsx";
 import { apiGet, apiSend } from "../lib/api.js";
 import { getRealdataToken } from "./realdata/realdataClient.jsx";
 import { useAppState } from "../context/AppStateContext.jsx";
@@ -18,6 +19,7 @@ export default function TrainingDatasetRegistration() {
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const datasetList = usePager(datasets);
   const request = useRef(0);
   const busyRef = useRef(false);
   const load = useCallback(async () => {
@@ -117,11 +119,12 @@ export default function TrainingDatasetRegistration() {
       <caption className="sr-only">등록된 학습데이터 목록</caption>
       <colgroup>{[18,18,13,12,13,8,10,8].map((width,index) => <col key={index} style={{width:`${width}%`}} />)}</colgroup>
       <thead><tr><th>이름</th><th>데이터셋</th><th>지역</th><th>학습 대상</th><th>기간</th><th>행 수</th><th>내용 해시</th><th>관리</th></tr></thead>
-      <tbody>{datasets.map((row) => <tr key={row.id}><td><span title={row.name}>{row.name}</span></td><td><span title={row.id}>{row.id}</span></td>
+      <tbody>{datasetList.pageRows.map((row) => <tr key={row.id}><td><span title={row.name}>{row.name}</span></td><td><span title={row.id}>{row.id}</span></td>
         <td><span title={`${datasetRegionName(row, appData.regions)} (${row.region_id})`}>{datasetRegionName(row, appData.regions)}</span></td><td><span title={TARGET_NAMES[row.target] ?? row.target}>{TARGET_NAMES[row.target] ?? row.target}</span></td>
         <td><span title={`${row.observed_from}~${row.observed_to}`}>{row.observed_from}~{row.observed_to}</span></td><td><span title={row.row_count.toLocaleString()}>{row.row_count.toLocaleString()}</span></td><td><span title={row.content_hash}>{row.content_hash.slice(0, 12)}</span></td>
         <td><button type="button" className="btn btn-secondary" disabled={busy} aria-label={`${row.name} 등록본 삭제`} onClick={() => setDeleteTarget(row)}>삭제</button></td></tr>)}</tbody>
     </table></div>
+    <TablePager {...datasetList.pager} />
     <ConfirmDialog open={Boolean(deleteTarget)} title="학습데이터 등록본을 삭제할까요?"
       description={`${deleteTarget?.name ?? ""} 등록본과 관리 복사본만 삭제합니다. 원본은 유지되며 파이프라인·버전·작업에서 참조 중이면 삭제할 수 없습니다.`}
       confirmLabel="등록본 삭제" busy={busy} onConfirm={remove} onCancel={() => setDeleteTarget(null)} />

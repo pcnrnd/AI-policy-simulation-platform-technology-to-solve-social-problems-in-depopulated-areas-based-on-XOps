@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import PendingData from "./PendingData.jsx";
+import TablePager, { usePager } from "./TablePager.jsx";
 import { buildRegionGrid, densityColor, DENSITY_LEGEND } from "../lib/geo.js";
 import { prefersReducedMotion } from "../lib/motion.js";
 
@@ -352,6 +353,8 @@ export default function SimulatorMap({ appData, currentRegion, setCurrentRegion,
 
 /** 지도 시설물·선택 지역 격자 상세 — 데모 표시에서만 목록, 그 밖에는 같은 자리 안내. */
 export function SimulatorMapDetails({ appData, currentRegion, allowSeed, note }) {
+  const facilities = usePager(allowSeed ? appData.facilities ?? [] : []);
+  const cells = usePager(allowSeed ? buildRegionGrid(currentRegion) : []);
   return (
     <details className="map-data-details" data-slot="sim.map.details">
       <summary>지도 시설물·선택 지역 격자 정보</summary>
@@ -359,13 +362,16 @@ export function SimulatorMapDetails({ appData, currentRegion, allowSeed, note })
         <section>
           <h4>시설물</h4>
           {allowSeed ? (
-            <ul>
-              {(appData.facilities ?? []).map((facility) => (
-                <li key={`${facility.name}-${facility.lat}-${facility.lng}`}>
-                  <strong>{facility.name}</strong> — {facility.type}, {facility.metric}, 운영 예산 {facility.operating_budget}억
-                </li>
-              ))}
-            </ul>
+            <>
+              <ul>
+                {facilities.pageRows.map((facility) => (
+                  <li key={`${facility.name}-${facility.lat}-${facility.lng}`}>
+                    <strong>{facility.name}</strong> — {facility.type}, {facility.metric}, 운영 예산 {facility.operating_budget}억
+                  </li>
+                ))}
+              </ul>
+              <TablePager {...facilities.pager} />
+            </>
           ) : (
             <PendingData text={note} />
           )}
@@ -373,11 +379,14 @@ export function SimulatorMapDetails({ appData, currentRegion, allowSeed, note })
         <section>
           <h4>{currentRegion.name} 인구밀도 격자</h4>
           {allowSeed ? (
-            <ul>
-              {buildRegionGrid(currentRegion).map((cell) => (
-                <li key={cell.gridId}>격자 {cell.gridId} — ㎢당 {cell.density}명</li>
-              ))}
-            </ul>
+            <>
+              <ul>
+                {cells.pageRows.map((cell) => (
+                  <li key={cell.gridId}>격자 {cell.gridId} — ㎢당 {cell.density}명</li>
+                ))}
+              </ul>
+              <TablePager {...cells.pager} />
+            </>
           ) : (
             <PendingData text={note} />
           )}

@@ -197,7 +197,8 @@
   }
   .archive-reg-col-row,
   .archive-reg-range-row,
-  .builder-control-grid {
+  .builder-control-grid,
+  .builder-paging-grid {
     grid-template-columns: 1fr;
     max-width: none;
   }
@@ -472,6 +473,18 @@
   grid-template-columns: minmax(110px, 0.45fr) minmax(0, 1.55fr);
   gap: var(--space-s);
   margin-bottom: var(--space-s);
+}
+/* 정렬 컬럼 | page | page_size — 같은 줄 입력칸은 같은 높이(select·input 공통 패딩)로 아래끝을 맞춘다. */
+.builder-paging-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr);
+  align-items: end;
+  gap: var(--space-s);
+  margin-bottom: var(--space-s);
+}
+.builder-paging-grid .select-control,
+.builder-paging-grid .input-control {
+  height: 44px;
 }
 
 .token-line {

@@ -1,3 +1,8 @@
+import { useState } from "react";
+
+// 목록형 UI 공통 페이지 크기 — 항목이 이보다 많으면 이 단위로 나눠 보인다.
+export const LIST_PAGE_SIZE = 5;
+
 // 테이블 하단 페이저 — 한 페이지뿐이어도 전체 건수와 현재 표시 범위를 유지한다.
 export default function TablePager({ page, totalPages, totalCount, pageSize = 5, onChange }) {
   const first = totalCount === 0 ? 0 : (page - 1) * pageSize + 1;
@@ -7,6 +12,8 @@ export default function TablePager({ page, totalPages, totalCount, pageSize = 5,
       <span className="table-pager-info" aria-live="polite">
         총 {totalCount}건 · {first}–{last}건 표시
       </span>
+      {/* 이전·쪽수·다음은 한 묶음 — 좁은 카드에서 줄바꿈돼도 버튼이 갈라지지 않는다. */}
+      <span className="table-pager-nav">
       <button
         type="button"
         className="btn btn-secondary"
@@ -30,6 +37,7 @@ export default function TablePager({ page, totalPages, totalCount, pageSize = 5,
       >
         다음 <i className="fa-solid fa-chevron-right" aria-hidden="true"></i>
       </button>
+      </span>
     </nav>
   );
 }
@@ -43,4 +51,12 @@ export function paginate(rows, page, pageSize) {
     safePage,
     totalPages
   };
+}
+
+// 목록 하나의 페이지 상태 — 현재 페이지 행과 <TablePager {...pager} /> 에 넘길 값을 함께 돌려준다.
+export function usePager(rows, pageSize = LIST_PAGE_SIZE) {
+  const [page, setPage] = useState(1);
+  const { pageRows, safePage, totalPages } = paginate(rows, page, pageSize);
+  return { pageRows, offset: (safePage - 1) * pageSize,
+    pager: { page: safePage, totalPages, totalCount: rows.length, pageSize, onChange: setPage } };
 }
