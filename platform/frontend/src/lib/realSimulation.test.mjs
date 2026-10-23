@@ -114,7 +114,7 @@ assert.match(page,/runTitle=\{factorRetry \? "다시 확인" : null\}/);
 assert.match(factorStage,/title=\{runLockTitle \?\? runTitle \?\? undefined\}/);
 // ①-1 요인 목록은 전체(상위 10 + 나머지)를 5개씩 페이지로 넘겨 본다 — 삭제된 계산 근거 행을 가리키지 않는다.
 assert.doesNotMatch(factorStage,/계산 근거에서 확인|<details/);
-assert.match(factorStage,/usePager\(view \? \[\.\.\.view\.factors, \.\.\.view\.rest\] : \[\], undefined, view\?\.model\.versionId\)[\s\S]*factorList\.pageRows\.map\(factorRow\)[\s\S]*<TablePager \{\.\.\.factorList\.pager\} \/>/);
+assert.match(factorStage,/usePager\(view \? \[\.\.\.view\.factors, \.\.\.view\.rest\] : \[\], undefined, view\?\.listKey\)[\s\S]*factorList\.pageRows\.map\(factorRow\)[\s\S]*<TablePager \{\.\.\.factorList\.pager\} \/>/);
 // 데모 진단은 사례 서사(출처 mock), 실데이터 진단은 요인분석 결과(출처 api)로 표기한다.
 assert.match(page,/diagnosisSource=\{cardSource\}/);assert.match(resultStage,/dataSource=\{diagnosisSource\}/);
 // 단위별 반올림(공용 포맷) — 카드 수치는 formatUnitValue 로만, 활성 버전은 짧은 ID + title 전체 ID.
@@ -177,6 +177,9 @@ assert.match(demoView.validation.targets.join("|"),/생활인구 · 요인 9개\
 const realView=factorAnalysisView({...panelResult,provenance:{...panelProof,mode:"real",source:"real",target:"observed_sales_krw"}},{demo:false,dataset:{name:"남원 관측 소비 스냅샷"},label:panelLabel});
 assert.equal(realView.basis,"현재 등록 데이터 기준 · 남원 관측 소비 스냅샷 (관측 2015-01~2024-12)");
 assert.equal(realView.unit,"원");
+// 요인 목록 쪽 번호 기준: 같은 활성 버전이라도 행정동이 바뀌면 다른 키(→ 1쪽부터).
+const dongView=factorAnalysisView({...panelResult,provenance:{...panelProof,dong_code:"45190250"}},{demo:false,dataset:null,label:panelLabel});
+assert.equal(demoView.listKey,`${panelProof.version_id}|all`);assert.notEqual(dongView.listKey,demoView.listKey);
 // 문제 유형 진단(실데이터 ②) — 추정 대 전년 같은 달로 유형, 행정동 제외 최대 하방·상방 요인, 계절 비중.
 const salesLabel=(feature) => observedFeatureLabel(feature,"observed_sales_krw",[{code:"1",name:"운봉읍"}]);
 const diagOf=(contributions,prediction) => factorDiagnosis(factorAnalysisView({provenance:{...proof,metrics:{},baseline:{}},intercept:0,prediction,contributions},{demo:false,dataset:null,label:salesLabel}));

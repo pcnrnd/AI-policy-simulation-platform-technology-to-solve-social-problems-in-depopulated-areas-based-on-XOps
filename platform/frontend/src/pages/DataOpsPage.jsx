@@ -2,6 +2,7 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import Card from "../components/Card.jsx";
 import PerfBadge from "../components/PerfBadge.jsx";
 import TablePager, { LIST_PAGE_SIZE, paginate } from "../components/TablePager.jsx";
+import { pageOfIndex, syncPagerState } from "../lib/pager.js";
 import PipelineStepper from "../components/PipelineStepper.jsx";
 import CollapsibleStage from "../components/CollapsibleStage.jsx";
 import ArchiveRegisterForm from "../components/ArchiveRegisterForm.jsx";
@@ -217,7 +218,8 @@ export default function DataOpsPage() {
   const [catalogQuery, setCatalogQuery] = useState("");
   const [catalogSort, setCatalogSort] = useState("name");
   const [catalogPage, setCatalogPage] = useState(1);
-  const [schemaPage, setSchemaPage] = useState(1);
+  // 스키마 표 쪽 — { key: 소스 ID, page }. 소스가 바뀌면(직접 선택·모드 전환 후 첫 소스로 이동) 렌더에서 1쪽으로 맞춘다.
+  const [schemaPage, setSchemaPage] = useState({ key: null, page: 1 });
   const [pendingAction, setPendingAction] = useState(null);
   const [asyncFeedback, setAsyncFeedback] = useState(null);
   const [confirmAction, setConfirmAction] = useState(null);
@@ -341,7 +343,6 @@ export default function DataOpsPage() {
 
   const handleSelectSource = (id) => {
     setSourceId(id);
-    setSchemaPage(1);
     setSortCol("");
     setFilterText("");
     setFilterError(null);
@@ -657,7 +658,7 @@ export default function DataOpsPage() {
       confirmLabel: "아카이브 등록 해제",
       nextFocusSelector: next ? `[data-source-delete="${next.id}"]` : "#dataops-catalog-title",
       fallbackFocusSelector: "#dataops-catalog-title",
-      nextPage: nextIndexAfterDelete >= 0 ? Math.floor(nextIndexAfterDelete / 10) + 1 : 1
+      nextPage: nextIndexAfterDelete >= 0 ? pageOfIndex(nextIndexAfterDelete, LIST_PAGE_SIZE) : 1
     });
   };
 
@@ -679,7 +680,7 @@ export default function DataOpsPage() {
       confirmLabel: "API 삭제",
       nextFocusSelector: next ? `[data-built-delete="${next.id}"]` : "#dataops-built-title",
       fallbackFocusSelector: "#dataops-built-title",
-      nextPage: nextIndexAfterDelete >= 0 ? Math.floor(nextIndexAfterDelete / BUILT_PAGE_SIZE) + 1 : 1
+      nextPage: nextIndexAfterDelete >= 0 ? pageOfIndex(nextIndexAfterDelete, BUILT_PAGE_SIZE) : 1
     });
   };
 
@@ -812,8 +813,10 @@ export default function DataOpsPage() {
     return a.label.localeCompare(b.label, "ko");
   });
   const catalogPg = paginate(catalogSources, catalogPage, LIST_PAGE_SIZE);
-  // 소스를 바꾸면 컬럼 수가 달라진다 — paginate 가 범위를 넘은 페이지를 마지막 페이지로 보정한다.
-  const schemaPg = paginate(target.columns, schemaPage, LIST_PAGE_SIZE);
+  // 소스가 바뀐 렌더에서 1쪽으로 맞춘다(렌더 중 상태 맞춤 — 키가 같아지면 멈춘다).
+  const schemaState = syncPagerState(schemaPage, target.id);
+  if (schemaState !== schemaPage) setSchemaPage(schemaState);
+  const schemaPg = paginate(target.columns, schemaState.page, LIST_PAGE_SIZE);
 
   // 카탈로그·스키마에 표시되는 값은 전부 백엔드 목록(sources)에서 온다 — 목업 폴백 경로가 없다.
   // 로딩·오류·빈 목록은 위에서 조기 반환했으므로 여기까지 오면 실응답이 화면을 채운 상태다.
@@ -1157,7 +1160,7 @@ export default function DataOpsPage() {
             totalPages={schemaPg.totalPages}
             totalCount={target.columns.length}
             pageSize={LIST_PAGE_SIZE}
-            onChange={setSchemaPage}
+            onChange={(page) => setSchemaPage({ key: target.id, page })}
           />
 
           <div className="stage-next-row">

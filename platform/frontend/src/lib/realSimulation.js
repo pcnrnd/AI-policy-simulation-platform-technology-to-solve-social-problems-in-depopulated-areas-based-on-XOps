@@ -159,6 +159,8 @@ export function factorAnalysisView(result, { demo, dataset, label }) {
     split: { positive: factors.filter((row) => row.value > 0), negative: factors.filter((row) => row.value < 0) },
     basis: demo ? `연계 데이터: 데모 요인 패널 · ${name}` : `현재 등록 데이터 기준 · ${name} (관측 ${observed})`,
     runInfo: `학습데이터 ${name} · 요인분석 활성 버전 ${displayId(p.version_id)}`,
+    // listKey: 요인 목록 쪽 번호를 1쪽으로 되돌리는 기준 — 같은 버전이라도 행정동이 바뀌면 다른 목록이다.
+    listKey: `${p.version_id}|${p.dong_code ?? ""}`,
     model: { version: displayId(p.version_id), versionId: p.version_id, intercept: result.intercept, prediction: result.prediction,
       features: (p.features ?? []).map(label) },
     validation: {

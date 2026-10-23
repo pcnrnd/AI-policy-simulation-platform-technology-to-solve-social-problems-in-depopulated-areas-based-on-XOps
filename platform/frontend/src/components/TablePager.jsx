@@ -1,7 +1,8 @@
 import { useState } from "react";
+import { LIST_PAGE_SIZE, paginate, syncPagerState } from "../lib/pager.js";
 
-// 목록형 UI 공통 페이지 크기 — 항목이 이보다 많으면 이 단위로 나눠 보인다.
-export const LIST_PAGE_SIZE = 5;
+// 공통 페이지 크기·슬라이스는 lib/pager.js(순수 계산) — 기존 import 경로를 위해 여기서도 내보낸다.
+export { LIST_PAGE_SIZE, paginate };
 
 // 테이블 하단 페이저 — 한 페이지뿐이어도 전체 건수와 현재 표시 범위를 유지한다.
 export default function TablePager({ page, totalPages, totalCount, pageSize = 5, onChange }) {
@@ -42,23 +43,13 @@ export default function TablePager({ page, totalPages, totalCount, pageSize = 5,
   );
 }
 
-// 페이지 슬라이스 헬퍼 — 목록이 줄어 현재 페이지가 범위를 벗어나면 마지막 페이지로 보정.
-export function paginate(rows, page, pageSize) {
-  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
-  const safePage = Math.min(Math.max(1, page), totalPages);
-  return {
-    pageRows: rows.slice((safePage - 1) * pageSize, safePage * pageSize),
-    safePage,
-    totalPages
-  };
-}
-
 // 목록 하나의 페이지 상태 — 현재 페이지 행과 <TablePager {...pager} /> 에 넘길 값을 함께 돌려준다.
-// resetKey: 목록의 대상(등록 모델·지역 등)이 바뀌면 1쪽부터 — 이전 대상의 쪽 번호를 새 목록에 쓰지 않는다.
+// resetKey: 목록의 대상(등록 모델·지역 등)이 바뀌면 그 렌더에서 1쪽으로 맞춘다 — 돌아와도 이전 쪽을 되살리지 않는다.
 export function usePager(rows, pageSize = LIST_PAGE_SIZE, resetKey) {
   const [state, setState] = useState({ key: resetKey, page: 1 });
-  const page = state.key === resetKey ? state.page : 1;
-  const { pageRows, safePage, totalPages } = paginate(rows, page, pageSize);
+  const synced = syncPagerState(state, resetKey);
+  if (synced !== state) setState(synced); // 렌더 중 상태 맞춤(React 허용 패턴, 키가 같아지면 멈춘다)
+  const { pageRows, safePage, totalPages } = paginate(rows, synced.page, pageSize);
   return { pageRows, offset: (safePage - 1) * pageSize,
     pager: { page: safePage, totalPages, totalCount: rows.length, pageSize, onChange: (next) => setState({ key: resetKey, page: next }) } };
 }

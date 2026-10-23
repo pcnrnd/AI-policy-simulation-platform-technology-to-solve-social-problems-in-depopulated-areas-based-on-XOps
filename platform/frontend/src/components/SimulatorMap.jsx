@@ -354,7 +354,7 @@ export default function SimulatorMap({ appData, currentRegion, setCurrentRegion,
 /** 지도 시설물·선택 지역 격자 상세 — 데모 표시에서만 목록, 그 밖에는 같은 자리 안내. */
 export function SimulatorMapDetails({ appData, currentRegion, allowSeed, note }) {
   const facilities = usePager(allowSeed ? appData.facilities ?? [] : []);
-  const cells = usePager(allowSeed ? buildRegionGrid(currentRegion) : []);
+  const cells = usePager(allowSeed ? buildRegionGrid(currentRegion) : [], undefined, currentRegion.id);
   return (
     <details className="map-data-details" data-slot="sim.map.details">
       <summary>지도 시설물·선택 지역 격자 정보</summary>
