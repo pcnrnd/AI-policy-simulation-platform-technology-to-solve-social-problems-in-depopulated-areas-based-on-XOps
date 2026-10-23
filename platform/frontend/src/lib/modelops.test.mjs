@@ -138,6 +138,9 @@ assert.equal(displayId("demo_factor_5f2e9a"), "…5f2e9a");assert.equal(displayI
 // 끝 6자가 같던 두 ID(…1b9bfe)가 8자로는 갈린다
 assert.notEqual(displayId("modelops_00000000000000000000000ad71b9bfe"), displayId("modelops_00000000000000000000000c041b9bfe"));
 assert.equal(displayId("ver-sim-1"), "ver-sim-1");assert.equal(displayId("x_12"), "x_12");assert.equal(displayId(null), "");
+// 적재 도구 버전 ID(묶음_날짜_해시)는 해시 끝 8자, 같은 꼴의 이름형 ID는 그대로(요인분석 XAI 카드·모니터 게이지)
+assert.equal(displayId("phaseb_20261014_f5892bd59f08425989dc5b12f42a4acb"), "…f42a4acb");
+assert.equal(displayId("phaseb_20261014_real_observed_sales_krw"), "phaseb_20261014_real_observed_sales_krw");
 const orchestratorPage = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "pages", "OrchestratorPage.jsx"), "utf-8");
 const trainingPanel = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "components", "realdata", "RealdataTrainingPanel.jsx"), "utf-8");
 assert.match(section, /<code title=\{id\}>\{displayId\(id\)\}<\/code>/);
@@ -187,10 +190,9 @@ assert.match(src("components", "ModelEvidence.jsx"), /\{p\.version_id\}/);
 for (const text of [orchestratorPage, section]) { assert.match(text, /formatUnitValue\(value, targetUnit\(target\)\)/); assert.doesNotMatch(text, /maximumFractionDigits: 3/); }
 assert.equal(orchestratorPage.match(/metric\([^)]*mae[^)]*, (?:m|version)\.target\)/gi)?.length, 4);
 assert.match(section, /metric\(row\.metrics\.mae, row\.target\)\} \/ \{metric\(row\.baseline\.mae, row\.target\)/);
-// 학습 카드 후보 버전 표도 같은 규칙 — MAE·RMSE·기준선은 대상 단위, WAPE는 비율(소수 2~3자리), 머리글에 단위
-assert.match(trainingPanel, /const fmtNum = \(v\) => formatUnitValue\(v, unit\)/);
-assert.doesNotMatch(trainingPanel, /toLocaleString\(undefined/);
-assert.match(trainingPanel, /MAE \/ RMSE \(\{unit\}\) \/ WAPE \(비율\)[\s\S]*기준선 MAE \(\{unit\}\)/);
+// 빠른 학습(옛 데이터 학습 카드)은 재학습 파이프라인 카드 안에 있다 — 별도 카드·후보 반영 표 없이 ⑥ 버전 관리가 활성화를 맡는다.
+assert.doesNotMatch(trainingPanel, /<Card|<table|onActivate|decide\(/);
+assert.match(orchestratorPage, /title="등록된 재학습 파이프라인"[\s\S]*<RealdataTrainingPanel[\s\S]*<\/Card>\s*\{\/\* ② 실행 상태/);
 // 같은 내용 재등록은 서버가 기존 등록본을 돌려준다 — DataOps 안내는 "이미 등록" 문구로 구분한다.
 const registration = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "components", "TrainingDatasetRegistration.jsx"), "utf-8");
 assert.match(registration, /const reused = datasets\.some\(\(row\) => row\.id === registered\.id\);[\s\S]*이미 등록되어 있습니다/);
@@ -205,6 +207,15 @@ assert.doesNotMatch(orchestratorPage, /logTime\(r\.(?:startedAt|finishedAt)\)/);
 const statusCard = src("components", "PipelineStatusCard.jsx");
 assert.equal(statusCard.match(/auditTime\((?:job|run)\.(?:started_at|finished_at)/g)?.length, 4);
 assert.doesNotMatch(statusCard, /logTime\((?:job|run)\./);
+// ② 제목은 "파이프라인 실행 상태" + 상태 태그 — 제목에 "— 상태" 문구 없음, 대기·진행 중·완료·실패의 문구·색 계열이 서로 다르다.
+assert.doesNotMatch(statusCard, /<>파이프라인 실행 상태 —|대기 중<\/>/);
+assert.match(statusCard, /title=\{<>파이프라인 실행 상태<span className="title-tag"[^>]*TONE_STYLE\[status\.tone\]/);
+const stateTags = [jobStatusLabel(null), jobStatusLabel({ state: "running" }), jobStatusLabel({ state: "saved" }, { status: "candidate", metrics: { mae: 1 }, baseline: { mae: 2 } }), jobStatusLabel({ state: "failed" })];
+assert.deepEqual(stateTags.map((tag) => tag.label), ["대기", "진행 중", "등록 완료", "실패"]);
+assert.equal(new Set(stateTags.map((tag) => tag.tone)).size, 4);
+// ③ Model Store — 부제는 태그 1개, 해시 추적 문구·승급 기준 본문 상자는 없고 기준 원문은 툴팁에만.
+assert.doesNotMatch(orchestratorPage, /Model Store —|해시로 버전 추적|promotion-criteria/);
+assert.equal(orchestratorPage.match(/Model Store<span className="title-tag">모델·실험 버전 이력<\/span><InfoTip label="모델 승급 기준" text=\{PROMOTION_RULE\} \/>/g)?.length, 1);
 assert.match(orchestratorPage, /auditTime\(last\.finished_at\)/);
 assert.doesNotMatch(orchestratorPage, /logTime\(last\./);
 assert.match(orchestratorPage, /time: logTime\(entry\.ts\)/);

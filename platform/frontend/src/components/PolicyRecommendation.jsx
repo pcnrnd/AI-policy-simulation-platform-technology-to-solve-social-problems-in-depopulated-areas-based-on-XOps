@@ -3,6 +3,7 @@ import { Bar } from "react-chartjs-2";
 import Card from "./Card.jsx";
 import InfoTip from "./InfoTip.jsx";
 import PerfBadge from "./PerfBadge.jsx";
+import TablePager, { usePager } from "./TablePager.jsx";
 import { useChartTheme } from "../hooks/useChartTheme.js";
 import { useRenderTiming } from "../lib/perf.js";
 import { formatUnitValue } from "../lib/realSimulation.js";
@@ -64,30 +65,20 @@ export default function PolicyRecommendation({ region, ranked: riceRanked, view 
   };
 
   const top3 = ranked.slice(0, 3);
+  const rows = usePager(ranked);
+  // 산정 근거는 두 모드 모두 제목 옆 툴팁 하나로 — 본문 설명 문단은 두지 않는다.
+  const basisTip = view
+    ? `관측 지표의 예측 민감도를 근거로 추천합니다. 변수끼리의 관계와 실제 실현 가능성을 함께 확인하세요. ${view.infoTip}`
+    : "표시 점수 = 안내식 × 예산 보정계수 √(총예산/600억). 남원 2,000억 예시: 3,061 × 1.83 ≈ 5,589";
 
   return (
     <Card
-        title={view ? `${region.name} 맞춤 정책 추천 (예측 민감도 근거)` : `${region.name} 맞춤 정책 추천`}
+      title={<>{region.name} 맞춤 정책 추천<InfoTip text={basisTip} label="추천 산정 근거 보기" /></>}
       icon="fa-lightbulb"
-      style={{ marginTop: 24 }}
       headerRight={<PerfBadge ms={vizMs} />}
       dataSource={view ? "api" : "mock"}
       data-slot="sim.report.panel"
     >
-      <p style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 16 }}>
-        {view ? (
-          <>
-            관측 지표의 예측 민감도를 근거로 추천합니다. 변수끼리의 관계와 실제 실현 가능성을 함께 확인하세요.
-            <InfoTip text={view.infoTip} />
-          </>
-        ) : (
-          <>
-            시뮬레이터의 정책 변수(복지·산업·주거 가중치)와 지자체 인구감소 특성을 반영해{" "}
-            <strong>RICE = (Reach × Impact × Confidence) ÷ Effort</strong> 점수로 맞춤 정책을 추천합니다.
-            <InfoTip text="표시 점수 = 안내식 × 예산 보정계수 √(총예산/600억). 남원 2,000억 예시: 3,061 × 1.83 ≈ 5,589" />
-          </>
-        )}
-      </p>
 
       {/* Top 3 추천 요약 */}
       <div className="reco-top3">
@@ -121,7 +112,9 @@ export default function PolicyRecommendation({ region, ranked: riceRanked, view 
             </tr>
           </thead>
           <tbody>
-            {ranked.map((s, i) => (
+            {rows.pageRows.map((s, pageIndex) => {
+              const i = rows.offset + pageIndex;
+              return (
               <tr key={s.id}>
                 <td style={{ fontWeight: 700 }}>{MEDAL[i] ?? i + 1}</td>
                 {cellsOf(s).map((cell, index) => (
@@ -148,10 +141,12 @@ export default function PolicyRecommendation({ region, ranked: riceRanked, view 
                   )}
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
+      <TablePager {...rows.pager} />
       <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 12 }}>
         {view ? view.footnote : "※ Impact는 지자체 정책 영향 가중치와 시뮬레이터 슬라이더 강조도로 보정된 값입니다."}
       </p>

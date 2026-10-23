@@ -298,6 +298,18 @@ export default function OrchestratorPage() {
             }}
           />
         )}
+        {/* 빠른 학습 — 스냅샷 생성 후 이 목록의 파이프라인으로 실행한다(옛 "데이터 학습" 카드를 합침). */}
+        <RealdataTrainingPanel
+          catalog={catalog}
+          demoVisible={demo}
+          regionName={regionName}
+          busy={locked}
+          job={liveJob}
+          onReload={reloadCatalog}
+          onRunPipeline={runPipeline}
+          onClearResult={clearVersionResult}
+          onLog={addConsoleLog}
+        />
         {catalogError && (
           <p className="pipeline-empty" role="alert">
             <i className="fa-solid fa-circle-exclamation" aria-hidden="true"></i> 파이프라인 카탈로그를 불러오지 못했습니다 — {catalogError}
@@ -403,22 +415,6 @@ export default function OrchestratorPage() {
         <TablePager page={pl.safePage} totalPages={pl.totalPages} totalCount={catalog.pipelines.length} pageSize={PAGE_SIZE} onChange={setPlPage} />
       </Card>
 
-      {/* 실데이터 학습 — 선행 조작(스냅샷 생성)이므로 실행 상태·결과 카드보다 위에 둔다. */}
-      <RealdataTrainingPanel
-        catalog={catalog}
-        versions={versions}
-        demoVisible={demo}
-        regionName={regionName}
-        busy={locked}
-        job={liveJob}
-        onReload={reloadCatalog}
-        onRunPipeline={runPipeline}
-        onActivate={(instanceId, version, rollback) => activate(instanceId, version, rollback, "card")}
-        versionResult={versionResult}
-        onClearResult={clearVersionResult}
-        onLog={addConsoleLog}
-      />
-
       {/* ② 실행 상태 — 상시 표시. 새 경로 작업 또는 선택한 이전 경로 기록 */}
       <PipelineStatusCard
         target={statusTarget}
@@ -442,18 +438,13 @@ export default function OrchestratorPage() {
         />
       )}
 
-      {/* ③ Model Store — 새 경로 버전 + (데모 ON) 이전 고정 모델 과거 버전(읽기 전용) */}
+      {/* ③ Model Store: 새 경로 버전 + (데모 ON) 이전 고정 모델 과거 버전(읽기 전용) */}
       <Card
-        title={<>Model Store — 모델·실험 버전 이력<InfoTip label="모델 승급 기준" text={PROMOTION_RULE} /></>}
+        title={<>Model Store<span className="title-tag">모델·실험 버전 이력</span><InfoTip label="모델 승급 기준" text={PROMOTION_RULE} /></>}
         icon="fa-boxes-stacked"
         className="page-section"
         dataSource="api"
-        headerRight={<span style={{ fontSize: 11, color: "var(--text-muted)" }}>학습데이터·모델 파일 해시로 버전 추적</span>}
       >
-        <div className="promotion-criteria" aria-labelledby="promotion-criteria-title">
-          <strong id="promotion-criteria-title">모델 승급 기준</strong>
-          <span>{PROMOTION_RULE}</span>
-        </div>
         <div className="table-container">
           <table>
             <caption className="sr-only">모델과 실험의 버전 이력 및 운영 상태</caption>

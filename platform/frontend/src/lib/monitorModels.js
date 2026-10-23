@@ -18,7 +18,12 @@ export function monitorActiveVersion(catalog, instance, mode) {
     && row.instance_id === instance.id) ?? null;
 }
 
+// 데모 표시의 지표·설명·분포 이력은 인구이동 예측 예시 모델 한 벌이다. 데모 모드 등록 모델(인구 변화율)이
+// 없거나 있어도 이 이력을 본다 — null 이면 화면 전체가 빈 값이 된다(2026-10-22 데모 ON 모니터 미표시).
+export const DEMO_MONITOR_ID = "population-forecast";
+
 export function legacyMonitorId(instance, rows, mode) {
+  if (mode === "mock") return !instance || instance.mode === "mock" ? DEMO_MONITOR_ID : null;
   if (mode !== "real" || instance?.mode !== mode) return null;
   const id = LEGACY_MODELS[instance.region_id]?.[instance.target];
   return id && rows.some((row) => row.model_id === id && row.metrics_source === "realdata") ? id : null;

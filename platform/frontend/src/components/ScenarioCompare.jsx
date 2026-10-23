@@ -1,17 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Line } from "react-chartjs-2";
 import Card from "./Card.jsx";
 import ConfirmDialog from "./ConfirmDialog.jsx";
-import { ChartEmptyNote } from "./PendingData.jsx";
-
-// 실데이터 표시에서는 저장 시나리오별 추이를 미리 계산하지 않는다 — 적용 후 추천 도출로 예측을 확인한다.
-const REAL_SCENARIO_NOTE = "저장한 시나리오를 적용한 뒤 [정책 추천 도출]을 누르면 예측을 확인할 수 있습니다.";
-import { useChartTheme } from "../hooks/useChartTheme.js";
-import { YEAR_LABELS, computeTrends, computeScenarioTrend, budgetToFactor, controlBoostOf } from "../lib/simulation.js";
+import TablePager, { usePager } from "./TablePager.jsx";
+import { computeTrends, computeScenarioTrend, budgetToFactor, controlBoostOf } from "../lib/simulation.js";
 import { scenarioStorageKey } from "../lib/dataMode.js";
 
 const MAX_PER_REGION = 8;
-const SCENARIO_COLORS = ["#a78bfa", "#f59e0b", "#10b981", "#ec4899", "#22d3ee", "#f97316", "#84cc16", "#e879f9"];
 
 function loadScenarios(allowSeed) {
   try {
@@ -33,24 +27,21 @@ function persistScenarios(scenarios, allowSeed) {
   }
 }
 
-// 슬라이더 변수 조합을 "시나리오"로 저장하고, 10개년 인구 추이를 나란히 비교한다.
+// 슬라이더 변수 조합을 "시나리오"로 저장하고, 저장 목록에서 다시 적용·삭제한다(비교 차트 칸은 두지 않는다).
 // 시나리오는 지자체(regionId) 단위로 관리되며 localStorage에 보존된다.
 //
-// allowSeed=false(데모 표시 OFF): 저장·적용·삭제·비교 선택은 그대로 조작 가능하되, 추이 값은
-// 지자체 인구(시드 전용)에서 계산되므로 예측 인구·증감률·차트를 빈 상태로 둔다.
+// allowSeed=false(데모 표시 OFF): 저장·적용·삭제는 그대로 조작 가능하되, 10년 후 인구·증감률은
+// 지자체 인구(시드 전용)에서 계산되므로 빈 값("–")으로 둔다.
 export default function ScenarioCompare({ region, snapshot, onApply, addConsoleLog, allowSeed = true }) {
-  const ct = useChartTheme();
   const [scenarios, setScenarios] = useState(() => loadScenarios(allowSeed));
   const [name, setName] = useState("");
-  const [compared, setCompared] = useState(() => new Set());
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [saveFeedback, setSaveFeedback] = useState(null);
 
   const regionScenarios = scenarios.filter((s) => s.regionId === region.id);
+  const list = usePager(regionScenarios, undefined, region.id);
 
-  // 지역 변경 시 비교 선택을 해당 지역 시나리오 전체로 초기화
   useEffect(() => {
-    setCompared(new Set(loadScenarios(allowSeed).filter((s) => s.regionId === region.id).map((s) => s.id)));
     setName("");
   }, [region.id, allowSeed]);
 
@@ -76,7 +67,6 @@ export default function ScenarioCompare({ region, snapshot, onApply, addConsoleL
       ...snapshot
     };
     const persisted = updateScenarios([...scenarios, scenario]);
-    setCompared((prev) => new Set(prev).add(scenario.id));
     setName("");
     setSaveFeedback({
       tone: persisted ? "success" : "error",
@@ -92,11 +82,6 @@ export default function ScenarioCompare({ region, snapshot, onApply, addConsoleL
 
   const handleDelete = (id) => {
     const persisted = updateScenarios(scenarios.filter((s) => s.id !== id));
-    setCompared((prev) => {
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
     const deleted = scenarios.find((scenario) => scenario.id === id);
     if (deleted) {
       addConsoleLog(`WARN: 시나리오 '${deleted.name}' 삭제.`);
@@ -119,15 +104,7 @@ export default function ScenarioCompare({ region, snapshot, onApply, addConsoleL
     });
   };
 
-  const toggleCompare = (id) =>
-    setCompared((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-
-  // 현재 설정 + 비교 대상 시나리오의 추이 계산
+  // 현재 설정·저장 시나리오의 10년 후 인구(데모 계산) — 목록 표의 값 칸에만 쓴다.
   const controls = region.case?.simulation?.controls ?? [];
   const currentTrend = useMemo(
     () =>
@@ -142,69 +119,11 @@ export default function ScenarioCompare({ region, snapshot, onApply, addConsoleL
     [region, snapshot, controls]
   );
 
-  const comparedScenarios = regionScenarios.filter((s) => compared.has(s.id));
-  const scenarioTrends = useMemo(
-    () => comparedScenarios.map((s) => ({ scenario: s, trend: computeScenarioTrend(region, s) })),
-    [comparedScenarios, region]
-  );
-
-  const chartData = useMemo(
-    () => ({
-      labels: YEAR_LABELS,
-      datasets: [
-        {
-          label: "자연 감소 (Base)",
-          data: currentTrend.baseTrend,
-          borderColor: "rgba(239, 68, 68, 0.6)",
-          borderDash: [5, 5],
-          fill: false,
-          tension: 0.2,
-          pointRadius: 0
-        },
-        {
-          label: "현재 설정",
-          data: currentTrend.simTrend,
-          borderColor: "rgba(59, 130, 246, 1)",
-          fill: false,
-          tension: 0.2,
-          borderWidth: 2.5
-        },
-        ...scenarioTrends.map(({ scenario, trend }, i) => ({
-          label: scenario.name,
-          data: trend.simTrend,
-          borderColor: SCENARIO_COLORS[i % SCENARIO_COLORS.length],
-          fill: false,
-          tension: 0.2,
-          pointRadius: 2
-        }))
-      ]
-    }),
-    [currentTrend, scenarioTrends]
-  );
-
-  const chartOpts = {
-    responsive: true,
-    maintainAspectRatio: false,
-    scales: {
-      y: { grid: { color: ct.grid }, ticks: { color: ct.tick } },
-      x: { grid: { display: false }, ticks: { color: ct.tick } }
-    },
-    plugins: { legend: { labels: { color: ct.legend, boxWidth: 12 } } }
-  };
-
-  // 계산 자체는 그대로 두고(로직 보존), 표시 단계에서만 시드 파생 계열을 비운다.
-  const displayChartData = allowSeed ? chartData : { labels: YEAR_LABELS, datasets: [] };
+  // 계산 자체는 그대로 두고(로직 보존), 표시 단계에서만 시드 파생 값을 비운다.
   const popCell = (text) => (allowSeed ? text : "–");
-
-  const summaryRows = scenarioTrends.map(({ scenario, trend }) => {
-    const finalPop = trend.simTrend[9];
-    const growth = (((finalPop - region.population) / region.population) * 100).toFixed(1);
-    return { scenario, finalPop, growth };
-  });
+  const growthOf = (finalPop) => (((finalPop - region.population) / region.population) * 100).toFixed(1);
   const currentFinal = currentTrend.simTrend[9];
-  const baseFinal = currentTrend.baseTrend[9];
-  const currentVsBase = currentFinal - baseFinal;
-  const currentGrowth = (((currentFinal - region.population) / region.population) * 100).toFixed(1);
+  const currentGrowth = growthOf(currentFinal);
 
   return (
     <div style={{ marginTop: 24 }}>
@@ -218,9 +137,8 @@ export default function ScenarioCompare({ region, snapshot, onApply, addConsoleL
       >
         <p style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 14 }}>
           {allowSeed
-            ? "현재 예산·정책 강조·시설 변수 조합을 시나리오로 저장하고, 10개년 인구 추이를 나란히 비교합니다."
-            : "현재 관측 입력 조합을 시나리오로 저장하고, 다시 적용해 다음 달 예측을 나란히 비교합니다."}
-          {" "}저장된 시나리오는 브라우저 저장소가 허용된 환경에서 보존됩니다.
+            ? "현재 예산·정책 강조·시설 변수 조합을 시나리오로 저장하고, 목록에서 다시 적용해 비교합니다."
+            : "현재 관측 입력 조합을 시나리오로 저장하고, 목록에서 다시 적용한 뒤 [정책 추천 도출]로 예측을 비교합니다."}
         </p>
 
         {/* 저장 입력 */}
@@ -259,34 +177,12 @@ export default function ScenarioCompare({ region, snapshot, onApply, addConsoleL
           </div>
         ) : (
           <div className="scenario-body">
-            {/* 비교 차트 */}
-            <div style={{ position: "relative", height: 220, width: "100%" }}>
-              <Line data={displayChartData} options={chartOpts} />
-              {!allowSeed && (
-                <ChartEmptyNote>{REAL_SCENARIO_NOTE}</ChartEmptyNote>
-              )}
-            </div>
-            <p className="chart-summary">
-              {allowSeed ? (
-                <>
-                  자연감소 기준은 10년 후 {baseFinal.toLocaleString()}명이며, 현재 설정은 {currentFinal.toLocaleString()}명
-                  ({parseFloat(currentGrowth) > 0 ? "+" : ""}{currentGrowth}%)으로 기준 대비 {currentVsBase >= 0 ? "+" : ""}{currentVsBase.toLocaleString()}명입니다.
-                  {scenarioTrends.length > 0
-                    ? ` 비교 중인 저장 시나리오 ${scenarioTrends.length}개의 연도별 추이는 차트와 아래 요약표에서 확인할 수 있습니다.`
-                    : " 비교할 저장 시나리오를 선택하면 추이가 함께 표시됩니다."}
-                </>
-              ) : (
-                REAL_SCENARIO_NOTE
-              )}
-            </p>
-
-            {/* 요약 테이블 */}
-            <div className="table-container" style={{ marginTop: 14 }}>
+            {/* 저장 목록 — 현재 설정 행 + 저장 시나리오 5개씩 */}
+            <div className="table-container">
               <table id="scenario-comparison-table" tabIndex="-1">
-                <caption className="sr-only">현재 설정과 저장한 인구 예측 시나리오 비교</caption>
+                <caption className="sr-only">현재 설정과 저장한 시나리오 목록</caption>
                 <thead>
                   <tr>
-                    <th scope="col">비교</th>
                     <th scope="col">시나리오</th>
                     <th scope="col" className="cell-num">예산</th>
                     <th scope="col" className="cell-num">복지/산업/주거</th>
@@ -297,9 +193,6 @@ export default function ScenarioCompare({ region, snapshot, onApply, addConsoleL
                 </thead>
                 <tbody>
                   <tr className="scenario-current-row">
-                    <td>
-                      <span className="scenario-swatch" style={{ backgroundColor: "rgba(59,130,246,1)" }}></span>
-                    </td>
                     <td>
                       <strong>현재 설정</strong>
                     </td>
@@ -315,42 +208,22 @@ export default function ScenarioCompare({ region, snapshot, onApply, addConsoleL
                     </td>
                     <td className="cell-actions">–</td>
                   </tr>
-                  {regionScenarios.map((s, rowIndex) => {
-                    const row = summaryRows.find((r) => r.scenario.id === s.id);
-                    const colorIdx = comparedScenarios.findIndex((cs) => cs.id === s.id);
+                  {list.pageRows.map((s, pageIndex) => {
+                    const rowIndex = list.offset + pageIndex;
+                    const finalPop = computeScenarioTrend(region, s).simTrend[9];
+                    const row = { finalPop, growth: growthOf(finalPop) };
                     return (
                       <tr key={s.id}>
-                        <td>
-                          <label className="scenario-compare-toggle" title="비교 차트에 표시">
-                            <input
-                              type="checkbox"
-                              checked={compared.has(s.id)}
-                              onChange={() => toggleCompare(s.id)}
-                              aria-label={`${s.name} 비교 포함`}
-                            />
-                            <span
-                              className="scenario-swatch"
-                              style={{
-                                backgroundColor:
-                                  colorIdx >= 0
-                                    ? SCENARIO_COLORS[colorIdx % SCENARIO_COLORS.length]
-                                    : "var(--border-color)"
-                              }}
-                            ></span>
-                          </label>
-                        </td>
                         <td>{s.name}</td>
                         <td className="cell-num">{s.budgetTotal.toLocaleString()}억</td>
                         <td className="cell-num">
                           {s.welfareWeight}/{s.industryWeight}/{s.housingWeight}
                         </td>
-                        <td className="cell-num">
-                          {row ? popCell(`${row.finalPop.toLocaleString()}명`) : "–"}
-                        </td>
+                        <td className="cell-num">{popCell(`${row.finalPop.toLocaleString()}명`)}</td>
                         <td
-                          className={`cell-num ${!allowSeed ? "" : row && parseFloat(row.growth) >= 0 ? "trend-up" : "trend-down"}`}
+                          className={`cell-num ${!allowSeed ? "" : parseFloat(row.growth) >= 0 ? "trend-up" : "trend-down"}`}
                         >
-                          {row ? popCell(`${parseFloat(row.growth) > 0 ? "+" : ""}${row.growth}%`) : "–"}
+                          {popCell(`${parseFloat(row.growth) > 0 ? "+" : ""}${row.growth}%`)}
                         </td>
                         <td className="cell-actions">
                           <button
@@ -379,6 +252,7 @@ export default function ScenarioCompare({ region, snapshot, onApply, addConsoleL
                 </tbody>
               </table>
             </div>
+            <TablePager {...list.pager} />
           </div>
         )}
       </Card>

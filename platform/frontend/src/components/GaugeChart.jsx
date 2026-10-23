@@ -58,23 +58,15 @@ export default function GaugeChart({
     plugins: { legend: { display: false }, tooltip: { enabled: false } }
   };
 
-  // 보조 지표용 컴팩트 게이지 — 칸 폭에 끌려 커지지 않도록 폭 상한 + 중앙 정렬
+  // 보조 지표용 컴팩트 게이지 — 칸 폭에 끌려 커지지 않도록 폭 상한 + 중앙 정렬.
+  // 수치·라벨은 호 위에 겹치지 않게 호 아래 흐름에 둔다(원 단위 긴 수치가 호를 덮던 문제).
   return (
-    <div
-      style={{ position: "relative", height: 100, maxWidth: 180, width: "100%", margin: "0 auto" }}
-      {...rest}
-    >
-      <Doughnut data={data} options={options} />
-      <div
-        style={{
-          position: "absolute",
-          bottom: 4,
-          left: 0,
-          width: "100%",
-          textAlign: "center"
-        }}
-      >
-        <div className="gauge-value" style={{ fontSize: 20, fontWeight: 700, fontFamily: "'Outfit', sans-serif", color: "var(--text-primary)" }}>
+    <div style={{ maxWidth: 220, width: "100%", margin: "0 auto", textAlign: "center" }} {...rest}>
+      <div style={{ position: "relative", height: 90, maxWidth: 180, margin: "0 auto" }}>
+        <Doughnut data={data} options={options} />
+      </div>
+      <div style={{ marginTop: 6 }}>
+        <div className="gauge-value" style={{ fontSize: 20, fontWeight: 700, fontFamily: "'Outfit', sans-serif", color: "var(--text-primary)", overflowWrap: "anywhere" }}>
           {displayText ?? (measured ? `${(ratio * 100).toFixed(1)}%` : "–")}
         </div>
         <div style={{ fontSize: 10, color: "var(--text-secondary)" }}>{label}</div>

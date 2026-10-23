@@ -1,5 +1,6 @@
 import Card from "./Card.jsx";
 import ConsoleLog from "./ConsoleLog.jsx";
+import TablePager, { usePager } from "./TablePager.jsx";
 import { TARGET_LABELS, auditLogLines, displayId, instanceLabel, typeName, versionStatus } from "../lib/modelops.js";
 import { formatUnitValue, targetUnit } from "../lib/realSimulation.js";
 
@@ -16,6 +17,7 @@ export default function ModelVersionSection({ catalog, versions, regionName, bus
   const selectedInstance = catalog.instances.find((row) => row.id === instanceId) ?? catalog.instances[0];
   const selectedId = selectedInstance?.id ?? "";
   const rows = versions.filter((row) => row.instance_id === selectedId);
+  const list = usePager(rows, undefined, selectedId);
   // 활성화·복원 결과는 페이지 공유 상태 — 이 카드에서 시작한 동작(origin "versions")일 때만 여기 표시한다.
   const result = versionResult?.origin === "versions" ? versionResult : null;
   const select = (id) => { onClearResult(); onSelectInstance(id); };
@@ -34,7 +36,7 @@ export default function ModelVersionSection({ catalog, versions, regionName, bus
       {result && <p className={`async-feedback ${result.ok ? "is-success" : "is-error"}`} role={result.ok ? "status" : "alert"}>{result.message}</p>}
       <div className="table-container"><table><caption className="sr-only">선택한 모델의 학습 버전과 상태</caption>
         <thead><tr><th scope="col">버전</th><th scope="col">학습데이터·해시</th><th scope="col">지역·대상·기간</th><th scope="col" className="cell-num">MAE / 기준선</th><th scope="col">상태</th><th scope="col" className="cell-actions">동작</th></tr></thead>
-        <tbody>{rows.map((row) => <tr key={row.id}><td>{shortCode(row.id)}<div>학습: {shortCode(row.job_id)}</div></td>
+        <tbody>{list.pageRows.map((row) => <tr key={row.id}><td>{shortCode(row.id)}<div>학습: {shortCode(row.job_id)}</div></td>
           <td>{shortCode(row.dataset_id)}<div>{head(row.dataset_hash, 12)}</div></td>
           <td>{regionName(row.region_id)} · {TARGET_LABELS[row.target] ?? row.target}<div>{row.observed_from}~{row.observed_to}</div></td>
           <td className="cell-num">{metric(row.metrics.mae, row.target)} / {metric(row.baseline.mae, row.target)}</td>
@@ -43,6 +45,7 @@ export default function ModelVersionSection({ catalog, versions, regionName, bus
             <button className="btn btn-secondary" disabled={busy || row.status !== "previous"} onClick={() => decide(row, true)}>이전 버전 복원</button></td>
         </tr>)}</tbody>
       </table></div>
+      <TablePager {...list.pager} />
     </Card>
     <Card title="최근 운영 기록" icon="fa-clock-rotate-left" className="page-section" dataSource="api">
       {auditLines.length ? <ConsoleLog logs={auditLines} height={220} /> : (

@@ -1,19 +1,16 @@
-// 실데이터 학습 카드 — 한 모델을 빠르게 학습·반영하는 단축 경로.
-// 뒷단은 /api/v3/modelops/*(등록 학습데이터·인스턴스·파이프라인·작업·버전)이고, 카탈로그와 작업 폴링은
-// 오케스트레이터 페이지가 소유한다(파이프라인 목록·하단 버전 관리와 같은 상태를 쓴다).
+// 빠른 학습 — 재학습 파이프라인 카드 안의 단축 경로(스냅샷 생성 → 파이프라인 자동 연결 → 실행).
+// 2026-10-22 별도 "데이터 학습" 카드를 합쳤다: [학습 실행]은 파이프라인 [실행]과 같은 runPipeline 이고,
+// 후보 반영·복원은 ⑥ 모델 버전 관리의 활성화·이전 버전 복원과 같은 API라 표를 두지 않는다.
+// 뒷단은 /api/v3/modelops/*이고, 카탈로그와 작업 폴링은 오케스트레이터 페이지가 소유한다.
 // [스냅샷 생성]은 현재 모드의 원본을 동결한 등록 학습데이터를 만든다. 실데이터 모드에서는 먼저
 // 실데이터 스냅샷(POST /realdata/datasets)을 만들어 그 최신 관측을 원본으로 쓴다.
 import { useState } from "react";
-import Card from "../Card.jsx";
 import { apiGet, apiSend } from "../../lib/api.js";
 import { alertText } from "../../lib/alertText.js";
-import { JOB_STATE_NAMES, cardPipelineId, datasetMatchesInstance, displayId, instanceLabel, typeName, versionStatus } from "../../lib/modelops.js";
-import { formatUnitValue, targetUnit } from "../../lib/realSimulation.js";
+import { JOB_STATE_NAMES, cardPipelineId, datasetMatchesInstance, displayId, instanceLabel, typeName } from "../../lib/modelops.js";
 import { getRealdataToken } from "./realdataClient.jsx";
 
 const orDash = (v) => (v === null || v === undefined || v === "" ? "–" : v);
-// MAE·RMSE·기준선은 학습 대상 단위 규칙(명·원 정수 천 단위, % 소수 1~2), WAPE는 비율이라 소수 2~3자리
-const fmtWape = (v) => (Number.isFinite(v) ? v.toLocaleString("ko-KR", { minimumFractionDigits: 2, maximumFractionDigits: 3 }) : "—");
 
 function snapshotName(source) {
   const now = new Date();
@@ -21,7 +18,7 @@ function snapshotName(source) {
   return `${source.name} 스냅샷 ${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
 }
 
-export default function RealdataTrainingPanel({ catalog, versions, demoVisible, regionName, busy, job, onReload, onRunPipeline, onActivate, onLog, versionResult, onClearResult }) {
+export default function RealdataTrainingPanel({ catalog, demoVisible, regionName, busy, job, onReload, onRunPipeline, onLog, onClearResult }) {
   const [selectedInstanceId, setSelectedInstanceId] = useState("");
   const [selectedDatasetId, setSelectedDatasetId] = useState("");
   const [working, setWorking] = useState(null); // "snapshot" | "train"
@@ -32,9 +29,6 @@ export default function RealdataTrainingPanel({ catalog, versions, demoVisible, 
   const matchingDatasets = catalog.datasets.filter((row) => datasetMatchesInstance(row, instance));
   const selectedDataset = matchingDatasets.find((row) => row.id === selectedDatasetId);
   const datasetReady = Boolean(selectedDataset);
-  const candidates = versions.filter((row) => row.instance_id === instanceId);
-  const unit = targetUnit(instance?.target);
-  const fmtNum = (v) => formatUnitValue(v, unit);
   const instanceBusy = catalog.jobs.some((row) => row.instance_id === instanceId && (row.state === "queued" || row.state === "running"));
   const locked = busy || Boolean(working);
 
@@ -95,35 +89,19 @@ export default function RealdataTrainingPanel({ catalog, versions, demoVisible, 
     finally { setWorking(null); }
   };
 
-  const decide = async (version, rollback) => {
-    if (locked) return;
-    const question = rollback
-      ? `이전 버전 ${displayId(version.id)}(으)로 되돌리시겠습니까? 현재 운영 버전은 '이전'으로 바뀝니다.`
-      : `후보 ${displayId(version.id)}을(를) 반영하시겠습니까? 현재 활성 모델을 교체합니다.`;
-    if (!window.confirm(question)) return;
-    setError(null);
-    onClearResult();
-    // 결과 문구는 페이지 공유 상태(versionResult)로 돌아온다 — ⑥에서 새 동작이 일어나면 여기 문구는 사라진다.
-    await onActivate(instanceId, version, rollback);
-  };
-
   const cardJob = job && job.instance_id === instanceId ? job : null;
   // 머리글 지역명은 선택한 등록 데이터(없으면 대상 모델)의 지역에서 읽는다. 이름을 못 찾으면 지역 코드 대신 생략.
   const regionId = selectedDataset?.region_id ?? instance?.region_id;
   const region = regionId ? regionName(regionId) : null;
   const realScope = `${region && region !== regionId ? `${region} ` : ""}행정동 실데이터`;
   return (
-    <Card
-      title={demoVisible ? "학습 실행 (데모 데이터)" : "데이터 학습"}
-      icon="fa-flask-vial"
-      className="page-section realdata-panel"
-      dataSource="api"
-      headerRight={
-        <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
+    <section className="realdata-panel quick-train" aria-labelledby="quick-train-title" data-values-source="api">
+      <div className="quick-train-head">
+        <strong id="quick-train-title"><i className="fa-solid fa-flask-vial" aria-hidden="true"></i> 빠른 학습</strong>
+        <span className="quick-train-scope">
           {demoVisible ? "데모 지역 시계열 · 선형 회귀 · 후보 승인 후 반영" : `${realScope} · 선형 회귀 공동 학습 · 후보 승인 후 반영`}
         </span>
-      }
-    >
+      </div>
       <div className="realdata-controls">
         <label className="realdata-field">
           <span>대상 모델</span>
@@ -163,6 +141,7 @@ export default function RealdataTrainingPanel({ catalog, versions, demoVisible, 
       {instance && (
         <p className="realdata-hint">
           활성 버전: <code title={instance.active_version ?? undefined}>{orDash(displayId(instance.active_version))}</code>
+          {" "}· 학습이 끝난 후보는 아래 [모델 버전 관리]에서 활성화합니다.
         </p>
       )}
       {cardJob && (
@@ -172,65 +151,6 @@ export default function RealdataTrainingPanel({ catalog, versions, demoVisible, 
         </p>
       )}
       {error && <p className="realdata-error" role="alert">{error}</p>}
-      {versionResult?.origin === "card" && (
-        versionResult.ok
-          ? <p className="realdata-hint" role="status">{versionResult.message}</p>
-          : <p className="realdata-error" role="alert">{versionResult.message}</p>
-      )}
-
-      <div className="table-container">
-        <table>
-          <caption className="sr-only">모델 후보 버전과 지표, 반영·복원 동작</caption>
-          <thead>
-            <tr>
-              <th scope="col">버전</th>
-              <th scope="col" className="cell-num">MAE / RMSE ({unit}) / WAPE (비율)</th>
-              <th scope="col" className="cell-num">기준선 MAE ({unit})</th>
-              <th scope="col">상태</th>
-              <th scope="col" className="cell-actions">동작</th>
-            </tr>
-          </thead>
-          <tbody>
-            {instance && candidates.length === 0 && (
-              <tr>
-                <td colSpan={5} style={{ color: "var(--text-muted)" }}>등록된 후보가 없습니다.</td>
-              </tr>
-            )}
-            {candidates.map((c) => (
-              <tr key={c.id}>
-                <td><code title={c.id}>{displayId(c.id)}</code></td>
-                <td className="cell-num">
-                  {fmtNum(c.metrics?.mae)} / {fmtNum(c.metrics?.rmse)} / {fmtWape(c.metrics?.wape)}
-                </td>
-                <td className="cell-num">{fmtNum(c.baseline?.mae)}</td>
-                <td>
-                  <span className="system-status" style={{ padding: "1px 8px", fontSize: 10 }}>
-                    {versionStatus(c.status)}
-                  </span>
-                </td>
-                <td className="cell-actions">
-                  <button
-                    className="btn btn-secondary"
-                    style={{ padding: "4px 10px", fontSize: 11 }}
-                    onClick={() => (c.status === "candidate" ? decide(c, false) : undefined)}
-                    aria-disabled={c.status !== "candidate" || locked}
-                  >
-                    반영
-                  </button>{" "}
-                  <button
-                    className="btn btn-secondary"
-                    style={{ padding: "4px 10px", fontSize: 11 }}
-                    onClick={() => (c.status === "previous" ? decide(c, true) : undefined)}
-                    aria-disabled={c.status !== "previous" || locked}
-                  >
-                    복원
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </Card>
+    </section>
   );
 }

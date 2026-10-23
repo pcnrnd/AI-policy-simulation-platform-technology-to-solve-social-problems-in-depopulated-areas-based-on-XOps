@@ -172,23 +172,9 @@
   font-size: 12px;
 }
 
-.promotion-criteria {
-  display: grid;
-  gap: 4px;
+/* 모니터 게이지 카드의 모델·버전 칩 줄 — 게이지와 간격을 둔다. */
+.monitor-model-meta {
   margin-bottom: var(--space-l);
-  padding: 12px 14px;
-  border: 1px solid var(--border-color);
-  border-left: 3px solid var(--accent-blue);
-  border-radius: 10px;
-  background: var(--surface-hover);
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.55;
-}
-
-.promotion-criteria strong {
-  color: var(--text-primary);
-  font-size: 12px;
 }
 
 /* ===== 라이트 테마 보정 =====

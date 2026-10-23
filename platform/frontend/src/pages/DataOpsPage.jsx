@@ -1,7 +1,8 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import Card from "../components/Card.jsx";
 import PerfBadge from "../components/PerfBadge.jsx";
-import TablePager, { paginate } from "../components/TablePager.jsx";
+import TablePager, { LIST_PAGE_SIZE, paginate } from "../components/TablePager.jsx";
+import { pageOfIndex, syncPagerState } from "../lib/pager.js";
 import PipelineStepper from "../components/PipelineStepper.jsx";
 import CollapsibleStage from "../components/CollapsibleStage.jsx";
 import ArchiveRegisterForm from "../components/ArchiveRegisterForm.jsx";
@@ -217,12 +218,14 @@ export default function DataOpsPage() {
   const [catalogQuery, setCatalogQuery] = useState("");
   const [catalogSort, setCatalogSort] = useState("name");
   const [catalogPage, setCatalogPage] = useState(1);
+  // 스키마 표 쪽 — { key: 소스 ID, page }. 소스가 바뀌면(직접 선택·모드 전환 후 첫 소스로 이동) 렌더에서 1쪽으로 맞춘다.
+  const [schemaPage, setSchemaPage] = useState({ key: null, page: 1 });
   const [pendingAction, setPendingAction] = useState(null);
   const [asyncFeedback, setAsyncFeedback] = useState(null);
   const [confirmAction, setConfirmAction] = useState(null);
   const [confirmBusy, setConfirmBusy] = useState(false);
   const [registrationSubmitting, setRegistrationSubmitting] = useState(false);
-  const BUILT_PAGE_SIZE = 10;
+  const BUILT_PAGE_SIZE = LIST_PAGE_SIZE;
   const [builtPage, setBuiltPage] = useState(1);
 
   // 카탈로그 로드 — 데모 표시 토글에 따라 시드 포함 여부가 달라지므로 토글할 때 다시 받는다.
@@ -655,7 +658,7 @@ export default function DataOpsPage() {
       confirmLabel: "아카이브 등록 해제",
       nextFocusSelector: next ? `[data-source-delete="${next.id}"]` : "#dataops-catalog-title",
       fallbackFocusSelector: "#dataops-catalog-title",
-      nextPage: nextIndexAfterDelete >= 0 ? Math.floor(nextIndexAfterDelete / 10) + 1 : 1
+      nextPage: nextIndexAfterDelete >= 0 ? pageOfIndex(nextIndexAfterDelete, LIST_PAGE_SIZE) : 1
     });
   };
 
@@ -677,7 +680,7 @@ export default function DataOpsPage() {
       confirmLabel: "API 삭제",
       nextFocusSelector: next ? `[data-built-delete="${next.id}"]` : "#dataops-built-title",
       fallbackFocusSelector: "#dataops-built-title",
-      nextPage: nextIndexAfterDelete >= 0 ? Math.floor(nextIndexAfterDelete / BUILT_PAGE_SIZE) + 1 : 1
+      nextPage: nextIndexAfterDelete >= 0 ? pageOfIndex(nextIndexAfterDelete, BUILT_PAGE_SIZE) : 1
     });
   };
 
@@ -809,7 +812,11 @@ export default function DataOpsPage() {
     }
     return a.label.localeCompare(b.label, "ko");
   });
-  const catalogPg = paginate(catalogSources, catalogPage, 10);
+  const catalogPg = paginate(catalogSources, catalogPage, LIST_PAGE_SIZE);
+  // 소스가 바뀐 렌더에서 1쪽으로 맞춘다(렌더 중 상태 맞춤 — 키가 같아지면 멈춘다).
+  const schemaState = syncPagerState(schemaPage, target.id);
+  if (schemaState !== schemaPage) setSchemaPage(schemaState);
+  const schemaPg = paginate(target.columns, schemaState.page, LIST_PAGE_SIZE);
 
   // 카탈로그·스키마에 표시되는 값은 전부 백엔드 목록(sources)에서 온다 — 목업 폴백 경로가 없다.
   // 로딩·오류·빈 목록은 위에서 조기 반환했으므로 여기까지 오면 실응답이 화면을 채운 상태다.
@@ -1081,7 +1088,7 @@ export default function DataOpsPage() {
             page={catalogPg.safePage}
             totalPages={catalogPg.totalPages}
             totalCount={catalogSources.length}
-            pageSize={10}
+            pageSize={LIST_PAGE_SIZE}
             onChange={setCatalogPage}
           />
           </div>
@@ -1124,7 +1131,7 @@ export default function DataOpsPage() {
                 </tr>
               </thead>
               <tbody>
-                {target.columns.map((col) => (
+                {schemaPg.pageRows.map((col) => (
                   <tr key={col.name}>
                     <td>
                       <code style={{ color: "var(--accent-purple-text)", fontWeight: 600 }}>{col.name}</code>
@@ -1148,6 +1155,13 @@ export default function DataOpsPage() {
               </tbody>
             </table>
           </div>
+          <TablePager
+            page={schemaPg.safePage}
+            totalPages={schemaPg.totalPages}
+            totalCount={target.columns.length}
+            pageSize={LIST_PAGE_SIZE}
+            onChange={(page) => setSchemaPage({ key: target.id, page })}
+          />
 
           <div className="stage-next-row">
             <button type="button" className="btn btn-secondary" onClick={() => jumpToStage("dstep-builder")}>
@@ -1264,7 +1278,8 @@ export default function DataOpsPage() {
                   if (filterError) setFilterError(filterValidationMessage(nextValue, target.columns));
                 }}
               />
-              <div className="builder-control-grid">
+              {/* 정렬·page·page_size 는 한 줄 3칸 — 라벨 위·입력칸 아래로 같은 높이에 맞춘다. */}
+              <div className="builder-paging-grid">
                 <label className="control-field">
                   <span>정렬 컬럼 (선택)</span>
                   <select className="select-control mock-data-output" value={sortCol} onChange={(e) => setSortCol(e.target.value)}>
@@ -1274,7 +1289,7 @@ export default function DataOpsPage() {
                     ))}
                   </select>
                 </label>
-                <label className="field-inline">
+                <label className="control-field">
                   <span>page</span>
                   <input
                     className="input-control"
@@ -1285,7 +1300,7 @@ export default function DataOpsPage() {
                     aria-label="페이지 번호"
                   />
                 </label>
-                <label className="field-inline">
+                <label className="control-field">
                   <span>page_size</span>
                   <input
                     className="input-control"

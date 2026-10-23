@@ -1,5 +1,6 @@
 import { useId } from "react";
 import { sliderValueText } from "../lib/realSimulation.js";
+import TablePager, { usePager } from "./TablePager.jsx";
 
 // 정책 시뮬레이터 STAGE ③ 우측 독 — 분석 대상 지자체 목록 + 시뮬레이션 변수.
 // 두 모드가 같은 컨트롤을 쓴다. 실데이터 대응이 없는 예산·가중치는 표시는 유지하고 잠근다(lockText 로 안내).
@@ -37,6 +38,7 @@ export default function SimulatorDock({
   stale
 }) {
   const locked = Boolean(fixed.lockText);
+  const regionList = usePager(regions, undefined, searchText);
   return (
     <div className="sim-dock">
       <div className="sim-dock-section" data-slot="sim.dock.regions">
@@ -47,7 +49,7 @@ export default function SimulatorDock({
           </span>
         </div>
         <div className="sim-region-list">
-          {regions.map((r) => {
+          {regionList.pageRows.map((r) => {
             const active = r.id === currentRegion.id;
             const info = regionInfo(r);
             return (
@@ -78,6 +80,7 @@ export default function SimulatorDock({
             </div>
           )}
         </div>
+        {regions.length > 0 && <TablePager {...regionList.pager} />}
         {districtControl}
       </div>
 

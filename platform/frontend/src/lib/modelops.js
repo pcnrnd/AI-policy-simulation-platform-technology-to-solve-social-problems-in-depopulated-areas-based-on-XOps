@@ -10,9 +10,11 @@ export const EXPERIMENT_MAX = 64;
  * 전체 ID는 title 로 함께 둔다(시뮬레이터·오케스트레이터 공용). ③ 계산 근거(ModelEvidence)만 전체 ID를 본문에 둔다.
  */
 const INTERNAL_ID = /^(?:modelops_|demo_factor_|card-[a-z_]+-)(.+)$/;
+// 적재 도구가 만든 버전 ID(<묶음>_<YYYYMMDD>_<해시 16자 이상>) — 해시 끝 8자만 보인다. 이름형(…_real_observed_sales_krw)은 그대로.
+const DATED_HASH_ID = /^[a-z0-9]+_\d{8}_([0-9a-f]{16,})$/;
 export function displayId(id) {
   const text = String(id ?? "");
-  const tail = text.match(INTERNAL_ID)?.[1] ?? "";
+  const tail = text.match(INTERNAL_ID)?.[1] ?? text.match(DATED_HASH_ID)?.[1] ?? "";
   return tail.length >= 6 ? `…${tail.slice(-8)}` : text;
 }
 export const typeName = (id) => MODEL_TYPES.find((type) => type.id === id)?.name ?? id ?? "—";

@@ -95,12 +95,11 @@ export const REAL_CONTROLS_LOCK_TEXT = "예산·정책 강조 가중치는 데�
 // STAGE ①·② 요인분석 — 두 모드가 활성 요인분석 모델 결과를 같은 자리에 보인다.
 // 실데이터에 요인분석 활성 모델이 없을 때만 안내(전문은 ① 첫 카드 한 곳, 나머지는 한 줄).
 export const FACTOR_GUIDE_TEXT = "이 지역·학습 대상의 요인분석 활성 모델이 없습니다. DataOps에서 학습데이터를 등록하고 오케스트레이터에서 요인분석 모델을 학습·활성화하세요.";
-export const FACTOR_PENDING_TEXT = "요인분석 활성 모델 준비 후 표시";
+export const FACTOR_PENDING_TEXT = "오케스트레이터에서 요인분석 모델을 학습·활성화하세요.";
 export const FACTOR_RUN_LOCK_TEXT = "이 지역·학습 대상의 요인분석 활성 모델을 먼저 준비하세요.";
 export const FACTOR_IDLE_TEXT = "[요인분석 실행] 후 표시됩니다.";
 export const FACTOR_FAILED_TEXT = "요인분석을 실행하지 못했습니다. 잠시 뒤 다시 실행하세요.";
 export const FACTOR_VERSION_CHANGED_TEXT = "활성 버전이 바뀌었습니다. [요인분석 실행]을 다시 누르세요.";
-export const FACTOR_DIAGNOSIS_TEXT = "문제 유형 진단은 시설 지표 학습데이터 등록 후 제공됩니다.";
 export const FACTOR_EXPLAIN_TEXT = "기여도는 학습 기간 평균 대비 최근 관측값이 모델 추정을 높인(+)·낮춘(−) 크기입니다.";
 export const FACTOR_FOOTNOTE = "※ 모델 추정의 기여도이며 정책의 인과 효과가 아닙니다.";
 export const CORRELATION_BASIS_TEXT = "STAGE ① 요인 기여도의 방향(+ 높임 / − 낮춤) 기준";
@@ -160,6 +159,8 @@ export function factorAnalysisView(result, { demo, dataset, label }) {
     split: { positive: factors.filter((row) => row.value > 0), negative: factors.filter((row) => row.value < 0) },
     basis: demo ? `연계 데이터: 데모 요인 패널 · ${name}` : `현재 등록 데이터 기준 · ${name} (관측 ${observed})`,
     runInfo: `학습데이터 ${name} · 요인분석 활성 버전 ${displayId(p.version_id)}`,
+    // listKey: 요인 목록 쪽 번호를 1쪽으로 되돌리는 기준 — 같은 버전이라도 행정동이 바뀌면 다른 목록이다.
+    listKey: `${p.version_id}|${p.dong_code ?? ""}`,
     model: { version: displayId(p.version_id), versionId: p.version_id, intercept: result.intercept, prediction: result.prediction,
       features: (p.features ?? []).map(label) },
     validation: {
@@ -169,6 +170,44 @@ export function factorAnalysisView(result, { demo, dataset, label }) {
         `기준월 ${formatMonth(p.prediction_period)}`]
     }
   };
+}
+
+// 문제 유형 판정 폭 — 다음 달 추정이 전년 같은 달보다 이 비율(%) 넘게 낮으면 감소형, 높으면 증가형, 그 사이는 정체형.
+const DIAGNOSIS_TREND_PCT = 5;
+// 계절 영향 표시 기준 — 월별 계절성 두 항의 |기여도| 합이 전체 |기여도| 합에서 차지하는 비율.
+const DIAGNOSIS_SEASONAL_SHARE = 0.15;
+
+/**
+ * 요인분석 결과만으로 읽는 문제 유형 진단(실데이터 STAGE ②) — 유형(추정 대 전년 같은 달)·주된 하방/상방 요인·계절 영향.
+ * 행정동 항목은 선택 동이 아닌 동의 평균 대비 보정이라 요인으로 내세우지 않는다. 읽을 신호가 없으면 빈 배열.
+ * @param {ReturnType<typeof factorAnalysisView> | null} view
+ * @returns {string[] | null}
+ */
+export function factorDiagnosis(view) {
+  if (!view) return null;
+  const all = [...view.factors, ...view.rest];
+  const input = (feature) => all.find((row) => row.feature === feature)?.input;
+  const amount = (row) => `${formatUnitValue(row.value, view.unit)} ${view.unit}`;
+  const lines = [];
+  const yoy = input("y_yoy");
+  const prediction = view.model.prediction;
+  if (Number.isFinite(yoy) && yoy > 0 && input("has_yoy") !== 0 && Number.isFinite(prediction)) {
+    const change = ((prediction - yoy) / yoy) * 100;
+    const kind = change < -DIAGNOSIS_TREND_PCT ? "감소형" : change > DIAGNOSIS_TREND_PCT ? "증가형" : "정체형";
+    lines.push(`유형: ${kind} — 다음 달 추정값이 전년 같은 달 관측보다 ${Math.abs(change).toFixed(1)}% ${change < 0 ? "낮습니다" : "높습니다"}.`);
+  }
+  const drivers = all.filter((row) => !row.feature.startsWith("dong_")); // |기여도| 내림차순 유지
+  const down = drivers.find((row) => row.value < 0);
+  const up = drivers.find((row) => row.value > 0);
+  if (down) lines.push(`주된 하방 요인: ${down.label} (기여도 ${amount(down)})`);
+  if (up) lines.push(`주된 상방 요인: ${up.label} (기여도 +${amount(up)})`);
+  const total = all.reduce((sum, row) => sum + Math.abs(row.value), 0);
+  const seasonal = all.filter((row) => row.feature === "month_sin" || row.feature === "month_cos")
+    .reduce((sum, row) => sum + Math.abs(row.value), 0);
+  if (total > 0 && seasonal / total >= DIAGNOSIS_SEASONAL_SHARE) {
+    lines.push(`계절 영향: 월별 계절성이 전체 기여의 ${Math.round((seasonal / total) * 100)}%를 차지합니다.`);
+  }
+  return lines;
 }
 
 // 범위/100을 유효숫자 2자리로 — 슬라이더 한 칸.

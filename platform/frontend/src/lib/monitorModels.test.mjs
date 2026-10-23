@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { monitorInstances, monitorActiveVersion, legacyMonitorId, regressionMetricText } from "./monitorModels.js";
+import { monitorInstances, monitorActiveVersion, legacyMonitorId, regressionMetricText, DEMO_MONITOR_ID } from "./monitorModels.js";
 
 const model = { id: "common-instance", mode: "real", region_id: "namwon", target: "observed_sales_krw", active_version: "active" };
 const active = { id: "active", instance_id: model.id, mode: "real", metrics: { mae: 0, rmse: 12, wape: 0.1 } };
@@ -16,7 +16,11 @@ assert.equal(legacyMonitorId(model, history, "real"), history[0].model_id);
 assert.equal(legacyMonitorId({ ...model, region_id: "shinan" }, history, "real"), null);
 assert.equal(legacyMonitorId({ ...model, target: "nonlocal_visitors" }, history, "real"), null);
 assert.equal(legacyMonitorId(model, [], "real"), null);
+// 모드 격리: 실데이터 인스턴스를 데모 모드 이력에 붙이지 않는다.
 assert.equal(legacyMonitorId(model, history, "mock"), null);
+// 데모 ON: 등록 모델이 없거나(첫 진입·빈 카탈로그) 데모 모델이면 예시 이력을 본다 — 화면이 비지 않는다.
+assert.equal(legacyMonitorId(null, [], "mock"), DEMO_MONITOR_ID);
+assert.equal(legacyMonitorId({ ...model, mode: "mock", target: "population_change_pct" }, [], "mock"), DEMO_MONITOR_ID);
 assert.equal(regressionMetricText(active.metrics.mae, "원"), "0원");
 assert.equal(regressionMetricText(active.metrics.wape, "%", true), "10%");
 for (const invalid of [null, undefined, NaN, Infinity, -1]) assert.equal(regressionMetricText(invalid, "명"), "–");

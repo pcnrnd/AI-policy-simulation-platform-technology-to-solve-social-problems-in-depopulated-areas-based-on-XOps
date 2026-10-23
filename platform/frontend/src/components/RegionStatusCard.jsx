@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import Card from "./Card.jsx";
+import TablePager, { usePager } from "./TablePager.jsx";
 import { DEMO_ONLY_HINT } from "./PendingData.jsx";
 
 // 소멸위험지수(낮을수록 위험) → 등급/색상 매핑.
@@ -31,6 +32,7 @@ export default function RegionStatusCard({ regions, currentRegionId, onSelectReg
     () => (allowSeed ? [...regions].sort((a, b) => a.riskIndex - b.riskIndex) : []),
     [regions, allowSeed]
   );
+  const list = usePager(sorted);
 
   return (
     <Card
@@ -64,7 +66,7 @@ export default function RegionStatusCard({ regions, currentRegionId, onSelectReg
                 </td>
               </tr>
             )}
-            {sorted.map((region) => {
+            {list.pageRows.map((region) => {
               const grade = riskGrade(region.riskIndex);
               const decline = declineRate(region.history);
               const isActive = region.id === currentRegionId;
@@ -117,6 +119,7 @@ export default function RegionStatusCard({ regions, currentRegionId, onSelectReg
           </tbody>
         </table>
       </div>
+      <TablePager {...list.pager} />
     </Card>
   );
 }
