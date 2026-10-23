@@ -30,7 +30,7 @@ export default function FactorAnalysisStage({
   const running = status === "running";
   const done = status === "done";
   // ①-1 요인 목록은 전체(상위 10 + 나머지)를 5개씩 넘겨 본다 — 카드 높이가 옆 카드와 맞는다.
-  const factorList = usePager(view ? [...view.factors, ...view.rest] : []);
+  const factorList = usePager(view ? [...view.factors, ...view.rest] : [], undefined, view?.model.versionId);
   const card = (index, title, body) => (
     <Card title={title} icon={CARD_ICONS[index]} dataSource="api" data-slot={`sim.factor.card-${index + 1}`}>
       {view ? body : placeholders[index] ?? <PendingData running={running} />}

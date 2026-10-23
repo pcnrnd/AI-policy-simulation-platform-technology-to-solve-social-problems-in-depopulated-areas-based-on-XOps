@@ -38,7 +38,7 @@ export default function SimulatorDock({
   stale
 }) {
   const locked = Boolean(fixed.lockText);
-  const regionList = usePager(regions);
+  const regionList = usePager(regions, undefined, searchText);
   return (
     <div className="sim-dock">
       <div className="sim-dock-section" data-slot="sim.dock.regions">

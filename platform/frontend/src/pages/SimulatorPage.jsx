@@ -473,6 +473,7 @@ export default function SimulatorPage() {
         running={analysisRunning}
         split={factorView?.split}
         diagnosis={demo ? currentRegion.case.problemDiagnosis : factorDiagnosis(factorView)}
+        diagnosisSource={cardSource}
         pendingText={factorMissing ? FACTOR_PENDING_TEXT : null}
         showDerive={demo}
       />

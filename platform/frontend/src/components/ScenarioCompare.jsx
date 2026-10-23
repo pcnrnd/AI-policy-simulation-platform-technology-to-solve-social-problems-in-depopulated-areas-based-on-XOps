@@ -39,7 +39,7 @@ export default function ScenarioCompare({ region, snapshot, onApply, addConsoleL
   const [saveFeedback, setSaveFeedback] = useState(null);
 
   const regionScenarios = scenarios.filter((s) => s.regionId === region.id);
-  const list = usePager(regionScenarios);
+  const list = usePager(regionScenarios, undefined, region.id);
 
   useEffect(() => {
     setName("");

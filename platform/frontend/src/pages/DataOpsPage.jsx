@@ -341,6 +341,7 @@ export default function DataOpsPage() {
 
   const handleSelectSource = (id) => {
     setSourceId(id);
+    setSchemaPage(1);
     setSortCol("");
     setFilterText("");
     setFilterError(null);

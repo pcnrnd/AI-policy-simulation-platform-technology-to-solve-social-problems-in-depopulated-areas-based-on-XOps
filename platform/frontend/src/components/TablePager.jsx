@@ -54,9 +54,11 @@ export function paginate(rows, page, pageSize) {
 }
 
 // 목록 하나의 페이지 상태 — 현재 페이지 행과 <TablePager {...pager} /> 에 넘길 값을 함께 돌려준다.
-export function usePager(rows, pageSize = LIST_PAGE_SIZE) {
-  const [page, setPage] = useState(1);
+// resetKey: 목록의 대상(등록 모델·지역 등)이 바뀌면 1쪽부터 — 이전 대상의 쪽 번호를 새 목록에 쓰지 않는다.
+export function usePager(rows, pageSize = LIST_PAGE_SIZE, resetKey) {
+  const [state, setState] = useState({ key: resetKey, page: 1 });
+  const page = state.key === resetKey ? state.page : 1;
   const { pageRows, safePage, totalPages } = paginate(rows, page, pageSize);
   return { pageRows, offset: (safePage - 1) * pageSize,
-    pager: { page: safePage, totalPages, totalCount: rows.length, pageSize, onChange: setPage } };
+    pager: { page: safePage, totalPages, totalCount: rows.length, pageSize, onChange: (next) => setState({ key: resetKey, page: next }) } };
 }

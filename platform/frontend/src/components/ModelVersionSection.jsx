@@ -17,7 +17,7 @@ export default function ModelVersionSection({ catalog, versions, regionName, bus
   const selectedInstance = catalog.instances.find((row) => row.id === instanceId) ?? catalog.instances[0];
   const selectedId = selectedInstance?.id ?? "";
   const rows = versions.filter((row) => row.instance_id === selectedId);
-  const list = usePager(rows);
+  const list = usePager(rows, undefined, selectedId);
   // 활성화·복원 결과는 페이지 공유 상태 — 이 카드에서 시작한 동작(origin "versions")일 때만 여기 표시한다.
   const result = versionResult?.origin === "versions" ? versionResult : null;
   const select = (id) => { onClearResult(); onSelectInstance(id); };

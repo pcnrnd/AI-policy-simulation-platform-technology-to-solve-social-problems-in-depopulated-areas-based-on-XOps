@@ -645,7 +645,7 @@ export default function MonitorPage() {
     outlier: true
   }));
   const outlierRows = measuredOutlierRows ?? (allowSeed ? seedOutlierRows : []);
-  const outlierList = usePager(outlierRows);
+  const outlierList = usePager(outlierRows, undefined, modelTarget);
   const outlierMeasured = measuredOutlierRows != null;
   const outlierCount = outlierMeasured
     ? `${measuredOutlierRows.length}건`
