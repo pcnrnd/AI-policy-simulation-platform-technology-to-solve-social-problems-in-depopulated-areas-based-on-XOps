@@ -958,14 +958,14 @@ export default function MonitorPage() {
           data-values-source={srcOf(outlierMeasured)}
         >
           <div className="stat-label">
-            이상값 검출(Z점수)
+            이상값 검출(z-score)
             <InfoTip
               text={
                 outlierMeasured
-                  ? `백엔드 이상치 판정 API가 실측 학습 실행 ${measuredLabels.length}건의 Accuracy 계열에서 Z-score 임계를 넘는 실행을 센 값입니다.`
+                  ? `백엔드 이상치 판정 API가 실측 학습 실행 ${measuredLabels.length}건의 Accuracy 계열에서 z-score 임계를 넘는 실행을 센 값입니다.`
                   : isRealdata
-                    ? "실데이터 실측 계열(후보 버전별 검증 지표)에서 Z-score 임계를 넘는 값이 없습니다. 이상값 로그는 학습 실행이 더 쌓이면 표시됩니다."
-                    : "Z-score(평균 대비 표준편차 거리)가 임계치를 넘는 이상치 건수입니다. 실측 지표 계열이 2건 이상 쌓이면 백엔드 판정 결과로 바뀝니다."
+                    ? "실데이터 실측 계열(후보 버전별 검증 지표)에서 z-score 임계를 넘는 값이 없습니다. 이상값 로그는 학습 실행이 더 쌓이면 표시됩니다."
+                    : "z-score(평균 대비 표준편차 거리)가 임계치를 넘는 이상치 건수입니다. 실측 지표 계열이 2건 이상 쌓이면 백엔드 판정 결과로 바뀝니다."
               }
             />
           </div>
@@ -1025,12 +1025,12 @@ export default function MonitorPage() {
         <Card title="이상값 검출 로그" icon="fa-filter">
           <div style={{ maxHeight: 320, overflowY: "auto" }}>
             <table style={{ width: "100%" }}>
-              <caption className="sr-only">최근 이상값 검출 시간, 지자체, Z-score와 판정 상태</caption>
+              <caption className="sr-only">최근 이상값 검출 시간, 지자체, z-score와 판정 상태</caption>
               <thead>
                 <tr>
                   <th scope="col">시간</th>
                   <th scope="col">지자체</th>
-                  <th scope="col" className="cell-num">Z-score</th>
+                  <th scope="col" className="cell-num">z-score</th>
                   <th scope="col">상태</th>
                 </tr>
               </thead>
