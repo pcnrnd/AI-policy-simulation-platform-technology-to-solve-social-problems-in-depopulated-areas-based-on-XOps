@@ -80,4 +80,13 @@ for (const text of emptyHints) {
   assert.match(text ?? "", /면 [^.]*표시됩니다\.$/, text);
   assert.doesNotMatch(text, /미구현|구현되지 않|지원하지 않|제한|mock|seed|시드|경로|\/api\//i, text);
 }
+// 대시보드(U16~U18): 제목·선택 상자 간격 12px·제목만 말줄임, 도넛 범례 7색 이상 중복 없음, 레이더 위 안내 겹침 없음(요약 한 곳)
+const overview = srcText("pages/Overview.jsx");
+const palette = overview.match(/const SOURCE_PALETTE = \[([\s\S]*?)\];/)[1].match(/rgba\([^)]*\)/g).map((c) => c.replace(/, [\d.]+\)$/, ")"));
+assert.ok(palette.length >= 7);
+assert.equal(new Set(palette).size, palette.length);
+assert.match(overview, /<Radar data=\{radarData\} options=\{radarOpts\} \/>\s*<\/div>/);
+assert.equal(overview.match(/radarSummary === null\s*\? DEMO_ONLY_HINT/g)?.length, 1);
+assert.match(srcText("styles/components.css"), /\.card-title-area \{[^}]*gap: 12px;/);
+assert.match(srcText("styles/components.css"), /\.policy-profile-card \.card-title-text \{[^}]*text-overflow: ellipsis;/);
 console.log("dataMode: 전환 요청 취소·epoch 격리·추천 저장키·mock 보고서 실측 호출 0·real 보고서 시드 값 차단·모드 배지 문구·화면 문구 금지어·알림 원문 차단 PASS");
