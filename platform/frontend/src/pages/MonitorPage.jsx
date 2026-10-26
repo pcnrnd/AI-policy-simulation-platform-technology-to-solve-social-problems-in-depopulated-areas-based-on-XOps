@@ -613,12 +613,14 @@ export default function MonitorPage() {
     ? {
         label: "모델 MAE / 기준선 MAE",
         tip: `선택한 실데이터 모델의 검증 MAE와 같은 구간 ${baselineLabel ? `기준선(${baselineLabel})` : "기준선"} MAE입니다. MAE가 기준선보다 낮아야 학습 모델이 이긴 것입니다.`,
-        trailing: `기준선: ${f1Val}`
+        valueLabel: "MAE",
+        trailing: `기준선 ${f1Val}`
       }
     : {
         label: "모델 정확도 / F1 점수",
         tip: "운영 중인 모델의 정확도(Accuracy)와 정밀도·재현율의 조화평균(F1-Score). 재학습 승급 시 두 값이 함께 갱신됩니다.",
-        trailing: `F1: ${f1Val}`
+        valueLabel: "정확도",
+        trailing: `F1 점수 ${f1Val}`
       };
 
   // PSI·드리프트 판정은 백엔드 실계산값(driftResp) 사용.
@@ -900,10 +902,13 @@ export default function MonitorPage() {
               marginTop: 10
             }}
           >
-            <span className="stat-value" style={{ fontSize: 32 }}>
-              {accVal}
+            <span>
+              <span className="stat-label" style={{ marginRight: 8 }}>{primaryCard.valueLabel}</span>
+              <span className="stat-value" style={{ fontSize: 32 }}>
+                {accVal}
+              </span>
             </span>
-            <span className="trend-up">{primaryCard.trailing}</span>
+            <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>{primaryCard.trailing}</span>
           </div>
         </div>
 
