@@ -46,6 +46,7 @@ export default function OrchestratorPage() {
   const [catalogLoaded, setCatalogLoaded] = useState(false);
   const [catalogError, setCatalogError] = useState(null);
   const [legacyRuns, setLegacyRuns] = useState([]);
+  const [activityLogOpen, setActivityLogOpen] = useState(false);
   const [registerOpen, setRegisterOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState(null);
@@ -630,8 +631,34 @@ export default function OrchestratorPage() {
         )}
       </Card>
 
-      <Card title="UI 활동 로그" icon="fa-list" className="page-section">
-        <ConsoleLog logs={consoleLogs} />
+      {/* 화면 조작·오류 원문(WARN) 기록 — 자리는 유지하고 기본은 접어 둔다 */}
+      <Card
+        title="UI 활동 로그"
+        icon="fa-list"
+        className="page-section"
+        headerRight={
+          <button
+            type="button"
+            className="btn btn-secondary"
+            style={{ padding: "5px 12px", fontSize: 12 }}
+            onClick={() => setActivityLogOpen((open) => !open)}
+            aria-expanded={activityLogOpen}
+            aria-controls="ui-activity-log-body"
+          >
+            <i className={`fa-solid ${activityLogOpen ? "fa-chevron-up" : "fa-chevron-down"}`} aria-hidden="true"></i>{" "}
+            {activityLogOpen ? "접기" : `펼치기${consoleLogs.length ? ` (${consoleLogs.length}건)` : ""}`}
+          </button>
+        }
+      >
+        <div id="ui-activity-log-body" hidden={!activityLogOpen}>
+          {consoleLogs.length ? (
+            <ConsoleLog logs={consoleLogs} />
+          ) : (
+            <p className="pipeline-empty">
+              <i className="fa-solid fa-circle-info" aria-hidden="true"></i>{" "}화면 조작과 오류 원문이 여기에 기록됩니다.
+            </p>
+          )}
+        </div>
       </Card>
 
       {/* ⑥ 최근 운영 기록 — 등록·학습·활성화·복원 감사 기록(버전 활성화·복원은 ③ Model Store에서) */}

@@ -141,12 +141,7 @@ export function AppStateProvider({ children }) {
   const [metricOverrides, setMetricOverrides] = useState({});
   const f1Override = metricOverrides["population-forecast"]?.f1 ?? null;
 
-  const [consoleLogs, setConsoleLogs] = useState([
-    {
-      time: "13:00:00",
-      ...normalizeConsoleMessage("INFO: MLOps 오케스트레이션 대기 중...")
-    }
-  ]);
+  const [consoleLogs, setConsoleLogs] = useState([]);
   const [alerts, setAlerts] = useState([]);
   // 헤더 벨 알림 이력 — 팝업과 달리 사라지지 않고 최근 N건 보존
   const [notifications, setNotifications] = useState([]);
