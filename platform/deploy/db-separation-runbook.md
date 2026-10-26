@@ -46,8 +46,10 @@ DB="docker compose -p population-db --env-file platform/deploy/.env --env-file p
    세 컨테이너 모두 `exited`인지 확인.
 6. 새 DB 시작: `$DB config --quiet && $DB up -d`. 세 컨테이너 healthy, 이미지 ID·볼륨 name·경로가 이전과 같은지
    `docker inspect`로 대조. 로그에 init 실행(`/docker-entrypoint-initdb.d/` 실행 줄)이 보이면 실패로 보고 복귀.
-7. 앱 재연결: `$APP up -d --no-deps xops-service` → `docker exec -i platform-xops-service-1 python - < platform/scripts/check_db_readiness.py`
-   (모두 PASS, exit 0). frontend nginx는 시작 때 한 번만 주소를 찾으므로 `docker restart platform-frontend-1`.
+7. 앱 재연결: `$APP up -d --no-deps xops-service` →
+   `docker exec -i platform-xops-service-1 python - --min-pg-tables <전환 전 pg public 테이블 수> < platform/scripts/check_db_readiness.py`
+   (모두 PASS, exit 0). 새 볼륨에 init이 다시 돌면 데모 테이블은 생기지만 적재 테이블(ext_*)은 없으므로
+   최소 테이블 수로 걸러낸다. timescale·mongo는 3단계 건수 기준선과 대조해 확인한다. frontend nginx는 시작 때 한 번만 주소를 찾으므로 `docker restart platform-frontend-1`.
 8. 검증: 실데이터 대표 소스 응답 `source_kind=database`(오류 이유 없음), 데모 소스 `source_kind=mock`,
    테이블·건수·컬렉션 기준선, xops.db 카탈로그·모델·작업 상태 동일. `GET /` 200만으로 통과시키지 않는다.
 
