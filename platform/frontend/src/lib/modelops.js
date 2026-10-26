@@ -118,6 +118,11 @@ export function jobStatusLabel(job, version) {
 }
 
 const time = (value) => (value ? Date.parse(value) || 0 : 0);
+// 같은 키가 두 번 오면(시드·저장 기록 중복 등) React 행이 남아 쪽 행 수가 어긋난다 — 첫 행만 둔다.
+const uniqueByKey = (rows) => {
+  const seen = new Set();
+  return rows.filter((row) => !seen.has(row.key) && seen.add(row.key));
+};
 
 /** 실행 이력: 새 경로 작업 + (데모 ON일 때만) 옛 경로 과거 기록. 최신 시작 순. */
 export function mergeRunHistory(jobs = [], legacyRuns = [], demoVisible = false, pipelines = []) {
@@ -135,7 +140,7 @@ export function mergeRunHistory(jobs = [], legacyRuns = [], demoVisible = false,
     startedAt: run.started_at, finishedAt: run.finished_at ?? null, versionId: run.active_version ?? null,
     error: run.error ?? null, readOnly: true, raw: run
   })) : [];
-  return [...fresh, ...legacy].sort((a, b) => time(b.startedAt) - time(a.startedAt));
+  return uniqueByKey([...fresh, ...legacy]).sort((a, b) => time(b.startedAt) - time(a.startedAt));
 }
 
 /** 새 경로 작업의 로그 — 작업 레코드·버전·감사 기록에서 만든다(저장된 사실만). */
@@ -196,5 +201,5 @@ export function storeRows(versions = [], datasets = [], legacyStore = [], demoVi
     dataVersion: row.dataVersion, params: row.params, accuracy: row.accuracy, originalStatus: row.status,
     registeredAt: row.registeredAt, source: row.source ?? "mock"
   })) : [];
-  return [...fresh, ...legacy];
+  return uniqueByKey([...fresh, ...legacy]);
 }
