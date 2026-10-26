@@ -1,0 +1,32 @@
+# 운영(dts·EC2) DB 덮어쓰기 — compose.db.yaml 위에 겹친다. compose.ec2.yaml에 있던 DB 블록을 옮겨 왔다.
+# 기동: docker compose -p population-db --env-file platform/deploy/.env --env-file platform/deploy/db.volumes.env \
+#         -f platform/compose.db.yaml -f platform/compose.db.ec2.yaml up -d
+# !override 태그를 쓰므로 Docker Compose 2.24 이상이 필요하다.
+#
+# 이미지는 기존 컨테이너와 같은 바이너리(RepoDigest)로 고정하고 pull하지 않는다 — 분리와 업그레이드를 섞지 않는다.
+# DB 포트는 서버 안에서 점검·적재할 때만 쓰도록 127.0.0.1에만 묶는다.
+services:
+  # DB 비밀번호는 볼륨을 처음 만들 때만 적용된다 — 기존 볼륨이 있으면 바꿔도 반영되지 않는다.
+  pg:
+    image: ${POP_DB_PG_IMAGE:?deploy/db.volumes.env에 POP_DB_PG_IMAGE 필요}
+    pull_policy: never
+    environment:
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?deploy/.env에 DB_PASSWORD 필요}
+    ports: !override
+      - "127.0.0.1:5433:5432"
+
+  timescale:
+    image: ${POP_DB_TIMESCALE_IMAGE:?deploy/db.volumes.env에 POP_DB_TIMESCALE_IMAGE 필요}
+    pull_policy: never
+    environment:
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports: !override
+      - "127.0.0.1:5434:5432"
+
+  mongo:
+    image: ${POP_DB_MONGO_IMAGE:?deploy/db.volumes.env에 POP_DB_MONGO_IMAGE 필요}
+    pull_policy: never
+    environment:
+      MONGO_INITDB_ROOT_PASSWORD: ${DB_PASSWORD}
+    ports: !override
+      - "127.0.0.1:27017:27017"

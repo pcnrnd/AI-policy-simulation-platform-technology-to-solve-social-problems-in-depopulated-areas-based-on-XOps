@@ -1,0 +1,88 @@
+# 저장소 3종(pg·timescale·mongo) 전용 Compose — 앱 project(platform)와 분리한 project=population-db.
+# 기동: docker compose -p population-db --env-file platform/deploy/db.volumes.env -f platform/compose.db.yaml up -d
+# 운영(dts): compose.db.ec2.yaml을 겹치고 deploy/.env도 함께 읽는다 — deploy/db-separation-runbook.md 참고.
+#
+# 데이터 볼륨·망은 이 Compose가 만들지 않는다(external). 이름은 deploy/db.volumes.env의 POP_DB_*로
+# 반드시 지정하며, 누락·오타·미존재면 기동이 실패한다 — 새 빈 볼륨으로 "성공"하는 경로를 막기 위함이다.
+# 앱(xops-service)은 같은 외부망 population-db-data에서 기존 별칭 pg/timescale/mongo로 접속한다.
+name: population-db
+
+services:
+  # PostgreSQL + PostGIS 겸용 — DataOps 카탈로그에 벡터 컬럼이 없어 공식 postgis 이미지를 그대로 쓴다.
+  pg:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: xops
+      POSTGRES_PASSWORD: xops
+      POSTGRES_DB: xops_dataops
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+      - ./initdb/postgres:/docker-entrypoint-initdb.d:ro # 빈 데이터 디렉터리일 때만 실행됨
+    networks:
+      - db-data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U xops -d xops_dataops"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+  timescale:
+    image: timescale/timescaledb:latest-pg16
+    environment:
+      POSTGRES_USER: xops
+      POSTGRES_PASSWORD: xops
+      POSTGRES_DB: xops_timeseries
+    volumes:
+      - timescale-data:/var/lib/postgresql/data
+      - ./initdb/timescale:/docker-entrypoint-initdb.d:ro
+    networks:
+      - db-data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U xops -d xops_timeseries"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+  mongo:
+    image: mongo:7
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: xops
+      MONGO_INITDB_ROOT_PASSWORD: xops
+      MONGO_INITDB_DATABASE: xops_documents
+    volumes:
+      - mongo-data:/data/db
+      # 이미지 VOLUME(/data/configdb)이 만든 기존 익명 볼륨을 이름으로 이어 붙인다.
+      - mongo-config:/data/configdb
+      - ./initdb/mongo:/docker-entrypoint-initdb.d:ro
+    networks:
+      - db-data
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+networks:
+  db-data:
+    external: true
+    name: population-db-data
+
+volumes:
+  pg-data:
+    external: true
+    name: ${POP_DB_PG_VOLUME:?deploy/db.volumes.env에 POP_DB_PG_VOLUME 필요}
+  timescale-data:
+    external: true
+    name: ${POP_DB_TIMESCALE_VOLUME:?deploy/db.volumes.env에 POP_DB_TIMESCALE_VOLUME 필요}
+  mongo-data:
+    external: true
+    name: ${POP_DB_MONGO_VOLUME:?deploy/db.volumes.env에 POP_DB_MONGO_VOLUME 필요}
+  mongo-config:
+    external: true
+    name: ${POP_DB_MONGO_CONFIG_VOLUME:?deploy/db.volumes.env에 POP_DB_MONGO_CONFIG_VOLUME 필요}
