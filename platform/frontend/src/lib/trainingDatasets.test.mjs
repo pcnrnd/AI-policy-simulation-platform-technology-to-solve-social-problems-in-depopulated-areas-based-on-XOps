@@ -31,6 +31,7 @@ assert.match(css, /\.dataops-builder-grid \{[^}]*align-items: stretch;/);
 assert.match(css, /\.dataops-builder-grid \.api-response \{[^}]*flex: 1 1 auto;[^}]*height: 0;/);
 assert.match(css, /\.catalog-tag-chip \{[^}]*white-space: nowrap;/);
 assert.match(css, /\.routing-step \{[^}]*min-width: 0;/);
+assert.match(css, /\.catalog-table th,\s*\.catalog-table td \{\s*padding-left: 10px;\s*padding-right: 10px;/); // 1280에서 9열 표 944→899px
 const registration = src("components", "TrainingDatasetRegistration.jsx");
 assert.match(registration, /title=\{`\$\{row\.id\} · 원본 \$\{row\.source_dataset_id \?\? "—"\}`\}>\{sourceName\(row\)\}/);
 assert.doesNotMatch(registration, /<span title=\{row\.id\}>\{row\.id\}<\/span>/);

@@ -404,6 +404,12 @@
 .catalog-table th {
   white-space: nowrap;
 }
+/* 9열 표 — 좌우 여백을 줄여 1280 폭 카드(약 900px) 안에 맞춘다. */
+.catalog-table th,
+.catalog-table td {
+  padding-left: 10px;
+  padding-right: 10px;
+}
 .catalog-cell-clip {
   display: inline-block;
   max-width: 132px;
