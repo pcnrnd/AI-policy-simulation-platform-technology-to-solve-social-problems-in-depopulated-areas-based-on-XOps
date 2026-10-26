@@ -268,4 +268,16 @@ const oldResponse=late.then((payload)=>oldRequest()&&inferenceMatches(payload,{.
 lateGate.cancel();
 releaseOld({provenance:proof});
 assert.equal(await oldResponse,false);
-console.log("PASS: current mode/model/version/district provenance, recommendation identity and late response isolation");
+// U20: OFF 시나리오 표 — 열 수·순서 그대로, "–" 대신 다음 달 예측·기준 대비 변화율(③ 카드와 같은 계산), 머리글은 모드별 이름
+const scenarioSrc=read("components","ScenarioCompare.jsx");
+assert.doesNotMatch(scenarioSrc,/popCell|: "–"\)/);
+assert.match(scenarioSrc,/\{allowSeed \? "10년 후 인구" : "다음 달 예측"\}[\s\S]*\{allowSeed \? "증감률" : "기준 대비 변화율"\}/);
+assert.equal(scenarioSrc.match(/<th scope="col"/g)?.length,6);
+assert.match(scenarioSrc,/result\.delta \/ Math\.abs\(result\.baseline_prediction\)/);
+assert.match(page,/predict: \(values\) => real\.predictOnly\(/);
+assert.match(read("hooks","useRealSimulation.js"),/const predictOnly = useCallback/);
+// U21: 요인분석 모델이 없는 지역의 빈 상태에 [모델이 있는 지역으로 이동] — 진입 때 자동 이동 없음(모델 선택과 같은 moveToModel)
+assert.match(page,/guide\(FACTOR_GUIDE_TEXT, moveAction\)/);
+assert.match(page,/onClick=\{\(\) => moveToModel\(movableModel\)\}[\s\S]*모델이 있는 지역으로 이동/);
+assert.equal(page.match(/moveToModel\(/g)?.length,2); // 호출은 모델 선택 1 + 이동 버튼 1뿐(진입 시 자동 호출 없음)
+console.log("PASS: current mode/model/version/district provenance, recommendation identity and late response isolation, U20 시나리오 예측 칸·U21 이동 버튼");

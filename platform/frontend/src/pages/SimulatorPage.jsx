@@ -361,12 +361,31 @@ export default function SimulatorPage() {
     ...(recoReady ? ["stage-sim", "stage-report"] : [])
   ];
 
+  // 요인분석 모델이 있는 지역·대상으로 옮긴다(모델 선택·빈 상태 [이동] 공용). 진입 때 자동으로 옮기지는 않는다.
+  const moveToModel = (model) => {
+    const region = appData.regions.find((row) => row.id === model?.region_id);
+    if (!model || !region) return;
+    setModelPick({ context: [mode, model.region_id, model.target].join("|"), id: model.id, version: model.active_version, explicit: true });
+    setDongPick({ regionId: region.id, code: "" });
+    if (!demo) setTarget(model.target);
+    setCurrentRegion(region);
+    addConsoleLog(`INFO: 요인분석 모델이 있는 ${region.name}(으)로 이동했습니다.`);
+  };
+  const movableModel = factorModels.find((row) => row.target === factorTarget) ?? factorModels[0];
+
   // ── 실데이터 표시의 같은 자리 내용 ──
-  const guide = (text) => (
+  const guide = (text, action = null) => (
     <div className="real-flow-guide" data-guide>
       <p>{text}</p>
+      {action}
     </div>
   );
+  // 선택 지역에 요인분석 활성 모델이 없을 때 — 안내 아래에 모델이 있는 지역으로 옮기는 버튼(있을 때만).
+  const moveAction = movableModel ? (
+    <button type="button" className="btn btn-secondary" style={{ padding: "5px 12px", fontSize: 12 }} onClick={() => moveToModel(movableModel)}>
+      <i className="fa-solid fa-location-arrow" aria-hidden="true"></i> 모델이 있는 지역으로 이동
+    </button>
+  ) : null;
   // ③ 자리의 시뮬레이션 모델 대기 문구 — 모델 없음(전문)·조회 중·조회 실패를 구분한다.
   const realPending = <PendingData running={real.loading} text={real.missing ? REAL_GUIDE_TEXT : realLockTitle} />;
   // ①·② 요인분석 — 두 모드 같은 매핑(factorAnalysisView). 실데이터 모델 없음이면 안내(전문은 ① 첫 카드 한 곳, 나머지는 한 줄).
@@ -374,7 +393,7 @@ export default function SimulatorPage() {
   const factorView = factorResult ? factorAnalysisView(factorResult.analysis, { demo, dataset: factorResult.dataset, label: factorLabel }) : null;
   const factorLine = <PendingData text={FACTOR_PENDING_TEXT} />;
   const factorIdle = <PendingData running={analysisRunning} text={FACTOR_IDLE_TEXT} />;
-  const factorPlaceholders = factorMissing ? [guide(FACTOR_GUIDE_TEXT), factorLine, factorLine] : [factorIdle, factorIdle, factorIdle];
+  const factorPlaceholders = factorMissing ? [guide(FACTOR_GUIDE_TEXT, moveAction), factorLine, factorLine] : [factorIdle, factorIdle, factorIdle];
   const factorRunInfo = factorView ? factorView.runInfo
     : demo ? "인구 구조·시설 지표 9개 요인 · 학습 대상 생활인구" : `등록 학습데이터 기준 · 학습 대상 ${targetName}`;
   const rangeProof = simProof?.range_provenance;
@@ -406,15 +425,7 @@ export default function SimulatorPage() {
           value={factorModel?.id ?? ""}
           disabled={analysisRunning || factor.loading || !factorModels.length}
           title={factor.loadFailed ? "모델 목록 조회 실패: 요인분석 실행을 눌러 다시 확인하세요." : factorLockTitle ?? undefined}
-          onChange={(event) => {
-            const model = factorModels.find((row) => row.id === event.target.value);
-            const region = appData.regions.find((row) => row.id === model?.region_id);
-            if (!model || !region) return;
-            setModelPick({ context: [mode, model.region_id, model.target].join("|"), id: model.id, version: model.active_version, explicit: true });
-            setDongPick({ regionId: region.id, code: "" });
-            if (!demo) setTarget(model.target);
-            setCurrentRegion(region);
-          }}
+          onChange={(event) => moveToModel(factorModels.find((row) => row.id === event.target.value))}
         >
           {!factorModel && <option value="">{factor.loading ? "모델 확인 중…" : factor.loadFailed ? "모델 목록 조회 실패" : "이 지역·대상의 활성 모델 없음"}</option>}
           {factorModels.map((row) => <option key={row.id} value={row.id}>{row.name} · {appData.regions.find((r) => r.id === row.region_id)?.name} · {demo ? "생활인구" : REAL_TARGETS[row.target]}</option>)}
@@ -653,6 +664,11 @@ export default function SimulatorPage() {
           region={currentRegion}
           allowSeed={demo}
           snapshot={{ budgetTotal, welfareWeight, industryWeight, housingWeight, controlValues }}
+          // 실데이터: 같은 열 자리에 시뮬레이션 모델의 다음 달 예측·기준 대비 변화율(③ 예측 카드와 같은 계산)
+          forecast={demo ? null : {
+            ready: real.ready, key: contextKey, unit, current: simShown,
+            predict: (values) => real.predictOnly(Object.fromEntries(controls.map((c) => [c.key, Number(values?.[c.key] ?? c.default)])))
+          }}
           onApply={(sc) => {
             setBudgetTotal(sc.budgetTotal);
             setWelfareWeight(sc.welfareWeight);

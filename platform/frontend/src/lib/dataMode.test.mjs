@@ -33,6 +33,9 @@ const FORBIDDEN = /mock|seed|시드|경로|modelops|\/api\/|정책 변수|VITE_|
 const shown = [true, false].flatMap((on) => [modeBadge(on).text, modeBadge(on).title, modeSwitchLog(on)]);
 const guides = [REAL_GUIDE_TEXT, realUnavailableText("지자체 비교 분포는"), REAL_CONTROLS_LOCK_TEXT, FACTOR_GUIDE_TEXT, FACTOR_PENDING_TEXT];
 for (const text of [...shown, ...guides]) assert.doesNotMatch(text, FORBIDDEN, text);
+// U19: 시뮬레이터 분포 카드·지도 시설물/격자 안내는 행동 안내만("제공되지 않습니다" 금지)
+assert.doesNotMatch(realUnavailableText("지자체 비교 분포는"), /제공되지|아직/);
+assert.match(realUnavailableText("시설물·격자 정보는"), /^시설물·격자 정보는 설정에서 '데모 데이터 표시'를 켜면/);
 // 알림 문구: 서버·브라우저 원문은 고정 문구로, 사용자용 한글 안내(4xx·화면 코드)는 그대로
 const FALLBACK = "잠시 뒤 다시 시도하세요.";
 const httpError = (status, message) => Object.assign(new Error(message), { status });

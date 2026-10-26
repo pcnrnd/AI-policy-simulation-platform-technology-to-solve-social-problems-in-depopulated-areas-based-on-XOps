@@ -4,6 +4,7 @@ import ConfirmDialog from "./ConfirmDialog.jsx";
 import TablePager, { usePager } from "./TablePager.jsx";
 import { computeTrends, computeScenarioTrend, budgetToFactor, controlBoostOf } from "../lib/simulation.js";
 import { scenarioStorageKey } from "../lib/dataMode.js";
+import { formatUnitValue } from "../lib/realSimulation.js";
 
 const MAX_PER_REGION = 8;
 
@@ -30,16 +31,37 @@ function persistScenarios(scenarios, allowSeed) {
 // 슬라이더 변수 조합을 "시나리오"로 저장하고, 저장 목록에서 다시 적용·삭제한다(비교 차트 칸은 두지 않는다).
 // 시나리오는 지자체(regionId) 단위로 관리되며 localStorage에 보존된다.
 //
-// allowSeed=false(데모 표시 OFF): 저장·적용·삭제는 그대로 조작 가능하되, 10년 후 인구·증감률은
-// 지자체 인구(시드 전용)에서 계산되므로 빈 값("–")으로 둔다.
-export default function ScenarioCompare({ region, snapshot, onApply, addConsoleLog, allowSeed = true }) {
+// allowSeed=false(데모 표시 OFF): 같은 열 자리에 10년 후 인구·증감률 대신 시뮬레이션 모델의 다음 달 예측과
+// 기준 대비 변화율을 둔다(forecast: { ready, key, unit, current, predict(controlValues) }). 열 수·순서는 같다.
+export default function ScenarioCompare({ region, snapshot, onApply, addConsoleLog, allowSeed = true, forecast = null }) {
   const [scenarios, setScenarios] = useState(() => loadScenarios(allowSeed));
   const [name, setName] = useState("");
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [saveFeedback, setSaveFeedback] = useState(null);
+  const [rowForecasts, setRowForecasts] = useState({}); // 시나리오 id → 추론 결과 | "failed"
 
   const regionScenarios = scenarios.filter((s) => s.regionId === region.id);
   const list = usePager(regionScenarios, undefined, region.id);
+  const pageIds = list.pageRows.map((s) => s.id).join(",");
+  const forecastReady = Boolean(forecast?.ready);
+
+  // 실데이터: 보이는 쪽의 저장 시나리오마다 관측 입력으로 다음 달 예측을 계산한다(모델·쪽이 바뀌면 다시).
+  useEffect(() => {
+    setRowForecasts({});
+    if (allowSeed || !forecastReady) return undefined;
+    let alive = true;
+    list.pageRows.forEach((s) => {
+      forecast.predict(s.controlValues)
+        .then((result) => alive && setRowForecasts((prev) => ({ ...prev, [s.id]: result ?? "failed" })))
+        .catch((error) => {
+          if (!alive) return;
+          setRowForecasts((prev) => ({ ...prev, [s.id]: "failed" }));
+          addConsoleLog(`WARN: 시나리오 '${s.name}' 예측 계산 실패 — ${error?.message ?? "알 수 없는 오류"}`);
+        });
+    });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- predict 는 렌더마다 새 함수, 모델·입력 조건은 key 가 대표한다
+  }, [allowSeed, forecastReady, forecast?.key, pageIds]);
 
   useEffect(() => {
     setName("");
@@ -119,11 +141,22 @@ export default function ScenarioCompare({ region, snapshot, onApply, addConsoleL
     [region, snapshot, controls]
   );
 
-  // 계산 자체는 그대로 두고(로직 보존), 표시 단계에서만 시드 파생 값을 비운다.
-  const popCell = (text) => (allowSeed ? text : "–");
   const growthOf = (finalPop) => (((finalPop - region.population) / region.population) * 100).toFixed(1);
-  const currentFinal = currentTrend.simTrend[9];
-  const currentGrowth = growthOf(currentFinal);
+  const trendClass = (growth) => (parseFloat(growth) >= 0 ? "trend-up" : "trend-down");
+  // 한 행의 값 두 칸 [예측, 변화율, 색] — 데모는 10년 후 인구·증감률, 실데이터는 다음 달 예측·기준 대비 변화율.
+  const demoCells = (finalPop) => {
+    const growth = growthOf(finalPop);
+    return [`${finalPop.toLocaleString()}명`, `${parseFloat(growth) > 0 ? "+" : ""}${growth}%`, trendClass(growth)];
+  };
+  const realCells = (result) => {
+    if (!forecastReady) return ["모델 준비 후", "모델 준비 후", ""];
+    if (result === undefined || result === null) return ["계산 중", "계산 중", ""];
+    if (result === "failed") return ["계산 실패", "계산 실패", ""];
+    const unit = forecast.unit;
+    const rate = result.baseline_prediction ? ((result.delta / Math.abs(result.baseline_prediction)) * 100).toFixed(1) : "0.0";
+    return [`${formatUnitValue(result.prediction, unit)}${unit}`, `${result.delta > 0 ? "+" : ""}${rate}%`, trendClass(result.delta)];
+  };
+  const currentCells = allowSeed ? demoCells(currentTrend.simTrend[9]) : realCells(forecast?.current);
 
   return (
     <div style={{ marginTop: 24 }}>
@@ -186,8 +219,8 @@ export default function ScenarioCompare({ region, snapshot, onApply, addConsoleL
                     <th scope="col">시나리오</th>
                     <th scope="col" className="cell-num">예산</th>
                     <th scope="col" className="cell-num">복지/산업/주거</th>
-                    <th scope="col" className="cell-num">10년 후 인구</th>
-                    <th scope="col" className="cell-num">증감률</th>
+                    <th scope="col" className="cell-num">{allowSeed ? "10년 후 인구" : "다음 달 예측"}</th>
+                    <th scope="col" className="cell-num">{allowSeed ? "증감률" : "기준 대비 변화율"}</th>
                     <th scope="col" className="cell-actions">동작</th>
                   </tr>
                 </thead>
@@ -200,18 +233,13 @@ export default function ScenarioCompare({ region, snapshot, onApply, addConsoleL
                     <td className="cell-num">
                       {snapshot.welfareWeight}/{snapshot.industryWeight}/{snapshot.housingWeight}
                     </td>
-                    <td className="cell-num">{popCell(`${currentFinal.toLocaleString()}명`)}</td>
-                    <td
-                      className={`cell-num ${!allowSeed ? "" : parseFloat(currentGrowth) >= 0 ? "trend-up" : "trend-down"}`}
-                    >
-                      {popCell(`${parseFloat(currentGrowth) > 0 ? "+" : ""}${currentGrowth}%`)}
-                    </td>
+                    <td className="cell-num">{currentCells[0]}</td>
+                    <td className={`cell-num ${currentCells[2]}`}>{currentCells[1]}</td>
                     <td className="cell-actions">–</td>
                   </tr>
                   {list.pageRows.map((s, pageIndex) => {
                     const rowIndex = list.offset + pageIndex;
-                    const finalPop = computeScenarioTrend(region, s).simTrend[9];
-                    const row = { finalPop, growth: growthOf(finalPop) };
+                    const cells = allowSeed ? demoCells(computeScenarioTrend(region, s).simTrend[9]) : realCells(rowForecasts[s.id]);
                     return (
                       <tr key={s.id}>
                         <td>{s.name}</td>
@@ -219,12 +247,8 @@ export default function ScenarioCompare({ region, snapshot, onApply, addConsoleL
                         <td className="cell-num">
                           {s.welfareWeight}/{s.industryWeight}/{s.housingWeight}
                         </td>
-                        <td className="cell-num">{popCell(`${row.finalPop.toLocaleString()}명`)}</td>
-                        <td
-                          className={`cell-num ${!allowSeed ? "" : parseFloat(row.growth) >= 0 ? "trend-up" : "trend-down"}`}
-                        >
-                          {popCell(`${parseFloat(row.growth) > 0 ? "+" : ""}${row.growth}%`)}
-                        </td>
+                        <td className="cell-num">{cells[0]}</td>
+                        <td className={`cell-num ${cells[2]}`}>{cells[1]}</td>
                         <td className="cell-actions">
                           <button
                             type="button"

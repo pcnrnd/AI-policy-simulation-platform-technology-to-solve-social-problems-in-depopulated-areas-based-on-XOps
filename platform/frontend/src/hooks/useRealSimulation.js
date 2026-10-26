@@ -106,6 +106,15 @@ export function useRealSimulation({ enabled, region, target, dong, log }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentContext, modelKey, reload]);
 
+  // 시나리오 표 행별 예측 — ③ 결과·안내 문구와 요청 게이트를 건드리지 않는 독립 계산. 실패는 호출부가 받는다.
+  const predictOnly = useCallback(async (changes) => {
+    if (!currentContext || !model) return null;
+    const token = await getRealdataToken();
+    const result = await apiSend("POST", endpoint(model) + "/predict", { token, body: inferenceRequest(currentContext, changes) });
+    return validateInference(result, currentContext);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentContext, modelKey]);
+
   const datasetName = (id) => catalog.datasets?.find((row) => row.id === id || row.dataset_id === id)?.name ?? id;
   const ready = Boolean(enabled && currentContext && model);
   // 모델이 실제로 없을 때만 "준비" 안내를 띄운다(조회 실패는 고정 실패 문구로 알린다).
@@ -114,6 +123,6 @@ export function useRealSimulation({ enabled, region, target, dong, log }) {
     catalog, context: currentContext, loading, ready, missing, loadFailed: Boolean(enabled && loadFailed),
     predictFailed: feedback === REAL_PREDICT_FAILED_TEXT,
     feedback: enabled && loadFailed ? REAL_LOAD_FAILED_TEXT : feedback,
-    revision, datasetName, simulate, reload
+    revision, datasetName, simulate, predictOnly, reload
   };
 }
