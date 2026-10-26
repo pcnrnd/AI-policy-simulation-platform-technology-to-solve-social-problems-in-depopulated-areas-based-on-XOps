@@ -1,8 +1,9 @@
-# xops-service(DataOps+MLOps) + frontend + 실 저장소 3종 통합 실행.
+# xops-service(DataOps+MLOps) + frontend 앱 실행(project=platform).
 # 기동: docker compose -f platform/compose.xops.yaml up -d --build
 # 접속: http://localhost:8080 (프론트) — /api는 nginx가 xops-service:8000으로 프록시
 #
-# 저장소는 3개 컨테이너로 충분하다:
+# 저장소 3종(pg·timescale·mongo)은 compose.db.yaml(project=population-db)로 분리했다.
+# 외부망 population-db-data와 DB 묶음을 먼저 준비한다 — deploy/db-separation-runbook.md 참고.
 #   pg        — postgis 이미지라 PostgreSQL과 PostGIS를 한 인스턴스에서 제공 (ds_01~04, ds_06)
 #   timescale — 시계열 (ds_05). 카탈로그가 소스 유형으로 Adapter를 나누므로 별 인스턴스로 둔다
 #   mongo     — 문서형 (ds_07)
@@ -39,13 +40,10 @@ services:
       # 직접 접근/디버깅용 (프론트는 내부 네트워크로 접근). 호스트 8000이 다른 프로젝트에
       # 점유된 개발 환경에서는 XOPS_HOST_PORT 로 바꾼다 — 컨테이너 내부 포트는 8000 고정.
       - "${XOPS_HOST_PORT:-8000}:8000"
-    depends_on:
-      pg:
-        condition: service_healthy
-      timescale:
-        condition: service_healthy
-      mongo:
-        condition: service_healthy
+    # DB는 별도 project(population-db)라 depends_on으로 기다릴 수 없다 — DB 준비는 runbook의 readiness 검사로 확인한다.
+    networks:
+      - default
+      - db-data
     restart: unless-stopped
 
   frontend:
@@ -73,67 +71,12 @@ services:
       - "${XOPS_FRONTEND_HOST_PORT:-8080}:80"
     restart: unless-stopped
 
-  # PostgreSQL + PostGIS 겸용 — project/metadata/Dockerfile.postgres 는 pgvector까지 넣지만
-  # DataOps 카탈로그에 벡터 컬럼이 없어 공식 postgis 이미지를 그대로 쓴다(빌드 단계 불필요).
-  pg:
-    image: postgis/postgis:16-3.4
-    environment:
-      POSTGRES_USER: xops
-      POSTGRES_PASSWORD: xops
-      POSTGRES_DB: xops_dataops
-    volumes:
-      - pg-data:/var/lib/postgresql/data
-      - ./initdb/postgres:/docker-entrypoint-initdb.d:ro # 최초 기동 1회만 실행됨
-    ports:
-      - "5433:5432" # 로컬 5432 충돌 회피
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U xops -d xops_dataops"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 20s
-    restart: unless-stopped
-
-  timescale:
-    image: timescale/timescaledb:latest-pg16
-    environment:
-      POSTGRES_USER: xops
-      POSTGRES_PASSWORD: xops
-      POSTGRES_DB: xops_timeseries
-    volumes:
-      - timescale-data:/var/lib/postgresql/data
-      - ./initdb/timescale:/docker-entrypoint-initdb.d:ro
-    ports:
-      - "5434:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U xops -d xops_timeseries"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 20s
-    restart: unless-stopped
-
-  mongo:
-    image: mongo:7
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: xops
-      MONGO_INITDB_ROOT_PASSWORD: xops
-      MONGO_INITDB_DATABASE: xops_documents
-    volumes:
-      - mongo-data:/data/db
-      - ./initdb/mongo:/docker-entrypoint-initdb.d:ro
-    ports:
-      - "27017:27017"
-    healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 20s
-    restart: unless-stopped
+# 저장소 3종은 compose.db.yaml(project=population-db)이 관리한다. 이 망은 그쪽과 공유하는 외부망이며
+# 이 Compose가 만들지 않는다 — 없으면 기동이 실패한다(runbook의 단회 생성 절차 참고).
+networks:
+  db-data:
+    external: true
+    name: population-db-data
 
 volumes:
   xops-data:
-  pg-data:
-  timescale-data:
-  mongo-data:
