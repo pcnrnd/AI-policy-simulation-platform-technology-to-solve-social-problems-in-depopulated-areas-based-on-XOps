@@ -43,6 +43,7 @@ export default function TrainingDatasetRegistration() {
     return () => { active = false; request.current += 1; };
   }, [load]);
   const source = available.find((row) => row.id === sourceId);
+  const sourceName = (row) => available.find((item) => item.id === row.source_dataset_id)?.name ?? "원본 목록에 없음";
   const submit = async (event) => {
     event.preventDefault();
     if (busyRef.current || !source || !name.trim()) return;
@@ -117,12 +118,13 @@ export default function TrainingDatasetRegistration() {
     {feedback && <p role="status">{feedback}</p>}
     <div className="table-container"><table className="training-dataset-table">
       <caption className="sr-only">등록된 학습데이터 목록</caption>
-      <colgroup>{[18,18,13,12,13,8,10,8].map((width,index) => <col key={index} style={{width:`${width}%`}} />)}</colgroup>
+      <colgroup>{[17,17,13,12,13,8,10,10].map((width,index) => <col key={index} style={{width:`${width}%`}} />)}</colgroup>
       <thead><tr><th>이름</th><th>데이터셋</th><th>지역</th><th>학습 대상</th><th>기간</th><th>행 수</th><th>내용 해시</th><th>관리</th></tr></thead>
-      <tbody>{datasetList.pageRows.map((row) => <tr key={row.id}><td><span title={row.name}>{row.name}</span></td><td><span title={row.id}>{row.id}</span></td>
+      {/* 데이터셋 열은 원본 데이터 이름 — 등록본·원본 식별자는 툴팁으로만 둔다. */}
+      <tbody>{datasetList.pageRows.map((row) => <tr key={row.id}><td><span title={row.name}>{row.name}</span></td><td><span title={`${row.id} · 원본 ${row.source_dataset_id ?? "—"}`}>{sourceName(row)}</span></td>
         <td><span title={`${datasetRegionName(row, appData.regions)} (${row.region_id})`}>{datasetRegionName(row, appData.regions)}</span></td><td><span title={TARGET_NAMES[row.target] ?? row.target}>{TARGET_NAMES[row.target] ?? row.target}</span></td>
         <td><span title={`${row.observed_from}~${row.observed_to}`}>{row.observed_from}~{row.observed_to}</span></td><td><span title={row.row_count.toLocaleString()}>{row.row_count.toLocaleString()}</span></td><td><span title={row.content_hash}>{row.content_hash.slice(0, 12)}</span></td>
-        <td><button type="button" className="btn btn-secondary" disabled={busy} aria-label={`${row.name} 등록본 삭제`} onClick={() => setDeleteTarget(row)}>삭제</button></td></tr>)}</tbody>
+        <td><button type="button" className="btn btn-secondary" style={{ padding: "4px 12px", fontSize: 12 }} disabled={busy} aria-label={`${row.name} 등록본 삭제`} onClick={() => setDeleteTarget(row)}>삭제</button></td></tr>)}</tbody>
     </table></div>
     <TablePager {...datasetList.pager} />
     <ConfirmDialog open={Boolean(deleteTarget)} title="학습데이터 등록본을 삭제할까요?"

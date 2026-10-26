@@ -151,6 +151,12 @@ function AsyncFeedback({ feedback }) {
   );
 }
 
+/** 화면용 토큰 — 앞 12자·뒤 6자만(짧으면 그대로 두지 않고 앞 4자만). */
+const maskToken = (token) => {
+  const text = String(token ?? "");
+  return text.length > 24 ? `${text.slice(0, 12)}…${text.slice(-6)}` : `${text.slice(0, 4)}…`;
+};
+
 // 메타데이터 가상화 라우팅 단계 — 저장소 유형(RDB/NoSQL)에 따라 쿼리 언어(SQL/MQL)가 달라진다.
 function RoutingFlow({ method, source, adapter, queryLang }) {
   const range = source.range;
@@ -202,6 +208,8 @@ export default function DataOpsPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [token, setToken] = useState(null);
+  const [tokenCopied, setTokenCopied] = useState(false);
+  useEffect(() => setTokenCopied(false), [token]); // 새 토큰이면 "복사됨" 표시를 지운다
   const [authMethod, setAuthMethod] = useState("JWT");
   const [responseText, setResponseText] = useState(READY_RESPONSE);
   const [apiMs, setApiMs] = useState(null);
@@ -362,6 +370,15 @@ export default function DataOpsPage() {
     addConsoleLog(`WARN: ${TOKEN_DISCARDED_MESSAGE}`, false, true);
     setAsyncFeedback({ tone: "error", message: TOKEN_DISCARDED_MESSAGE });
     return true;
+  };
+
+  const handleCopyToken = async () => {
+    try {
+      await navigator.clipboard.writeText(token);
+      setTokenCopied(true);
+    } catch {
+      setAsyncFeedback({ tone: "error", message: "토큰을 복사하지 못했습니다. 브라우저의 클립보드 권한을 허용한 뒤 다시 누르세요." });
+    }
   };
 
   // 쓰기(등록·삭제·API 빌드) 직전에 토큰을 확보한다. 예전에는 사용자가 STEP ③까지 내려가
@@ -1018,11 +1035,11 @@ export default function DataOpsPage() {
                       </td>
                       <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>{s.source}</td>
                       <td>
-                        <code style={{ fontSize: 11, color: "var(--accent-purple-text)" }}>{s.object}</code>
+                        <code className="catalog-cell-clip" style={{ fontSize: 11, color: "var(--accent-purple-text)" }} title={s.object}>{s.object}</code>
                       </td>
                       <td style={{ fontSize: 11, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
                         {s.range ? (
-                          <span title={`조회에 적용할 적재 범위 (${s.range.column})`}>
+                          <span className="catalog-cell-clip" title={`조회에 적용할 적재 범위 (${s.range.column}) ${s.range.from}~${s.range.to}`}>
                             <code style={{ fontSize: 10 }}>{s.range.column}</code> {s.range.from}~{s.range.to}
                           </span>
                         ) : (
@@ -1048,7 +1065,7 @@ export default function DataOpsPage() {
                       <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>
                         {s.archive?.retention ?? "–"}
                       </td>
-                      <td style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                      <td style={{ fontSize: 12, color: "var(--text-muted)", whiteSpace: "nowrap" }}>
                         {s.archive?.loaded_at ?? "–"}
                       </td>
                       <td className="cell-num" style={{ color: "var(--text-muted)" }}>
@@ -1238,7 +1255,15 @@ export default function DataOpsPage() {
                     OAuth2 Authorization Code Grant: 인가코드 발급 → access_token(JWT) 교환 흐름.
                   </div>
                 )}
-                {token && <code className="token-line">Authorization: Bearer {token}</code>}
+                {/* 토큰은 앞뒤 일부만 보이고, 전체 값은 [복사]로만 꺼낸다(화면·캡처에 전체 토큰을 남기지 않는다). */}
+                {token && (
+                  <div className="token-line">
+                    <code title="전체 토큰은 [복사]로 가져갑니다">Authorization: Bearer {maskToken(token)}</code>
+                    <button type="button" className="btn btn-secondary token-copy-btn" onClick={handleCopyToken} aria-label="전체 토큰 복사">
+                      <i className="fa-solid fa-copy" aria-hidden="true"></i> {tokenCopied ? "복사됨" : "복사"}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
 
