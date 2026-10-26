@@ -13,6 +13,7 @@ import FilterBuilder from "../components/FilterBuilder.jsx";
 import TrainingDatasetRegistration from "../components/TrainingDatasetRegistration.jsx";
 import { useAppState } from "../context/AppStateContext.jsx";
 import { apiGet, apiSend } from "../lib/api.js";
+import { formatClock, formatDateTime } from "../lib/reportContent.js";
 import { filterValidationMessage } from "../lib/filterExpression.js";
 import { HTTP_METHODS, AUTH_METHODS, adapterOf, buildQuery } from "../lib/dataopsApi.js";
 import { getScrollBehavior } from "../lib/motion.js";
@@ -82,7 +83,7 @@ function fromServerApi(api) {
     page: api.page,
     pageSize: api.page_size,
     authMethod: api.auth_method,
-    createdAt: new Date(api.created_at).toLocaleString("ko-KR", { hour12: false })
+    createdAt: formatDateTime(api.created_at)
   };
 }
 
@@ -486,7 +487,7 @@ export default function DataOpsPage() {
     setAsyncFeedback({ tone: "pending", message: `${cfg.method} 요청을 전송하는 중입니다.` });
     setApiMs(null);
     setResponseText(`Sending ${cfg.method} request...`);
-    setSentAt(new Date().toLocaleTimeString("ko-KR", { hour12: false }));
+    setSentAt(formatClock());
 
     const result = await executeRequest(cfg);
     const elapsed = performance.now() - start;
@@ -592,7 +593,7 @@ export default function DataOpsPage() {
       apiId: api.id,
       text: JSON.stringify(result.body, null, 2),
       ms: elapsed,
-      time: new Date().toLocaleTimeString("ko-KR", { hour12: false }),
+      time: formatClock(),
       ok: result.ok,
       degrade: degradeReasonOf(result.body)
     });
@@ -1447,7 +1448,7 @@ export default function DataOpsPage() {
                           <td style={{ fontSize: 12 }}>{api.sourceLabel}</td>
                           <td style={{ fontSize: 11, color: "var(--text-secondary)" }}>{querySummary}</td>
                           <td style={{ fontSize: 11, color: "var(--text-secondary)" }}>{api.authMethod}</td>
-                          <td style={{ fontSize: 11, color: "var(--text-muted)" }}>{api.createdAt}</td>
+                          <td style={{ fontSize: 11, color: "var(--text-muted)", whiteSpace: "nowrap" }}>{api.createdAt}</td>
                           <td>
                             <span
                               className="system-status"
@@ -1465,7 +1466,7 @@ export default function DataOpsPage() {
                                 className={`fa-solid ${sourceAvailable ? "fa-circle-check" : "fa-triangle-exclamation"}`}
                                 aria-hidden="true"
                               ></i>{" "}
-                              {sourceAvailable ? "Active" : "원천 없음"}
+                              {sourceAvailable ? "활성" : "원천 없음"}
                             </span>
                           </td>
                           <td className="cell-actions">

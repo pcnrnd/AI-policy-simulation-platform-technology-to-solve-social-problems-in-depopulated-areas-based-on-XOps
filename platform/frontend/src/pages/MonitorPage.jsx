@@ -589,12 +589,12 @@ export default function MonitorPage() {
   const baselineLabel = baselineName(metricsUsable?.baseline?.name);
   const primaryCard = isRealdata
     ? {
-        label: "Model MAE / 기준선 MAE",
+        label: "모델 MAE / 기준선 MAE",
         tip: `선택한 실데이터 모델의 검증 MAE와 같은 구간 ${baselineLabel ? `기준선(${baselineLabel})` : "기준선"} MAE입니다. MAE가 기준선보다 낮아야 학습 모델이 이긴 것입니다.`,
         trailing: `기준선: ${f1Val}`
       }
     : {
-        label: "Model Accuracy / F1-Score",
+        label: "모델 정확도 / F1 점수",
         tip: "운영 중인 모델의 정확도(Accuracy)와 정밀도·재현율의 조화평균(F1-Score). 재학습 승급 시 두 값이 함께 갱신됩니다.",
         trailing: `F1: ${f1Val}`
       };
@@ -890,7 +890,7 @@ export default function MonitorPage() {
           data-values-source={psiSrc}
         >
           <div className="stat-label">
-            Data Drift Status (PSI)
+            데이터 분포 변화(PSI)
             <InfoTip
               text={
                 driftUsable?.source === "realdata"
@@ -930,7 +930,7 @@ export default function MonitorPage() {
           data-values-source={srcOf(outlierMeasured)}
         >
           <div className="stat-label">
-            Outlier Detection (Z-Score)
+            이상값 검출(Z점수)
             <InfoTip
               text={
                 outlierMeasured

@@ -5,6 +5,7 @@ import {
   buildReportBlocks,
   buildReportRows,
   blocksToMarkdown,
+  formatClock,
   formatMetric,
   formatReportTimestamp,
   reportGateMode
@@ -171,7 +172,7 @@ export default function ReporterPage() {
           return;
         }
         setBinding(result);
-        setLastUpdated(new Date().toLocaleTimeString("ko-KR"));
+        setLastUpdated(formatClock());
         // 여기까지 왔으면 바인딩이 있다 — 데모 토글과 무관하게 실데이터 기준 성공 문구를 쓴다.
         setBindingFeedback({ tone: "success", message: `${region.name} 데이터를 갱신했습니다.` });
         addConsoleLog(

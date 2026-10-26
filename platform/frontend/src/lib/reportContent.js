@@ -29,14 +29,29 @@ export function formatMetric(value, digits = 3) {
   return typeof value === "number" ? value.toFixed(digits) : "–";
 }
 
-/** 미리보기와 모든 내보내기 형식에서 동일한 생성 시각을 KST로 표시한다. */
-export function formatReportTimestamp(generatedAt = new Date().toISOString()) {
+function kstParts(at) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit",
-    hour: "2-digit", minute: "2-digit", hourCycle: "h23"
-  }).formatToParts(new Date(generatedAt));
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return `${values.year}-${values.month}-${values.day} ${values.hour}:${values.minute} (KST)`;
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23"
+  }).formatToParts(new Date(at));
+  return Object.fromEntries(parts.map((part) => [part.type, part.value]));
+}
+
+/** 날짜가 들어간 화면 시각 — "2026-09-22 14:27"(KST, 24시간). */
+export function formatDateTime(at = new Date()) {
+  const v = kstParts(at);
+  return `${v.year}-${v.month}-${v.day} ${v.hour}:${v.minute}`;
+}
+
+/** 시각만 표시 — "14:58:17"(KST, 24시간, 오전/오후 없음). */
+export function formatClock(at = new Date()) {
+  const v = kstParts(at);
+  return `${v.hour}:${v.minute}:${v.second}`;
+}
+
+/** 미리보기와 모든 내보내기 형식에서 동일한 생성 시각을 KST로 표시한다. */
+export function formatReportTimestamp(generatedAt = new Date().toISOString()) {
+  return `${formatDateTime(generatedAt)} (KST)`;
 }
 
 /**

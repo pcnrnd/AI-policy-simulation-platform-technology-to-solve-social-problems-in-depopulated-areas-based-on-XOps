@@ -264,7 +264,7 @@ export default function Overview() {
             liveSources || allowSeed ? (
               <>
                 <span className="trend-up">
-                  <i className="fa-solid fa-arrow-right"></i> Active
+                  <i className="fa-solid fa-arrow-right"></i> 정상 수신
                 </span>
                 {/* 카테고리 문구는 시드 6종 이름이다 — 실데이터 롤업에는 그 구성이 없다. */}
                 <span className="text-secondary">

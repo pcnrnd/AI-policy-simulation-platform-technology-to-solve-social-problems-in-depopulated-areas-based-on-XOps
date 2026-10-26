@@ -27,13 +27,13 @@ export default function FactorResultStage({ open, onToggle, locked = false, runn
               <div className="pl-corr-grid">
                 <div className="pl-corr pl-corr-pos">
                   <div className="pl-corr-head">
-                    <i className="fa-solid fa-arrow-trend-up" aria-hidden="true"></i> Positive correlation
+                    <i className="fa-solid fa-arrow-trend-up" aria-hidden="true"></i> 양의 상관
                   </div>
                   <ul>{list(split.positive)}</ul>
                 </div>
                 <div className="pl-corr pl-corr-neg">
                   <div className="pl-corr-head">
-                    <i className="fa-solid fa-arrow-trend-down" aria-hidden="true"></i> Negative correlation
+                    <i className="fa-solid fa-arrow-trend-down" aria-hidden="true"></i> 음의 상관
                   </div>
                   <ul>{list(split.negative)}</ul>
                 </div>
