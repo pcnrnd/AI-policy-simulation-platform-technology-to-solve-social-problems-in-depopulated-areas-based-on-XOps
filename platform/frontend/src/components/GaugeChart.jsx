@@ -18,13 +18,16 @@ export default function GaugeChart({
   const { isDark } = useTheme();
   // 측정값이 없으면(데모 표시 OFF·미수집) 0으로 강제해 판정하지 않는다 — value ?? 0 으로 두면
   // 값이 없는 게이지가 "위험"(또는 lowerIsBetter에서 "정상")이라고 단정해 버린다.
+  // neutral: 호는 채우되(예: 기준선 대비 비율) 정상·주의·위험 색 판정은 하지 않는다.
   const measured = Number.isFinite(value);
-  const ratio = measured && !neutral ? Math.max(0, Math.min(1, value)) : 0;
+  const ratio = measured ? Math.max(0, Math.min(1, value)) : 0;
   const ok = measured && (lowerIsBetter ? ratio <= goodThreshold : ratio >= goodThreshold);
   const warn = measured && (lowerIsBetter ? ratio <= Math.min(1, goodThreshold + 0.2) : ratio >= 0.6);
-  const color = !measured || neutral
+  const color = !measured
     ? (isDark ? "rgba(255, 255, 255, 0.10)" : "rgba(15, 23, 42, 0.12)")
-    : ok
+    : neutral
+      ? "rgba(59, 130, 246, 0.85)"
+      : ok
       ? "rgba(16, 185, 129, 1)"
       : warn
         ? "rgba(245, 158, 11, 1)"

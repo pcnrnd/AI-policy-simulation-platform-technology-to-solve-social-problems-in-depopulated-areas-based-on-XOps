@@ -25,9 +25,12 @@ import InfoTip from "../components/InfoTip.jsx";
 import { getRealdataToken } from "../components/realdata/realdataClient.jsx";
 import { apiGet, apiSend } from "../lib/api.js";
 import { alertText } from "../lib/alertText.js";
-import { monitorInstances, monitorActiveVersion, legacyMonitorId, regressionMetricText, DEMO_MONITOR_ID } from "../lib/monitorModels.js";
-import { displayId, instanceLabel } from "../lib/modelops.js";
-import { baselineName, targetUnit } from "../lib/realSimulation.js";
+import {
+  monitorInstances, monitorActiveVersion, legacyMonitorId, defaultMonitorInstance, regressionMetricText, baselineRatio,
+  runDateLabels, monitorFeatureLabel, DEMO_MONITOR_ID
+} from "../lib/monitorModels.js";
+import { TARGET_LABELS, displayId, instanceLabel } from "../lib/modelops.js";
+import { baselineName, compactNumber, compactRangeLabel, targetUnit } from "../lib/realSimulation.js";
 import TablePager, { usePager } from "../components/TablePager.jsx";
 
 // 데모 분포 표시 대상 — 인구이동 예측 예시 모델(백엔드 시드 id). 지표·설명 이력도 같은 모델을 본다.
@@ -109,6 +112,8 @@ const REALDATA_DATASETS = [
 // 모니터링 옵션 — 조회 구간 (대상 모델은 운영 모델 레지스트리에서 선택).
 // 단위는 관측 개수다. 실측 지표는 학습 실행 단위로 생기므로 시간 라벨을 붙이지 않는다.
 const WINDOW_OPTIONS = [3, 6, 10];
+// SHAP 막대 수 상한 — 차트 높이 280px에서 라벨을 건너뛰지 않고 모두 보이는 개수.
+const SHAP_TOP_N = 12;
 
 export default function MonitorPage() {
   const {
@@ -130,8 +135,9 @@ export default function MonitorPage() {
   const selectableModels = monitorInstances(catalog, mode);
   const regionName = (id) => appData.regions.find((row) => row.id === id)?.name ?? "지역 미확인";
   const selectedInstance = selectableModels.find((row) => modelPick?.mode === mode && row.id === modelPick.id)
-    ?? selectableModels.find((row) => monitorActiveVersion(catalog, row, mode)) ?? selectableModels[0] ?? null;
+    ?? defaultMonitorInstance(catalog, realdataModels, mode);
   const selectedVersion = monitorActiveVersion(catalog, selectedInstance, mode);
+  const targetLabel = TARGET_LABELS[selectedInstance?.target] ?? selectedInstance?.target ?? "";
   const modelTarget = legacyMonitorId(selectedInstance, realdataModels, mode) ?? "";
   // 매핑 없는 공통 모델에 다른 데모 모델의 이력을 폴백하지 않는다.
   const allowSeed = mockDataVisible && Boolean(modelTarget);
@@ -177,6 +183,18 @@ export default function MonitorPage() {
     }).catch((err) => {
       if (current()) addConsoleLog(`WARN: 모델 목록 조회 실패 — ${alertText(err, "모델 목록을 불러오지 못했습니다.")}`);
     });
+    return () => { alive = false; };
+  }, [mockDataVisible, realdataToken, addConsoleLog]);
+
+  // 행정동 대응표 — SHAP 특징의 행정동 원핫(dong_<코드>)을 행정동명으로 보인다(실데이터 표시 전용).
+  const [dongEntries, setDongEntries] = useState([]);
+  useEffect(() => {
+    setDongEntries([]);
+    if (mockDataVisible || !realdataToken) return undefined;
+    let alive = true;
+    apiGet("/api/v3/realdata/dong-map", { token: realdataToken })
+      .then((resp) => alive && setDongEntries(resp?.status === "ok" ? resp.data?.entries ?? [] : []))
+      .catch((err) => alive && addConsoleLog(`WARN: 행정동 대응표 조회 실패 — ${alertText(err, "행정동 이름을 불러오지 못했습니다.")}`));
     return () => { alive = false; };
   }, [mockDataVisible, realdataToken, addConsoleLog]);
 
@@ -394,7 +412,8 @@ export default function MonitorPage() {
       (driftInjected ? seed?.current_drifted : seed?.current_normal) ??
       [];
     return {
-      labels: buckets,
+      // 원 단위 구간 경계는 억·만으로 줄여 축 라벨이 겹치지 않게 한다(%·작은 수 구간은 그대로).
+      labels: buckets.map(compactRangeLabel),
       datasets: [
         {
           label: "참조 분포 (Reference Dataset)",
@@ -462,11 +481,11 @@ export default function MonitorPage() {
   // 실제로 그려진 관측 수. 구간보다 관측이 적으면 화면이 그대로라, 그 사실을 카드에 적는다.
   const plottedCount = Math.max(0, ...Object.values(windowSeries).map((values) => values.length));
 
-  // 추이 x축 — 실측이면 백엔드가 준 실행 ID 라벨을 쓴다. 실측 지표는 학습 실행 단위로 생기므로
-  // 시각 라벨을 붙이면 없는 관측 주기를 있는 것처럼 보이게 한다.
+  // 추이 x축 — 실측이면 백엔드가 준 실행·버전 라벨의 날짜 표시명을 쓴다(ID는 보이지 않는다). 실측 지표는
+  // 학습 실행 단위로 생기므로 시각 라벨을 붙이면 없는 관측 주기를 있는 것처럼 보이게 한다.
   const axisLabels = useMemo(() => {
     const measured = metricsUsable?.labels;
-    if (Array.isArray(measured) && measured.length > 0) return measured.slice(-windowHours);
+    if (Array.isArray(measured) && measured.length > 0) return runDateLabels(measured.slice(-windowHours));
     // 데모 OFF에는 그릴 계열이 없다 — 시각 라벨만 남기면 관측 주기가 있는 것처럼 보인다(빈 축).
     if (!allowSeed) return [];
     return hourlyLabels.slice(-windowHours);
@@ -487,6 +506,7 @@ export default function MonitorPage() {
       ...AXIS_OPTS,
       scales: {
         ...AXIS_OPTS.scales,
+        y: { ...AXIS_OPTS.scales.y, ticks: { ...AXIS_OPTS.scales.y.ticks, callback: (value) => compactNumber(value) } },
         y1: {
           position: "right",
           grid: { display: false },
@@ -507,9 +527,11 @@ export default function MonitorPage() {
     // 값이 유효한 수치인 특징만 남겨 라벨·값·색을 같은 배열에서 만든다 — 짝이 어긋나지 않고,
     // Number(null)·Number("0.3") 같은 강제 변환으로 없는 값이 0.000짜리 실측치로 둔갑하지 않는다.
     // 0과 음수는 실제 기여도이므로 그대로 남긴다.
-    const feats = source.filter((f) => Number.isFinite(f?.value));
+    // 막대 칸에 모든 라벨이 들어가도록 절대 기여도 상위 SHAP_TOP_N개만 그린다(전체 값은 제목 툴팁 요약에 남긴다).
+    const feats = source.filter((f) => Number.isFinite(f?.value))
+      .sort((a, b) => Math.abs(b.value) - Math.abs(a.value)).slice(0, SHAP_TOP_N);
     return {
-      labels: feats.map((f) => f.feature.split(" (")[0]),
+      labels: feats.map((f) => monitorFeatureLabel(f.feature, selectedInstance?.target, dongEntries)),
       datasets: [
         {
           label: "SHAP 기여도 기여 지수 (음수일수록 유출 기여)",
@@ -523,15 +545,15 @@ export default function MonitorPage() {
         }
       ]
     };
-  }, [appData, allowSeed, shapUsable]);
+  }, [appData, allowSeed, shapUsable, selectedInstance?.target, dongEntries]);
 
   const shapOpts = {
     indexAxis: "y",
     responsive: true,
     maintainAspectRatio: false,
     scales: {
-      x: { grid: { color: ct.grid }, ticks: { color: ct.tick } },
-      y: { grid: { display: false }, ticks: { color: ct.tickStrong, font: { size: 10 } } }
+      x: { grid: { color: ct.grid }, ticks: { color: ct.tick, callback: (value) => compactNumber(value) } },
+      y: { grid: { display: false }, ticks: { color: ct.tickStrong, font: { size: 10 }, autoSkip: false } }
     },
     plugins: { legend: { display: false } }
   };
@@ -562,7 +584,7 @@ export default function MonitorPage() {
     ? "양수는 예측값을 기준값보다 끌어올린 기여, 음수는 끌어내린 기여를 뜻합니다."
     : "양수는 인구 유출 완화 기여, 음수는 인구 유출 기여를 뜻합니다.";
   const shapSummary = Number.isFinite(topShapValue)
-    ? `절대 기여도가 가장 큰 특징은 ${shapData.labels[topShapIndex]}이며 SHAP 값은 ${fmt3(topShapValue)}입니다. ${shapSignNote} 전체 값: ${shapData.labels
+    ? `절대 기여도가 가장 큰 특징은 ${shapData.labels[topShapIndex]}이며 SHAP 값은 ${fmt3(topShapValue)}입니다. ${shapSignNote} 상위 값: ${shapData.labels
         .map((label, index) => `${label} ${fmt3(shapData.datasets[0].data[index])}`)
         .join(", ")}.`
     : EMPTY_HINT;
@@ -580,9 +602,9 @@ export default function MonitorPage() {
     return Number.isFinite(latest) ? latest : null;
   };
   const fmtMetric = (value) => (value === null ? NO_VALUE : fmt3(value));
-  // 실데이터 회귀 지표는 원 단위(수만~수억)라 소수 3자리 대신 천단위 구분으로 읽는다.
+  // 실데이터 회귀 지표는 원 단위(수만~수억)라 게이지와 같은 표기("1.03억 원")로 줄여 카드 밖으로 넘치지 않게 한다.
   const fmtAmount = (value) =>
-    value === null ? NO_VALUE : Number(value).toLocaleString(undefined, { maximumFractionDigits: 1 });
+    value === null ? NO_VALUE : regressionMetricText(value, targetUnit(selectedInstance?.target));
   const accVal = isRealdata ? fmtAmount(metricValue("mae")) : fmtMetric(metricValue("accuracy"));
   const f1Val = isRealdata ? fmtAmount(metricValue("baseline_mae")) : fmtMetric(metricValue("f1"));
   // 카드 수·배치는 그대로 두고 라벨·설명만 회귀 지표에 맞춘다. 기준선 방법은 한글 이름, 모르면 "기준선"만.
@@ -638,8 +660,9 @@ export default function MonitorPage() {
       ];
 
   // 실측 이상치 — 백엔드 실계산 API(POST /monitoring/outliers)가 돌려준 결과만 쓴다.
+  const outlierTimes = runDateLabels(outlierResp?.labels ?? []);
   const measuredOutlierRows = outlierResp?.result?.outliers?.map((o) => ({
-    time: outlierResp.labels[o.index] ?? `#${o.index + 1}`,
+    time: outlierTimes[o.index] ?? `${o.index + 1}회차`,
     target: `${targetModel.name} 학습 실행 Accuracy ${fmt3(outlierResp.values[o.index])}`,
     z: Number.isFinite(o.z) ? Number(o.z).toFixed(2) : NO_VALUE,
     outlier: true
@@ -1090,7 +1113,7 @@ export default function MonitorPage() {
         <Card
           title={
             <>
-              SHAP 기반 인구 유출 기여 특징 중요도 분석
+              SHAP 기반 {selectedInstance ? targetLabel : "인구 유출"} 기여 특징 중요도 분석
               <InfoTip
                 text={
                   shapUsable?.basis
@@ -1117,7 +1140,7 @@ export default function MonitorPage() {
 
       <Card title={<>
         모델 신뢰도 게이지
-        <InfoTip text="선택한 등록 모델의 현재 활성 버전 검증 MAE·RMSE·WAPE입니다. MAE와 RMSE는 예측 오차의 크기이며 낮을수록 좋습니다. WAPE는 절대 오차 비율입니다. 신뢰 확률이나 정규화 판정 기준이 아니므로 색상 판정을 하지 않습니다. 위 차트는 별도 이력 자료입니다." />
+        <InfoTip text="선택한 등록 모델의 현재 활성 버전 검증 MAE·RMSE·WAPE입니다. MAE와 RMSE는 예측 오차의 크기이며 낮을수록 좋습니다. WAPE는 절대 오차 비율입니다. 호는 같은 구간 기준선 오차 대비 비율로, 짧을수록 기준선보다 정확합니다." />
       </>} icon="fa-gauge-high">
         {/* 모델·버전 설명은 한 문장 대신 라벨+값 칩으로 — 내부 이름 대신 종류·지역·학습 대상, 버전은 짧은 표기(전체는 title). */}
         <div className="run-meta monitor-model-meta" role="status">
@@ -1126,7 +1149,7 @@ export default function MonitorPage() {
           <span className="run-meta-item"><span className="run-meta-label">활성 버전</span>
             {selectedVersion ? <code title={selectedVersion.id}>{displayId(selectedVersion.id)}</code> : "없음"}</span>
           <span className="run-meta-item"><span className="run-meta-label">위 차트 이력</span>
-            {modelTarget ? targetModel.name : "연결된 이력 없음"}</span>
+            {!modelTarget ? "연결된 이력 없음" : selectedInstance ? instanceLabel(selectedInstance, regionName) : targetModel.name}</span>
         </div>
         <div className="grid-cols-3" style={{ marginBottom: 0 }}>
           {[{ key: "mae", label: "MAE", unit: targetUnit(selectedInstance?.target) },
@@ -1134,9 +1157,15 @@ export default function MonitorPage() {
             { key: "wape", label: "WAPE", unit: "%", percent: true }].map((metric) => {
               const raw = selectedVersion?.metrics?.[metric.key];
               const value = Number.isFinite(raw) && raw >= 0 ? raw : null;
-              return <GaugeChart key={metric.key} neutral value={value} label={metric.label}
+              // 호는 기준선 오차 대비 비율 — 값·기준선이 없으면 빈 호 자리에 다음 행동을 적는다.
+              const ratio = baselineRatio(value, selectedVersion?.baseline?.[metric.key]);
+              const statusText = !selectedVersion ? "오케스트레이터에서 모델을 활성화하세요"
+                : value === null ? "재학습하면 측정값이 표시됩니다"
+                  : ratio === null ? "재학습하면 기준선 대비 비율이 표시됩니다"
+                    : `기준선 대비 ${Math.round(ratio * 100)}%`;
+              return <GaugeChart key={metric.key} neutral value={ratio} label={metric.label}
                 displayText={regressionMetricText(value, metric.unit, metric.percent)}
-                statusText={value === null ? selectedVersion ? "측정값 없음" : "활성 버전 없음" : "정규화 판정 없음"}
+                statusText={statusText}
                 data-values-source={value === null ? "empty" : "api"} />;
             })}
         </div>

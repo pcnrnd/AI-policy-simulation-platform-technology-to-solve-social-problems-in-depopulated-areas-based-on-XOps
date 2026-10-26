@@ -118,6 +118,21 @@ export function formatUnitValue(value, unit) {
   if (COUNT_UNITS.has(unit)) return integerText(value);
   return value.toLocaleString("ko-KR", unit ? { minimumFractionDigits: 1, maximumFractionDigits: 2 } : { maximumFractionDigits: 2 });
 }
+/** 큰 수 축약 — 1억 이상 "1.03억", 1만 이상 "71.2만", 그보다 작으면 천 단위 구분(최대 소수 2자리). */
+export function compactNumber(value) {
+  if (!Number.isFinite(value)) return "—";
+  const abs = Math.abs(value);
+  const text = (number, digits) => number.toLocaleString("ko-KR", { maximumFractionDigits: digits });
+  if (abs >= 1e8) return `${text(value / 1e8, 2)}억`;
+  if (abs >= 1e4) return `${text(value / 1e4, 1)}만`;
+  return text(value, 2);
+}
+/** 구간 라벨("712,425–613,218,650") 안의 큰 수만 축약한다 — 부호·구분 기호는 그대로 둔다. */
+export const compactRangeLabel = (label) =>
+  String(label).replace(/\d[\d,]*(?:\.\d+)?/g, (token) => {
+    const number = Number(token.replace(/,/g, ""));
+    return number >= 1e4 ? compactNumber(number) : token;
+  });
 // 슬라이더 값 — 한 칸이 1 이상이면 정수 천 단위(데모 '50%'·'18㏊' 그대로), 1 미만이면 단위 규칙.
 export const sliderValueText = (value, unit, step = 1) =>
   step >= 1 && Number.isFinite(value) ? integerText(value) : formatUnitValue(value, unit);

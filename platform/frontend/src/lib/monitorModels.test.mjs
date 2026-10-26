@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
-import { monitorInstances, monitorActiveVersion, legacyMonitorId, regressionMetricText, DEMO_MONITOR_ID } from "./monitorModels.js";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { monitorInstances, monitorActiveVersion, legacyMonitorId, defaultMonitorInstance, regressionMetricText, baselineRatio,
+  runDateLabels, monitorFeatureLabel, DEMO_MONITOR_ID } from "./monitorModels.js";
+import { compactNumber, compactRangeLabel } from "./realSimulation.js";
 
 const model = { id: "common-instance", mode: "real", region_id: "namwon", target: "observed_sales_krw", active_version: "active" };
 const active = { id: "active", instance_id: model.id, mode: "real", metrics: { mae: 0, rmse: 12, wape: 0.1 } };
@@ -44,4 +49,38 @@ for (const invalid of [null, undefined, NaN, Infinity, -0.1]) {
   assert.equal(regressionMetricText(invalid, "%"), "–");
   assert.equal(regressionMetricText(invalid, "%", true), "–");
 }
-console.log("PASS: exact active metrics, zero/missing, explicit legacy mapping and mode isolation");
+// U7: 데모 이력은 같은 학습 대상(인구 변화율) 데모 모델에만 — 다른 대상을 고르면 이력 없음(카드 전체가 같은 자리 안내)
+const mockFactor = { id: "f", mode: "mock", target: "living_population", region_id: "shinan", active_version: "fv" };
+const mockPct = { id: "p", mode: "mock", target: "population_change_pct", region_id: "namwon", active_version: "pv" };
+assert.equal(legacyMonitorId(mockFactor, [], "mock"), null);
+const mockCatalog = { mode: "mock", source: "mock", instances: [mockFactor, mockPct],
+  versions: [{ id: "fv", instance_id: "f", mode: "mock" }, { id: "pv", instance_id: "p", mode: "mock" }] };
+assert.equal(defaultMonitorInstance(mockCatalog, [], "mock"), mockPct); // 이력이 연결된 활성 모델 먼저
+assert.equal(defaultMonitorInstance({ ...mockCatalog, instances: [mockFactor] }, [], "mock"), mockFactor);
+assert.equal(defaultMonitorInstance(null, [], "mock"), null);
+// U8: 지표 카드·게이지 공통 표기 — 1만 이상 축약, 단위 유지
+assert.equal(regressionMetricText(102928071.8, "원"), "1.03억 원");
+assert.equal(regressionMetricText(173182427, "원"), "1.73억 원");
+assert.equal(regressionMetricText(27390, "명"), "2.7만 명");
+assert.equal(regressionMetricText(2277, "명"), "2,277명");
+assert.equal(compactNumber(-30000000), "-3,000만");assert.equal(compactNumber(0.05), "0.05");
+// U10: 분포 구간 경계 축약(%·작은 수 구간 그대로), 평가지표 x축은 날짜 표시명(ID 없음)
+assert.equal(compactRangeLabel("712,425–613,218,650"), "71.2만–6.13억");
+assert.equal(compactRangeLabel("-5% ~ -3%"), "-5% ~ -3%");
+assert.deepEqual(runDateLabels(["v20260911-78d661", "v20261014-78d661", "v20261014-78d661-r2", "RUN-20260921-0009", "x"]),
+  ["09-11", "10-14", "10-14 (2)", "09-21", "5회차"]);
+// U9: SHAP 특징 한글 표시명 — 내부 변수명 노출 없음
+const dongs = [{ dong_code: "45190250", dong_name: "운봉읍" }];
+assert.deepEqual(["rate_t-1", "rate_t-2", "riskIndex", "birthRate", "agingIndex", "dong_45190250", "dong_45190999", "month_cos", "y_lag2", "y_yoy", "has_yoy"]
+  .map((feature) => monitorFeatureLabel(feature, "observed_sales_krw", dongs)),
+["직전 기간 인구 변화율", "2기간 전 인구 변화율", "위험지수", "출산율", "고령화지수", "행정동: 운봉읍", "행정동 45190999", "월별 계절성 2", "2개월 전 관측 소비", "전년 같은 달 관측 소비", "전년 관측값 유무"]);
+assert.equal(monitorFeatureLabel("스마트팜 단지 규모 (Smartfarm Scale)", "x"), "스마트팜 단지 규모");
+// U11: 게이지 호 = 기준선 대비 비율(0~1), 기준선 없으면 null
+assert.equal(baselineRatio(50, 100), 0.5);assert.equal(baselineRatio(150, 100), 1);
+assert.equal(baselineRatio(1, undefined), null);assert.equal(baselineRatio(null, 2), null);assert.equal(baselineRatio(1, 0), null);
+const monitorSrc = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "pages", "MonitorPage.jsx"), "utf-8");
+assert.doesNotMatch(monitorSrc, /정규화 판정 없음/);
+assert.match(monitorSrc, /neutral value=\{ratio\}/);
+assert.match(monitorSrc, /SHAP 기반 \{selectedInstance \? targetLabel : "인구 유출"\} 기여 특징 중요도 분석/);
+assert.match(monitorSrc, /autoSkip: false/);
+console.log("PASS: exact active metrics, zero/missing, explicit legacy mapping and mode isolation, U7~U11 선택 모델 연결·축약·날짜 축·특징명·기준선 비율");
