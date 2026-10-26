@@ -90,7 +90,8 @@ export function rankSensitivity(result) {
 // 실데이터가 없을 때 같은 자리에 두는 행동 안내. G1 = 준비 가능(③·④는 시뮬레이션 모델 기준), G2 = 실데이터 항목 없음.
 export const REAL_GUIDE_TEXT = "이 지역·학습 대상의 시뮬레이션 활성 모델이 없습니다. DataOps에서 학습데이터를 등록하고 오케스트레이터에서 시뮬레이션 모델을 학습·활성화하세요.";
 // subject 는 조사까지 포함한다(예: "문제 유형 진단은", "지자체 비교 분포는").
-export const realUnavailableText = (subject) => `${subject} 실데이터로 아직 제공되지 않습니다. 설정에서 데모 데이터 표시를 켜면 예시를 볼 수 있습니다.`;
+// 행동 안내만 둔다 — 제공 여부·사유는 쓰지 않는다.
+export const realUnavailableText = (subject) => `${subject} 설정에서 '데모 데이터 표시'를 켜면 예시로 볼 수 있습니다.`;
 export const REAL_CONTROLS_LOCK_TEXT = "예산·정책 강조 가중치는 데모 데이터 시뮬레이션에서 조정합니다. 실데이터에서는 아래 관측 입력을 조정하세요.";
 // STAGE ①·② 요인분석 — 두 모드가 활성 요인분석 모델 결과를 같은 자리에 보인다.
 // 실데이터에 요인분석 활성 모델이 없을 때만 안내(전문은 ① 첫 카드 한 곳, 나머지는 한 줄).
@@ -118,6 +119,21 @@ export function formatUnitValue(value, unit) {
   if (COUNT_UNITS.has(unit)) return integerText(value);
   return value.toLocaleString("ko-KR", unit ? { minimumFractionDigits: 1, maximumFractionDigits: 2 } : { maximumFractionDigits: 2 });
 }
+/** 큰 수 축약 — 1억 이상 "1.03억", 1만 이상 "71.2만", 그보다 작으면 천 단위 구분(최대 소수 2자리). */
+export function compactNumber(value) {
+  if (!Number.isFinite(value)) return "—";
+  const abs = Math.abs(value);
+  const text = (number, digits) => number.toLocaleString("ko-KR", { maximumFractionDigits: digits });
+  if (abs >= 1e8) return `${text(value / 1e8, 2)}억`;
+  if (abs >= 1e4) return `${text(value / 1e4, 1)}만`;
+  return text(value, 2);
+}
+/** 구간 라벨("712,425–613,218,650") 안의 큰 수만 축약한다 — 부호·구분 기호는 그대로 둔다. */
+export const compactRangeLabel = (label) =>
+  String(label).replace(/\d[\d,]*(?:\.\d+)?/g, (token) => {
+    const number = Number(token.replace(/,/g, ""));
+    return number >= 1e4 ? compactNumber(number) : token;
+  });
 // 슬라이더 값 — 한 칸이 1 이상이면 정수 천 단위(데모 '50%'·'18㏊' 그대로), 1 미만이면 단위 규칙.
 export const sliderValueText = (value, unit, step = 1) =>
   step >= 1 && Number.isFinite(value) ? integerText(value) : formatUnitValue(value, unit);

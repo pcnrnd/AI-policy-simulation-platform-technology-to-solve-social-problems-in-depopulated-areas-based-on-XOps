@@ -11,18 +11,20 @@ import { ChartEmptyNote, DEMO_ONLY_HINT } from "../components/PendingData.jsx";
 // 실데이터 표시에서 데이터 소스 롤업이 비었을 때의 안내 — 값을 채우는 방법을 알린다.
 const SOURCE_EMPTY_HINT = "DataOps에서 데이터 소스를 등록하면 표시됩니다.";
 
-// 데이터 소스 수에 맞춰 순환 사용하는 색상 팔레트 —
-// 플랫폼 액센트(블루·시안·바이올렛·틸) 한 계열로 통일해 글래스모피즘 톤앤매너에 맞춘다.
 // f1Override(연합 재학습 승급 지표)를 내보내는 모델 — Model Store에서 운영 버전을 찾을 때 사용
 const POPULATION_MODEL_ID = "population-forecast";
 
+// 데이터 소스 수에 맞춰 순환 사용하는 색상 팔레트 — 소스가 8개까지는 범례 색이 겹치지 않도록
+// 색상(hue)이 서로 떨어진 8색을 쓴다(인디고·틸처럼 이웃 색은 범례에서 구분되지 않았다).
 const SOURCE_PALETTE = [
   "rgba(59, 130, 246, 0.85)",
-  "rgba(34, 211, 238, 0.8)",
-  "rgba(139, 92, 246, 0.8)",
-  "rgba(16, 185, 129, 0.8)",
-  "rgba(99, 102, 241, 0.8)",
-  "rgba(45, 212, 191, 0.8)"
+  "rgba(16, 185, 129, 0.85)",
+  "rgba(245, 158, 11, 0.85)",
+  "rgba(139, 92, 246, 0.85)",
+  "rgba(236, 72, 153, 0.8)",
+  "rgba(34, 211, 238, 0.85)",
+  "rgba(132, 204, 22, 0.85)",
+  "rgba(100, 116, 139, 0.85)"
 ];
 
 export default function Overview() {
@@ -197,6 +199,8 @@ export default function Overview() {
         .join(", ")
     : null;
 
+  const profileTitle = allowSeed ? `${currentRegion.name} 정책 영향 프로파일` : "정책 영향 프로파일";
+
   const radarOpts = {
     responsive: true,
     maintainAspectRatio: false,
@@ -264,7 +268,7 @@ export default function Overview() {
             liveSources || allowSeed ? (
               <>
                 <span className="trend-up">
-                  <i className="fa-solid fa-arrow-right"></i> Active
+                  <i className="fa-solid fa-arrow-right"></i> 정상 수신
                 </span>
                 {/* 카테고리 문구는 시드 6종 이름이다 — 실데이터 롤업에는 그 구성이 없다. */}
                 <span className="text-secondary">
@@ -326,7 +330,9 @@ export default function Overview() {
         <Card
           // 지자체 목록·이름은 시드(mock_data.json regions) 전용이라 실저장소 대응값이 없다 —
           // 데모 OFF에서는 제목·요약문에서 이름을 빼고, 선택 자체는 조작 UI라 그대로 둔다.
-          title={allowSeed ? `${currentRegion.name} 정책 영향 프로파일` : "정책 영향 프로파일"}
+          // 제목과 "대상 지자체" 선택을 같은 줄에 두고, 긴 지자체 이름은 제목 쪽만 말줄임한다.
+          title={<span className="card-title-text" title={profileTitle}>{profileTitle}</span>}
+          className="policy-profile-card"
           icon="fa-bullseye"
           headerRight={
             <label className="compact-select-field">
@@ -346,13 +352,9 @@ export default function Overview() {
             </label>
           }
         >
+          {/* 값이 없어도 레이더 틀은 남기고, 안내는 아래 요약 자리 한 곳에만 둔다(차트 위 겹침 없음). */}
           <div style={{ position: "relative", height: 240, width: "100%" }}>
             <Radar data={radarData} options={radarOpts} />
-            {radarSummary === null && (
-              <ChartEmptyNote>
-                {DEMO_ONLY_HINT}
-              </ChartEmptyNote>
-            )}
           </div>
           <p className="chart-summary">
             {radarSummary === null

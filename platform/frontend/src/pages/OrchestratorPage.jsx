@@ -3,10 +3,9 @@ import Card from "../components/Card.jsx";
 import ConsoleLog from "../components/ConsoleLog.jsx";
 import InfoTip from "../components/InfoTip.jsx";
 import ModelPipelineRegisterForm from "../components/ModelPipelineRegisterForm.jsx";
-import ModelVersionSection from "../components/ModelVersionSection.jsx";
 import NextStepBanner from "../components/NextStepBanner.jsx";
 import PipelineStatusCard, { LEGACY_RUN_STATE_LABEL, logTime, orDash } from "../components/PipelineStatusCard.jsx";
-import TablePager, { paginate } from "../components/TablePager.jsx";
+import TablePager, { paginate, usePager } from "../components/TablePager.jsx";
 import RealdataTrainingPanel from "../components/realdata/RealdataTrainingPanel.jsx";
 import { getRealdataToken } from "../components/realdata/realdataClient.jsx";
 import { useAppState } from "../context/AppStateContext.jsx";
@@ -14,7 +13,7 @@ import { MODEL_REGISTRY } from "../constants/models.js";
 import { apiGet, apiSend } from "../lib/api.js";
 import { alertText } from "../lib/alertText.js";
 import {
-  JOB_STATE_NAMES, TARGET_LABELS, auditTime, displayId, isLocked, jobLocks, jobLogLines, lastJobOf, mergeRunHistory, storeRows, typeName, versionsWithStatus
+  JOB_STATE_NAMES, TARGET_LABELS, auditLogLines, auditTime, displayId, instanceLabel, isLocked, jobLocks, jobLogLines, lastJobOf, mergeRunHistory, storeRows, typeName, versionsWithStatus
 } from "../lib/modelops.js";
 import { formatUnitValue, targetUnit } from "../lib/realSimulation.js";
 
@@ -50,7 +49,7 @@ export default function OrchestratorPage() {
   const [registerOpen, setRegisterOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState(null);
-  const [versionResult, setVersionResult] = useState(null); // { origin: "card" | "versions", ok, message }
+  const [versionResult, setVersionResult] = useState(null); // { origin: "store", ok, message }
   const clearVersionResult = useCallback(() => setVersionResult(null), []);
   const [liveJob, setLiveJob] = useState(null);
   const [pollError, setPollError] = useState(null); // { message, stopped } — 상태 폴링 실패(잠금 해제·다시 확인)
@@ -58,7 +57,6 @@ export default function OrchestratorPage() {
   const [legacyLogs, setLegacyLogs] = useState(null);
   const [versionInstanceId, setVersionInstanceId] = useState("");
   const [plPage, setPlPage] = useState(1);
-  const [storePage, setStorePage] = useState(1);
   const [runPage, setRunPage] = useState(1);
   const [statusFocusRequest, setStatusFocusRequest] = useState(0);
   const mounted = useRef(true);
@@ -204,8 +202,8 @@ export default function OrchestratorPage() {
     } finally { if (mounted.current) setBusy(false); }
   }, [locked, addConsoleLog, reloadCatalog, pollJob]);
 
-  // 활성화·복원 — 결과는 페이지 상태 하나(versionResult)에 둔다. 버튼이 있는 섹션(학습 카드 "card" / 버전 관리
-  // "versions")은 origin 이 자기일 때만 그리므로, 어느 쪽에서든 새 동작이 일어나면 다른 쪽의 낡은 문구는 사라진다.
+  // 활성화·복원 — 결과는 페이지 상태 하나(versionResult)에 두고 Model Store(origin "store")가 그린다.
+  // 학습 카드·모델 선택 변경은 onClearResult 로 낡은 문구를 지운다.
   const activate = useCallback(async (instanceId, version, rollback, origin) => {
     if (locked) {
       setVersionResult({ origin, ok: false, message: "진행 중인 작업이 끝난 뒤 다시 시도하세요." });
@@ -259,8 +257,12 @@ export default function OrchestratorPage() {
   };
 
   const pl = paginate(catalog.pipelines, plPage, PAGE_SIZE);
-  const storeAll = storeRows(versions, catalog.datasets, modelStore, demo);
-  const store = paginate(storeAll, storePage, PAGE_SIZE);
+  const storeInstance = catalog.instances.find((row) => row.id === versionInstanceId) ?? null;
+  const storeAll = storeRows(versions, catalog.datasets, modelStore, demo)
+    .filter((row) => !storeInstance || row.instanceId === storeInstance.id);
+  const store = usePager(storeAll, PAGE_SIZE, storeInstance?.id ?? "");
+  const storeResult = versionResult?.origin === "store" ? versionResult : null;
+  const auditLines = auditLogLines(catalog.audit);
   const runList = paginate(history, runPage, PAGE_SIZE);
   const activatedVersion = statusTarget?.kind === "modelops" && statusTarget.version?.status === "active" ? statusTarget.version : null;
 
@@ -438,13 +440,29 @@ export default function OrchestratorPage() {
         />
       )}
 
-      {/* ③ Model Store: 새 경로 버전 + (데모 ON) 이전 고정 모델 과거 버전(읽기 전용) */}
+      {/* ③ Model Store: 새 경로 버전 + (데모 ON) 이전 고정 모델 과거 버전(읽기 전용). 모델을 고르면 그 모델의
+          버전만 보이고, 행 끝에서 활성화·이전 버전 복원을 한다(과거 기록 행은 동작 없음). */}
       <Card
         title={<>Model Store<span className="title-tag">모델·실험 버전 이력</span><InfoTip label="모델 승급 기준" text={PROMOTION_RULE} /></>}
         icon="fa-boxes-stacked"
-        className="page-section"
+        className="page-section realdata-panel"
         dataSource="api"
       >
+        <div className="realdata-controls">
+          <label className="realdata-field"><span>모델 선택</span>
+            <select value={storeInstance?.id ?? ""} onChange={(event) => { clearVersionResult(); setVersionInstanceId(event.target.value); }}>
+              <option value="">전체 모델</option>
+              {catalog.instances.map((row) => <option key={row.id} value={row.id}>{instanceLabel(row, regionName)}</option>)}
+            </select>
+          </label>
+        </div>
+        {storeInstance && (
+          <p className="realdata-hint">
+            활성 버전: {storeInstance.active_version ? <code title={storeInstance.active_version}>{displayId(storeInstance.active_version)}</code> : "—"}
+            {" "}· 이전 버전: {storeInstance.previous_version ? <code title={storeInstance.previous_version}>{displayId(storeInstance.previous_version)}</code> : "—"}
+          </p>
+        )}
+        {storeResult && <p className={`async-feedback ${storeResult.ok ? "is-success" : "is-error"}`} role={storeResult.ok ? "status" : "alert"}>{storeResult.message}</p>}
         <div className="table-container">
           <table>
             <caption className="sr-only">모델과 실험의 버전 이력 및 운영 상태</caption>
@@ -453,10 +471,10 @@ export default function OrchestratorPage() {
                 <th scope="col">모델</th>
                 <th scope="col">버전</th>
                 <th scope="col">학습데이터</th>
-                <th scope="col">하이퍼파라미터</th>
                 <th scope="col" className="cell-num">MAE / 기준선 · Accuracy</th>
-                <th scope="col">상태</th>
+                <th scope="col" style={{ minWidth: 64 }}>상태</th>
                 <th scope="col">등록일</th>
+                <th scope="col" className="cell-actions">동작</th>
               </tr>
             </thead>
             <tbody>
@@ -472,43 +490,53 @@ export default function OrchestratorPage() {
                       <td style={{ fontSize: 13 }}>
                         <strong>{MODEL_REGISTRY.find((row) => row.id === m.modelId)?.name ?? m.modelId}</strong>
                         <div><code style={{ fontSize: 11, color: "var(--accent-purple-text)" }}>{orDash(m.modelId)}</code></div>
+                        <div style={{ fontSize: 11, color: "var(--text-secondary)" }} data-values-source="mock">{orDash(m.params)}</div>
                       </td>
                       <td><code style={{ fontSize: 12, fontWeight: 600 }} title={m.version}>{orDash(displayId(m.version))}</code></td>
                       <td style={{ fontSize: 12, color: "var(--text-secondary)" }} data-values-source="mock">{orDash(m.dataVersion)}</td>
-                      <td style={{ fontSize: 11, color: "var(--text-secondary)" }} data-values-source="mock">{orDash(m.params)}</td>
                       <td className="cell-num" style={{ fontWeight: 600 }}>{typeof m.accuracy === "number" ? `Acc ${m.accuracy.toFixed(3)}` : "–"}</td>
                       <td>
                         <span className="system-status" title={`과거 고정 모델입니다. 읽기 전용이며 새 파이프라인 대상이 아닙니다. 원래 상태: ${orDash(m.originalStatus)}`}
-                          style={{ padding: "1px 8px", fontSize: 10, color: STORE_STATUS.legacy.color, backgroundColor: STORE_STATUS.legacy.bg }}>
+                          style={{ padding: "1px 8px", fontSize: 10, whiteSpace: "nowrap", color: STORE_STATUS.legacy.color, backgroundColor: STORE_STATUS.legacy.bg }}>
                           {STORE_STATUS.legacy.label}
                         </span>
                       </td>
                       <td style={{ fontSize: 11, color: "var(--text-muted)" }} data-values-source="mock">{orDash(m.registeredAt)}</td>
+                      <td className="cell-actions"></td>
                     </tr>
                   );
                 }
                 const st = STORE_STATUS[m.status] ?? STORE_STATUS.candidate;
+                const version = versionById.get(m.version);
                 return (
                   <tr key={m.key} data-values-source="api" style={m.status === "active" ? { backgroundColor: "rgba(var(--accent-teal-rgb), 0.04)" } : undefined}>
                     <td style={{ fontSize: 13 }}>
                       <strong>{typeName(m.modelType)}</strong>
                       <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{regionName(m.regionId)} · {TARGET_LABELS[m.target] ?? m.target}</div>
+                      <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>선형 회귀 · 입력 피처 {m.featureCount}개</div>
                     </td>
                     <td><code style={{ fontSize: 12, fontWeight: 600 }} title={m.version}>{displayId(m.version)}</code></td>
                     <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>
                       {orDash(m.datasetName)}<div style={{ fontSize: 11 }} title={m.datasetHash}>{String(m.datasetHash ?? "").slice(0, 12)}</div>
                     </td>
-                    <td style={{ fontSize: 11, color: "var(--text-secondary)" }}>선형 회귀 · 입력 피처 {m.featureCount}개</td>
                     <td className="cell-num" style={{ fontWeight: 600 }}>MAE {metric(m.mae, m.target)} / {metric(m.baselineMae, m.target)}</td>
-                    <td><span className="system-status" style={{ padding: "1px 8px", fontSize: 10, color: st.color, backgroundColor: st.bg }}>{st.label}</span></td>
-                    <td style={{ fontSize: 11, color: "var(--text-muted)" }}>{orDash(day(m.createdAt))}</td>
+                    <td><span className="system-status" style={{ padding: "1px 8px", fontSize: 10, whiteSpace: "nowrap", color: st.color, backgroundColor: st.bg }}>{st.label}</span></td>
+                    <td style={{ fontSize: 11, color: "var(--text-muted)", whiteSpace: "nowrap" }}>{orDash(day(m.createdAt))}</td>
+                    <td className="cell-actions">
+                      <span className="store-actions">
+                        <button className="btn btn-secondary" disabled={locked || m.status === "active" || !version}
+                          onClick={() => activate(m.instanceId, version, false, "store")} aria-label={`${displayId(m.version)} 버전 활성화`}>활성화</button>
+                        <button className="btn btn-secondary" disabled={locked || m.status !== "previous" || !version}
+                          onClick={() => activate(m.instanceId, version, true, "store")} aria-label={`${displayId(m.version)} 이전 버전 복원`}>이전 버전 복원</button>
+                      </span>
+                    </td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
         </div>
-        <TablePager page={store.safePage} totalPages={store.totalPages} totalCount={storeAll.length} pageSize={PAGE_SIZE} onChange={setStorePage} />
+        <TablePager {...store.pager} />
       </Card>
 
       {/* ④ 실행 이력 — 새 경로 학습 작업 + (데모 ON) 이전 경로 과거 기록. 행을 고르면 ②·⑤가 그 실행을 보여준다. */}
@@ -606,18 +634,14 @@ export default function OrchestratorPage() {
         <ConsoleLog logs={consoleLogs} />
       </Card>
 
-      {/* ⑥ 모델 버전 관리 — 등록 모델(종류·지역·학습 대상)별 버전 활성화·이전 버전 복원, 최근 운영 기록 */}
-      <ModelVersionSection
-        catalog={catalog}
-        versions={versions}
-        regionName={regionName}
-        busy={locked}
-        instanceId={versionInstanceId}
-        onSelectInstance={setVersionInstanceId}
-        onActivate={(instanceId, version, rollback) => activate(instanceId, version, rollback, "versions")}
-        versionResult={versionResult}
-        onClearResult={clearVersionResult}
-      />
+      {/* ⑥ 최근 운영 기록 — 등록·학습·활성화·복원 감사 기록(버전 활성화·복원은 ③ Model Store에서) */}
+      <Card title="최근 운영 기록" icon="fa-clock-rotate-left" className="page-section" dataSource="api">
+        {auditLines.length ? <ConsoleLog logs={auditLines} height={220} /> : (
+          <p className="pipeline-empty">
+            <i className="fa-solid fa-circle-info" aria-hidden="true"></i>{" "}아직 운영 기록이 없습니다.
+          </p>
+        )}
+      </Card>
     </>
   );
 }

@@ -74,6 +74,9 @@ const merged = mergeRunHistory(jobs, legacy, true, [{ id: "p1", trigger_policy: 
 assert.deepEqual(merged.map((row) => row.key), ["modelops:j2", "legacy:j2", "modelops:j1"]);
 assert.deepEqual(merged.map((row) => row.readOnly), [false, true, false]);
 assert.equal(merged[2].pipelineMissing, true);
+// 같은 과거 기록이 두 번 와도 행은 하나(키 중복이면 React 행이 남아 쪽 행 수가 "1–5건 표시"와 어긋난다)
+assert.deepEqual(mergeRunHistory(jobs, [...legacy, ...legacy], true, []).map((row) => row.key), ["modelops:j2", "legacy:j2", "modelops:j1"]);
+assert.equal(storeRows([], [], [{ modelId: "m", version: "v1" }, { modelId: "m", version: "v1" }], true).length, 1);
 assert.equal(lastJobOf({ id: "p1" }, jobs).id, "j2");
 assert.equal(lastJobOf({ id: "none" }, jobs), null);
 
@@ -126,12 +129,16 @@ assert.equal(auditLines.at(-1).time, "10-16 14:59:05");assert.equal(auditLines[0
 assert.equal(auditLogLines([{ action: "unknown", asset_id: "x", actor: "a", created_at: "bad" }])[0].message, "운영 기록 — x · a");
 assert.equal(auditTime("bad"), "bad");
 assert.deepEqual(auditLogLines(), []);
-// ⑥ 구조: 종류 카드 삭제, 운영 기록은 콘솔 패널, 카드 간격은 다른 카드와 같은 page-section
-const section = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "components", "ModelVersionSection.jsx"), "utf-8");
-assert.doesNotMatch(section, /MODEL_TYPES\.map|aria-label="모델 종류"|버전 보기|grid-cols-2|selectedType/);
-assert.equal(section.match(/<ConsoleLog /g)?.length, 1);
-assert.equal(section.match(/className="page-section/g)?.length, 2);
-assert.match(section, /instanceLabel\(row, regionName\)/);
+// U4 Model Store 통합: 모델 버전 관리 카드 없음, 최근 운영 기록 카드 1개(콘솔 패널), Model Store 위 모델 선택(기본 전체 모델)·
+// 행 끝 활성화/이전 버전 복원(과거 기록 행은 빈 칸), 하이퍼파라미터는 모델 칸 아랫줄
+const orchestratorSrc = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "pages", "OrchestratorPage.jsx"), "utf-8");
+assert.doesNotMatch(orchestratorSrc, /ModelVersionSection|title="모델 버전 관리"|<th scope="col">하이퍼파라미터<\/th>/);
+assert.equal(orchestratorSrc.match(/title="최근 운영 기록"/g)?.length, 1);
+assert.match(orchestratorSrc, /<option value="">전체 모델<\/option>\s*\{catalog\.instances\.map\(\(row\) => <option key=\{row\.id\} value=\{row\.id\}>\{instanceLabel\(row, regionName\)\}/);
+assert.match(orchestratorSrc, /activate\(m\.instanceId, version, false, "store"\)[\s\S]*activate\(m\.instanceId, version, true, "store"\)/);
+assert.match(orchestratorSrc, /<td style=\{\{ fontSize: 11, color: "var\(--text-muted\)" \}\} data-values-source="mock">\{orDash\(m\.registeredAt\)\}<\/td>\s*<td className="cell-actions"><\/td>/);
+assert.equal(orchestratorSrc.match(/whiteSpace: "nowrap", color: (?:st|STORE_STATUS\.legacy)\.color/g)?.length, 2); // U5 상태 칩 한 줄
+assert.match(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "components", "realdata", "RealdataTrainingPanel.jsx"), "utf-8"), /\[Model Store\]에서 활성화/);
 // 화면용 짧은 ID(공용) — 내부 접두사를 떼고 끝 8자(끝 조각 6~7자면 그 전체), 접두사가 없거나 짧으면 그대로. ⑥·Model Store·실행 이력이 같은 함수를 쓰고 title 에 전체 ID.
 assert.equal(displayId("modelops_881abc0123456789abcdef0123456789"), "…23456789");
 assert.equal(displayId("demo_factor_5f2e9a"), "…5f2e9a");assert.equal(displayId("demo_factor_5f2e9a1"), "…5f2e9a1");
@@ -143,7 +150,6 @@ assert.equal(displayId("phaseb_20261014_f5892bd59f08425989dc5b12f42a4acb"), "…
 assert.equal(displayId("phaseb_20261014_real_observed_sales_krw"), "phaseb_20261014_real_observed_sales_krw");
 const orchestratorPage = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "pages", "OrchestratorPage.jsx"), "utf-8");
 const trainingPanel = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "components", "realdata", "RealdataTrainingPanel.jsx"), "utf-8");
-assert.match(section, /<code title=\{id\}>\{displayId\(id\)\}<\/code>/);
 assert.match(orchestratorPage, /title=\{m\.version\}>\{displayId\(m\.version\)\}/);
 assert.doesNotMatch(orchestratorPage, /versionId\.slice|active_version\?\.slice|m\.version\.slice/);
 // 내부 접두사만 뗀다 — 카드 파이프라인은 card-<종류>-, 사용자 ID·과거 기록 ID는 그대로
@@ -170,7 +176,7 @@ const rawIds = (text) => {
 const src = (...parts) => readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", ...parts), "utf-8");
 const modelopsLib = src("lib", "modelops.js");
 const guarded = {
-  "pages/OrchestratorPage.jsx": orchestratorPage, "components/realdata/RealdataTrainingPanel.jsx": trainingPanel, "components/ModelVersionSection.jsx": section,
+  "pages/OrchestratorPage.jsx": orchestratorPage, "components/realdata/RealdataTrainingPanel.jsx": trainingPanel,
   "components/PipelineStatusCard.jsx": src("components", "PipelineStatusCard.jsx"), "components/FactorAnalysisStage.jsx": src("components", "FactorAnalysisStage.jsx"),
   "pages/SimulatorPage.jsx": src("pages", "SimulatorPage.jsx"), "hooks/useFactorAnalysis.js": src("hooks", "useFactorAnalysis.js"),
   "lib/modelops.js(로그 줄)": modelopsLib.slice(modelopsLib.indexOf("export function jobLogLines"), modelopsLib.indexOf("export function storeRows"))
@@ -187,9 +193,8 @@ assert.deepEqual(rawIds("<code title={c.id}>{displayId(c.id)}</code> key={`model
 // ③ 계산 근거는 전체 ID 유지(예외)
 assert.match(src("components", "ModelEvidence.jsx"), /\{p\.version_id\}/);
 // MAE·기준선(Model Store·⑥ 버전 표·실행 이력)은 학습 대상 단위 규칙 — 명·원 정수 천 단위, % 소수 1~2자리
-for (const text of [orchestratorPage, section]) { assert.match(text, /formatUnitValue\(value, targetUnit\(target\)\)/); assert.doesNotMatch(text, /maximumFractionDigits: 3/); }
+for (const text of [orchestratorPage]) { assert.match(text, /formatUnitValue\(value, targetUnit\(target\)\)/); assert.doesNotMatch(text, /maximumFractionDigits: 3/); }
 assert.equal(orchestratorPage.match(/metric\([^)]*mae[^)]*, (?:m|version)\.target\)/gi)?.length, 4);
-assert.match(section, /metric\(row\.metrics\.mae, row\.target\)\} \/ \{metric\(row\.baseline\.mae, row\.target\)/);
 // 빠른 학습(옛 데이터 학습 카드)은 재학습 파이프라인 카드 안에 있다 — 별도 카드·후보 반영 표 없이 ⑥ 버전 관리가 활성화를 맡는다.
 assert.doesNotMatch(trainingPanel, /<Card|<table|onActivate|decide\(/);
 assert.match(orchestratorPage, /title="등록된 재학습 파이프라인"[\s\S]*<RealdataTrainingPanel[\s\S]*<\/Card>\s*\{\/\* ② 실행 상태/);

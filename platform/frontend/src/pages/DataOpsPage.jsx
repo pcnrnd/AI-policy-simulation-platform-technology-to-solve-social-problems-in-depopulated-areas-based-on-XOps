@@ -13,6 +13,7 @@ import FilterBuilder from "../components/FilterBuilder.jsx";
 import TrainingDatasetRegistration from "../components/TrainingDatasetRegistration.jsx";
 import { useAppState } from "../context/AppStateContext.jsx";
 import { apiGet, apiSend } from "../lib/api.js";
+import { formatClock, formatDateTime } from "../lib/reportContent.js";
 import { filterValidationMessage } from "../lib/filterExpression.js";
 import { HTTP_METHODS, AUTH_METHODS, adapterOf, buildQuery } from "../lib/dataopsApi.js";
 import { getScrollBehavior } from "../lib/motion.js";
@@ -82,7 +83,7 @@ function fromServerApi(api) {
     page: api.page,
     pageSize: api.page_size,
     authMethod: api.auth_method,
-    createdAt: new Date(api.created_at).toLocaleString("ko-KR", { hour12: false })
+    createdAt: formatDateTime(api.created_at)
   };
 }
 
@@ -150,6 +151,12 @@ function AsyncFeedback({ feedback }) {
   );
 }
 
+/** 화면용 토큰 — 앞 12자·뒤 6자만(짧으면 그대로 두지 않고 앞 4자만). */
+const maskToken = (token) => {
+  const text = String(token ?? "");
+  return text.length > 24 ? `${text.slice(0, 12)}…${text.slice(-6)}` : `${text.slice(0, 4)}…`;
+};
+
 // 메타데이터 가상화 라우팅 단계 — 저장소 유형(RDB/NoSQL)에 따라 쿼리 언어(SQL/MQL)가 달라진다.
 function RoutingFlow({ method, source, adapter, queryLang }) {
   const range = source.range;
@@ -201,6 +208,8 @@ export default function DataOpsPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [token, setToken] = useState(null);
+  const [tokenCopied, setTokenCopied] = useState(false);
+  useEffect(() => setTokenCopied(false), [token]); // 새 토큰이면 "복사됨" 표시를 지운다
   const [authMethod, setAuthMethod] = useState("JWT");
   const [responseText, setResponseText] = useState(READY_RESPONSE);
   const [apiMs, setApiMs] = useState(null);
@@ -363,6 +372,15 @@ export default function DataOpsPage() {
     return true;
   };
 
+  const handleCopyToken = async () => {
+    try {
+      await navigator.clipboard.writeText(token);
+      setTokenCopied(true);
+    } catch {
+      setAsyncFeedback({ tone: "error", message: "토큰을 복사하지 못했습니다. 브라우저의 클립보드 권한을 허용한 뒤 다시 누르세요." });
+    }
+  };
+
   // 쓰기(등록·삭제·API 빌드) 직전에 토큰을 확보한다. 예전에는 사용자가 STEP ③까지 내려가
   // [토큰 발급]을 먼저 눌러야 등록 버튼이 살아났고, 그 사실을 모르면 "등록이 안 된다"로 보였다.
   // 보안 경계는 그대로 서버의 data:write scope 검사다 — 화면에서 미리 막는 대신 필요할 때 받는다.
@@ -486,7 +504,7 @@ export default function DataOpsPage() {
     setAsyncFeedback({ tone: "pending", message: `${cfg.method} 요청을 전송하는 중입니다.` });
     setApiMs(null);
     setResponseText(`Sending ${cfg.method} request...`);
-    setSentAt(new Date().toLocaleTimeString("ko-KR", { hour12: false }));
+    setSentAt(formatClock());
 
     const result = await executeRequest(cfg);
     const elapsed = performance.now() - start;
@@ -592,7 +610,7 @@ export default function DataOpsPage() {
       apiId: api.id,
       text: JSON.stringify(result.body, null, 2),
       ms: elapsed,
-      time: new Date().toLocaleTimeString("ko-KR", { hour12: false }),
+      time: formatClock(),
       ok: result.ok,
       degrade: degradeReasonOf(result.body)
     });
@@ -1017,11 +1035,11 @@ export default function DataOpsPage() {
                       </td>
                       <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>{s.source}</td>
                       <td>
-                        <code style={{ fontSize: 11, color: "var(--accent-purple-text)" }}>{s.object}</code>
+                        <code className="catalog-cell-clip" style={{ fontSize: 11, color: "var(--accent-purple-text)" }} title={s.object}>{s.object}</code>
                       </td>
                       <td style={{ fontSize: 11, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
                         {s.range ? (
-                          <span title={`조회에 적용할 적재 범위 (${s.range.column})`}>
+                          <span className="catalog-cell-clip" title={`조회에 적용할 적재 범위 (${s.range.column}) ${s.range.from}~${s.range.to}`}>
                             <code style={{ fontSize: 10 }}>{s.range.column}</code> {s.range.from}~{s.range.to}
                           </span>
                         ) : (
@@ -1047,7 +1065,7 @@ export default function DataOpsPage() {
                       <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>
                         {s.archive?.retention ?? "–"}
                       </td>
-                      <td style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                      <td style={{ fontSize: 12, color: "var(--text-muted)", whiteSpace: "nowrap" }}>
                         {s.archive?.loaded_at ?? "–"}
                       </td>
                       <td className="cell-num" style={{ color: "var(--text-muted)" }}>
@@ -1237,7 +1255,15 @@ export default function DataOpsPage() {
                     OAuth2 Authorization Code Grant: 인가코드 발급 → access_token(JWT) 교환 흐름.
                   </div>
                 )}
-                {token && <code className="token-line">Authorization: Bearer {token}</code>}
+                {/* 토큰은 앞뒤 일부만 보이고, 전체 값은 [복사]로만 꺼낸다(화면·캡처에 전체 토큰을 남기지 않는다). */}
+                {token && (
+                  <div className="token-line">
+                    <code title="전체 토큰은 [복사]로 가져갑니다">Authorization: Bearer {maskToken(token)}</code>
+                    <button type="button" className="btn btn-secondary token-copy-btn" onClick={handleCopyToken} aria-label="전체 토큰 복사">
+                      <i className="fa-solid fa-copy" aria-hidden="true"></i> {tokenCopied ? "복사됨" : "복사"}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1447,7 +1473,7 @@ export default function DataOpsPage() {
                           <td style={{ fontSize: 12 }}>{api.sourceLabel}</td>
                           <td style={{ fontSize: 11, color: "var(--text-secondary)" }}>{querySummary}</td>
                           <td style={{ fontSize: 11, color: "var(--text-secondary)" }}>{api.authMethod}</td>
-                          <td style={{ fontSize: 11, color: "var(--text-muted)" }}>{api.createdAt}</td>
+                          <td style={{ fontSize: 11, color: "var(--text-muted)", whiteSpace: "nowrap" }}>{api.createdAt}</td>
                           <td>
                             <span
                               className="system-status"
@@ -1465,7 +1491,7 @@ export default function DataOpsPage() {
                                 className={`fa-solid ${sourceAvailable ? "fa-circle-check" : "fa-triangle-exclamation"}`}
                                 aria-hidden="true"
                               ></i>{" "}
-                              {sourceAvailable ? "Active" : "원천 없음"}
+                              {sourceAvailable ? "활성" : "원천 없음"}
                             </span>
                           </td>
                           <td className="cell-actions">

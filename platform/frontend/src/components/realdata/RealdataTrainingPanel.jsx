@@ -1,6 +1,6 @@
 // 빠른 학습 — 재학습 파이프라인 카드 안의 단축 경로(스냅샷 생성 → 파이프라인 자동 연결 → 실행).
 // 2026-10-22 별도 "데이터 학습" 카드를 합쳤다: [학습 실행]은 파이프라인 [실행]과 같은 runPipeline 이고,
-// 후보 반영·복원은 ⑥ 모델 버전 관리의 활성화·이전 버전 복원과 같은 API라 표를 두지 않는다.
+// 후보 반영·복원은 ③ Model Store 행의 활성화·이전 버전 복원과 같은 API라 표를 두지 않는다.
 // 뒷단은 /api/v3/modelops/*이고, 카탈로그와 작업 폴링은 오케스트레이터 페이지가 소유한다.
 // [스냅샷 생성]은 현재 모드의 원본을 동결한 등록 학습데이터를 만든다. 실데이터 모드에서는 먼저
 // 실데이터 스냅샷(POST /realdata/datasets)을 만들어 그 최신 관측을 원본으로 쓴다.
@@ -141,7 +141,7 @@ export default function RealdataTrainingPanel({ catalog, demoVisible, regionName
       {instance && (
         <p className="realdata-hint">
           활성 버전: <code title={instance.active_version ?? undefined}>{orDash(displayId(instance.active_version))}</code>
-          {" "}· 학습이 끝난 후보는 아래 [모델 버전 관리]에서 활성화합니다.
+          {" "}· 학습이 끝난 후보는 [Model Store]에서 활성화합니다.
         </p>
       )}
       {cardJob && (

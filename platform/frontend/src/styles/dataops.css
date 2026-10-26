@@ -243,6 +243,8 @@
 
 /* 카탈로그 태그 칩 */
 .catalog-tag-chip {
+  display: inline-block;
+  white-space: nowrap; /* 태그 글자 중간 줄바꿈 금지 — 칩 단위로만 다음 줄로 */
   margin-left: 6px;
   font-size: 10px;
   color: var(--accent-purple-text);
@@ -288,24 +290,21 @@
   display: grid;
   grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
   gap: 24px;
-  align-items: start;
+  align-items: stretch;
 }
-/* 응답 카드는 좌측 폼 스크롤 동안 따라오도록 고정 */
+/* 같은 줄 두 카드 높이를 맞춘다 — 응답 영역이 남은 높이를 채우고 긴 응답은 안에서 스크롤 */
 .dataops-resp-card {
-  position: sticky;
-  top: 16px;
+  display: flex;
+  flex-direction: column;
 }
 .dataops-builder-grid .api-response {
-  height: auto;
+  flex: 1 1 auto;
+  height: 0;
   min-height: 380px;
-  max-height: 560px;
 }
 @media (max-width: 1100px) {
   .dataops-builder-grid {
     grid-template-columns: 1fr;
-  }
-  .dataops-resp-card {
-    position: static;
   }
   .dataops-builder-grid .api-response {
     min-height: 220px;
@@ -401,6 +400,25 @@
   vertical-align: middle;
 }
 
+/* 1280 폭에서 카탈로그 표가 넘치지 않게 긴 객체명·수집 범위는 말줄임(전체 값은 title) */
+.catalog-table th {
+  white-space: nowrap;
+}
+/* 9열 표 — 좌우 여백을 줄여 1280 폭 카드(약 900px) 안에 맞춘다. */
+.catalog-table th,
+.catalog-table td {
+  padding-left: 10px;
+  padding-right: 10px;
+}
+.catalog-cell-clip {
+  display: inline-block;
+  max-width: 132px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
 /* 데이터 소스 카탈로그 선택 행 */
 .catalog-table tbody tr {
   transition: background-color var(--transition-fast);
@@ -488,12 +506,20 @@
 }
 
 .token-line {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   margin-top: 8px;
   font-size: 10px;
   color: var(--accent-purple-text);
   word-break: break-all;
   line-height: 1.4;
+}
+.token-line .token-copy-btn {
+  flex-shrink: 0;
+  padding: 2px 10px;
+  font-size: 11px;
 }
 
 /* 라벨이 붙은 인라인 숫자 필드 */
@@ -536,10 +562,13 @@
   margin-bottom: 10px;
 }
 
+/* 5단계를 한 줄에 둔 채 단계 상자를 폭에 맞춰 줄인다(1280에서 가로 스크롤 없이 모두 보이게). */
 .routing-step-wrap {
   display: flex;
   align-items: center;
   gap: 4px;
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .routing-step {
@@ -548,8 +577,9 @@
   align-items: center;
   justify-content: center;
   gap: 3px;
-  min-width: 92px;
-  padding: 8px 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 8px 4px;
   border-radius: 8px;
   background: var(--bg-card);
   border: 1px solid var(--border-color);
@@ -572,6 +602,7 @@
   color: var(--text-muted);
   line-height: 1.3;
   word-break: keep-all;
+  overflow-wrap: anywhere;
 }
 
 .routing-arrow {

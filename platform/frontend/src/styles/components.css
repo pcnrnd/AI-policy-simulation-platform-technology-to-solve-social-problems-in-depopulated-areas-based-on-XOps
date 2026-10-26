@@ -28,6 +28,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px; /* 제목과 오른쪽 컨트롤이 맞붙지 않게 */
   /* 우측 컨트롤(select 등) 유무와 무관하게 헤더 높이·제목 위치 통일 */
   min-height: 36px;
   margin-bottom: 20px;
@@ -52,6 +53,20 @@
 }
 
 .card-title i { color: var(--accent-blue); }
+
+/* 대시보드 정책 영향 프로파일 — 선택 상자는 줄이지 않고 긴 제목만 말줄임해 한 줄을 유지한다. */
+.policy-profile-card .card-title {
+  min-width: 0;
+}
+.policy-profile-card .card-title-side {
+  flex-shrink: 0;
+}
+.policy-profile-card .card-title-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
 
 /* 제목 옆 태그 — 제목 뒤 "— 부제·상태" 문구 대신 쓴다. 색은 상태 태그만 인라인(tone)으로 덮어쓴다. */
 .title-tag {
@@ -410,6 +425,17 @@ th.cell-actions,
 td.cell-actions {
   text-align: right;
   white-space: nowrap;
+}
+
+/* Model Store 행 동작 — 두 버튼을 세로로 쌓아 1280 폭에서 표가 넘치지 않게 한다. */
+.store-actions {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.store-actions .btn {
+  padding: 3px 10px;
+  font-size: 11px;
 }
 
 .table-row-action {

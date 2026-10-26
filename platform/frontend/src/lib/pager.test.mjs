@@ -32,4 +32,6 @@ assert.equal(dataops.match(/nextPage: nextIndexAfterDelete >= 0 \? pageOfIndex\(
 assert.match(dataops, /syncPagerState\(schemaPage, target\.id\)/);
 assert.match(src("components", "SimulatorMap.jsx"), /usePager\(allowSeed \? buildRegionGrid\(currentRegion\) : \[\], undefined, currentRegion\.id\)/);
 assert.match(src("components", "TablePager.jsx"), /const synced = syncPagerState\(state, resetKey\);\s*if \(synced !== state\) setState\(synced\);/);
+// 0건 목록: 범위("0–0건") 없이 "총 0건"만, 페이저 줄은 그대로 렌더한다.
+assert.match(src("components", "TablePager.jsx"), /총 \{totalCount\}건\{totalCount > 0 && ` · \$\{first\}–\$\{last\}건 표시`\}/);
 console.log("pager: 5개 단위 슬라이스·삭제 후 이동 쪽·대상 변경 시 1쪽(A→B→A 포함)·DataOps/지도 격자/usePager 연결 PASS");

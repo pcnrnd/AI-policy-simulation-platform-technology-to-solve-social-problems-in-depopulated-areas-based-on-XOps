@@ -33,6 +33,9 @@ const FORBIDDEN = /mock|seed|시드|경로|modelops|\/api\/|정책 변수|VITE_|
 const shown = [true, false].flatMap((on) => [modeBadge(on).text, modeBadge(on).title, modeSwitchLog(on)]);
 const guides = [REAL_GUIDE_TEXT, realUnavailableText("지자체 비교 분포는"), REAL_CONTROLS_LOCK_TEXT, FACTOR_GUIDE_TEXT, FACTOR_PENDING_TEXT];
 for (const text of [...shown, ...guides]) assert.doesNotMatch(text, FORBIDDEN, text);
+// U19: 시뮬레이터 분포 카드·지도 시설물/격자 안내는 행동 안내만("제공되지 않습니다" 금지)
+assert.doesNotMatch(realUnavailableText("지자체 비교 분포는"), /제공되지|아직/);
+assert.match(realUnavailableText("시설물·격자 정보는"), /^시설물·격자 정보는 설정에서 '데모 데이터 표시'를 켜면/);
 // 알림 문구: 서버·브라우저 원문은 고정 문구로, 사용자용 한글 안내(4xx·화면 코드)는 그대로
 const FALLBACK = "잠시 뒤 다시 시도하세요.";
 const httpError = (status, message) => Object.assign(new Error(message), { status });
@@ -80,4 +83,18 @@ for (const text of emptyHints) {
   assert.match(text ?? "", /면 [^.]*표시됩니다\.$/, text);
   assert.doesNotMatch(text, /미구현|구현되지 않|지원하지 않|제한|mock|seed|시드|경로|\/api\//i, text);
 }
+// 리포터(U22·U23): 템플릿 상자 제목 "보고서 데이터", 주소 대신 데이터 이름, 실무자 팁은 행동 안내만
+const reporterScreen = reporterPage.replace(/\/\/.*$/gm, "").replace(/\{\/\*[\s\S]*?\*\/\}/g, "");
+assert.match(reporterScreen, /\{" "\}\s*보고서 데이터\s*<\/div>/);
+assert.doesNotMatch(reporterScreen, /엔드포인트|Data source API|regionBinding\?\.source|OOXML|콘솔|보안 정책|오전|오후/);
+assert.match(reporterScreen, /브라우저 다운로드 폴더에/);
+// 대시보드(U16~U18): 제목·선택 상자 간격 12px·제목만 말줄임, 도넛 범례 7색 이상 중복 없음, 레이더 위 안내 겹침 없음(요약 한 곳)
+const overview = srcText("pages/Overview.jsx");
+const palette = overview.match(/const SOURCE_PALETTE = \[([\s\S]*?)\];/)[1].match(/rgba\([^)]*\)/g).map((c) => c.replace(/, [\d.]+\)$/, ")"));
+assert.ok(palette.length >= 7);
+assert.equal(new Set(palette).size, palette.length);
+assert.match(overview, /<Radar data=\{radarData\} options=\{radarOpts\} \/>\s*<\/div>/);
+assert.equal(overview.match(/radarSummary === null\s*\? DEMO_ONLY_HINT/g)?.length, 1);
+assert.match(srcText("styles/components.css"), /\.card-title-area \{[^}]*gap: 12px;/);
+assert.match(srcText("styles/components.css"), /\.policy-profile-card \.card-title-text \{[^}]*text-overflow: ellipsis;/);
 console.log("dataMode: 전환 요청 취소·epoch 격리·추천 저장키·mock 보고서 실측 호출 0·real 보고서 시드 값 차단·모드 배지 문구·화면 문구 금지어·알림 원문 차단 PASS");

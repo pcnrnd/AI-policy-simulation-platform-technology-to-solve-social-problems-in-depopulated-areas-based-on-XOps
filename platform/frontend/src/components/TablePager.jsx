@@ -5,13 +5,14 @@ import { LIST_PAGE_SIZE, paginate, syncPagerState } from "../lib/pager.js";
 export { LIST_PAGE_SIZE, paginate };
 
 // 테이블 하단 페이저 — 한 페이지뿐이어도 전체 건수와 현재 표시 범위를 유지한다.
+// 0건이면 범위 없이 "총 0건"만 두고 이전/다음은 비활성으로 자리를 지킨다.
 export default function TablePager({ page, totalPages, totalCount, pageSize = 5, onChange }) {
-  const first = totalCount === 0 ? 0 : (page - 1) * pageSize + 1;
+  const first = (page - 1) * pageSize + 1;
   const last = Math.min(totalCount, page * pageSize);
   return (
     <nav className="table-pager" aria-label="표 페이지 탐색">
       <span className="table-pager-info" aria-live="polite">
-        총 {totalCount}건 · {first}–{last}건 표시
+        총 {totalCount}건{totalCount > 0 && ` · ${first}–${last}건 표시`}
       </span>
       {/* 이전·쪽수·다음은 한 묶음 — 좁은 카드에서 줄바꿈돼도 버튼이 갈라지지 않는다. */}
       <span className="table-pager-nav">

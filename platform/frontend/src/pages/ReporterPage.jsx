@@ -5,6 +5,7 @@ import {
   buildReportBlocks,
   buildReportRows,
   blocksToMarkdown,
+  formatClock,
   formatMetric,
   formatReportTimestamp,
   reportGateMode
@@ -16,6 +17,7 @@ import {
   downloadBlob
 } from "../lib/reportExport.js";
 import { fetchReportData } from "../lib/dataopsApi.js";
+import { REALDATA_MODEL_LABELS } from "../constants/models.js";
 import { alertText } from "../lib/alertText.js";
 
 const EXPORT_FORMATS = [
@@ -171,7 +173,7 @@ export default function ReporterPage() {
           return;
         }
         setBinding(result);
-        setLastUpdated(new Date().toLocaleTimeString("ko-KR"));
+        setLastUpdated(formatClock());
         // 여기까지 왔으면 바인딩이 있다 — 데모 토글과 무관하게 실데이터 기준 성공 문구를 쓴다.
         setBindingFeedback({ tone: "success", message: `${region.name} 데이터를 갱신했습니다.` });
         addConsoleLog(
@@ -316,15 +318,16 @@ export default function ReporterPage() {
           >
             <div style={{ fontSize: 12, fontWeight: 600 }}>
               <i className="fa-solid fa-link" style={{ color: "var(--accent-teal)" }}></i>{" "}
-              템플릿 가변 저장 구조 — Data source API 자동 바인딩
+              보고서 데이터
             </div>
           </div>
           <div className="mock-data-output" style={{ fontSize: 11, color: "var(--text-secondary)", lineHeight: 1.6 }}>
+            {/* 주소 대신 사람이 읽는 데이터 이름 — 활성 모델의 검증 지표 */}
             <div>
-              엔드포인트:{" "}
-              <code style={{ color: "var(--accent-blue)" }}>
-                {regionBinding?.source ?? "—"}
-              </code>
+              데이터:{" "}
+              <strong style={{ color: "var(--accent-blue)" }}>
+                {regionBinding ? `${REALDATA_MODEL_LABELS[regionBinding.modelId] ?? region.name} 검증 지표` : "—"}
+              </strong>
             </div>
             <div>마지막 갱신: {lastUpdated ?? "—"}</div>
           </div>
@@ -433,10 +436,9 @@ export default function ReporterPage() {
             <i className="fa-solid fa-circle-info"></i> 지자체 실무자 팁
           </div>
           <div style={{ fontSize: 11, color: "var(--text-secondary)", lineHeight: 1.5 }}>
-            Word(.docx)·Excel(.xlsx)는 OOXML 규격으로, HTML(.html)은 웹 문서 형식으로 즉시
-            저장됩니다. 정량 성과 지표 텍스트와 표가 모두 자동 기입됩니다. 동일 파일명 재저장 시{" "}
-            <code>_(1)</code> 형식으로 자동 증분되며, 저장 실패 시 콘솔에 오류가 기록됩니다.
-            (브라우저 보안 정책상 저장 경로는 브라우저 다운로드 폴더로 고정됩니다.)
+            형식을 고르고 저장하면 Word(.docx)·Excel(.xlsx)·HTML(.html) 파일이 브라우저 다운로드 폴더에
+            저장됩니다. 정량 성과 지표 텍스트와 표가 모두 자동 기입됩니다. 같은 이름으로 다시 저장하면 파일명 끝에{" "}
+            <code>_(1)</code>이 붙으니, 다운로드 폴더에서 최신 파일을 확인하세요.
           </div>
         </div>
       </Card>
