@@ -83,6 +83,11 @@ for (const text of emptyHints) {
   assert.match(text ?? "", /면 [^.]*표시됩니다\.$/, text);
   assert.doesNotMatch(text, /미구현|구현되지 않|지원하지 않|제한|mock|seed|시드|경로|\/api\//i, text);
 }
+// 리포터(U22·U23): 템플릿 상자 제목 "보고서 데이터", 주소 대신 데이터 이름, 실무자 팁은 행동 안내만
+const reporterScreen = reporterPage.replace(/\/\/.*$/gm, "").replace(/\{\/\*[\s\S]*?\*\/\}/g, "");
+assert.match(reporterScreen, /\{" "\}\s*보고서 데이터\s*<\/div>/);
+assert.doesNotMatch(reporterScreen, /엔드포인트|Data source API|regionBinding\?\.source|OOXML|콘솔|보안 정책|오전|오후/);
+assert.match(reporterScreen, /브라우저 다운로드 폴더에/);
 // 대시보드(U16~U18): 제목·선택 상자 간격 12px·제목만 말줄임, 도넛 범례 7색 이상 중복 없음, 레이더 위 안내 겹침 없음(요약 한 곳)
 const overview = srcText("pages/Overview.jsx");
 const palette = overview.match(/const SOURCE_PALETTE = \[([\s\S]*?)\];/)[1].match(/rgba\([^)]*\)/g).map((c) => c.replace(/, [\d.]+\)$/, ")"));
