@@ -613,12 +613,14 @@ export default function MonitorPage() {
     ? {
         label: "모델 MAE / 기준선 MAE",
         tip: `선택한 실데이터 모델의 검증 MAE와 같은 구간 ${baselineLabel ? `기준선(${baselineLabel})` : "기준선"} MAE입니다. MAE가 기준선보다 낮아야 학습 모델이 이긴 것입니다.`,
-        trailing: `기준선: ${f1Val}`
+        valueLabel: "MAE",
+        trailing: `기준선 ${f1Val}`
       }
     : {
         label: "모델 정확도 / F1 점수",
         tip: "운영 중인 모델의 정확도(Accuracy)와 정밀도·재현율의 조화평균(F1-Score). 재학습 승급 시 두 값이 함께 갱신됩니다.",
-        trailing: `F1: ${f1Val}`
+        valueLabel: "정확도",
+        trailing: `F1 점수 ${f1Val}`
       };
 
   // PSI·드리프트 판정은 백엔드 실계산값(driftResp) 사용.
@@ -900,10 +902,13 @@ export default function MonitorPage() {
               marginTop: 10
             }}
           >
-            <span className="stat-value" style={{ fontSize: 32 }}>
-              {accVal}
+            <span>
+              <span className="stat-label" style={{ marginRight: 8 }}>{primaryCard.valueLabel}</span>
+              <span className="stat-value" style={{ fontSize: 32 }}>
+                {accVal}
+              </span>
             </span>
-            <span className="trend-up">{primaryCard.trailing}</span>
+            <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>{primaryCard.trailing}</span>
           </div>
         </div>
 
@@ -953,14 +958,14 @@ export default function MonitorPage() {
           data-values-source={srcOf(outlierMeasured)}
         >
           <div className="stat-label">
-            이상값 검출(Z점수)
+            이상값 검출(z-score)
             <InfoTip
               text={
                 outlierMeasured
-                  ? `백엔드 이상치 판정 API가 실측 학습 실행 ${measuredLabels.length}건의 Accuracy 계열에서 Z-score 임계를 넘는 실행을 센 값입니다.`
+                  ? `백엔드 이상치 판정 API가 실측 학습 실행 ${measuredLabels.length}건의 Accuracy 계열에서 z-score 임계를 넘는 실행을 센 값입니다.`
                   : isRealdata
-                    ? "실데이터 실측 계열(후보 버전별 검증 지표)에서 Z-score 임계를 넘는 값이 없습니다. 이상값 로그는 학습 실행이 더 쌓이면 표시됩니다."
-                    : "Z-score(평균 대비 표준편차 거리)가 임계치를 넘는 이상치 건수입니다. 실측 지표 계열이 2건 이상 쌓이면 백엔드 판정 결과로 바뀝니다."
+                    ? "실데이터 실측 계열(후보 버전별 검증 지표)에서 z-score 임계를 넘는 값이 없습니다. 이상값 로그는 학습 실행이 더 쌓이면 표시됩니다."
+                    : "z-score(평균 대비 표준편차 거리)가 임계치를 넘는 이상치 건수입니다. 실측 지표 계열이 2건 이상 쌓이면 백엔드 판정 결과로 바뀝니다."
               }
             />
           </div>
@@ -1020,12 +1025,12 @@ export default function MonitorPage() {
         <Card title="이상값 검출 로그" icon="fa-filter">
           <div style={{ maxHeight: 320, overflowY: "auto" }}>
             <table style={{ width: "100%" }}>
-              <caption className="sr-only">최근 이상값 검출 시간, 지자체, Z-score와 판정 상태</caption>
+              <caption className="sr-only">최근 이상값 검출 시간, 지자체, z-score와 판정 상태</caption>
               <thead>
                 <tr>
                   <th scope="col">시간</th>
                   <th scope="col">지자체</th>
-                  <th scope="col" className="cell-num">Z-score</th>
+                  <th scope="col" className="cell-num">z-score</th>
                   <th scope="col">상태</th>
                 </tr>
               </thead>
