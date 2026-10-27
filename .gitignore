@@ -9,6 +9,20 @@ data_2026
 data_raw
 data_prepro
 /data_dvc
+# 실데이터 원본·가공본 형식은 위치와 관계없이 로컬에만 둔다(합성 fixture는 .json으로 둔다).
+*.xlsx
+*.xls
+*.csv
+*.tsv
+*.geojson
+*.parquet
+*.feather
+*.shp
+*.shx
+*.dbf
+*.prj
+*.cpg
+*.gpkg
 
 # === Private data, analysis outputs and local review state ===
 /.dvc/
