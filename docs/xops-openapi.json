@@ -2337,6 +2337,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/RollbackInput"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -5574,6 +5591,19 @@
         "type": "object",
         "title": "RestoreRequest",
         "description": "POST /realdata/models/{model_id}/restore/{version} 요청 본문(R3-4) — 사유는 선택."
+      },
+      "RollbackInput": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Reason",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "RollbackInput"
       },
       "SourceSummary": {
         "properties": {

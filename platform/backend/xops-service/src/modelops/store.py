@@ -59,8 +59,10 @@ def save(mode: str, kind: str, body: dict[str, Any], *, create: bool = False) ->
     return body
 
 
-def audit(mode: str, action: str, asset_id: str, actor: str, **details: Any) -> None:
-    save(mode, "audit", {"id": new_id(), "created_at": now(), "action": action,
+def audit(mode: str, action: str, asset_id: str, actor: str, *, audit_id: str | None = None,
+          created_at: str | None = None, **details: Any) -> None:
+    """감사 기록. ID·시각을 주지 않으면 지금 만든다(기본 동작) — 운영 이력 재구성만 명시 값을 넘긴다."""
+    save(mode, "audit", {"id": audit_id or new_id(), "created_at": created_at or now(), "action": action,
                          "asset_id": asset_id, "actor": actor, **details}, create=True)
 
 

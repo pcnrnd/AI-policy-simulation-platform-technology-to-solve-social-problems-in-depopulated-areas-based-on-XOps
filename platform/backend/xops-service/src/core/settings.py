@@ -36,6 +36,12 @@ class Settings(BaseSettings):
     # 학습 아티팩트(모델 계수·실측 지표) 로컬 저장 경로 — db_path와 같은 data/ 볼륨
     model_artifact_dir: Path = SERVICE_ROOT / "data" / "models"
 
+    # 데모 표시용 운영 이력(모델 4개·학습 12회·DataOps 발급 API 3·사용자 소스 2)을 새 설치에서 한 번 만든다.
+    # 기본 끔. 켜도 mock 모드 기록이 이미 있으면 건너뛰고, 완료 후에는 다시 만들지 않는다(src/modelops/demo_history.py).
+    demo_history: bool = False
+    # 위 작업의 시간 상한(초) — 잠금 대기를 포함한다. 넘으면 쓰기를 멈추고 다음 기동 때 이어서 한다.
+    demo_history_timeout_seconds: float = 60.0
+
     # 인증 (HS256) — 시크릿은 반드시 환경변수로 주입
     jwt_secret: str = _DEFAULT_JWT_SECRET
     jwt_algorithm: str = "HS256"
