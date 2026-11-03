@@ -135,6 +135,19 @@ export default function OrchestratorPage() {
     ? jobLogLines(selectedJob, versionById.get(selectedJob.version_id), catalog.audit)
     : legacyLogs?.logs ?? [];
 
+  // 데모 ON 첫 화면: mock 카탈로그가 처음 도착하면 한 번, 버전까지 저장된 최신 학습 작업을 ②·⑤에 보이고
+  // Model Store도 그 모델로 맞춘다. 사용자가 이미 고른 실행·Store 모델이나 진행 중인 작업은 덮어쓰지 않는다(스크롤·초점 이동 없음).
+  const autoSelected = useRef(false);
+  useEffect(() => {
+    if (!demo || autoSelected.current || catalog.mode !== "mock") return;
+    autoSelected.current = true;
+    if (selectedKey !== null || liveJob) return;
+    const latest = catalog.jobs.find((job) => job.state === "saved" && versionById.has(job.version_id));
+    if (!latest) return;
+    setSelectedKey(`modelops:${latest.id}`);
+    setVersionInstanceId((current) => current || latest.instance_id);
+  }, [demo, catalog, selectedKey, liveJob, versionById]);
+
   useEffect(() => {
     if (statusFocusRequest === 0) return;
     const anchor = statusAnchorRef.current;

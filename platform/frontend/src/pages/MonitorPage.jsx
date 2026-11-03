@@ -138,7 +138,7 @@ export default function MonitorPage() {
     ?? defaultMonitorInstance(catalog, realdataModels, mode);
   const selectedVersion = monitorActiveVersion(catalog, selectedInstance, mode);
   const targetLabel = TARGET_LABELS[selectedInstance?.target] ?? selectedInstance?.target ?? "";
-  const modelTarget = legacyMonitorId(selectedInstance, realdataModels, mode) ?? "";
+  const modelTarget = legacyMonitorId(selectedInstance, realdataModels, mode, catalog) ?? "";
   // 매핑 없는 공통 모델에 다른 데모 모델의 이력을 폴백하지 않는다.
   const allowSeed = mockDataVisible && Boolean(modelTarget);
 

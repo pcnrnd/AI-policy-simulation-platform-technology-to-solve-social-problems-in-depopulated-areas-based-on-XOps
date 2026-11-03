@@ -164,7 +164,7 @@ export function jobLogLines(job, version, audit = []) {
     && (row.job_id === job.id || row.version_id === job.version_id));
   [...related].sort((a, b) => time(a.created_at) - time(b.created_at)).forEach((row) => {
     lines.push({ ts: row.created_at, level: "INFO",
-      message: `${row.action === "version_activated" ? "버전 활성화" : "이전 버전 복원"} — ${displayId(row.version_id)} · ${row.actor}` });
+      message: `${row.action === "version_activated" ? "버전 활성화" : "이전 버전 복원"} — ${displayId(row.version_id)} · ${row.actor}${row.reason ? ` · 사유: ${row.reason}` : ""}` });
   });
   return lines;
 }
@@ -182,7 +182,7 @@ export function auditTime(ts) {
 export function auditLogLines(audit = [], limit = 20) {
   return audit.slice(0, limit).reverse().map((row) => ({
     time: auditTime(row.created_at), level: AUDIT_LEVELS[row.action] ?? "INFO",
-    message: `${ACTION_NAMES[row.action] ?? "운영 기록"} — ${displayId(row.asset_id)}${row.version_id ? ` · 버전 ${displayId(row.version_id)}` : ""}${row.job_id ? ` · 작업 ${displayId(row.job_id)}` : ""} · ${row.actor}`
+    message: `${ACTION_NAMES[row.action] ?? "운영 기록"} — ${displayId(row.asset_id)}${row.version_id ? ` · 버전 ${displayId(row.version_id)}` : ""}${row.job_id ? ` · 작업 ${displayId(row.job_id)}` : ""} · ${row.actor}${row.reason ? ` · 사유: ${row.reason}` : ""}`
   }));
 }
 

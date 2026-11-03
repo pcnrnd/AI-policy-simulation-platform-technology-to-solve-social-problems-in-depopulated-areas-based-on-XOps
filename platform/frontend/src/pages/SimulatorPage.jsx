@@ -38,7 +38,7 @@ export default function SimulatorPage() {
   const {
     appData, currentRegion, setCurrentRegion,
     welfareWeight, setWelfareWeight, industryWeight, setIndustryWeight, housingWeight, setHousingWeight,
-    budgetTotal, setBudgetTotal, addConsoleLog, navigateToTab, mockDataVisible
+    budgetTotal, setBudgetTotal, addConsoleLog, navigateToTab, mockDataVisible, simulatorRuns, updateSimulatorRun
   } = useAppState();
   const ct = useChartTheme();
   const demo = mockDataVisible;
@@ -142,6 +142,50 @@ export default function SimulatorPage() {
     setRecoSim(null);
     // real.revision: 활성 버전이 바뀌거나(409) 다시 확인해 입력을 다시 읽으면 이전 결과를 비운다.
   }, [demo, currentRegion.id, target, dong, real.revision]);
+
+  // 데모 첫 화면: 활성 요인분석 모델이 준비된 현재 세대에서 지역마다 한 번 ①→④를 같은 입력으로 계산한다.
+  // 이미 계산한 지역(같은 활성 버전)은 앱 상태의 결과를 되살린다. 실패해도 다시 시도하지 않고, 도중에 입력을
+  // 바꿨으면 결과를 버린다(사용자 입력을 덮지 않음). 화면 이동·초점 이동은 하지 않는다.
+  const sigRef = useRef(currentSig);
+  sigRef.current = currentSig;
+  const demoModelReady = demo && Boolean(factorModel) && !factor.loading && picked?.version === factorModel?.active_version;
+  useEffect(() => {
+    if (!demoModelReady) return;
+    const regionId = currentRegion.id;
+    const version = factorModel.active_version;
+    const saved = simulatorRuns[regionId]?.version === version ? simulatorRuns[regionId] : null;
+    if (saved?.result) {
+      if (analysisStatus === "idle" && !factorResult) {
+        factor.restore(saved.result);
+        setRecommendation(saved.recommendation ?? null);
+        setRecoSig(saved.recoSig ?? "");
+      }
+      return;
+    }
+    if (saved?.attempted || analysisStatus !== "idle") return;
+    updateSimulatorRun(regionId, { version, attempted: true, result: null, recommendation: null, recoSig: "" });
+    const startSig = sigRef.current;
+    const weights = { welfare: welfareWeight, industry: industryWeight, housing: housingWeight };
+    const factorOfBudget = budgetFactor;
+    const region = currentRegion;
+    (async () => {
+      const analysis = await factor.run();
+      if (!analysis || sigRef.current !== startSig) return;
+      const ranked = rankStrategies(region, weights, factorOfBudget);
+      setRecommendation(ranked);
+      setRecoSig(startSig);
+      addConsoleLog(`INFO: ${region.name} 요인분석·정책 추천 계산 완료 — 1순위 '${ranked[0].name}'`);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 지역·활성 버전·준비 상태가 바뀔 때만 판정한다
+  }, [demoModelReady, currentRegion.id, factorModel?.active_version]);
+
+  // ①·④가 현재 입력 기준으로 끝난 데모 결과는 지역별로 보존한다(수동 실행 포함).
+  useEffect(() => {
+    if (!demo || !factorModel || analysisStatus !== "done" || !factor.result || !recommendation || recoSig !== currentSig) return;
+    updateSimulatorRun(currentRegion.id, { version: factorModel.active_version, attempted: true,
+      result: factor.result, recommendation, recoSig });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [demo, factor.result, recommendation, recoSig]);
 
   const handleRunAnalysis = async () => {
     if (factorRetry) { factor.reload(); return; }

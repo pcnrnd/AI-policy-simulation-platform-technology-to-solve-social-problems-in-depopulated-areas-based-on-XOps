@@ -107,5 +107,11 @@ export function useFactorAnalysis({ demo, region, target, dong, modelId, version
     }
   }, [demo, region, target, dong, modelId, versionId]);
 
-  return { catalog, loading, loadFailed, reload: () => setRevision((value) => value + 1), status, step, result, feedback, missing, run };
+  // 같은 조건에서 이미 끝난 결과(앱 상태에 보존)를 다시 계산하지 않고 되살린다 — 진행 중 실행은 버린다.
+  const restore = useCallback((saved) => {
+    gate.current.cancel();
+    setResult(saved); setStatus("done"); setStep(4); setFeedback(null); setMissing(false);
+  }, []);
+
+  return { catalog, loading, loadFailed, reload: () => setRevision((value) => value + 1), status, step, result, feedback, missing, run, restore };
 }
