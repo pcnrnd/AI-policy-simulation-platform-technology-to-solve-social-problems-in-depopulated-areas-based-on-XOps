@@ -9,8 +9,22 @@ from typing import Callable
 import pytest
 from fastapi.testclient import TestClient
 
+from main import app
 from src.core import db
 from src.mlops.orchestration import registry as registry_module
+
+REAL = {"X-Data-Mode": "real"}
+
+
+@pytest.fixture()
+def client() -> TestClient:
+    """이전 경로 오케스트레이션(시드 모델 3종)은 데모(mock) 모드 기능이다 — 이 모듈은 모드를 명시한다."""
+    return TestClient(app, headers={"X-Data-Mode": "mock"})
+
+
+def _off_clients() -> tuple[TestClient, TestClient]:
+    """데모 OFF로 보는 두 경로 — 실데이터 모드 명시, 헤더 없음."""
+    return TestClient(app, headers=REAL), TestClient(app)
 
 
 def test_list_models(client: TestClient) -> None:
@@ -21,16 +35,17 @@ def test_list_models(client: TestClient) -> None:
 
 
 def test_demo_off_hides_seed_models_and_pipelines(client: TestClient) -> None:
-    """기본값(데모 OFF)에서는 시드 파이프라인 3종과 시드 지표 모델이 목록에 없다."""
-    pipelines = client.get("/api/v3/orchestration/pipelines").json()
-    assert {p["id"] for p in pipelines} & {
-        "PL-POP-RETRAIN-01",
-        "PL-VITAL-RETRAIN-02",
-        "PL-SETTLE-RETRAIN-03",
-    } == set()
+    """데모 OFF(실데이터 모드)·헤더 없음에서는 시드 파이프라인 3종과 시드 지표 모델이 목록에 없다."""
+    for off_client in _off_clients():
+        pipelines = off_client.get("/api/v3/orchestration/pipelines", params={"include_seed": "true"}).json()
+        assert {p["id"] for p in pipelines} & {
+            "PL-POP-RETRAIN-01",
+            "PL-VITAL-RETRAIN-02",
+            "PL-SETTLE-RETRAIN-03",
+        } == set()
 
-    models = client.get("/api/v3/orchestration/models").json()
-    assert all(m["metrics_source"] != "seed" for m in models)
+        models = off_client.get("/api/v3/orchestration/models", params={"include_seed": "true"}).json()
+        assert all(m["metrics_source"] != "seed" for m in models)
 
     on_pipelines = client.get("/api/v3/orchestration/pipelines", params={"include_seed": "true"}).json()
     assert {"PL-POP-RETRAIN-01", "PL-VITAL-RETRAIN-02", "PL-SETTLE-RETRAIN-03"} <= {p["id"] for p in on_pipelines}
@@ -42,11 +57,16 @@ def test_demo_off_hides_runs_from_seed_pipelines(client: TestClient, auth_header
         "/api/v3/orchestration/pipelines/PL-POP-RETRAIN-01/run", json={"trigger": "manual"}, headers=auth_headers
     )
 
-    off = client.get("/api/v3/orchestration/runs").json()
-    on = client.get("/api/v3/orchestration/runs", params={"include_seed": "true"}).json()
+    off = client.get("/api/v3/orchestration/runs", params={"include_seed": "true"}, headers=REAL).json()
+    on = client.get("/api/v3/orchestration/runs").json()
 
     assert all(r.get("pipeline_id") != "PL-POP-RETRAIN-01" for r in off)
     assert any(r.get("pipeline_id") == "PL-POP-RETRAIN-01" for r in on)
+    # 시드 실행 단건·로그도 실데이터 모드와 헤더 없음에서는 보이지 않는다(ID 직접 접근 차단).
+    seed_run = next(r["run_id"] for r in on if r.get("pipeline_id") == "PL-POP-RETRAIN-01")
+    for off_client in _off_clients():
+        assert off_client.get(f"/api/v3/orchestration/runs/{seed_run}").status_code == 404
+        assert off_client.get(f"/api/v3/orchestration/runs/{seed_run}/logs").status_code == 404
 
 
 def test_unknown_model_404(client: TestClient, auth_headers: dict[str, str]) -> None:

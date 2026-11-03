@@ -196,11 +196,11 @@ def test_monitoring_without_token_keeps_empty_contract(client: TestClient) -> No
 
 
 def test_monitoring_demo_on_stays_seed(client: TestClient, auth_headers: dict[str, str]) -> None:
-    """데모 표시 ON은 토큰이 있어도 시드 경로 그대로다."""
+    """데모 표시 ON(mock 모드)은 토큰이 있어도 시드 경로 그대로다."""
     body = client.get(
         "/api/v3/monitoring/metrics",
         params={"model_id": _MODEL_ID, "include_seed": "true"},
-        headers=auth_headers,
+        headers={**auth_headers, "X-Data-Mode": "mock"},
     ).json()
     assert body["source"] == "seed"
     assert "accuracy" in body["history"]

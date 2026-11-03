@@ -54,7 +54,8 @@ def test_duplicate_id_rejected(client: TestClient, auth_headers: dict[str, str])
 
 
 def test_delete_seed_source_forbidden(client: TestClient, auth_headers: dict[str, str]) -> None:
-    r = client.delete(f"{_CATALOG}/ds_01_resident_registry", headers=auth_headers)
+    # 시드 소스는 데모(mock) 모드에서만 보인다 — 그 모드에서 삭제를 시도해도 보호된다.
+    r = client.delete(f"{_CATALOG}/ds_01_resident_registry", headers={**auth_headers, "X-Data-Mode": "mock"})
     assert r.status_code == 403
 
 

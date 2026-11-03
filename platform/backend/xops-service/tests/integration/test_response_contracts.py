@@ -42,10 +42,10 @@ def test_realdata_models_response_matches_documented_type(client: TestClient, au
     _assert_conforms(Envelope[list[RealdataModelEntry]], body)
 
 
-@pytest.mark.parametrize("include_seed", ["true", "false"])
-def test_overview_summary_response_matches_documented_type(client: TestClient, include_seed: str) -> None:
-    body = client.get(_OVERVIEW, params={"include_seed": include_seed}).json()
-    if include_seed == "true":
+@pytest.mark.parametrize("mode", ["mock", "real"])
+def test_overview_summary_response_matches_documented_type(client: TestClient, mode: str) -> None:
+    body = client.get(_OVERVIEW, headers={"X-Data-Mode": mode}).json()
+    if mode == "mock":
         assert body["model"] is not None  # 모델 스냅샷 구조까지 검사되게
     _assert_conforms(OverviewSummary, body)
 

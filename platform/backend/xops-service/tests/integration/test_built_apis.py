@@ -6,9 +6,27 @@
 
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 
+from main import app
+
 _APIS = "/api/v3/dataops/apis"
+
+
+@pytest.fixture()
+def client() -> TestClient:
+    """시드 소스(ds_01)로 만드는 발급 API는 데모(mock) 모드 기록이다 — 모드를 명시한다."""
+    return TestClient(app, headers={"X-Data-Mode": "mock"})
+
+
+def test_mock_api_is_hidden_from_real_and_headerless(client: TestClient, auth_headers: dict[str, str]) -> None:
+    """mock 으로 만든 발급 API는 헤더 없음·real 목록에 나오지 않는다."""
+    client.post(_APIS, json=_BUILT, headers=auth_headers)
+    for headers in ({}, {"X-Data-Mode": "real"}):
+        rows = TestClient(app).get(_APIS, headers={**auth_headers, **headers}).json()
+        assert all(a["id"] != _BUILT["id"] for a in rows)
+    client.delete(f"{_APIS}/{_BUILT['id']}", headers=auth_headers)
 
 _BUILT = {
     "id": "api_test_pop_get",

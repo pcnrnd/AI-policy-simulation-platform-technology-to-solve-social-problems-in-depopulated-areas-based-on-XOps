@@ -7,7 +7,14 @@ from typing import Callable
 import pytest
 from fastapi.testclient import TestClient
 
+from main import app
 from src.core.settings import Settings
+
+
+@pytest.fixture()
+def client() -> TestClient:
+    """드리프트 시드 판정·시드 소스 조회는 데모(mock) 모드 경로다 — 헤더 없는 요청은 실데이터로 본다."""
+    return TestClient(app, headers={"X-Data-Mode": "mock"})
 
 
 # ── ⑤ 드리프트 → 재학습 자동 연결 ──

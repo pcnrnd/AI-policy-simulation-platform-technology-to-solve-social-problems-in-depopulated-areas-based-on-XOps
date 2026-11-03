@@ -2,7 +2,23 @@
 
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
+
+from main import app
+
+
+@pytest.fixture()
+def client() -> TestClient:
+    """시드 소스(ds_01~07)는 데모(mock) 모드 데이터다 — 이 모듈의 기본 요청은 mock 모드를 명시한다."""
+    return TestClient(app, headers={"X-Data-Mode": "mock"})
+
+
+@pytest.fixture()
+def bare() -> TestClient:
+    """헤더 없는 요청 — 실데이터(real)로 본다."""
+    return TestClient(app)
+
 
 # 카탈로그 기대 구성 — 건수를 세 곳에 리터럴로 박으면 소스 1건 추가마다 세 군데가 같이 깨진다.
 # ID 목록을 정본으로 두고 건수는 거기서 파생시킨다(목록 자체가 회귀를 잡는다).
@@ -32,37 +48,42 @@ def test_health(client: TestClient) -> None:
 
 
 def test_catalog_list_and_search(client: TestClient) -> None:
-    # 데모 표시 ON 경로 — 시드 7종 + 실데이터 2종(ds_08·ds_09) + 외부데이터 4종(ds_10~13)
+    # 데모 표시 ON(mock) 경로 — 시드 7종만 보인다(실데이터·외부데이터는 real 모드 목록).
     all_sources = client.get("/api/v3/dataops/catalog", params={"include_seed": "true"}).json()
-    assert len(all_sources) == _ALL_COUNT
+    assert [s["id"] for s in all_sources if s["id"].startswith("ds_")] == _SEED_IDS
     filtered = client.get(
         "/api/v3/dataops/catalog", params={"q": "MongoDB", "include_seed": "true"}
     ).json()
     assert all("MongoDB" in (s.get("source") or "") for s in filtered)
 
 
-def test_catalog_default_excludes_demo_seed(client: TestClient) -> None:
-    """목록 기본값 = 데모 표시 OFF — 실데이터(ds_08~13)만 남는다."""
-    body = client.get("/api/v3/dataops/catalog").json()
-
-    assert [s["id"] for s in body] == _REAL_IDS
-    assert all(not s["is_seed"] for s in body)
+def test_catalog_default_excludes_demo_seed(bare: TestClient) -> None:
+    """헤더 없음 = 데모 표시 OFF — 실데이터(ds_08~13)만 남는다. include_seed=true 를 줘도 같다."""
+    for params in ({}, {"include_seed": "true"}):
+        body = bare.get("/api/v3/dataops/catalog", params=params).json()
+        assert [s["id"] for s in body if s["id"].startswith("ds_")] == _REAL_IDS
+        assert all(not s.get("is_seed") for s in body)
     # 검색도 같은 목록 위에서 돈다 — 시드 태그로는 아무것도 걸리지 않는다.
-    assert client.get("/api/v3/dataops/catalog", params={"q": "인구이동"}).json() == []
+    assert bare.get("/api/v3/dataops/catalog", params={"q": "인구이동", "include_seed": "true"}).json() == []
 
 
-def test_catalog_include_seed_restores_full_list(client: TestClient) -> None:
+def test_catalog_include_seed_restores_full_list(client: TestClient, bare: TestClient) -> None:
     """데모 표시 ON — 시드 7종이 되돌아온다. 목록에서 빠졌을 뿐 지워지지 않았다는 확인."""
     body = client.get("/api/v3/dataops/catalog", params={"include_seed": "true"}).json()
-
-    assert len(body) == _ALL_COUNT
     assert [s["id"] for s in body if s["is_seed"]] == _SEED_IDS
+    real = bare.get("/api/v3/dataops/catalog").json()
+    assert len([s for s in real if s["id"].startswith("ds_")]) + len(_SEED_IDS) == _ALL_COUNT
 
 
-def test_seed_source_stays_reachable_when_hidden_from_listing(client: TestClient) -> None:
-    """목록 필터는 단건 조회·토큰 발급에 걸리지 않는다 — 데모 ON에서 고른 소스가 404가 되면 안 된다."""
+def test_seed_source_reachable_only_in_mock_mode(client: TestClient, bare: TestClient, auth_headers: dict[str, str]) -> None:
+    """데모 ON(mock)에서 고른 시드 소스는 단건·토큰·데이터가 열리고, 헤더 없음·real 에서는 ID로도 닿지 않는다."""
     assert client.get("/api/v3/dataops/catalog/ds_01_resident_registry").status_code == 200
     assert client.post("/api/v3/dataops/token/ds_01_resident_registry").status_code == 200
+    for headers in ({}, {"X-Data-Mode": "real"}):
+        assert bare.get("/api/v3/dataops/catalog/ds_01_resident_registry", headers=headers).status_code == 404
+        assert bare.post("/api/v3/dataops/token/ds_01_resident_registry", headers=headers).status_code == 404
+        assert bare.post("/api/v3/dataops/oauth2/ds_01_resident_registry", headers=headers).status_code == 404
+        assert bare.get("/api/v3/dataops/ds_01_resident_registry", headers={**auth_headers, **headers}).status_code == 404
 
 
 def test_unknown_source_404(client: TestClient, auth_headers: dict[str, str]) -> None:
@@ -150,17 +171,17 @@ def test_oauth2_issue_validates_catalog_like_token(client: TestClient) -> None:
     assert "access_token" in ok.json()
 
 
-def test_degrade_surfaces_reason_in_response(client, auth_headers, monkeypatch) -> None:
-    """저장소 왕복이 실패하면 사유를 응답에 싣는다 — 로그에만 남기면 스텁이 실조회로 보인다."""
+def test_degrade_surfaces_reason_in_response(bare, auth_headers, monkeypatch) -> None:
+    """저장소 왕복이 실패하면 사유를 응답에 싣는다 — 로그에만 남기면 스텁이 실조회로 보인다(실데이터 소스)."""
     from src.dataops import service as service_module
 
     def _boom(_schema):
         raise RuntimeError("connection refused")
 
     monkeypatch.setattr(service_module, "get_adapter", _boom)
-    body = client.get("/api/v3/dataops/ds_01_resident_registry", headers=auth_headers).json()
+    body = bare.get("/api/v3/dataops/ds_09_welfare_facility", headers=auth_headers).json()
     assert body["source_kind"] == "in-memory"
     assert "connection refused" in body["source_kind_reason"]
 
-    written = client.post("/api/v3/dataops/ds_01_resident_registry", json={"data": {}}, headers=auth_headers).json()
+    written = bare.post("/api/v3/dataops/ds_09_welfare_facility", json={"data": {}}, headers=auth_headers).json()
     assert written["source_kind_reason"]

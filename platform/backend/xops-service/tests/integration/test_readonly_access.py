@@ -132,21 +132,25 @@ def test_orchestration_reads_stay_public(client: TestClient) -> None:
 _DRIFT_RETRAIN = {"drifted": "true", "include_seed": "true", "model_id": "population-forecast"}
 
 
+# 시드 분포 판정은 데모(mock) 모드 경로다 — 헤더 없는 요청은 실데이터로 본다.
+_MOCK = {"X-Data-Mode": "mock"}
+
+
 def test_drift_read_stays_public(client: TestClient) -> None:
-    r = client.get("/api/v3/monitoring/drift", params={"drifted": "true", "include_seed": "true"})
+    r = client.get("/api/v3/monitoring/drift", params={"drifted": "true", "include_seed": "true"}, headers=_MOCK)
     assert r.status_code == 200
     assert r.json()["drifted"] is True
 
 
 def test_drift_auto_retrain_requires_write(client: TestClient, readonly_headers: dict[str, str]) -> None:
     params = {**_DRIFT_RETRAIN, "auto_retrain": "true"}
-    assert client.get("/api/v3/monitoring/drift", params=params).status_code == 401
-    assert client.get("/api/v3/monitoring/drift", params=params, headers=readonly_headers).status_code == 401
+    assert client.get("/api/v3/monitoring/drift", params=params, headers=_MOCK).status_code == 401
+    assert client.get("/api/v3/monitoring/drift", params=params, headers={**readonly_headers, **_MOCK}).status_code == 401
 
 
 def test_drift_auto_retrain_with_write_token_fires(client: TestClient, auth_headers: dict[str, str]) -> None:
     params = {**_DRIFT_RETRAIN, "auto_retrain": "true"}
-    r = client.get("/api/v3/monitoring/drift", params=params, headers=auth_headers)
+    r = client.get("/api/v3/monitoring/drift", params=params, headers={**auth_headers, **_MOCK})
     assert r.status_code == 200
     assert r.json()["retrain"] is not None
 

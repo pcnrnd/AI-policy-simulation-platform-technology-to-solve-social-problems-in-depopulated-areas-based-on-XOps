@@ -11,11 +11,20 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
+import pytest
 from fastapi.testclient import TestClient
+
+from main import app
 
 from src.core.settings import get_settings
 from src.mlops.orchestration import orchestrator as orchestrator_module
 from src.mlops.training import trainer as trainer_module
+
+
+@pytest.fixture()
+def client() -> TestClient:
+    """이전 경로 재학습(시드 모델)은 데모(mock) 모드 기능이다 — 헤더 없는 요청은 실데이터로 본다."""
+    return TestClient(app, headers={"X-Data-Mode": "mock"})
 
 _MODEL = "population-forecast"
 _EVENTS = "/api/v3/orchestration/events"

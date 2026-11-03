@@ -56,12 +56,11 @@ def test_live_true_keeps_search_filter(client: TestClient, monkeypatch: pytest.M
     """검색(q)과 함께 써도 결과가 줄어들 뿐 주석은 그대로 붙는다."""
     monkeypatch.setattr(liveness, "_count", lambda schema: 5)
 
-    # '인구이동' 은 시드(ds_01) 태그라 데모 ON 경로(include_seed=true)로 조회한다.
-    params = {"live": "true", "include_seed": "true"}
-    body = client.get(_CATALOG, params={**params, "q": "인구이동"}).json()
+    # 실적재 주석은 실데이터 모드 목록에만 붙는다(데모 mock 은 저장소를 치지 않는다) — 실데이터 소스명으로 검색한다.
+    body = client.get(_CATALOG, params={"live": "true", "q": "KT"}).json()
 
     assert body
-    assert len(body) < len(client.get(_CATALOG, params={"include_seed": "true"}).json())
+    assert len(body) < len(client.get(_CATALOG).json())
     assert all(source["live_rows"] == 5 for source in body)
 
 
