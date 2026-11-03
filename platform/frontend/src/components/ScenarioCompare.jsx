@@ -12,6 +12,11 @@ const presetAttempted = new Set();
 
 // 브라우저 저장에 실패한 목록 — 이번 앱 세션 동안 메모리에 두고(탭·지역 왕복에도 유지) 저장은 다시 시도하지 않는다.
 const sessionFallback = new Map();
+// 다른 브라우저 탭이 저장에 성공하면 그 값이 기준이다. 화면이 닫혀 있는 동안의 변경도 놓치지 않도록
+// 앱 세션 전체에서 한 번만 구독해 해당 키의 메모리를 버린다(재진입 때 저장소 값을 다시 읽는다).
+if (typeof window !== "undefined") {
+  window.addEventListener("storage", (event) => { if (event.key) sessionFallback.delete(event.key); });
+}
 
 function loadStore(allowSeed) {
   const key = scenarioStorageKey(allowSeed);

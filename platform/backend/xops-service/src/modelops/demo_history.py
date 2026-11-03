@@ -25,7 +25,7 @@ from src.core import db
 from src.core.logger import get_logger
 from src.core.seed import get_seed
 from src.core.settings import get_settings
-from src.modelops import datasets, factor_panel, service, store
+from src.modelops import datasets, factor_panel, inference, service, store
 
 MODE = "mock"
 ACTOR = "operator"
@@ -141,6 +141,7 @@ def read_state() -> dict[str, Any] | None:
 
 
 def _write_state(state: dict[str, Any]) -> None:
+    store.check_write_guard()
     db._conn().execute("INSERT INTO ops_history_state (key, value_json) VALUES (?, ?) "
                        "ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json",
                        (_STATE_KEY, json.dumps(state, ensure_ascii=False)))
@@ -196,16 +197,25 @@ def startup() -> None:
     deadline = time.monotonic() + settings.demo_history_timeout_seconds
     try:
         with file_lock(deadline):
+            # 상한 정책 하나: 재구성의 모든 저장(store.save·표식·DataOps) 직전에 같은 기한을 확인한다.
+            # 기한을 넘기면 그 저장부터 하지 않고, 오류 표식·미완료 작업 정리도 다음 기동으로 넘긴다
+            # (미완료 표식 'started'는 첫 쓰기 전에 이미 있다).
+            expired = lambda: time.monotonic() >= deadline  # noqa: E731
             try:
-                result = ensure(deadline)
+                with store.write_guard(lambda: _check_deadline("write", deadline)):
+                    result = ensure(deadline)
                 get_logger().info(f"운영 이력 재구성: {result}")
             except Deadline as exc:
-                # 상한 초과 — 이후 저장은 하지 않는다(미완료 표식 'started'는 첫 쓰기 전에 이미 있다).
-                # 미완료 작업 정리(recover_jobs)도 같은 상한 안의 작업이므로 다음 기동으로 넘긴다.
                 get_logger().warning(f"운영 이력 재구성: 시간 상한 초과로 중단, 다음 기동에 이어서 진행 (단계={getattr(exc, 'stage', 'unknown')})")
                 return
             except Exception as exc:  # noqa: BLE001 — 앱 기동을 막지 않는다
+                if expired():
+                    get_logger().warning(f"운영 이력 재구성: 시간 상한 뒤 실패, 기록 없이 중단 (사유={type(exc).__name__})")
+                    return
                 _record_error(exc)
+            if expired():
+                get_logger().warning("운영 이력 재구성: 시간 상한 도달, 미완료 작업 정리는 다음 기동에서")
+                return
             service.recover_jobs(skip_ids=frozenset(v for k, v in owned_ids().items() if k.endswith(":job")))
     except Deadline:
         # 다른 프로세스가 잠금을 쥐고 있다 — 그쪽이 재구성과 정리를 맡는다.
@@ -450,6 +460,7 @@ def _run_dataops(state: dict[str, Any], deadline: float, times: dict[str, str]) 
             expected = _user_source(source_id, region_id, times[f"source:{source_id}"])
             existing = db.get_user_source(source_id)
             if existing is None:
+                store.check_write_guard()
                 db.add_user_source(expected)
             elif existing != expected:
                 raise Conflict(f"source:{source_id}")
@@ -459,6 +470,7 @@ def _run_dataops(state: dict[str, Any], deadline: float, times: dict[str, str]) 
             expected = _built_api(api, times[f"api:{api['id']}"])
             existing = next((row for row in db.list_built_apis() if row["id"] == api["id"]), None)
             if existing is None:
+                store.check_write_guard()
                 db.upsert_built_api(expected)
             elif existing != expected:
                 raise Conflict(f"api:{api['id']}")
@@ -515,10 +527,12 @@ def verify(base_time: str) -> dict[str, Any]:
                         job_id, instance_id, dataset_id, content_hash,
                         combo["model_type"], combo["region"], (instance or {}).get("target")):
                 problems.append(f"refs:{key}:{run}")
-            # 아티팩트 안의 연결 정보도 추론 경로(load_artifact·inference)가 보는 값과 같아야 한다
-            artifact = json.loads(Path(version["artifact_path"]).read_text(encoding="utf-8"))
-            if (artifact.get("model_id"), artifact.get("version"), artifact.get("job_id"), artifact.get("dataset_id"),
-                    artifact.get("content_hash")) != (instance_id, versions[run], job_id, dataset_id, content_hash):
+            if job.get("model_type") != combo["model_type"]:
+                problems.append(f"refs:{key}:{run}")
+            # 아티팩트·학습데이터 연결은 실제 추론(inputs·predict)이 쓰는 검사와 똑같이 확인한다 — 완료 뒤 409가 없게.
+            try:
+                inference.validate_version(MODE, instance_id, versions[run], require_active=False)
+            except HTTPException:
                 problems.append(f"artifact:{key}:{run}")
             order = [job["created_at"], job["started_at"], job["finished_at"], times[f"{key}:run{run}:activated"]]
             if order != sorted(order) or order[-1] >= base_time:

@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Callable, Iterator
 from uuid import uuid4
 
 from fastapi import HTTPException
@@ -45,7 +47,27 @@ def list_assets(mode: str, kind: str) -> list[dict[str, Any]]:
     )]
 
 
+_write_guard: ContextVar[Callable[[], None] | None] = ContextVar("modelops_write_guard", default=None)
+
+
+@contextmanager
+def write_guard(check: Callable[[], None]) -> Iterator[None]:
+    """이 구간의 모든 저장 직전에 `check()`를 부른다(예외를 올리면 그 저장부터 하지 않음). 기본은 검사 없음."""
+    token = _write_guard.set(check)
+    try:
+        yield
+    finally:
+        _write_guard.reset(token)
+
+
+def check_write_guard() -> None:
+    guard = _write_guard.get()
+    if guard is not None:
+        guard()
+
+
 def save(mode: str, kind: str, body: dict[str, Any], *, create: bool = False) -> dict[str, Any]:
+    check_write_guard()
     body = {**body, "mode": mode, "source": mode}
     args = (mode, kind, body["id"], json.dumps(body, ensure_ascii=False, allow_nan=False), body.get("created_at") or now())
     sql = "INSERT INTO mo_assets (mode,kind,id,body_json,created_at) VALUES (?,?,?,?,?)"

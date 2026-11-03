@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import subprocess
 import sys
@@ -374,6 +376,57 @@ def test_sample_filter_keeps_every_condition(fresh: Path) -> None:
                       params={"filter": "base_ym >= 202410 AND base_ym >= 202401", "sort": "base_ym"}, headers=auth).json()
     assert [row["base_ym"] for row in body["rows"]] == [202412, 202411, 202410]
     assert body["pagination"]["total"] == 3
+
+
+@pytest.mark.parametrize("field,value", [("region_id", "shinan"), ("target", "living_population"), ("model_type", "factor_analysis"),
+                                         ("mode", "real"), ("source", "real")])
+def test_artifact_link_mismatch_blocks_completion(fresh: Path, monkeypatch: pytest.MonkeyPatch, field: str, value: str) -> None:
+    """해시가 맞는 아티팩트라도 추론이 보는 연결 정보가 다르면 완료하지 않는다(추론과 같은 검사)."""
+    with monkeypatch.context() as patch:
+        patch.setattr(history, "verify", lambda base: {"problems": ["simulated"]})
+        with pytest.raises(history.Conflict):
+            history.ensure(FAR)
+    version_id = history.owned_ids()["namwon-change-sim:run2:version"]
+    version = store.get("mock", "version", version_id)
+    path = Path(version["artifact_path"])
+    artifact = json.loads(path.read_text(encoding="utf-8"))
+    path.write_text(json.dumps({**artifact, field: value}, ensure_ascii=False), encoding="utf-8")
+    store.save("mock", "version", {**version, "artifact_hash": hashlib.sha256(path.read_bytes()).hexdigest()})
+    assert "artifact:namwon-change-sim:2" in history.verify(history.read_state()["base_time"])["problems"]
+    with pytest.raises(history.Conflict):
+        history.ensure(FAR)
+
+
+@pytest.mark.parametrize("hit", ["version_activated", "version_rolled_back", "dataset_registered", "user_source"])
+def test_any_write_after_deadline_is_refused_in_startup(fresh: Path, monkeypatch: pytest.MonkeyPatch, hit: str) -> None:
+    """기동 경로의 저장 구간 검사 — 어느 저장에서 기한이 지나도 그 뒤 소유 쓰기·오류 표식·정리를 하지 않는다."""
+    monkeypatch.setattr(get_settings(), "demo_history", True)
+    store.save("real", "job", {"id": "real-job", "instance_id": "r", "state": "running", "created_at": store.now()}, create=True)
+    clock = {"expired": False}
+    real_monotonic = history.time.monotonic
+    monkeypatch.setattr(history.time, "monotonic", lambda: real_monotonic() + (10**6 if clock["expired"] else 0))
+    real_audit, real_add = store.audit, history.db.add_user_source
+
+    def audit(mode: str, action: str, *args: Any, **kwargs: Any) -> None:
+        real_audit(mode, action, *args, **kwargs)
+        if action == hit:
+            clock["expired"] = True
+
+    def add_source(schema: dict[str, Any]) -> None:
+        real_add(schema)
+        if hit == "user_source":
+            clock["expired"] = True
+
+    monkeypatch.setattr(store, "audit", audit)
+    monkeypatch.setattr(history.db, "add_user_source", add_source)
+    history.startup()
+    apis_after_expiry = len(history.db.list_built_apis())
+    clock["expired"] = False
+    state = history.read_state()
+    assert state["status"] == "started" and "last_error" not in state
+    assert store.get("real", "job", "real-job")["state"] == "running"
+    assert apis_after_expiry == 0  # 기한 뒤 DataOps 발급 API까지 가지 않았다
+    assert history.ensure(FAR) == "completed"  # 남은 기록은 다음 기동(여기서는 ensure)에서 이어 쓴다
 
 
 def test_deadline_stops_further_writes(fresh: Path) -> None:

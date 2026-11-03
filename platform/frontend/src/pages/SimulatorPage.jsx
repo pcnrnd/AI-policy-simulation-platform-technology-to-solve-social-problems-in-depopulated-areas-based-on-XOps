@@ -92,7 +92,12 @@ export default function SimulatorPage() {
   const defaultValues = () => Object.fromEntries(controls.map((c) => [c.key, c.default]));
   const [controlValues, setControlValues] = useState(defaultValues);
   useEffect(() => {
-    setControlValues(defaultValues());
+    // 모델·버전이 늦게 도착해 조절변수 구성이 바뀌어도, 이 지역에서 사용자가 이미 바꾼 값(같은 키)은 지키고
+    // 새 키만 기본값으로 둔다. 지역이 바뀌면(userEdited 초기화) 기본값으로 시작한다.
+    const defaults = defaultValues();
+    setControlValues((prev) => (userEdited.current === currentRegion.id
+      ? Object.fromEntries(Object.entries(defaults).map(([key, value]) => [key, Object.hasOwn(prev, key) ? prev[key] : value]))
+      : defaults));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [controlsKey]);
 
@@ -136,7 +141,7 @@ export default function SimulatorPage() {
   useEffect(() => {
     // 다른 지역에 갔다가 돌아와도 이전 행정동이 되살아나지 않게 기억을 지운다(화면 값은 이미 "전체").
     setDongPick((pick) => (pick.regionId === currentRegion.id ? pick : { regionId: currentRegion.id, code: "" }));
-    userEdited.current = false;
+    if (userEdited.current !== currentRegion.id) userEdited.current = null;
     setSimResult(null);
     setRecommendation(null);
     setRecoSig("");
@@ -149,9 +154,9 @@ export default function SimulatorPage() {
   // 바꿨으면 결과를 버린다(사용자 입력을 덮지 않음). 화면 이동·초점 이동은 하지 않는다.
   const sigRef = useRef(currentSig);
   sigRef.current = currentSig;
-  // 이 지역에 들어온 뒤 사용자가 직접 입력을 바꿨는지 — 바꿨으면 보존 결과를 되살리지 않는다(지역 변경 시 초기화).
-  const userEdited = useRef(false);
-  const edited = (setter) => (...args) => { userEdited.current = true; setter(...args); };
+  // 사용자가 직접 입력을 바꾼 지역 id — 현재 지역과 같으면 보존 결과를 되살리지 않고 늦은 기본값 초기화도 하지 않는다.
+  const userEdited = useRef(null);
+  const edited = (setter) => (...args) => { userEdited.current = currentRegion.id; setter(...args); };
   const demoModelReady = demo && Boolean(factorModel) && !factor.loading && picked?.version === factorModel?.active_version;
   useEffect(() => {
     if (!demoModelReady) return;
@@ -161,7 +166,7 @@ export default function SimulatorPage() {
     if (saved?.result) {
       // 결과와 그때 계산에 쓴 입력(예산·정책 가중치·시설)을 함께 되살린다. 이 지역에 들어온 뒤 사용자가 이미 입력을
       // 바꿨으면 과거 결과로 덮지 않는다(복원하지 않음).
-      if (analysisStatus === "idle" && !factorResult && !userEdited.current) {
+      if (analysisStatus === "idle" && !factorResult && userEdited.current !== regionId) {
         const inputs = saved.inputs ?? {};
         if (inputs.controlValues) setControlValues(inputs.controlValues);
         if (Number.isFinite(inputs.budgetTotal)) setBudgetTotal(inputs.budgetTotal);
@@ -728,7 +733,7 @@ export default function SimulatorPage() {
             predict: (values) => real.predictOnly(Object.fromEntries(controls.map((c) => [c.key, Number(values?.[c.key] ?? c.default)])))
           }}
           onApply={(sc) => {
-            userEdited.current = true;
+            userEdited.current = currentRegion.id;
             setBudgetTotal(sc.budgetTotal);
             setWelfareWeight(sc.welfareWeight);
             setIndustryWeight(sc.industryWeight);

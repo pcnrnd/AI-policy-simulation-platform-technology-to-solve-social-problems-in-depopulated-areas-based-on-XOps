@@ -136,6 +136,7 @@ def _register(mode: str, source: dict[str, Any], body: dict[str, Any], actor: st
     dataset_id = dataset_id or store.new_id(body.get("id_prefix", "modelops_"))
     created_at = created_at or store.now()
     path = get_settings().model_artifact_dir / "modelops" / mode / "datasets" / (dataset_id + ".json")
+    store.check_write_guard()  # 파일도 저장 구간 검사 대상(기본은 검사 없음)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(document, ensure_ascii=False, allow_nan=False), encoding="utf-8")
     registered = store.save(mode, "dataset", {
