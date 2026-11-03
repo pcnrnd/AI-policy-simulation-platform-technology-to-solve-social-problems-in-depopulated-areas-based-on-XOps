@@ -248,21 +248,23 @@ docker exec platform-xops-service-1 python -c "import sqlite3; c=sqlite3.connect
 ### 7.2 백업 — 앱만 멈추고 xops-data 볼륨 전체를 보존한다
 
 ```sh
-TS=$(date +%Y%m%d-%H%M%S); B=/home/<계정>/backups/population-demo-history-$TS; mkdir -p $B
-docker image inspect platform-xops-service --format '{{.Id}}' > $B/xops-service.image   # 복귀용 현재 이미지
-docker image inspect platform-frontend --format '{{.Id}}' > $B/frontend.image
+TS=$(date +%Y%m%d-%H%M%S); BK=/home/<계정>/backups/population-demo-history-$TS; mkdir -p $BK
+docker image inspect platform-xops-service --format '{{.Id}}' > $BK/xops-service.image   # 복귀용 현재 이미지
+docker image inspect platform-frontend --format '{{.Id}}' > $BK/frontend.image
 $DC stop xops-service                                        # 쓰기 중지(DB 3종은 건드리지 않는다)
-docker run --rm -v platform_xops-data:/data:ro -v $B:/backup alpine tar czf /backup/xops-data.tgz -C /data .   # SQLite WAL 포함
-cp platform/deploy/.env $B/env.bak
-sha256sum $B/* > $B/SHA256SUMS
+docker run --rm -v platform_xops-data:/data:ro -v $BK:/backup alpine tar czf /backup/xops-data.tgz -C /data .   # SQLite WAL 포함
+cp platform/deploy/.env $BK/env.bak
+sha256sum $BK/* > $BK/SHA256SUMS
 ```
 
 ### 7.3 반영 — backend → 이력 확인 → frontend 순서
 
 ```sh
 git -C <checkout> checkout <병합 SHA>
-grep -q '^XOPS_DEMO_HISTORY=' platform/deploy/.env || echo 'XOPS_DEMO_HISTORY=1' >> platform/deploy/.env   # 다른 값은 그대로
-$DC config | grep XOPS_DEMO_HISTORY                          # 'XOPS_DEMO_HISTORY: "1"' 확인
+# 플래그 행만 1로 바꾸거나(기존 0 포함) 없으면 추가한다 — 다른 값은 그대로
+if grep -q '^XOPS_DEMO_HISTORY=' platform/deploy/.env; then sed -i 's/^XOPS_DEMO_HISTORY=.*/XOPS_DEMO_HISTORY=1/' platform/deploy/.env; else echo 'XOPS_DEMO_HISTORY=1' >> platform/deploy/.env; fi
+diff <(grep -v '^XOPS_DEMO_HISTORY=' $BK/env.bak) <(grep -v '^XOPS_DEMO_HISTORY=' platform/deploy/.env) && echo env_other_values_same
+$DC config | grep XOPS_DEMO_HISTORY                          # 'XOPS_DEMO_HISTORY: "1"'가 아니면 여기서 중단(재생성하지 않는다)
 $DC up -d --no-deps --build xops-service
 $DC logs xops-service | grep '운영 이력 재구성'               # '운영 이력 재구성: completed'
 docker exec platform-xops-service-1 python -c "from src.modelops import demo_history as h; s=h.read_state(); print(s['status'], s['manifest_hash']==h.manifest_hash(), h.verify(s['base_time']))"
@@ -275,8 +277,19 @@ docker exec platform-xops-service-1 python -c "from src.modelops import demo_his
 
 ### 7.4 실패 시 복귀
 
-- 앱 두 개만 이전 SHA·이미지로 되돌린다: `.env`의 `XOPS_DEMO_HISTORY=0` → `git checkout <이전 SHA>` →
-  `$DC up -d --no-deps --build xops-service` → `$DC up -d --no-deps --build frontend` → `docker restart platform-frontend-1`.
-- 이미 만들어진 mock 기록은 실데이터 모드·헤더 없는 호출에 보이지 않으므로 그대로 두어도 실데이터 화면에 영향이 없다.
-  볼륨을 백업 시점으로 되돌리는 복원(`xops-data.tgz`)은 그 사이 실데이터 쓰기도 되돌리므로 별도 승인 후에만 한다.
+헤더 없는 요청을 실데이터로 보는 누출 차단은 이 변경과 함께 들어왔다. **이력이 만들어진 뒤 backend를 이 변경 이전
+SHA로 되돌리면** 헤더 없는 `/dataops/catalog`·`/dataops/apis` 등에 새 mock 사용자 소스·발급 API가 다시 보인다.
+그래서 복귀는 아래 순서로 판단한다.
+
+1. **이력 생성 전(7.3 확인 전) 실패**: `.env`의 `XOPS_DEMO_HISTORY=0` → `git checkout <이전 SHA>` →
+   `$DC up -d --no-deps --build xops-service` → `$DC up -d --no-deps --build frontend` → `docker restart platform-frontend-1`.
+   `mock_rows 0`(7.1 명령)을 다시 확인한다.
+2. **이력 생성 뒤 화면(frontend) 문제**: backend는 병합 SHA 이미지를 그대로 두고(누출 차단 유지) frontend만 이전 SHA로
+   다시 빌드한다(`$DC up -d --no-deps --build frontend` 후 `docker restart platform-frontend-1`). 플래그는 0으로 내려도
+   만들어진 기록은 남지만 실데이터 모드·헤더 없는 호출에는 보이지 않는다.
+3. **이력 생성 뒤 backend 자체 문제로 이전 SHA가 필요**: 이전 SHA는 누출 차단이 없으므로 backend만 되돌리면 안 된다.
+   7.2의 `xops-data.tgz`로 볼륨을 백업 시점으로 복원(이력 제거)하고 이전 SHA로 되돌린다. 복원은 그 사이 실데이터 쓰기도
+   되돌리므로 별도 승인 후에만 한다.
+- 어느 경우든 복귀 뒤 헤더 없는 조회로 확인한다:
+  `curl -s -b jar "$B/api/v3/dataops/catalog?include_seed=true" | grep -c ds_u0` → `0`.
 - 켠 뒤 화면에서 지운 이력은 다시 만들어지지 않는다(완료 표식). 다시 만들려면 볼륨 복원과 같은 수준의 결정이 필요하다.

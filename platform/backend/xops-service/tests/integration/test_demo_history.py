@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -118,12 +121,12 @@ def test_deleted_rows_are_not_restored_after_completion(fresh: Path) -> None:
 def _interrupt_after(monkeypatch: pytest.MonkeyPatch, steps: int) -> None:
     original, calls = history._step, {"n": 0}
 
-    def stop_at(state: dict[str, Any], name: str, deadline: float) -> bool:
+    def stop_at(state: dict[str, Any], name: str, deadline: float, **kwargs: Any) -> bool:
         if name not in state["steps"]:
             calls["n"] += 1
             if calls["n"] > steps:
                 raise history.Deadline(name)
-        return original(state, name, deadline)
+        return original(state, name, deadline, **kwargs)
 
     monkeypatch.setattr(history, "_step", stop_at)
 
@@ -182,6 +185,112 @@ def test_conflicting_user_record_stops_without_overwrite(fresh: Path, monkeypatc
     assert store.get("mock", "instance", user["id"])["active_version"] is None
 
 
+@pytest.mark.parametrize("action", ["dataset_registered", "instance_registered", "pipeline_registered"])
+def test_row_saved_but_registration_audit_missing_is_filled(fresh: Path, monkeypatch: pytest.MonkeyPatch, action: str) -> None:
+    """등록 행 저장 직후·감사 저장 전에 끊겨도 재개 때 고정 ID 감사만 보충해 완료한다."""
+    original = store.audit
+
+    def drop_first(mode: str, act: str, *args: Any, **kwargs: Any) -> None:
+        if act == action:
+            raise RuntimeError("interrupted")
+        original(mode, act, *args, **kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(store, "audit", drop_first)
+        with pytest.raises(RuntimeError):
+            history.ensure(FAR)
+    assert history.read_state()["status"] == "started"
+    assert history.ensure(FAR) == "completed"
+    assert history.read_state()["integrity"]["audit"] == history.EXPECTED_AUDIT
+    assert len(store.list_assets("mock", "audit")) == 37
+
+
+def test_deadline_during_training_writes_no_result(fresh: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """학습 도중 시간 상한을 넘기면 결과 파일·버전·감사·완료 상태를 쓰지 않고 멈춘다(작업은 재개 대상)."""
+    expired = {"now": False}
+    real_check, real_train = history._check_deadline, history.service._train
+
+    def check(name: str, deadline: float) -> None:
+        if expired["now"]:
+            raise history.Deadline(name)
+        real_check(name, deadline)
+
+    def slow_train(*args: Any, **kwargs: Any) -> Any:
+        result = real_train(*args, **kwargs)
+        expired["now"] = True  # 학습 계산이 끝나는 사이 상한을 넘김
+        return result
+
+    with monkeypatch.context() as patch:
+        patch.setattr(history, "_check_deadline", check)
+        patch.setattr(history.service, "_train", slow_train)
+        with pytest.raises(history.Deadline):
+            history.ensure(FAR)
+    ids = history.owned_ids()
+    job = store.get("mock", "job", ids["namwon-living-factor:run0:job"])
+    assert job["state"] == "running"
+    assert store.list_assets("mock", "version") == []
+    assert not any(row["action"] == "training_saved" for row in store.list_assets("mock", "audit"))
+    assert not list((fresh / "models" / "modelops" / "mock").glob("modelops_*/*.json"))
+    assert history.read_state()["status"] == "started"
+    assert history.ensure(FAR) == "completed"
+
+
+def test_deadline_before_completion_marker_keeps_started(fresh: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    real_check = history._check_deadline
+
+    def check(name: str, deadline: float) -> None:
+        if name == "complete":
+            raise history.Deadline(name)
+        real_check(name, deadline)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(history, "_check_deadline", check)
+        with pytest.raises(history.Deadline):
+            history.ensure(FAR)
+    assert history.read_state()["status"] == "started"
+    assert history.ensure(FAR) == "completed"
+
+
+def test_owned_row_deleted_before_completion_is_rebuilt(fresh: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """완료 표식 전에 지워진 소유 파이프라인은 재개 때 같은 정의로 다시 만들고 완료한다(완료 후 삭제는 미복원)."""
+    with monkeypatch.context() as patch:
+        patch.setattr(history, "verify", lambda base: {"problems": ["simulated"]})
+        with pytest.raises(history.Conflict):
+            history.ensure(FAR)
+    store.delete_pipeline("mock", "shinan-population-change", "user")
+    assert history.ensure(FAR) == "completed"
+    pipeline = store.get("mock", "pipeline", "shinan-population-change")
+    assert pipeline["instance_id"] == history.owned_ids()["shinan-change-sim:instance"]
+
+
+def test_corrupted_owned_dataset_blocks_completion(fresh: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    with monkeypatch.context() as patch:
+        patch.setattr(history, "verify", lambda base: {"problems": ["simulated"]})
+        with pytest.raises(history.Conflict):
+            history.ensure(FAR)
+    dataset = store.get("mock", "dataset", history.owned_ids()["namwon-change-sim:dataset"])
+    Path(dataset["private_path"]).write_text("{}", encoding="utf-8")
+    assert "dataset:namwon-change-sim" in history.verify(history.read_state()["base_time"])["problems"]
+    with pytest.raises(Exception):  # 손상 확인(409) 또는 무결성 충돌 — 어느 쪽이든 덮어쓰지 않고 멈춘다
+        history.ensure(FAR)
+    assert history.read_state()["status"] == "started"
+
+
+def test_user_source_sample_rows_answer_filter_sort_and_paging(fresh: Path) -> None:
+    history.ensure(FAR)
+    client = TestClient(app)
+    token = client.post("/api/v3/dataops/token/ds_u01_namwon_living_factors", headers=MOCK).json()["access_token"]
+    auth = {**MOCK, "Authorization": f"Bearer {token}"}
+    body = client.get("/api/v3/dataops/ds_u01_namwon_living_factors",
+                      params={"filter": "base_ym >= 202401", "sort": "base_ym", "page_size": 5}, headers=auth).json()
+    assert body["source_kind"] == "mock"
+    assert body["pagination"]["total"] == 12
+    assert [row["base_ym"] for row in body["rows"]] == [202412, 202411, 202410, 202409, 202408]
+    assert set(body["rows"][0]) == {"base_ym", "living_population", *history.factor_panel.FEATURES}
+    # 샘플은 목록·단건 메타데이터 응답에 싣지 않는다
+    assert "sample_rows" not in client.get("/api/v3/dataops/catalog/ds_u01_namwon_living_factors", headers=MOCK).json()
+
+
 def test_deadline_stops_further_writes(fresh: Path) -> None:
     with pytest.raises(history.Deadline):
         history.ensure(time.monotonic() - 1)
@@ -212,6 +321,23 @@ def test_concurrent_startups_build_once(fresh: Path, monkeypatch: pytest.MonkeyP
     assert history.read_state()["status"] == "completed"
     assert len(store.list_assets("mock", "audit")) == 37
     assert len(store.list_assets("mock", "version")) == 12
+
+
+def test_two_processes_starting_together_build_once(fresh: Path) -> None:
+    """같은 영속 경로를 쓰는 서버 프로세스 2개가 동시에 기동해도 파일 잠금으로 한 번만 만든다."""
+    env = {**os.environ, "XOPS_DB_PATH": str(fresh / "xops.db"), "XOPS_MODEL_ARTIFACT_DIR": str(fresh / "models"),
+           "XOPS_DEMO_HISTORY": "1", "PYTHONDONTWRITEBYTECODE": "1"}
+    code = "from main import app; from src.modelops import demo_history; demo_history.startup()"
+    service_root = Path(__file__).resolve().parents[2]
+    procs = [subprocess.Popen([sys.executable, "-B", "-c", code], cwd=service_root, env=env,
+                              stdout=subprocess.DEVNULL, stderr=subprocess.PIPE) for _ in range(2)]
+    for proc in procs:
+        _, err = proc.communicate(timeout=90)
+        assert proc.returncode == 0, err.decode(errors="replace")[-500:]
+    assert history.read_state()["status"] == "completed"
+    assert len(store.list_assets("mock", "audit")) == 37
+    assert len(store.list_assets("mock", "version")) == 12
+    assert len(list((fresh / "models" / "modelops" / "mock").rglob("*.json"))) == 16
 
 
 def test_startup_failure_keeps_app_running(fresh: Path, monkeypatch: pytest.MonkeyPatch) -> None:

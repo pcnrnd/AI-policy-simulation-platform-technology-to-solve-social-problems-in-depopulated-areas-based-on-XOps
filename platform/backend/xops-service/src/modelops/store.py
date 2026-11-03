@@ -61,9 +61,10 @@ def save(mode: str, kind: str, body: dict[str, Any], *, create: bool = False) ->
 
 def audit(mode: str, action: str, asset_id: str, actor: str, *, audit_id: str | None = None,
           created_at: str | None = None, **details: Any) -> None:
-    """감사 기록. ID·시각을 주지 않으면 지금 만든다(기본 동작) — 운영 이력 재구성만 명시 값을 넘긴다."""
+    """감사 기록. ID·시각을 주지 않으면 지금 만든다(기본 동작) — 운영 이력 재구성만 명시 값을 넘긴다.
+    고정 ID로 다시 쓰면 같은 행을 덮어써 중복을 만들지 않는다(중단 재개)."""
     save(mode, "audit", {"id": audit_id or new_id(), "created_at": created_at or now(), "action": action,
-                         "asset_id": asset_id, "actor": actor, **details}, create=True)
+                         "asset_id": asset_id, "actor": actor, **details}, create=audit_id is None)
 
 
 def delete_pipeline(mode: str, asset_id: str, actor: str) -> None:

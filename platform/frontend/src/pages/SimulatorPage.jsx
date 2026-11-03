@@ -155,7 +155,9 @@ export default function SimulatorPage() {
     const version = factorModel.active_version;
     const saved = simulatorRuns[regionId]?.version === version ? simulatorRuns[regionId] : null;
     if (saved?.result) {
+      // 결과와 그때의 시설 입력을 함께 되살린다(예산·정책 가중치는 앱 상태라 그대로 유지된다).
       if (analysisStatus === "idle" && !factorResult) {
+        if (saved.controlValues) setControlValues(saved.controlValues);
         factor.restore(saved.result);
         setRecommendation(saved.recommendation ?? null);
         setRecoSig(saved.recoSig ?? "");
@@ -169,7 +171,8 @@ export default function SimulatorPage() {
     const factorOfBudget = budgetFactor;
     const region = currentRegion;
     (async () => {
-      const analysis = await factor.run();
+      // 입력이 바뀌었으면 ①의 결과도 게시하지 않고 버린다(훅 안에서 결과 게시 직전에 확인).
+      const analysis = await factor.run({ accept: () => sigRef.current === startSig });
       if (!analysis || sigRef.current !== startSig) return;
       const ranked = rankStrategies(region, weights, factorOfBudget);
       setRecommendation(ranked);
@@ -183,7 +186,7 @@ export default function SimulatorPage() {
   useEffect(() => {
     if (!demo || !factorModel || analysisStatus !== "done" || !factor.result || !recommendation || recoSig !== currentSig) return;
     updateSimulatorRun(currentRegion.id, { version: factorModel.active_version, attempted: true,
-      result: factor.result, recommendation, recoSig });
+      result: factor.result, recommendation, recoSig, controlValues });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [demo, factor.result, recommendation, recoSig]);
 

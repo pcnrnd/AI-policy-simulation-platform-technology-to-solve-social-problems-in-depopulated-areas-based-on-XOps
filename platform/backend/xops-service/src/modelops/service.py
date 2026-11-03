@@ -4,7 +4,7 @@ import hashlib
 import json
 import threading
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from fastapi import HTTPException
 
@@ -135,11 +135,16 @@ def start_job(mode: str, pipeline_id: str, actor: str) -> dict[str, Any]:
     return job
 
 
+class Stopped(Exception):
+    """호출자가 준 guard가 실행을 멈춤(시간 상한 등) — 실패로 기록하지 않고 그대로 올린다."""
+
+
 def train_sync(mode: str, pipeline_id: str, actor: str, *, job_id: str, version_id: str, created_at: str,
-               started_at: str, finished_at: str, audit_id: str) -> dict[str, Any]:
-    """같은 학습을 호출 스레드에서 끝까지 실행한다(운영 이력 재구성 전용). 시각·ID는 모두 명시 값을 쓴다."""
+               started_at: str, finished_at: str, audit_id: str, guard: Callable[[], None] | None = None) -> dict[str, Any]:
+    """같은 학습을 호출 스레드에서 끝까지 실행한다(운영 이력 재구성 전용). 시각·ID는 모두 명시 값을 쓴다.
+    `guard`는 저장 직전마다 불리며 `Stopped`를 올리면 그 뒤 파일·DB를 쓰지 않는다."""
     job, lock = _queue_job(mode, pipeline_id, actor, job_id=job_id, version_id=version_id, created_at=created_at, replace=True)
-    _run_job(mode, job, lock, clock=lambda stage: started_at if stage == "started" else finished_at, audit_id=audit_id)
+    _run_job(mode, job, lock, clock=lambda stage: started_at if stage == "started" else finished_at, audit_id=audit_id, guard=guard)
     return store.get(mode, "job", job_id)
 
 
@@ -147,15 +152,19 @@ def _now(_stage: str) -> str:
     return store.now()
 
 
-def _run_job(mode: str, job: dict[str, Any], lock: threading.Lock, *, clock: Any = _now, audit_id: str | None = None) -> None:
+def _run_job(mode: str, job: dict[str, Any], lock: threading.Lock, *, clock: Any = _now, audit_id: str | None = None,
+             guard: Callable[[], None] | None = None) -> None:
     """학습 실행. `clock(stage)`가 시작("started")·저장 시각을 준다 — 기본은 지금 시각이다."""
+    check = guard or (lambda: None)
     stage = "preparing"  # 실패 시 어느 단계에서 멈췄는지 화면 노드에 표시한다.
     try:
+        check()
         job = store.save(mode, "job", {**job, "state": "running", "started_at": clock("started")})
         dataset, document = datasets.load(mode, job["dataset_id"], job["dataset_hash"])
         instance = store.get(mode, "instance", job["instance_id"])
         stage = "training"
         artifact, metrics, baseline = _train(mode, dataset, document, job["version_id"])
+        check()
         stage = "registering"
         artifact.update({"model_id": instance["id"], "model_type": instance["model_type"],
             "mode": mode, "source": mode, "region_id": instance["region_id"], "target": instance["target"],
@@ -174,6 +183,8 @@ def _run_job(mode: str, job: dict[str, Any], lock: threading.Lock, *, clock: Any
         store.audit(mode, "training_saved", instance["id"], job["actor"], audit_id=audit_id, created_at=clock("saved"),
                     job_id=job["id"], version_id=job["version_id"], dataset_hash=dataset["content_hash"])
         job = store.save(mode, "job", {**job, "state": "saved", "finished_at": clock("saved"), "artifact_path": str(path)})
+    except Stopped:
+        raise
     except Exception as exc:
         store.save(mode, "job", {**job, "state": "failed", "finished_at": clock("failed"), "error": type(exc).__name__, "failed_stage": stage})
         store.audit(mode, "training_failed", job["instance_id"], job["actor"], job_id=job["id"], reason=type(exc).__name__)

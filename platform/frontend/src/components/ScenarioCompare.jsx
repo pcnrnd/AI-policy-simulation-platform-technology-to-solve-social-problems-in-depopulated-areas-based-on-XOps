@@ -10,20 +10,28 @@ import { MAX_PER_REGION, parseScenarioStore, serializeScenarioStore, withPresetS
 // 이번 세션에서 기본 시나리오를 시도한 지역 — 저장에 실패해도 다시 시도하지 않는다(화면 세션에만 표시).
 const presetAttempted = new Set();
 
+// 브라우저 저장에 실패한 목록 — 이번 앱 세션 동안 메모리에 두고(탭·지역 왕복에도 유지) 저장은 다시 시도하지 않는다.
+const sessionFallback = new Map();
+
 function loadStore(allowSeed) {
+  const key = scenarioStorageKey(allowSeed);
+  if (sessionFallback.has(key)) return sessionFallback.get(key);
   try {
-    return parseScenarioStore(localStorage.getItem(scenarioStorageKey(allowSeed)));
+    return parseScenarioStore(localStorage.getItem(key));
   } catch {
     return { scenarios: [], presets: {} };
   }
 }
 
 function persistStore(store, allowSeed) {
+  const key = scenarioStorageKey(allowSeed);
   try {
-    localStorage.setItem(scenarioStorageKey(allowSeed), serializeScenarioStore(store));
+    localStorage.setItem(key, serializeScenarioStore(store));
+    sessionFallback.delete(key);
     return true;
   } catch {
-    // 저장공간 초과 등 — 비교 기능은 메모리 상태로 계속 동작
+    // 저장공간 초과·저장 차단 — 비교 기능은 메모리 상태로 계속 동작
+    sessionFallback.set(key, store);
     return false;
   }
 }
