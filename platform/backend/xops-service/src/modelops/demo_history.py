@@ -196,30 +196,24 @@ def startup() -> None:
         return
     deadline = time.monotonic() + settings.demo_history_timeout_seconds
     try:
-        with file_lock(deadline):
-            # 상한 정책 하나: 재구성의 모든 저장(store.save·표식·DataOps) 직전에 같은 기한을 확인한다.
-            # 기한을 넘기면 그 저장부터 하지 않고, 오류 표식·미완료 작업 정리도 다음 기동으로 넘긴다
-            # (미완료 표식 'started'는 첫 쓰기 전에 이미 있다).
-            expired = lambda: time.monotonic() >= deadline  # noqa: E731
+        # 상한 정책 하나: 잠금 구간의 모든 저장(재구성·오류 표식·미완료 작업 정리) 직전에 같은 기한을 확인한다.
+        # 기한을 넘기면 그 저장부터 하지 않고 로그만 남긴다(미완료 표식 'started'는 첫 쓰기 전에 이미 있다).
+        with file_lock(deadline), store.write_guard(lambda: _check_deadline("write", deadline)):
             try:
-                with store.write_guard(lambda: _check_deadline("write", deadline)):
-                    result = ensure(deadline)
+                result = ensure(deadline)
                 get_logger().info(f"운영 이력 재구성: {result}")
-            except Deadline as exc:
-                get_logger().warning(f"운영 이력 재구성: 시간 상한 초과로 중단, 다음 기동에 이어서 진행 (단계={getattr(exc, 'stage', 'unknown')})")
-                return
+            except Deadline:
+                raise
             except Exception as exc:  # noqa: BLE001 — 앱 기동을 막지 않는다
-                if expired():
-                    get_logger().warning(f"운영 이력 재구성: 시간 상한 뒤 실패, 기록 없이 중단 (사유={type(exc).__name__})")
-                    return
                 _record_error(exc)
-            if expired():
-                get_logger().warning("운영 이력 재구성: 시간 상한 도달, 미완료 작업 정리는 다음 기동에서")
-                return
             service.recover_jobs(skip_ids=frozenset(v for k, v in owned_ids().items() if k.endswith(":job")))
-    except Deadline:
-        # 다른 프로세스가 잠금을 쥐고 있다 — 그쪽이 재구성과 정리를 맡는다.
-        get_logger().warning("운영 이력 재구성: 잠금 대기 시간 초과, 이번 기동은 건너뜀")
+    except Deadline as exc:
+        stage = getattr(exc, "stage", None) or "lock"
+        if stage == "lock":
+            # 다른 프로세스가 잠금을 쥐고 있다 — 그쪽이 재구성과 정리를 맡는다.
+            get_logger().warning("운영 이력 재구성: 잠금 대기 시간 초과, 이번 기동은 건너뜀")
+        else:
+            get_logger().warning(f"운영 이력 재구성: 시간 상한 초과로 중단, 남은 저장·정리는 다음 기동에서 (단계={stage})")
 
 
 def _record_error(exc: Exception) -> None:

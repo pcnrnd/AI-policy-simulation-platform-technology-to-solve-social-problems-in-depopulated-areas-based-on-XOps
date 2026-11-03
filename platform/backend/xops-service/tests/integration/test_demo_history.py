@@ -429,6 +429,52 @@ def test_any_write_after_deadline_is_refused_in_startup(fresh: Path, monkeypatch
     assert history.ensure(FAR) == "completed"  # 남은 기록은 다음 기동(여기서는 ensure)에서 이어 쓴다
 
 
+def test_error_record_after_deadline_is_not_written(fresh: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """재구성이 기한 안에 일반 오류로 끝나고, 오류 표식을 쓰기 직전에 기한이 지나면 표식을 쓰지 않는다."""
+    monkeypatch.setattr(get_settings(), "demo_history", True)
+    clock = {"expired": False}
+    real_monotonic, real_read = history.time.monotonic, history.read_state
+    monkeypatch.setattr(history.time, "monotonic", lambda: real_monotonic() + (10**6 if clock["expired"] else 0))
+    monkeypatch.setattr(history, "verify", lambda base: {"problems": ["simulated"]})  # 상한 안의 일반 실패(Conflict)
+
+    def read_then_expire() -> dict[str, Any] | None:
+        state = real_read()
+        if state is not None and state.get("status") == "started" and len(state["steps"]) > 30:
+            clock["expired"] = True  # _record_error 의 read_state 직후 만료
+        return state
+
+    monkeypatch.setattr(history, "read_state", read_then_expire)
+    history.startup()
+    clock["expired"] = False
+    monkeypatch.setattr(history, "read_state", real_read)
+    assert "last_error" not in history.read_state()
+
+
+def test_recover_jobs_stops_when_deadline_passes_midway(fresh: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """미완료 작업 정리 도중 기한이 지나면 나머지 작업 저장을 하지 않는다."""
+    history.ensure(FAR)
+    monkeypatch.setattr(get_settings(), "demo_history", True)
+    for index in range(3):
+        store.save("real", "job", {"id": f"stale-{index}", "instance_id": "r", "state": "running",
+                                    "created_at": f"2026-01-0{index + 1}T00:00:00+00:00"}, create=True)
+    clock = {"expired": False, "saved": 0}
+    real_monotonic, real_save = history.time.monotonic, store.save
+    monkeypatch.setattr(history.time, "monotonic", lambda: real_monotonic() + (10**6 if clock["expired"] else 0))
+
+    def save(mode: str, kind: str, body: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
+        result = real_save(mode, kind, body, **kwargs)
+        if kind == "job" and body.get("error") == "restart":
+            clock["saved"] += 1
+            clock["expired"] = True  # 첫 정리 저장 직후 만료
+        return result
+
+    monkeypatch.setattr(store, "save", save)
+    history.startup()
+    clock["expired"] = False
+    states = [store.get("real", "job", f"stale-{index}")["state"] for index in range(3)]
+    assert clock["saved"] == 1 and states.count("failed") == 1 and states.count("running") == 2
+
+
 def test_deadline_stops_further_writes(fresh: Path) -> None:
     """잠금 대기로 상한을 다 쓴 경우 — 시작 표식을 포함해 아무것도 쓰지 않는다."""
     with pytest.raises(history.Deadline):
