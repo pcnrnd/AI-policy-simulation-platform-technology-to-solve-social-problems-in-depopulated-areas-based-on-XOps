@@ -1786,6 +1786,69 @@
         }
       }
     },
+    "/api/v3/modelops/datasets/{dataset_id}": {
+      "delete": {
+        "tags": [
+          "modelops"
+        ],
+        "summary": "Delete Dataset",
+        "operationId": "delete_dataset_api_v3_modelops_datasets__dataset_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "dataset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Dataset Id"
+            }
+          },
+          {
+            "name": "X-Data-Mode",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "enum": [
+                "mock",
+                "real"
+              ],
+              "type": "string",
+              "default": "real",
+              "title": "X-Data-Mode"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Delete Dataset Api V3 Modelops Datasets  Dataset Id  Delete"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v3/modelops/instances": {
       "post": {
         "tags": [
