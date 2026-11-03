@@ -142,6 +142,15 @@ def test_readonly_client_env_is_passed_through(compose: dict[str, Any]) -> None:
         assert key.removeprefix(prefix).lower() in Settings.model_fields
 
 
+def test_demo_history_flag_defaults_off_on_ec2() -> None:
+    """운영 덮어쓰기는 데모 운영 이력 플래그를 명시 전달하되 기본값은 0(끔)이다 — 공용 설정에 켬을 고정하지 않는다."""
+    env = _load(_PLATFORM / "compose.ec2.yaml")["services"]["xops-service"]["environment"]
+    assert env["XOPS_DEMO_HISTORY"] == "${XOPS_DEMO_HISTORY:-0}"
+    assert "demo_history" in Settings.model_fields and Settings().demo_history is False
+    example = (_PLATFORM / "deploy" / ".env.example").read_text(encoding="utf-8")
+    assert re.search(r"^XOPS_DEMO_HISTORY=0$", example, re.MULTILINE)
+
+
 def test_nginx_serves_openapi_and_keeps_api_block() -> None:
     """같은 도메인 연동 — `/api/v3/openapi.json` 정확 일치를 두고 기존 `/api/` 블록은 그대로 둔다."""
     conf = (_PLATFORM / "frontend" / "nginx.conf").read_text(encoding="utf-8")

@@ -46,6 +46,8 @@ services:
       XOPS_PG_DSN: postgresql://xops:${DB_PASSWORD:?deploy/.env에 DB_PASSWORD 필요}@pg:5432/xops_dataops
       XOPS_TIMESCALE_DSN: postgresql://xops:${DB_PASSWORD}@timescale:5432/xops_timeseries
       XOPS_MONGO_URI: mongodb://xops:${DB_PASSWORD}@mongo:27017/xops_documents?authSource=admin
+      # 데모 표시용 운영 이력 재구성 — 기본 0(끔). 켜는 절차·확인·복귀는 docs/deploy/ec2-login-gate.md 7절.
+      XOPS_DEMO_HISTORY: ${XOPS_DEMO_HISTORY:-0}
     ports: !reset []
 
   frontend:

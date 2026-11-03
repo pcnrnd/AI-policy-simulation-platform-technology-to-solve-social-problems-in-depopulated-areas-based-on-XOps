@@ -227,3 +227,56 @@ $DC up -d --no-deps --build frontend            # 화면 변경 반영
 - `--no-deps`가 없으면 depends_on 때문에 frontend 갱신 시 xops-service까지 재빌드·재생성된다.
 
 - 세션이 끊기면 화면이 로그인 화면으로 보내고, 로그인 뒤 원래 화면으로 돌아와 "다시 로그인했습니다" 안내가 뜬다.
+
+## 7. 데모 운영 이력(`XOPS_DEMO_HISTORY`) 켜기
+
+데모 표시 ON(mock 모드) 화면이 운영 중인 서버처럼 보이도록, 새 설치에서 한 번 과거 12주 운영 이력을 만든다
+(모델 4개·학습 12회·활성화 12건·복원 1건·소유 감사 37건, DataOps 사용자 소스 2건·발급 API 3건).
+기본은 꺼짐(0)이며 실데이터 모드와 모드 헤더 없는 호출에는 이 기록이 보이지 않는다. 앱 기동 시
+`xops-data` 볼륨의 파일 잠금 안에서 동기로 실행되고 상한은 60초다. 상한을 넘기면 쓰기를 멈추고 다음 기동 때 잇는다.
+상한 60초는 xops-service 헬스체크가 unhealthy로 바꾸기까지의 약 90초(start_period 20초 + 15초 간격 5회)보다 짧다.
+
+### 7.1 배포 전 확인(읽기 전용) — 하나라도 다르면 중단하고 보고한다
+
+```sh
+docker exec platform-xops-service-1 python -c "import sqlite3; c=sqlite3.connect('file:/app/data/xops.db?mode=ro', uri=True); print('mock_rows', c.execute(\"select count(*) from mo_assets where mode='mock'\").fetchone()[0]); print('state_table', c.execute(\"select count(*) from sqlite_master where name='ops_history_state'\").fetchone()[0])"
+```
+
+- `mock_rows 0`, `state_table 0`이어야 새 설치다. mock 기록이 있으면 켜도 건너뛰므로(덮어쓰지 않음) 켤 이유가 없다.
+- 실데이터 기준선(대표 조회의 `source_kind=database`·건수)을 같은 시점에 기록해 둔다.
+
+### 7.2 백업 — 앱만 멈추고 xops-data 볼륨 전체를 보존한다
+
+```sh
+TS=$(date +%Y%m%d-%H%M%S); B=/home/<계정>/backups/population-demo-history-$TS; mkdir -p $B
+docker image inspect platform-xops-service --format '{{.Id}}' > $B/xops-service.image   # 복귀용 현재 이미지
+docker image inspect platform-frontend --format '{{.Id}}' > $B/frontend.image
+$DC stop xops-service                                        # 쓰기 중지(DB 3종은 건드리지 않는다)
+docker run --rm -v platform_xops-data:/data:ro -v $B:/backup alpine tar czf /backup/xops-data.tgz -C /data .   # SQLite WAL 포함
+cp platform/deploy/.env $B/env.bak
+sha256sum $B/* > $B/SHA256SUMS
+```
+
+### 7.3 반영 — backend → 이력 확인 → frontend 순서
+
+```sh
+git -C <checkout> checkout <병합 SHA>
+grep -q '^XOPS_DEMO_HISTORY=' platform/deploy/.env || echo 'XOPS_DEMO_HISTORY=1' >> platform/deploy/.env   # 다른 값은 그대로
+$DC config | grep XOPS_DEMO_HISTORY                          # 'XOPS_DEMO_HISTORY: "1"' 확인
+$DC up -d --no-deps --build xops-service
+$DC logs xops-service | grep '운영 이력 재구성'               # '운영 이력 재구성: completed'
+docker exec platform-xops-service-1 python -c "from src.modelops import demo_history as h; s=h.read_state(); print(s['status'], s['manifest_hash']==h.manifest_hash(), h.verify(s['base_time']))"
+```
+
+- 성공 판정은 healthy가 아니라 위 확인값이다: `completed True`, `audit_total 37`, `pointers` 4개 모두 `ok`(남원 생활인구는 2차 활성·3차 이전),
+  `user_sources 2`, `built_apis 3`, `problems []`.
+- 그다음 `$DC up -d --no-deps --build frontend` → `docker restart platform-frontend-1`(nginx가 API 주소를 다시 찾게 한다).
+- `down`·`-v`·`--remove-orphans`·`prune` 금지, DB 3종(project `population-db`)은 읽지도 재시작하지도 않는다.
+
+### 7.4 실패 시 복귀
+
+- 앱 두 개만 이전 SHA·이미지로 되돌린다: `.env`의 `XOPS_DEMO_HISTORY=0` → `git checkout <이전 SHA>` →
+  `$DC up -d --no-deps --build xops-service` → `$DC up -d --no-deps --build frontend` → `docker restart platform-frontend-1`.
+- 이미 만들어진 mock 기록은 실데이터 모드·헤더 없는 호출에 보이지 않으므로 그대로 두어도 실데이터 화면에 영향이 없다.
+  볼륨을 백업 시점으로 되돌리는 복원(`xops-data.tgz`)은 그 사이 실데이터 쓰기도 되돌리므로 별도 승인 후에만 한다.
+- 켠 뒤 화면에서 지운 이력은 다시 만들어지지 않는다(완료 표식). 다시 만들려면 볼륨 복원과 같은 수준의 결정이 필요하다.
