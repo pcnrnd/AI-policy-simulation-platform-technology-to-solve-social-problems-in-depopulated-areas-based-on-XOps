@@ -159,6 +159,16 @@ def _mongo_value(raw: str) -> Any:
             return raw.strip("'").strip('"')
 
 
+def filter_conditions(filter_expr: str | None) -> list[tuple[str, str, Any]]:
+    """필터식의 조건을 손실 없이 (컬럼, 연산자, 값) 목록으로 — 같은 컬럼의 여러 조건도 모두 남는다(AND)."""
+    conditions = []
+    for condition in split_filter_conditions(filter_expr):
+        match = _FILTER_RE.match(condition)
+        if match is not None:
+            conditions.append((match.group(1), match.group(2), _mongo_value(match.group(3))))
+    return conditions
+
+
 def build_mongo_query(*, range_: Range, filter_expr: str | None) -> dict[str, Any]:
     """pymongo 에 그대로 넘기는 필터 dict.
 

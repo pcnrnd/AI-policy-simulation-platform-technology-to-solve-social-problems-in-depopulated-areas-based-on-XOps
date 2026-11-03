@@ -136,6 +136,7 @@ export default function SimulatorPage() {
   useEffect(() => {
     // 다른 지역에 갔다가 돌아와도 이전 행정동이 되살아나지 않게 기억을 지운다(화면 값은 이미 "전체").
     setDongPick((pick) => (pick.regionId === currentRegion.id ? pick : { regionId: currentRegion.id, code: "" }));
+    userEdited.current = false;
     setSimResult(null);
     setRecommendation(null);
     setRecoSig("");
@@ -148,6 +149,9 @@ export default function SimulatorPage() {
   // 바꿨으면 결과를 버린다(사용자 입력을 덮지 않음). 화면 이동·초점 이동은 하지 않는다.
   const sigRef = useRef(currentSig);
   sigRef.current = currentSig;
+  // 이 지역에 들어온 뒤 사용자가 직접 입력을 바꿨는지 — 바꿨으면 보존 결과를 되살리지 않는다(지역 변경 시 초기화).
+  const userEdited = useRef(false);
+  const edited = (setter) => (...args) => { userEdited.current = true; setter(...args); };
   const demoModelReady = demo && Boolean(factorModel) && !factor.loading && picked?.version === factorModel?.active_version;
   useEffect(() => {
     if (!demoModelReady) return;
@@ -155,9 +159,15 @@ export default function SimulatorPage() {
     const version = factorModel.active_version;
     const saved = simulatorRuns[regionId]?.version === version ? simulatorRuns[regionId] : null;
     if (saved?.result) {
-      // 결과와 그때의 시설 입력을 함께 되살린다(예산·정책 가중치는 앱 상태라 그대로 유지된다).
-      if (analysisStatus === "idle" && !factorResult) {
-        if (saved.controlValues) setControlValues(saved.controlValues);
+      // 결과와 그때 계산에 쓴 입력(예산·정책 가중치·시설)을 함께 되살린다. 이 지역에 들어온 뒤 사용자가 이미 입력을
+      // 바꿨으면 과거 결과로 덮지 않는다(복원하지 않음).
+      if (analysisStatus === "idle" && !factorResult && !userEdited.current) {
+        const inputs = saved.inputs ?? {};
+        if (inputs.controlValues) setControlValues(inputs.controlValues);
+        if (Number.isFinite(inputs.budgetTotal)) setBudgetTotal(inputs.budgetTotal);
+        if (Number.isFinite(inputs.welfareWeight)) setWelfareWeight(inputs.welfareWeight);
+        if (Number.isFinite(inputs.industryWeight)) setIndustryWeight(inputs.industryWeight);
+        if (Number.isFinite(inputs.housingWeight)) setHousingWeight(inputs.housingWeight);
         factor.restore(saved.result);
         setRecommendation(saved.recommendation ?? null);
         setRecoSig(saved.recoSig ?? "");
@@ -186,7 +196,8 @@ export default function SimulatorPage() {
   useEffect(() => {
     if (!demo || !factorModel || analysisStatus !== "done" || !factor.result || !recommendation || recoSig !== currentSig) return;
     updateSimulatorRun(currentRegion.id, { version: factorModel.active_version, attempted: true,
-      result: factor.result, recommendation, recoSig, controlValues });
+      result: factor.result, recommendation, recoSig,
+      inputs: { controlValues, budgetTotal, welfareWeight, industryWeight, housingWeight } });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [demo, factor.result, recommendation, recoSig]);
 
@@ -605,17 +616,17 @@ export default function SimulatorPage() {
             </label>}
             hint={demo ? "예산·정책 강조·시설 변수를 조정하면 10년 인구 예측이 실시간 갱신됩니다." : "관측 입력을 조정하면 다음 달 예측이 갱신됩니다."}
             fixed={{
-              budgetTotal, setBudgetTotal, welfare: welfareWeight, setWelfare: setWelfareWeight,
-              industry: industryWeight, setIndustry: setIndustryWeight, housing: housingWeight, setHousing: setHousingWeight,
+              budgetTotal, setBudgetTotal: edited(setBudgetTotal), welfare: welfareWeight, setWelfare: edited(setWelfareWeight),
+              industry: industryWeight, setIndustry: edited(setIndustryWeight), housing: housingWeight, setHousing: edited(setHousingWeight),
               lockText: demo ? null : REAL_CONTROLS_LOCK_TEXT
             }}
             controls={controls}
             controlValues={controlValues}
-            onControlChange={(key, value) => setControlValues((prev) => ({ ...prev, [key]: value }))}
+            onControlChange={edited((key, value) => setControlValues((prev) => ({ ...prev, [key]: value })))}
             controlsLabel={demo ? "시설 조절변수 (x)" : "관측 입력 조정 (x)"}
             controlsEmptyText={demo ? null : real.missing ? "시뮬레이션 모델 준비 후 조정할 수 있습니다." : real.loading ? "관측 입력 확인 중…" : null}
             controlsLockTitle={realLockTitle ?? "조정할 조절변수가 없습니다."}
-            onResetControls={() => { if (controls.length) setControlValues(defaultValues()); }}
+            onResetControls={edited(() => { if (controls.length) setControlValues(defaultValues()); })}
             onRecommend={handleRecommend}
             // 실데이터는 ① 실행 없이 시뮬레이션 모델만으로 추천한다. 조회 실패면 눌러서 다시 확인(재시도).
             recommendDisabled={demo ? !analysisDone : !real.ready && !real.loadFailed}
@@ -717,6 +728,7 @@ export default function SimulatorPage() {
             predict: (values) => real.predictOnly(Object.fromEntries(controls.map((c) => [c.key, Number(values?.[c.key] ?? c.default)])))
           }}
           onApply={(sc) => {
+            userEdited.current = true;
             setBudgetTotal(sc.budgetTotal);
             setWelfareWeight(sc.welfareWeight);
             setIndustryWeight(sc.industryWeight);

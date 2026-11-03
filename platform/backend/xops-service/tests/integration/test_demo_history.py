@@ -291,10 +291,96 @@ def test_user_source_sample_rows_answer_filter_sort_and_paging(fresh: Path) -> N
     assert "sample_rows" not in client.get("/api/v3/dataops/catalog/ds_u01_namwon_living_factors", headers=MOCK).json()
 
 
+def test_deadline_between_saves_stops_remaining_writes(fresh: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """버전 저장 직후 상한을 넘기면 학습 감사·완료 상태를 쓰지 않는다(저장마다 확인). 재개는 감사만 채운다."""
+    expired = {"now": False}
+    real_check, real_save = history._check_deadline, store.save
+
+    def check(name: str, deadline: float) -> None:
+        if expired["now"]:
+            raise history.Deadline(name)
+        real_check(name, deadline)
+
+    def save(mode: str, kind: str, body: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
+        result = real_save(mode, kind, body, **kwargs)
+        if kind == "version":
+            expired["now"] = True
+        return result
+
+    with monkeypatch.context() as patch:
+        patch.setattr(history, "_check_deadline", check)
+        patch.setattr(store, "save", save)
+        with pytest.raises(history.Deadline):
+            history.ensure(FAR)
+    assert len(store.list_assets("mock", "version")) == 1
+    assert not any(row["action"] == "training_saved" for row in store.list_assets("mock", "audit"))
+    assert all(job["state"] != "saved" for job in store.list_assets("mock", "job"))
+    assert history.ensure(FAR) == "completed"
+
+
+def test_startup_deadline_writes_nothing_more(fresh: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """기동 경로에서 상한을 넘기면 오류 표식·미완료 작업 정리도 하지 않는다(다음 기동으로)."""
+    monkeypatch.setattr(get_settings(), "demo_history", True)
+    store.save("real", "job", {"id": "real-job", "instance_id": "r", "state": "running", "created_at": store.now()}, create=True)
+    real_check = history._check_deadline
+
+    def check(name: str, deadline: float) -> None:
+        if name.endswith(":instance"):
+            raise history.Deadline(name)
+        real_check(name, deadline)
+
+    monkeypatch.setattr(history, "_check_deadline", check)
+    history.startup()
+    state = history.read_state()
+    assert state["status"] == "started" and "last_error" not in state
+    assert store.get("real", "job", "real-job")["state"] == "running"  # 정리는 다음 기동에서
+
+
+def test_hash_link_mismatch_blocks_completion(fresh: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    with monkeypatch.context() as patch:
+        patch.setattr(history, "verify", lambda base: {"problems": ["simulated"]})
+        with pytest.raises(history.Conflict):
+            history.ensure(FAR)
+    version_id = history.owned_ids()["shinan-living-factor:run2:version"]
+    version = store.get("mock", "version", version_id)
+    store.save("mock", "version", {**version, "dataset_hash": "0" * 64})
+    assert "refs:shinan-living-factor:2" in history.verify(history.read_state()["base_time"])["problems"]
+    with pytest.raises(history.Conflict):
+        history.ensure(FAR)
+    assert history.read_state()["status"] == "started"
+
+
+def test_redefined_owned_pipeline_is_a_conflict(fresh: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """완료 전 같은 ID·같은 학습데이터로 다른 정의(실행 정책)를 재등록했으면 덮어쓰지 않고 멈춘다."""
+    with monkeypatch.context() as patch:
+        patch.setattr(history, "verify", lambda base: {"problems": ["simulated"]})
+        with pytest.raises(history.Conflict):
+            history.ensure(FAR)
+    pipeline = store.get("mock", "pipeline", "namwon-living-monthly")
+    store.delete_pipeline("mock", "namwon-living-monthly", "user")
+    service.register_pipeline("mock", {**{k: pipeline[k] for k in ("id", "name", "model_type", "dataset_id", "dataset_hash", "experiment")},
+                                       "trigger_policy": "수동"}, "user")
+    with pytest.raises(history.Conflict):
+        history.ensure(FAR)
+    assert store.get("mock", "pipeline", "namwon-living-monthly")["trigger_policy"] == "수동"
+
+
+def test_sample_filter_keeps_every_condition(fresh: Path) -> None:
+    history.ensure(FAR)
+    client = TestClient(app)
+    token = client.post("/api/v3/dataops/token/ds_u01_namwon_living_factors", headers=MOCK).json()["access_token"]
+    auth = {**MOCK, "Authorization": f"Bearer {token}"}
+    body = client.get("/api/v3/dataops/ds_u01_namwon_living_factors",
+                      params={"filter": "base_ym >= 202410 AND base_ym >= 202401", "sort": "base_ym"}, headers=auth).json()
+    assert [row["base_ym"] for row in body["rows"]] == [202412, 202411, 202410]
+    assert body["pagination"]["total"] == 3
+
+
 def test_deadline_stops_further_writes(fresh: Path) -> None:
+    """잠금 대기로 상한을 다 쓴 경우 — 시작 표식을 포함해 아무것도 쓰지 않는다."""
     with pytest.raises(history.Deadline):
         history.ensure(time.monotonic() - 1)
-    assert history.read_state()["status"] == "started" and history.read_state()["steps"] == []
+    assert history.read_state() is None
     assert _mock_rows() == 0
 
 

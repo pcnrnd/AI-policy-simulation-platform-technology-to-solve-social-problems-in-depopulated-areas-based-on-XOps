@@ -143,6 +143,8 @@ def train_sync(mode: str, pipeline_id: str, actor: str, *, job_id: str, version_
                started_at: str, finished_at: str, audit_id: str, guard: Callable[[], None] | None = None) -> dict[str, Any]:
     """같은 학습을 호출 스레드에서 끝까지 실행한다(운영 이력 재구성 전용). 시각·ID는 모두 명시 값을 쓴다.
     `guard`는 저장 직전마다 불리며 `Stopped`를 올리면 그 뒤 파일·DB를 쓰지 않는다."""
+    if guard:
+        guard()
     job, lock = _queue_job(mode, pipeline_id, actor, job_id=job_id, version_id=version_id, created_at=created_at, replace=True)
     _run_job(mode, job, lock, clock=lambda stage: started_at if stage == "started" else finished_at, audit_id=audit_id, guard=guard)
     return store.get(mode, "job", job_id)
@@ -173,6 +175,7 @@ def _run_job(mode: str, job: dict[str, Any], lock: threading.Lock, *, clock: Any
         path = get_settings().model_artifact_dir / "modelops" / mode / instance["id"] / (job["version_id"] + ".json")
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(artifact, ensure_ascii=False, allow_nan=False), encoding="utf-8")
+        check()  # 이후 저장마다 다시 확인 — 멈춘 지점은 재개가 같은 ID로 이어 쓴다(파일은 같은 경로에 덮어씀)
         store.save(mode, "version", {"id": job["version_id"], "instance_id": instance["id"],
             "model_type": instance["model_type"], "region_id": instance["region_id"], "target": instance["target"],
             "dataset_id": dataset["id"], "dataset_hash": dataset["content_hash"], "source_dataset_id": dataset["source_dataset_id"],
@@ -180,8 +183,10 @@ def _run_job(mode: str, job: dict[str, Any], lock: threading.Lock, *, clock: Any
             "job_id": job["id"], "metrics": metrics, "baseline": baseline, "artifact_path": str(path),
             "artifact_hash": hashlib.sha256(path.read_bytes()).hexdigest(), "created_at": clock("saved"), "status": "candidate"},
             create=audit_id is None)  # 재개는 같은 버전 ID를 다시 쓴다 — 아티팩트 해시도 함께 갱신된다
+        check()
         store.audit(mode, "training_saved", instance["id"], job["actor"], audit_id=audit_id, created_at=clock("saved"),
                     job_id=job["id"], version_id=job["version_id"], dataset_hash=dataset["content_hash"])
+        check()
         job = store.save(mode, "job", {**job, "state": "saved", "finished_at": clock("saved"), "artifact_path": str(path)})
     except Stopped:
         raise

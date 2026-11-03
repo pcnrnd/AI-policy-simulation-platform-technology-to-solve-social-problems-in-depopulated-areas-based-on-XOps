@@ -80,7 +80,12 @@ export default function ScenarioCompare({ region, snapshot, onApply, addConsoleL
   useEffect(() => {
     setStore(loadStore(allowSeed));
     const key = scenarioStorageKey(allowSeed);
-    const onStorage = (event) => { if (event.key === key) setStore(parseScenarioStore(event.newValue)); };
+    // 다른 탭이 저장에 성공했으면 그 값이 기준이다 — 이 탭의 저장 실패 메모리도 버려 삭제·표식을 되살리지 않는다.
+    const onStorage = (event) => {
+      if (event.key !== key) return;
+      sessionFallback.delete(key);
+      setStore(parseScenarioStore(event.newValue));
+    };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
   }, [allowSeed]);

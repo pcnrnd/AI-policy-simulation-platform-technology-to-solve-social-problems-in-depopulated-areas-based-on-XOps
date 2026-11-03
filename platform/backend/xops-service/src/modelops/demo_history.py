@@ -199,6 +199,11 @@ def startup() -> None:
             try:
                 result = ensure(deadline)
                 get_logger().info(f"운영 이력 재구성: {result}")
+            except Deadline as exc:
+                # 상한 초과 — 이후 저장은 하지 않는다(미완료 표식 'started'는 첫 쓰기 전에 이미 있다).
+                # 미완료 작업 정리(recover_jobs)도 같은 상한 안의 작업이므로 다음 기동으로 넘긴다.
+                get_logger().warning(f"운영 이력 재구성: 시간 상한 초과로 중단, 다음 기동에 이어서 진행 (단계={getattr(exc, 'stage', 'unknown')})")
+                return
             except Exception as exc:  # noqa: BLE001 — 앱 기동을 막지 않는다
                 _record_error(exc)
             service.recover_jobs(skip_ids=frozenset(v for k, v in owned_ids().items() if k.endswith(":job")))
@@ -208,6 +213,7 @@ def startup() -> None:
 
 
 def _record_error(exc: Exception) -> None:
+    """상한 안에서 난 실패(충돌·데이터 확인 등) — 미완료 표식에 단계·사유 종류만 남긴다(경로·비밀값 제외)."""
     stage = getattr(exc, "stage", None) or "unknown"
     kind = type(exc).__name__
     get_logger().warning(f"운영 이력 재구성 중단: 단계={stage} 사유={kind}")
@@ -224,6 +230,7 @@ def ensure(deadline: float) -> str:
     if state is not None and state["status"] == "skipped":
         return "already-skipped"
     if state is None:
+        _check_deadline("start", deadline)  # 잠금 대기로 상한을 다 썼으면 표식도 쓰지 않는다
         if db._conn().execute("SELECT 1 FROM mo_assets WHERE mode=? LIMIT 1", (MODE,)).fetchone():
             _write_state({"status": "skipped", "reason": "existing-mock-records", "at": store.now()})
             return "skipped"
@@ -260,10 +267,22 @@ def _step(state: dict[str, Any], name: str, deadline: float, *, recheck: bool = 
     return True
 
 
-def _done(state: dict[str, Any], name: str) -> None:
+def _done(state: dict[str, Any], name: str, deadline: float | None = None) -> None:
+    if deadline is not None:
+        _check_deadline(name, deadline)  # 단계 표식도 상한 안에서만 쓴다(빠지면 재개가 같은 단계를 다시 확인)
     if name not in state["steps"]:
         state["steps"].append(name)
         _write_state(state)
+
+
+def _pipeline_matches(pipeline: dict[str, Any] | None, combo: dict[str, Any], instance_id: str, dataset: dict[str, Any] | None) -> bool:
+    """소유 파이프라인이 명세의 정의 그대로인지 — 이름·실행 정책·종류·모델·학습데이터·해시·지역·대상."""
+    if pipeline is None or dataset is None:
+        return False
+    expected = {"name": combo["name"], "trigger_policy": TRIGGER_POLICY, "experiment": "", "model_type": combo["model_type"],
+                "instance_id": instance_id, "dataset_id": dataset["id"], "dataset_hash": dataset["content_hash"],
+                "region_id": dataset["region_id"], "target": dataset["target"]}
+    return all(pipeline.get(field) == value for field, value in expected.items())
 
 
 def _ensure_audit(action: str, asset_id: str, audit_id: str, at: str, **details: Any) -> None:
@@ -302,7 +321,7 @@ def _run_combo(state: dict[str, Any], deadline: float, combo: dict[str, Any], ti
                               ACTOR, dataset_id=dataset_id, created_at=times[f"{key}:dataset"], audit_id=ids[f"{key}:dataset:audit"])
         _ensure_audit("dataset_registered", dataset_id, ids[f"{key}:dataset:audit"], times[f"{key}:dataset"],
                       dataset_hash=source["content_hash"])
-        _done(state, f"{key}:dataset")
+        _done(state, f"{key}:dataset", deadline)
     dataset = store.get(MODE, "dataset", dataset_id)
     body = {"model_type": combo["model_type"], "dataset_id": dataset_id, "dataset_hash": dataset["content_hash"],
             "name": combo["name"].replace(" 정기 학습", "")}
@@ -310,16 +329,16 @@ def _run_combo(state: dict[str, Any], deadline: float, combo: dict[str, Any], ti
         service.register_instance(MODE, body, ACTOR, instance_id=instance_id, created_at=times[f"{key}:instance"],
                                   audit_id=ids[f"{key}:instance:audit"])
         _ensure_audit("instance_registered", instance_id, ids[f"{key}:instance:audit"], times[f"{key}:instance"])
-        _done(state, f"{key}:instance")
+        _done(state, f"{key}:instance", deadline)
     if _step(state, f"{key}:pipeline", deadline, recheck=True):
         pipeline = service.register_pipeline(MODE, {**body, "id": combo["pipeline"], "name": combo["name"],
                                                     "trigger_policy": TRIGGER_POLICY, "experiment": "", "id_prefix": "modelops_"},
                                              ACTOR, created_at=times[f"{key}:pipeline"], audit_id=ids[f"{key}:pipeline:audit"])
-        if pipeline["instance_id"] != instance_id:
-            raise Conflict("pipeline")
+        if not _pipeline_matches(pipeline, combo, instance_id, dataset):
+            raise Conflict("pipeline")  # 같은 ID로 다른 정의가 있으면 덮어쓰지 않고 멈춘다
         _ensure_audit("pipeline_registered", combo["pipeline"], ids[f"{key}:pipeline:audit"], times[f"{key}:pipeline"],
                       dataset_id=dataset_id, dataset_hash=dataset["content_hash"])
-        _done(state, f"{key}:pipeline")
+        _done(state, f"{key}:pipeline", deadline)
     for run in range(RUNS):
         _train(state, deadline, combo, run, times, ids)
         _activate(state, deadline, combo, run, times, ids)
@@ -356,7 +375,7 @@ def _train(state: dict[str, Any], deadline: float, combo: dict[str, Any], run: i
                                  finished_at=finished, audit_id=audit_id, guard=lambda: _check_deadline(name, deadline))
         if job["state"] != "saved":
             raise Conflict(f"train:{job.get('failed_stage')}")
-    _done(state, name)
+    _done(state, name, deadline)
 
 
 def _activate(state: dict[str, Any], deadline: float, combo: dict[str, Any], run: int,
@@ -434,7 +453,7 @@ def _run_dataops(state: dict[str, Any], deadline: float, times: dict[str, str]) 
                 db.add_user_source(expected)
             elif existing != expected:
                 raise Conflict(f"source:{source_id}")
-            _done(state, f"source:{source_id}")
+            _done(state, f"source:{source_id}", deadline)
     for api in BUILT_APIS:
         if _step(state, f"api:{api['id']}", deadline, recheck=True):
             expected = _built_api(api, times[f"api:{api['id']}"])
@@ -443,7 +462,7 @@ def _run_dataops(state: dict[str, Any], deadline: float, times: dict[str, str]) 
                 db.upsert_built_api(expected)
             elif existing != expected:
                 raise Conflict(f"api:{api['id']}")
-            _done(state, f"api:{api['id']}")
+            _done(state, f"api:{api['id']}", deadline)
 
 
 def _built_api(api: dict[str, Any], at: str) -> dict[str, Any]:
@@ -474,9 +493,9 @@ def verify(base_time: str) -> dict[str, Any]:
             problems.append(f"dataset:{key}")
         if instance is None or (instance["model_type"], instance["region_id"]) != (combo["model_type"], combo["region"]):
             problems.append(f"instance:{key}")
-        if pipeline is None or pipeline.get("instance_id") != instance_id or pipeline.get("dataset_id") != dataset_id \
-                or pipeline.get("dataset_hash") != (dataset or {}).get("content_hash"):
+        if not _pipeline_matches(pipeline, combo, instance_id, dataset):
             problems.append(f"pipeline:{key}")
+        content_hash = (dataset or {}).get("content_hash")
         versions = [ids[f"{key}:run{run}:version"] for run in range(RUNS)]
         expected = (versions[1], versions[2]) if combo["rollback"] else (versions[2], versions[1])
         actual = (instance or {}).get("active_version"), (instance or {}).get("previous_version")
@@ -489,10 +508,18 @@ def verify(base_time: str) -> dict[str, Any]:
             if version is None or job is None or job["state"] != "saved" or not _artifact_intact(version):
                 problems.append(f"version:{key}:{run}")
                 continue
-            refs = (job["pipeline_id"], job["instance_id"], job["dataset_id"], job["version_id"],
-                    version["job_id"], version["instance_id"], version["dataset_id"])
-            if refs != (combo["pipeline"], instance_id, dataset_id, versions[run], job_id, instance_id, dataset_id):
+            refs = (job["pipeline_id"], job["instance_id"], job["dataset_id"], job["version_id"], job["dataset_hash"],
+                    version["job_id"], version["instance_id"], version["dataset_id"], version["dataset_hash"],
+                    version["model_type"], version["region_id"], version["target"])
+            if refs != (combo["pipeline"], instance_id, dataset_id, versions[run], content_hash,
+                        job_id, instance_id, dataset_id, content_hash,
+                        combo["model_type"], combo["region"], (instance or {}).get("target")):
                 problems.append(f"refs:{key}:{run}")
+            # 아티팩트 안의 연결 정보도 추론 경로(load_artifact·inference)가 보는 값과 같아야 한다
+            artifact = json.loads(Path(version["artifact_path"]).read_text(encoding="utf-8"))
+            if (artifact.get("model_id"), artifact.get("version"), artifact.get("job_id"), artifact.get("dataset_id"),
+                    artifact.get("content_hash")) != (instance_id, versions[run], job_id, dataset_id, content_hash):
+                problems.append(f"artifact:{key}:{run}")
             order = [job["created_at"], job["started_at"], job["finished_at"], times[f"{key}:run{run}:activated"]]
             if order != sorted(order) or order[-1] >= base_time:
                 problems.append(f"time:{key}:{run}")

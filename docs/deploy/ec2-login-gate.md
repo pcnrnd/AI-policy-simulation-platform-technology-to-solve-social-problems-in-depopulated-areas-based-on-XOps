@@ -277,19 +277,31 @@ docker exec platform-xops-service-1 python -c "from src.modelops import demo_his
 
 ### 7.4 실패 시 복귀
 
-헤더 없는 요청을 실데이터로 보는 누출 차단은 이 변경과 함께 들어왔다. **이력이 만들어진 뒤 backend를 이 변경 이전
-SHA로 되돌리면** 헤더 없는 `/dataops/catalog`·`/dataops/apis` 등에 새 mock 사용자 소스·발급 API가 다시 보인다.
-그래서 복귀는 아래 순서로 판단한다.
+헤더 없는 요청을 실데이터로 보는 누출 차단은 이 변경과 함께 들어왔다. **mock 기록이 하나라도 저장된 뒤 backend를 이
+변경 이전 SHA로 되돌리면** 헤더 없는 `/dataops/catalog`·`/dataops/apis` 등에 새 mock 사용자 소스·발급 API가 다시 보인다.
+backend 재생성(7.3) 자체가 쓰기를 시작하므로, 분기는 확인 단계가 아니라 **볼륨에 실제로 쓰였는지**로 고른다.
 
-1. **이력 생성 전(7.3 확인 전) 실패**: `.env`의 `XOPS_DEMO_HISTORY=0` → `git checkout <이전 SHA>` →
+먼저 backend를 멈춘 상태에서(이전 backend를 띄우기 전에) 볼륨을 읽기 전용으로 확인한다.
+
+```sh
+$DC stop xops-service
+docker run --rm -v platform_xops-data:/data:ro platform-xops-service python -c "import sqlite3; c=sqlite3.connect('file:/data/xops.db?mode=ro', uri=True); q=lambda s: c.execute(s).fetchone()[0]; t=lambda n: q(f\"select count(*) from sqlite_master where name='{n}'\"); print('mock_rows', q(\"select count(*) from mo_assets where mode='mock'\")); print('state_table', t('ops_history_state')); print('mock_sources', q(\"select count(*) from user_sources where schema_json like '%\\\"mode\\\": \\\"mock\\\"%'\")); print('mock_apis', q(\"select count(*) from built_apis where definition_json like '%\\\"mode\\\": \\\"mock\\\"%'\"))"
+```
+
+1. **네 값이 모두 0**(아무것도 쓰이지 않음): `.env`의 `XOPS_DEMO_HISTORY=0` → `git checkout <이전 SHA>` →
    `$DC up -d --no-deps --build xops-service` → `$DC up -d --no-deps --build frontend` → `docker restart platform-frontend-1`.
-   `mock_rows 0`(7.1 명령)을 다시 확인한다.
-2. **이력 생성 뒤 화면(frontend) 문제**: backend는 병합 SHA 이미지를 그대로 두고(누출 차단 유지) frontend만 이전 SHA로
-   다시 빌드한다(`$DC up -d --no-deps --build frontend` 후 `docker restart platform-frontend-1`). 플래그는 0으로 내려도
-   만들어진 기록은 남지만 실데이터 모드·헤더 없는 호출에는 보이지 않는다.
-3. **이력 생성 뒤 backend 자체 문제로 이전 SHA가 필요**: 이전 SHA는 누출 차단이 없으므로 backend만 되돌리면 안 된다.
-   7.2의 `xops-data.tgz`로 볼륨을 백업 시점으로 복원(이력 제거)하고 이전 SHA로 되돌린다. 복원은 그 사이 실데이터 쓰기도
-   되돌리므로 별도 승인 후에만 한다.
-- 어느 경우든 복귀 뒤 헤더 없는 조회로 확인한다:
-  `curl -s -b jar "$B/api/v3/dataops/catalog?include_seed=true" | grep -c ds_u0` → `0`.
+2. **하나라도 0이 아니고 화면(frontend)만 문제**: backend는 병합 SHA 이미지 그대로 다시 올리고(`$DC start xops-service`,
+   누출 차단 유지) frontend만 이전 SHA로 다시 빌드한다(`$DC up -d --no-deps --build frontend` 후 `docker restart platform-frontend-1`).
+   플래그를 0으로 내려도 만들어진 기록은 남지만 실데이터 모드·헤더 없는 호출에는 보이지 않는다.
+3. **하나라도 0이 아니고 backend 자체 문제로 이전 SHA가 필요**, 또는 확인 결과가 불명확: 이전 SHA는 누출 차단이 없으므로
+   backend만 되돌리지 않는다. 7.2의 `xops-data.tgz`로 볼륨을 백업 시점으로 복원(이력 제거)한 뒤 이전 SHA로 되돌린다.
+   복원은 그 사이 실데이터 쓰기도 되돌리므로 별도 승인 후에만 한다. 승인 전에는 병합 SHA backend를 유지한다.
+- 어느 경우든 복귀 뒤 헤더 없는 조회가 정상 응답이면서 누출 0인지 확인한다(HTTP 상태와 본문을 함께 본다):
+
+```sh
+curl -s -b jar -o cat.json -w '%{http_code}\n' "$B/api/v3/dataops/catalog?include_seed=true"   # 200
+python3 -c "import json; rows=json.load(open('cat.json')); print('seed_or_mock', sum(1 for r in rows if r.get('is_seed')))"   # 0
+TOKEN=$(curl -s -b jar -X POST "$B/api/v3/dataops/token" | python3 -c "import json,sys; print(json.load(sys.stdin)['access_token'])")
+curl -s -b jar -H "Authorization: Bearer $TOKEN" "$B/api/v3/dataops/apis" | python3 -c "import json,sys; print('mock_apis', sum(1 for r in json.load(sys.stdin) if r.get('mode')=='mock'))"   # 0
+```
 - 켠 뒤 화면에서 지운 이력은 다시 만들어지지 않는다(완료 표식). 다시 만들려면 볼륨 복원과 같은 수준의 결정이 필요하다.

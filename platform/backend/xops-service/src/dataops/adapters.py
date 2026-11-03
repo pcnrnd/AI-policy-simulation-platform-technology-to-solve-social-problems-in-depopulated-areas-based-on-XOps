@@ -69,21 +69,18 @@ class InMemoryAdapter:
         return ExecutionResult.not_executed(self._reason)
 
 
-_SAMPLE_OPS = {"$gt": lambda a, b: a > b, "$gte": lambda a, b: a >= b, "$lt": lambda a, b: a < b,
-               "$lte": lambda a, b: a <= b, "$ne": lambda a, b: a != b}
+_SAMPLE_OPS = {"=": lambda a, b: a == b, ">": lambda a, b: a > b, ">=": lambda a, b: a >= b,
+               "<": lambda a, b: a < b, "<=": lambda a, b: a <= b, "!=": lambda a, b: a != b}
 
 
-def _sample_match(row: dict[str, Any], query: dict[str, Any]) -> bool:
-    for column, clause in query.items():
-        value = row.get(column)
-        conditions = clause.items() if isinstance(clause, dict) else [("$eq", clause)]
-        for op, expected in conditions:
-            try:
-                ok = value == expected if op == "$eq" else _SAMPLE_OPS[op](value, expected)
-            except (TypeError, KeyError):
-                ok = False
-            if not ok:
+def _sample_match(row: dict[str, Any], conditions: list[tuple[str, str, Any]]) -> bool:
+    """모든 조건을 AND 로 평가한다(생성 SQL의 WHERE 와 같은 의미). 비교할 수 없는 값은 불일치."""
+    for column, op, expected in conditions:
+        try:
+            if not _SAMPLE_OPS[op](row.get(column), expected):
                 return False
+        except (TypeError, KeyError):
+            return False
     return True
 
 
@@ -100,10 +97,10 @@ class SampleAdapter:
     def execute(self, request: ExecutionRequest) -> ExecutionResult:
         if request.method != "GET":
             return ExecutionResult.not_executed("데모 모드의 가상 데이터입니다.")
-        from src.dataops.query_builder import build_mongo_query
+        from src.dataops.query_builder import filter_conditions
 
-        query = build_mongo_query(range_=None, filter_expr=request.filter_expr)
-        rows = [row for row in self._rows if _sample_match(row, query)]
+        conditions = filter_conditions(request.filter_expr)
+        rows = [row for row in self._rows if _sample_match(row, conditions)]
         if request.sort:
             rows = sorted(rows, key=lambda row: (row.get(request.sort) is None, row.get(request.sort)), reverse=True)
         start = (request.page - 1) * request.page_size
