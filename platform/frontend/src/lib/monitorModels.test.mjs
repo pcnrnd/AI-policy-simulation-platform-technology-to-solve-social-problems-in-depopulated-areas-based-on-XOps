@@ -25,7 +25,18 @@ assert.equal(legacyMonitorId(model, [], "real"), null);
 assert.equal(legacyMonitorId(model, history, "mock"), null);
 // 데모 ON: 등록 모델이 없거나(첫 진입·빈 카탈로그) 데모 모델이면 예시 이력을 본다 — 화면이 비지 않는다.
 assert.equal(legacyMonitorId(null, [], "mock"), DEMO_MONITOR_ID);
-assert.equal(legacyMonitorId({ ...model, mode: "mock", target: "population_change_pct" }, [], "mock"), DEMO_MONITOR_ID);
+// 확정 결정(2026-10-27): 예시 이력은 남원·simulation·인구 변화율·활성 버전 원천 mock_namwon 에만 연결
+const namwonSim = { id: "ns", mode: "mock", region_id: "namwon", model_type: "simulation", target: "population_change_pct", active_version: "nsv" };
+const shinanSim = { ...namwonSim, id: "ss", region_id: "shinan", active_version: "ssv" };
+const simCatalog = { mode: "mock", source: "mock", instances: [shinanSim, namwonSim], versions: [
+  { id: "nsv", instance_id: "ns", mode: "mock", source_dataset_id: "mock_namwon" },
+  { id: "ssv", instance_id: "ss", mode: "mock", source_dataset_id: "mock_shinan" }] };
+assert.equal(legacyMonitorId(namwonSim, [], "mock", simCatalog), DEMO_MONITOR_ID);
+assert.equal(legacyMonitorId(shinanSim, [], "mock", simCatalog), null);
+assert.equal(legacyMonitorId({ ...namwonSim, model_type: "factor_analysis" }, [], "mock", simCatalog), null);
+assert.equal(legacyMonitorId({ ...namwonSim, active_version: null }, [], "mock", simCatalog), null); // 활성 버전 없음
+assert.equal(legacyMonitorId(namwonSim, [], "mock", { ...simCatalog, versions: [{ id: "nsv", instance_id: "ns", mode: "mock", source_dataset_id: "mock_factor_namwon" }] }), null);
+assert.equal(defaultMonitorInstance(simCatalog, [], "mock"), namwonSim); // 연결된 남원 모델이 기본
 assert.equal(regressionMetricText(active.metrics.mae, "원"), "0원");
 assert.equal(regressionMetricText(active.metrics.wape, "%", true), "10%");
 for (const invalid of [null, undefined, NaN, Infinity, -1]) assert.equal(regressionMetricText(invalid, "명"), "–");
@@ -51,10 +62,10 @@ for (const invalid of [null, undefined, NaN, Infinity, -0.1]) {
 }
 // U7: 데모 이력은 같은 학습 대상(인구 변화율) 데모 모델에만 — 다른 대상을 고르면 이력 없음(카드 전체가 같은 자리 안내)
 const mockFactor = { id: "f", mode: "mock", target: "living_population", region_id: "shinan", active_version: "fv" };
-const mockPct = { id: "p", mode: "mock", target: "population_change_pct", region_id: "namwon", active_version: "pv" };
+const mockPct = { id: "p", mode: "mock", target: "population_change_pct", region_id: "namwon", model_type: "simulation", active_version: "pv" };
 assert.equal(legacyMonitorId(mockFactor, [], "mock"), null);
 const mockCatalog = { mode: "mock", source: "mock", instances: [mockFactor, mockPct],
-  versions: [{ id: "fv", instance_id: "f", mode: "mock" }, { id: "pv", instance_id: "p", mode: "mock" }] };
+  versions: [{ id: "fv", instance_id: "f", mode: "mock" }, { id: "pv", instance_id: "p", mode: "mock", source_dataset_id: "mock_namwon" }] };
 assert.equal(defaultMonitorInstance(mockCatalog, [], "mock"), mockPct); // 이력이 연결된 활성 모델 먼저
 assert.equal(defaultMonitorInstance({ ...mockCatalog, instances: [mockFactor] }, [], "mock"), mockFactor);
 assert.equal(defaultMonitorInstance(null, [], "mock"), null);

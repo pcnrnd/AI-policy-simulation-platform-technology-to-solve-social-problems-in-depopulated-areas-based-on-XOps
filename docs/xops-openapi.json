@@ -1786,6 +1786,69 @@
         }
       }
     },
+    "/api/v3/modelops/datasets/{dataset_id}": {
+      "delete": {
+        "tags": [
+          "modelops"
+        ],
+        "summary": "Delete Dataset",
+        "operationId": "delete_dataset_api_v3_modelops_datasets__dataset_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "dataset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Dataset Id"
+            }
+          },
+          {
+            "name": "X-Data-Mode",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "enum": [
+                "mock",
+                "real"
+              ],
+              "type": "string",
+              "default": "real",
+              "title": "X-Data-Mode"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Delete Dataset Api V3 Modelops Datasets  Dataset Id  Delete"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v3/modelops/instances": {
       "post": {
         "tags": [
@@ -2274,6 +2337,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/RollbackInput"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -5511,6 +5591,19 @@
         "type": "object",
         "title": "RestoreRequest",
         "description": "POST /realdata/models/{model_id}/restore/{version} 요청 본문(R3-4) — 사유는 선택."
+      },
+      "RollbackInput": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Reason",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "RollbackInput"
       },
       "SourceSummary": {
         "properties": {

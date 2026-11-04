@@ -5,25 +5,38 @@ import TablePager, { usePager } from "./TablePager.jsx";
 import { computeTrends, computeScenarioTrend, budgetToFactor, controlBoostOf } from "../lib/simulation.js";
 import { scenarioStorageKey } from "../lib/dataMode.js";
 import { formatUnitValue } from "../lib/realSimulation.js";
+import { MAX_PER_REGION, parseScenarioStore, serializeScenarioStore, withPresetScenarios } from "../lib/scenarioStore.js";
 
-const MAX_PER_REGION = 8;
+// 이번 세션에서 기본 시나리오를 시도한 지역 — 저장에 실패해도 다시 시도하지 않는다(화면 세션에만 표시).
+const presetAttempted = new Set();
 
-function loadScenarios(allowSeed) {
+// 브라우저 저장에 실패한 목록 — 이번 앱 세션 동안 메모리에 두고(탭·지역 왕복에도 유지) 저장은 다시 시도하지 않는다.
+const sessionFallback = new Map();
+// 다른 브라우저 탭이 저장에 성공하면 그 값이 기준이다. 화면이 닫혀 있는 동안의 변경도 놓치지 않도록
+// 앱 세션 전체에서 한 번만 구독해 해당 키의 메모리를 버린다(재진입 때 저장소 값을 다시 읽는다).
+if (typeof window !== "undefined") {
+  window.addEventListener("storage", (event) => { if (event.key) sessionFallback.delete(event.key); });
+}
+
+function loadStore(allowSeed) {
+  const key = scenarioStorageKey(allowSeed);
+  if (sessionFallback.has(key)) return sessionFallback.get(key);
   try {
-    const raw = localStorage.getItem(scenarioStorageKey(allowSeed));
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed.filter((s) => s && s.id && s.regionId) : [];
+    return parseScenarioStore(localStorage.getItem(key));
   } catch {
-    return [];
+    return { scenarios: [], presets: {} };
   }
 }
 
-function persistScenarios(scenarios, allowSeed) {
+function persistStore(store, allowSeed) {
+  const key = scenarioStorageKey(allowSeed);
   try {
-    localStorage.setItem(scenarioStorageKey(allowSeed), JSON.stringify(scenarios));
+    localStorage.setItem(key, serializeScenarioStore(store));
+    sessionFallback.delete(key);
     return true;
   } catch {
-    // 저장공간 초과 등 — 비교 기능은 메모리 상태로 계속 동작
+    // 저장공간 초과·저장 차단 — 비교 기능은 메모리 상태로 계속 동작
+    sessionFallback.set(key, store);
     return false;
   }
 }
@@ -34,7 +47,8 @@ function persistScenarios(scenarios, allowSeed) {
 // allowSeed=false(데모 표시 OFF): 같은 열 자리에 10년 후 인구·증감률 대신 시뮬레이션 모델의 다음 달 예측과
 // 기준 대비 변화율을 둔다(forecast: { ready, key, unit, current, predict(controlValues) }). 열 수·순서는 같다.
 export default function ScenarioCompare({ region, snapshot, onApply, addConsoleLog, allowSeed = true, forecast = null }) {
-  const [scenarios, setScenarios] = useState(() => loadScenarios(allowSeed));
+  const [store, setStore] = useState(() => loadStore(allowSeed));
+  const scenarios = store.scenarios;
   const [name, setName] = useState("");
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [saveFeedback, setSaveFeedback] = useState(null);
@@ -67,9 +81,37 @@ export default function ScenarioCompare({ region, snapshot, onApply, addConsoleL
     setName("");
   }, [region.id, allowSeed]);
 
+  // 모드가 바뀌면 그 모드의 저장 목록을 다시 읽고, 다른 탭의 저장·삭제는 storage 이벤트로 따라간다.
+  useEffect(() => {
+    setStore(loadStore(allowSeed));
+    const key = scenarioStorageKey(allowSeed);
+    // 다른 탭이 저장에 성공했으면 그 값이 기준이다 — 이 탭의 저장 실패 메모리도 버려 삭제·표식을 되살리지 않는다.
+    const onStorage = (event) => {
+      if (event.key !== key) return;
+      sessionFallback.delete(key);
+      setStore(parseScenarioStore(event.newValue));
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [allowSeed]);
+
+  // 데모 표시 ON: 지역별 최초 1회 기본 시나리오(행과 표식을 한 번에 저장). 저장 직전 최신 값을 다시 읽어
+  // 다른 탭이 먼저 넣었거나 지운 표식을 존중한다. 저장에 실패하면 이번 세션 화면에만 두고 다시 시도하지 않는다.
+  useEffect(() => {
+    if (!allowSeed || presetAttempted.has(region.id)) return;
+    presetAttempted.add(region.id);
+    const latest = loadStore(true);
+    const next = withPresetScenarios(latest, region);
+    if (!next) { setStore(latest); return; }
+    setStore(next);
+    persistStore(next, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 지역·모드가 바뀔 때만 판정한다
+  }, [allowSeed, region.id]);
+
   const updateScenarios = (next) => {
-    setScenarios(next);
-    return persistScenarios(next, allowSeed);
+    const nextStore = { ...store, scenarios: next };
+    setStore(nextStore);
+    return persistStore(nextStore, allowSeed);
   };
 
   const handleSave = (event) => {

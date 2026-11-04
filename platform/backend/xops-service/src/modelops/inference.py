@@ -17,9 +17,10 @@ from src.realdata.snapshot import DatasetRecord, _content_hash
 _REAL_ADJUSTABLE = {"y_lag1", "y_lag2", "y_lag3", "y_yoy"}
 
 
-def _context(mode: str, instance_id: str, version_id: str, dong_code: str | None):
+def validate_version(mode: str, instance_id: str, version_id: str, *, require_active: bool = True):
+    """추론 전 연결·계산 정보 검증 — 모델·버전·학습데이터·아티팩트가 서로 맞는지. 운영 이력 완료 판정도 같은 검사를 쓴다."""
     instance = store.get(mode, "instance", instance_id)
-    if not instance["active_version"] or instance["active_version"] != version_id:
+    if require_active and (not instance["active_version"] or instance["active_version"] != version_id):
         raise HTTPException(409, "활성 버전을 확인한 뒤 다시 실행하세요.")
     artifact = service.load_artifact(mode, instance_id, version_id)
     version = store.get(mode, "version", version_id)
@@ -38,6 +39,12 @@ def _context(mode: str, instance_id: str, version_id: str, dong_code: str | None
         or not isinstance(artifact.get("intercept"), (int, float)) or not math.isfinite(artifact["intercept"])
         or any(std <= 0 for std in artifact["train_stds"]) or names != version["features"]):
         raise HTTPException(409, "모델의 입력과 계산 정보를 확인하세요.")
+    return instance, artifact, version, dataset, document
+
+
+def _context(mode: str, instance_id: str, version_id: str, dong_code: str | None):
+    instance, artifact, version, dataset, document = validate_version(mode, instance_id, version_id)
+    names = artifact["features"]
     if mode == "real":
         record = DatasetRecord(**document)
         if record.target != dataset["target"] or record.content_hash != dataset["content_hash"] or _content_hash(record.rows) != dataset["content_hash"]:

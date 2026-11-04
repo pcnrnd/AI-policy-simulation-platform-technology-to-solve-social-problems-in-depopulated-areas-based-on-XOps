@@ -2,11 +2,24 @@
 
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 
-# GET 3종의 시드 폴백은 데모 표시 ON 경로다 — 기본값(include_seed=false)은 빈 응답이므로
-# 시드 계약을 보는 테스트는 이 파라미터를 명시한다.
+from main import app
+
+# GET 3종의 시드 폴백은 데모 표시 ON(mock 모드) 경로다. 헤더 없는 요청은 실데이터로 보므로 이 모듈의
+# 기본 client 는 mock 모드를 명시하고, 데모 OFF 계약은 헤더 없는 `bare` client 로 확인한다.
 _DEMO_ON = {"include_seed": "true"}
+
+
+@pytest.fixture()
+def client() -> TestClient:
+    return TestClient(app, headers={"X-Data-Mode": "mock"})
+
+
+@pytest.fixture()
+def bare() -> TestClient:
+    return TestClient(app)
 
 
 def test_metrics_history_has_six_series(client: TestClient) -> None:
@@ -70,23 +83,33 @@ def test_metrics_source_is_seed_for_untrained_model(client: TestClient) -> None:
 
 
 # ── 데모 표시 OFF (기본값) ────────────────────────────────────
-def test_demo_off_metrics_returns_no_seed_values(client: TestClient) -> None:
+def test_demo_off_metrics_returns_no_seed_values(bare: TestClient) -> None:
     """기본값은 데모 OFF — 실측이 없으면 시드 대신 빈 시계열이고 source 는 null 이다."""
-    j = client.get("/api/v3/monitoring/metrics").json()
+    j = bare.get("/api/v3/monitoring/metrics").json()
     assert j == {"history": {}, "latest": {}, "labels": None, "latency_ms": None, "source": None}
 
 
-def test_demo_off_drift_returns_no_seed_distribution(client: TestClient) -> None:
+def test_demo_off_drift_returns_no_seed_distribution(bare: TestClient) -> None:
     """실 추론 입력 수집 경로가 없으므로 데모 OFF에서는 판정을 내지 않는다."""
-    j = client.get("/api/v3/monitoring/drift").json()
+    j = bare.get("/api/v3/monitoring/drift").json()
     assert j["source"] is None
     assert j["reference"] == [] and j["current"] == [] and j["buckets"] == []
     assert "psi" not in j
 
 
-def test_demo_off_explain_returns_no_seed_features(client: TestClient) -> None:
-    j = client.get("/api/v3/monitoring/explain").json()
+def test_demo_off_explain_returns_no_seed_features(bare: TestClient) -> None:
+    j = bare.get("/api/v3/monitoring/explain").json()
     assert j["source"] is None and j["features"] == []
+
+
+@pytest.mark.parametrize("headers", [{}, {"X-Data-Mode": "real"}])
+def test_headerless_or_real_ignores_include_seed(bare: TestClient, headers: dict[str, str]) -> None:
+    """헤더 없음·real 에서 include_seed=true 를 줘도 시드·이전 경로 실측이 나오지 않는다(누출 0)."""
+    for model_id in (None, "population-forecast", "settlement-demand"):
+        params = {**_DEMO_ON, **({"model_id": model_id} if model_id else {})}
+        assert bare.get("/api/v3/monitoring/metrics", params=params, headers=headers).json()["source"] is None
+        assert bare.get("/api/v3/monitoring/explain", params=params, headers=headers).json()["source"] is None
+        assert bare.get("/api/v3/monitoring/drift", params=params, headers=headers).json()["source"] is None
 
 
 def test_metrics_become_measured_after_retrain(client: TestClient, reset_model, await_run, auth_headers) -> None:
@@ -159,9 +182,9 @@ def test_metrics_window_rejects_zero(client: TestClient) -> None:
     assert client.get("/api/v3/monitoring/metrics", params={"window": 0}).status_code == 422
 
 
-def test_demo_off_window_does_not_fill_seed(client: TestClient) -> None:
+def test_demo_off_window_does_not_fill_seed(bare: TestClient) -> None:
     """데모 OFF에서 구간을 줘도 시드 수치를 채우지 않는다."""
-    j = client.get("/api/v3/monitoring/metrics", params={"window": 3}).json()
+    j = bare.get("/api/v3/monitoring/metrics", params={"window": 3}).json()
     assert j["source"] is None
     assert j["history"] == {}
     assert j["applied_window"] == 3

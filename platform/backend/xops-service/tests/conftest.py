@@ -35,6 +35,9 @@ def client() -> TestClient:
 
 
 _RUN_TERMINAL_STATES = ("succeeded", "rejected", "rolled_back", "debounced", "failed")
+# 헤더 없는 요청은 실데이터(real)로 본다. 데모 시드가 필요한 요청은 이 헤더를 명시한다.
+# (conftest는 임포트하지 않는다 — 다시 실행되면 테스트 DB를 지운다. 테스트 모듈은 같은 값을 직접 쓴다.)
+MOCK_MODE = {"X-Data-Mode": "mock"}
 
 
 @pytest.fixture()
@@ -45,11 +48,12 @@ def await_run() -> Callable[..., dict]:
     종결 상태를 보려면 `GET /orchestration/runs/{run_id}`를 다시 읽어야 한다.
     """
 
-    def _await(client: TestClient, accepted: dict, timeout_s: float = 60.0) -> dict:
+    def _await(client: TestClient, accepted: dict, timeout_s: float = 60.0, mode: str = "mock") -> dict:
+        # 이전 경로 실행 기록은 데모(mock) 모드에서만 보인다 — 헤더 없는 요청은 실데이터로 본다.
         run_id = accepted["run_id"]
         deadline = time.monotonic() + timeout_s
         while time.monotonic() < deadline:
-            run = client.get(f"/api/v3/orchestration/runs/{run_id}").json()
+            run = client.get(f"/api/v3/orchestration/runs/{run_id}", headers={"X-Data-Mode": mode}).json()
             if run.get("state") in _RUN_TERMINAL_STATES:
                 return run
             time.sleep(0.05)
@@ -60,7 +64,9 @@ def await_run() -> Callable[..., dict]:
 
 @pytest.fixture()
 def auth_headers(client: TestClient) -> dict[str, str]:
-    token = client.post("/api/v3/dataops/token/ds_01_resident_registry").json()["access_token"]
+    # 토큰 소스(ds_01)는 데모 시드라 발급 요청에만 mock 모드를 명시한다. 토큰 자체는 모드와 무관하므로
+    # 반환 헤더에는 모드를 넣지 않는다 — 각 테스트가 필요한 모드를 직접 밝힌다(전역 mock 강제 금지).
+    token = client.post("/api/v3/dataops/token/ds_01_resident_registry", headers=MOCK_MODE).json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
 
 

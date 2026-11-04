@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Header, Query
 from pydantic import BaseModel, Field
 
 from src.api.dependencies import require_auth
-from src.modelops import datasets, inference, service, store
+from src.modelops import datasets, demo_history, inference, service, store
 
 router = APIRouter(prefix="/modelops", tags=["modelops"])
 Mode = Annotated[Literal["mock", "real"], Header(alias="X-Data-Mode")]
@@ -46,13 +46,19 @@ class PredictionInput(BaseModel):
     adjustments: dict[str, Annotated[float, Field(strict=True, allow_inf_nan=False)]] = Field(default_factory=dict, max_length=30)
 
 
+class RollbackInput(BaseModel):
+    model_config = {"extra": "forbid"}
+    reason: str = Field(default="", max_length=200)
+
+
 def _actor(auth: dict[str, Any]) -> str:
     return str(auth.get("sub") or "api")
 
 
 @router.on_event("startup")
 def recover_jobs() -> None:
-    service.recover_jobs()
+    # 운영 이력 재구성(설정 켬일 때만)과 미완료 작업 정리를 같은 파일 잠금 구간에서 순서대로 실행한다.
+    demo_history.startup()
 
 
 @router.get("/catalog")
@@ -113,8 +119,10 @@ def activate_version(instance_id: str, version_id: str, auth: Write, mode: Mode 
 
 
 @router.post("/instances/{instance_id}/versions/{version_id}/rollback")
-def rollback_version(instance_id: str, version_id: str, auth: Write, mode: Mode = "real") -> dict[str, Any]:
-    return service.activate(mode, instance_id, version_id, _actor(auth), rollback=True)
+def rollback_version(instance_id: str, version_id: str, auth: Write, mode: Mode = "real",
+                     body: RollbackInput | None = None) -> dict[str, Any]:
+    reason = body.reason.strip() if body else ""
+    return service.activate(mode, instance_id, version_id, _actor(auth), rollback=True, reason=reason or None)
 
 
 @router.post("/pipelines", status_code=201)

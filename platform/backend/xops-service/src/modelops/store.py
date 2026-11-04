@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Callable, Iterator
 from uuid import uuid4
 
 from fastapi import HTTPException
@@ -45,7 +47,27 @@ def list_assets(mode: str, kind: str) -> list[dict[str, Any]]:
     )]
 
 
+_write_guard: ContextVar[Callable[[], None] | None] = ContextVar("modelops_write_guard", default=None)
+
+
+@contextmanager
+def write_guard(check: Callable[[], None]) -> Iterator[None]:
+    """이 구간의 모든 저장 직전에 `check()`를 부른다(예외를 올리면 그 저장부터 하지 않음). 기본은 검사 없음."""
+    token = _write_guard.set(check)
+    try:
+        yield
+    finally:
+        _write_guard.reset(token)
+
+
+def check_write_guard() -> None:
+    guard = _write_guard.get()
+    if guard is not None:
+        guard()
+
+
 def save(mode: str, kind: str, body: dict[str, Any], *, create: bool = False) -> dict[str, Any]:
+    check_write_guard()
     body = {**body, "mode": mode, "source": mode}
     args = (mode, kind, body["id"], json.dumps(body, ensure_ascii=False, allow_nan=False), body.get("created_at") or now())
     sql = "INSERT INTO mo_assets (mode,kind,id,body_json,created_at) VALUES (?,?,?,?,?)"
@@ -59,9 +81,12 @@ def save(mode: str, kind: str, body: dict[str, Any], *, create: bool = False) ->
     return body
 
 
-def audit(mode: str, action: str, asset_id: str, actor: str, **details: Any) -> None:
-    save(mode, "audit", {"id": new_id(), "created_at": now(), "action": action,
-                         "asset_id": asset_id, "actor": actor, **details}, create=True)
+def audit(mode: str, action: str, asset_id: str, actor: str, *, audit_id: str | None = None,
+          created_at: str | None = None, **details: Any) -> None:
+    """감사 기록. ID·시각을 주지 않으면 지금 만든다(기본 동작) — 운영 이력 재구성만 명시 값을 넘긴다.
+    고정 ID로 다시 쓰면 같은 행을 덮어써 중복을 만들지 않는다(중단 재개)."""
+    save(mode, "audit", {"id": audit_id or new_id(), "created_at": created_at or now(), "action": action,
+                         "asset_id": asset_id, "actor": actor, **details}, create=audit_id is None)
 
 
 def delete_pipeline(mode: str, asset_id: str, actor: str) -> None:

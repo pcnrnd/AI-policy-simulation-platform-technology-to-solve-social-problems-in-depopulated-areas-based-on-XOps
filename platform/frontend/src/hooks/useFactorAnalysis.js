@@ -61,7 +61,8 @@ export function useFactorAnalysis({ demo, region, target, dong, modelId, version
     setStatus("idle"); setStep(0); setResult(null); setFeedback(null); setMissing(false);
   }, [demo, region, target, dong, modelId, versionId]);
 
-  const run = useCallback(async () => {
+  // accept: 결과를 게시하기 직전에 부른다 — false면 결과를 버리고 처음 상태로 둔다(자동 계산 중 입력이 바뀐 경우).
+  const run = useCallback(async ({ accept } = {}) => {
     const begun = gate.current.begin();
     const current = () => mounted.current && begun();
     const at = async (promise) => { const value = await promise; if (!current()) throw CANCELLED; return value; };
@@ -93,6 +94,7 @@ export function useFactorAnalysis({ demo, region, target, dong, modelId, version
       setStep(4);
       const unit = targetUnit(proof.target);
       say(`INFO: [요인분석 4/4] 검증 평균 절대 오차 ${formatUnitValue(proof.metrics?.mae, unit)} / 기준선 ${formatUnitValue(proof.baseline?.mae, unit)} ${unit}`);
+      if (accept && !accept()) { setStatus("idle"); setStep(0); return null; }
       setResult({ analysis, dataset });
       setStatus("done");
       return analysis;
@@ -107,5 +109,11 @@ export function useFactorAnalysis({ demo, region, target, dong, modelId, version
     }
   }, [demo, region, target, dong, modelId, versionId]);
 
-  return { catalog, loading, loadFailed, reload: () => setRevision((value) => value + 1), status, step, result, feedback, missing, run };
+  // 같은 조건에서 이미 끝난 결과(앱 상태에 보존)를 다시 계산하지 않고 되살린다 — 진행 중 실행은 버린다.
+  const restore = useCallback((saved) => {
+    gate.current.cancel();
+    setResult(saved); setStatus("done"); setStep(4); setFeedback(null); setMissing(false);
+  }, []);
+
+  return { catalog, loading, loadFailed, reload: () => setRevision((value) => value + 1), status, step, result, feedback, missing, run, restore };
 }

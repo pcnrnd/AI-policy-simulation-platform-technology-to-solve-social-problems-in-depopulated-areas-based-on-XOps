@@ -69,6 +69,44 @@ class InMemoryAdapter:
         return ExecutionResult.not_executed(self._reason)
 
 
+_SAMPLE_OPS = {"=": lambda a, b: a == b, ">": lambda a, b: a > b, ">=": lambda a, b: a >= b,
+               "<": lambda a, b: a < b, "<=": lambda a, b: a <= b, "!=": lambda a, b: a != b}
+
+
+def _sample_match(row: dict[str, Any], conditions: list[tuple[str, str, Any]]) -> bool:
+    """모든 조건을 AND 로 평가한다(생성 SQL의 WHERE 와 같은 의미). 비교할 수 없는 값은 불일치."""
+    for column, op, expected in conditions:
+        try:
+            if not _SAMPLE_OPS[op](row.get(column), expected):
+                return False
+        except (TypeError, KeyError):
+            return False
+    return True
+
+
+class SampleAdapter:
+    """데모(mock) 모드에서 카탈로그에 함께 실린 샘플 행(`sample_rows`)으로 조회만 실행한다 — 저장소에 닿지 않는다.
+
+    필터·정렬(내림차순)·페이징은 실 어댑터와 같은 규칙이다. 쓰기는 실행하지 않는다(기존 mock 응답).
+    """
+
+    def __init__(self, name: str, rows: list[dict[str, Any]]) -> None:
+        self.name = name
+        self._rows = rows
+
+    def execute(self, request: ExecutionRequest) -> ExecutionResult:
+        if request.method != "GET":
+            return ExecutionResult.not_executed("데모 모드의 가상 데이터입니다.")
+        from src.dataops.query_builder import filter_conditions
+
+        conditions = filter_conditions(request.filter_expr)
+        rows = [row for row in self._rows if _sample_match(row, conditions)]
+        if request.sort:
+            rows = sorted(rows, key=lambda row: (row.get(request.sort) is None, row.get(request.sort)), reverse=True)
+        start = (request.page - 1) * request.page_size
+        return ExecutionResult(rows=rows[start:start + request.page_size], total=len(rows), executed=True)
+
+
 def dsn_for(schema: dict[str, Any]) -> str:
     """스키마의 저장소 유형에 맞는 DSN — 없으면 빈 문자열.
 
@@ -90,6 +128,8 @@ def get_adapter(schema: dict[str, Any]) -> QueryAdapter:
     """
     name = adapter_of(schema)
     if current_mode() == "mock":
+        if isinstance(schema.get("sample_rows"), list):
+            return SampleAdapter(name, schema["sample_rows"])
         return InMemoryAdapter(name, "데모 모드의 가상 데이터입니다.")
     dsn = dsn_for(schema)
     if not dsn:

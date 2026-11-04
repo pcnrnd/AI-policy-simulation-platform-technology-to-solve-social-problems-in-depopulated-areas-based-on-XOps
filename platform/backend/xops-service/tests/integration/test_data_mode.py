@@ -18,9 +18,11 @@ def test_catalog_modes_are_disjoint_and_override_legacy_include_seed(client, aut
     assert not {row["id"] for row in mock.json()} & {row["id"] for row in real.json()}
     assert client.get("/api/v3/dataops/ds_11_kt_namwon_monthly_dong_visitors", headers=mode_headers(auth_headers, "mock")).status_code == 404
     assert client.get("/api/v3/dataops/ds_01_resident_registry", headers=mode_headers(auth_headers, "real")).status_code == 404
-    # 헤더 없는 기존 클라이언트의 계약은 유지한다.
-    all_rows = client.get("/api/v3/dataops/catalog?include_seed=true").json()
-    assert {row["id"] for row in mock.json()} | {row["id"] for row in real.json()} == {row["id"] for row in all_rows}
+    # 헤더 없는 요청은 실데이터(real)로 본다 — include_seed=true 를 줘도 시드가 섞이지 않는다.
+    headerless = client.get("/api/v3/dataops/catalog?include_seed=true")
+    assert "X-Data-Mode" not in headerless.headers
+    assert {row["id"] for row in headerless.json()} == {row["id"] for row in real.json()}
+    assert client.get("/api/v3/dataops/ds_01_resident_registry", headers=auth_headers).status_code == 404
 
 
 def test_mock_does_not_touch_database_adapter_or_liveness(client, auth_headers, monkeypatch):

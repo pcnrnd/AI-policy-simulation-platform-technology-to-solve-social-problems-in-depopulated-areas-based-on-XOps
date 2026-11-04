@@ -82,10 +82,13 @@ def test_demo_off_full_round_trip(
     assert by_id[_LIVE_SOURCE]["live_rows"] == 1334, "적재된 소스는 실제 행수가 실려야 한다"
     assert by_id["ds_09_welfare_facility"]["live_rows"] is None, "확인 불가는 0과 구분된다"
 
-    # 데모 ON 경로만 시드를 함께 내려준다 — 시드를 지운 게 아니라 목록에서만 뺐다는 확인.
-    on_catalog = client.get(_CATALOG, params={"live": "true", "include_seed": "true"}).json()
+    # 데모 ON(mock 모드)만 시드를 내려준다 — 시드를 지운 게 아니라 실데이터 목록에서만 뺐다는 확인.
+    # 헤더 없는 요청은 include_seed=true 를 붙여도 데모 OFF 목록 그대로다.
+    headerless_on = client.get(_CATALOG, params={"live": "true", "include_seed": "true"}).json()
+    assert {s["id"] for s in headerless_on} == set(by_id)
+    on_catalog = client.get(_CATALOG, params={"live": "true"}, headers={"X-Data-Mode": "mock"}).json()
     assert _EMPTY_SOURCE in {s["id"] for s in on_catalog}
-    assert len(on_catalog) == len(catalog) + 7, "시드 7종이 데모 ON에서만 추가된다"
+    assert len([s for s in on_catalog if s["is_seed"]]) == 7, "시드 7종은 데모 ON에서만 보인다"
 
     # ── STEP ② 스키마: 선택한 소스의 컬럼 정의가 그대로 온다 ──
     schema = client.get(f"{_CATALOG}/{_LIVE_SOURCE}").json()

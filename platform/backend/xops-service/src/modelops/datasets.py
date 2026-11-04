@@ -76,7 +76,9 @@ def available(mode: str) -> list[dict[str, Any]]:
             for ds in snapshot.list_datasets() if ds.get("spec", {}).get("model_id") in snapshot.TARGETS.values()]
 
 
-def register(mode: str, body: dict[str, Any], actor: str) -> dict[str, Any]:
+def register(mode: str, body: dict[str, Any], actor: str, *, dataset_id: str | None = None,
+             created_at: str | None = None, audit_id: str | None = None) -> dict[str, Any]:
+    """학습데이터 등록. `dataset_id`를 주면 기존 등록본을 재사용하지 않고 그 ID로 새로 만든다(운영 이력 재구성 전용)."""
     source = next((row for row in available(mode) if row["id"] == body["source_dataset_id"]), None)
     if source is None:
         raise HTTPException(400, "현재 모드에서 사용할 학습데이터를 선택하세요.")
@@ -85,6 +87,8 @@ def register(mode: str, body: dict[str, Any], actor: str) -> dict[str, Any]:
     # 같은 원천·같은 내용(해시)은 한 번만 등록한다 — 동시 요청(두 화면의 첫 실행)도 같은 등록본을 돌려받는다.
     # 프로세스 안 잠금이라 단일 서버 프로세스 기준이다. 여러 프로세스로 띄우면 DB 유일 제약으로 옮긴다.
     with _register_lock:
+        if dataset_id is not None:
+            return _register(mode, source, body, actor, dataset_id=dataset_id, created_at=created_at, audit_id=audit_id)
         existing = next((row for row in store.list_assets(mode, "dataset")
                          if row.get("source_dataset_id") == source["id"] and row.get("content_hash") == source["content_hash"]
                          and _intact(row)), None)
@@ -97,7 +101,8 @@ def _intact(dataset: dict[str, Any]) -> bool:
     return path.is_file() and hashlib.sha256(path.read_bytes()).hexdigest() == dataset.get("private_hash")
 
 
-def _register(mode: str, source: dict[str, Any], body: dict[str, Any], actor: str) -> dict[str, Any]:
+def _register(mode: str, source: dict[str, Any], body: dict[str, Any], actor: str, *, dataset_id: str | None = None,
+              created_at: str | None = None, audit_id: str | None = None) -> dict[str, Any]:
     if mode == "mock" and source["id"].startswith(factor_panel.SOURCE_PREFIX):
         region = next(region for region in get_seed()["regions"] if factor_panel.SOURCE_PREFIX + region["id"] == source["id"])
         rows = factor_panel.generate(region)
@@ -128,17 +133,20 @@ def _register(mode: str, source: dict[str, Any], body: dict[str, Any], actor: st
         document = asdict(record)
         features = feature_names(record)
         row_count = record.row_count
-    dataset_id = store.new_id(body.get("id_prefix", "modelops_"))
+    dataset_id = dataset_id or store.new_id(body.get("id_prefix", "modelops_"))
+    created_at = created_at or store.now()
     path = get_settings().model_artifact_dir / "modelops" / mode / "datasets" / (dataset_id + ".json")
+    store.check_write_guard()  # 파일도 저장 구간 검사 대상(기본은 검사 없음)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(document, ensure_ascii=False, allow_nan=False), encoding="utf-8")
     registered = store.save(mode, "dataset", {
         **source, "id": dataset_id, "dataset_id": dataset_id, "name": body["name"],
         "source_dataset_id": source["id"], "features": features, "row_count": row_count,
         "private_path": str(path), "private_hash": hashlib.sha256(path.read_bytes()).hexdigest(),
-        "created_at": store.now(),
+        "created_at": created_at,
     }, create=True)
-    store.audit(mode, "dataset_registered", dataset_id, actor, dataset_hash=source["content_hash"])
+    store.audit(mode, "dataset_registered", dataset_id, actor, audit_id=audit_id, created_at=created_at,
+                dataset_hash=source["content_hash"])
     return registered
 
 

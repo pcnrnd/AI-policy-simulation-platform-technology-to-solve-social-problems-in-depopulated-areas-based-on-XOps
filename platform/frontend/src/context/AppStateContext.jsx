@@ -141,6 +141,14 @@ export function AppStateProvider({ children }) {
   const [metricOverrides, setMetricOverrides] = useState({});
   const f1Override = metricOverrides["population-forecast"]?.f1 ?? null;
 
+  // 데모 시뮬레이터 지역별 ①→④ 결과 — 이번 세션 동안만 보존해 탭·지역 왕복 시 다시 계산하지 않고 되살린다.
+  // { [regionId]: { version, attempted, result?, recommendation?, recoSig?, inputs?: { controlValues, budgetTotal, *Weight } } }
+  // — 활성 버전이 다르면 쓰지 않는다.
+  const [simulatorRuns, setSimulatorRuns] = useState({});
+  const updateSimulatorRun = useCallback((regionId, patch) => {
+    setSimulatorRuns((runs) => ({ ...runs, [regionId]: { ...runs[regionId], ...patch } }));
+  }, []);
+
   const [consoleLogs, setConsoleLogs] = useState([]);
   const [alerts, setAlerts] = useState([]);
   // 헤더 벨 알림 이력 — 팝업과 달리 사라지지 않고 최근 N건 보존
@@ -679,6 +687,8 @@ export function AppStateProvider({ children }) {
     setHousingWeight,
     budgetTotal,
     setBudgetTotal,
+    simulatorRuns,
+    updateSimulatorRun,
     driftInjected,
     driftChecking,
     pipelineRunning,

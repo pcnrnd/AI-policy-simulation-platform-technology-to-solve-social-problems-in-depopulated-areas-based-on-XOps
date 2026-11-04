@@ -20,14 +20,21 @@ export function monitorActiveVersion(catalog, instance, mode) {
     && row.instance_id === instance.id) ?? null;
 }
 
-// 데모 표시의 지표·설명·분포 이력은 인구이동 예측 예시 모델 한 벌이다. 이 이력은 같은 학습 대상(인구 변화율)의
-// 데모 등록 모델에만 잇는다 — 대상 모델을 바꾸면 모든 카드가 함께 바뀌고, 이력이 없는 모델은 같은 자리에 안내를 둔다.
+// 데모 표시의 지표·설명·분포 이력은 인구이동 예측 예시 모델 한 벌이다. 이 이력은 남원 인구 변화율 시뮬레이션 모델
+// (지역 namwon · simulation · 대상 population_change_pct · 활성 버전 원천 mock_namwon)에만 잇는다(2026-10-27 확정).
+// 다른 모델을 고르면 모든 카드가 같은 자리에 기존 안내("연결된 이력 없음")를 둔다.
 // 등록 모델이 하나도 없으면(첫 진입·빈 카탈로그) 예시 이력을 그대로 본다(2026-10-22 데모 ON 모니터 미표시).
 export const DEMO_MONITOR_ID = "population-forecast";
-const DEMO_MONITOR_TARGET = "population_change_pct";
+const DEMO_MONITOR = { region_id: "namwon", model_type: "simulation", target: "population_change_pct", source: "mock_namwon" };
 
-export function legacyMonitorId(instance, rows, mode) {
-  if (mode === "mock") return !instance || (instance.mode === "mock" && instance.target === DEMO_MONITOR_TARGET) ? DEMO_MONITOR_ID : null;
+function isDemoMonitorModel(instance, version) {
+  return instance.mode === "mock" && instance.region_id === DEMO_MONITOR.region_id && instance.model_type === DEMO_MONITOR.model_type
+    && instance.target === DEMO_MONITOR.target && version?.source_dataset_id === DEMO_MONITOR.source;
+}
+
+/** @param catalog 데모 모드에서 선택 모델의 활성 버전 원천을 확인하는 데 쓴다(실데이터 모드는 쓰지 않는다). */
+export function legacyMonitorId(instance, rows, mode, catalog = null) {
+  if (mode === "mock") return !instance || isDemoMonitorModel(instance, monitorActiveVersion(catalog, instance, mode)) ? DEMO_MONITOR_ID : null;
   if (mode !== "real" || instance?.mode !== mode) return null;
   const id = LEGACY_MODELS[instance.region_id]?.[instance.target];
   return id && rows.some((row) => row.model_id === id && row.metrics_source === "realdata") ? id : null;
@@ -36,7 +43,7 @@ export function legacyMonitorId(instance, rows, mode) {
 /** 기본 대상 모델 — 이력이 연결된 활성 모델 → 이력이 연결된 모델 → 활성 모델 → 첫 모델 순. */
 export function defaultMonitorInstance(catalog, rows, mode) {
   const models = monitorInstances(catalog, mode);
-  const linked = (row) => Boolean(legacyMonitorId(row, rows, mode));
+  const linked = (row) => Boolean(legacyMonitorId(row, rows, mode, catalog));
   const active = (row) => Boolean(monitorActiveVersion(catalog, row, mode));
   return models.find((row) => linked(row) && active(row)) ?? models.find(linked) ?? models.find(active) ?? models[0] ?? null;
 }

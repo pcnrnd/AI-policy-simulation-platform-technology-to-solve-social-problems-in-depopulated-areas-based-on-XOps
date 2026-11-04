@@ -6,16 +6,32 @@ Docker 미설치 환경에서도 "실 DB 연결 시 응답이 어떻게 달라�
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Iterator
 
 import pytest
 from fastapi.testclient import TestClient
 
+from src.core import db
 from src.dataops import service as service_module
+from src.dataops.catalog import get_catalog
 from src.dataops.results import ExecutionResult
 
-_SOURCE = "ds_01_resident_registry"
+# 실 저장소 경로는 실데이터(real) 모드 소스에서만 열린다. 데모 시드(ds_01·ds_07)와 같은 열 구성의
+# 실데이터 소스를 이 모듈 동안만 등록해 같은 계약을 검증한다(헤더 없는 요청 = real).
+_SOURCE = "rt_resident_registry"
 _URL = f"/api/v3/dataops/{_SOURCE}"
+_MONGO_SOURCE = "rt_civil_complaints"
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _real_sources() -> Iterator[None]:
+    for source_id, seed_id in ((_SOURCE, "ds_01_resident_registry"), (_MONGO_SOURCE, "ds_07_civil_complaints")):
+        schema = {**get_catalog()._seed[seed_id], "id": source_id, "is_seed": False, "mode": "real", "user_registered": True}
+        db.delete_user_source(source_id)
+        db.add_user_source(schema)
+    yield
+    for source_id in (_SOURCE, _MONGO_SOURCE):
+        db.delete_user_source(source_id)
 
 
 class _StubAdapter:
@@ -70,11 +86,12 @@ def test_get_keeps_stub_contract_when_adapter_degrades(
 
     body = client.get(_URL, params={"page": 1, "page_size": 10}, headers=auth_headers).json()
 
-    # DB 미연결이면 기존 결정적 응답이 그대로 — 프론트 계약이 깨지지 않는다.
-    assert body["pagination"] == {"page": 1, "page_size": 10, "total": 1248, "total_pages": 125}
+    # 실데이터 모드에서 DB 미연결이면 지어낸 총계·행을 내지 않는다(빈 결과 + 사유) — 계약 키는 그대로다.
+    assert body["pagination"] == {"page": 1, "page_size": 10, "total": None, "total_pages": None}
     assert body["source_kind"] == "in-memory"
-    assert "rows" not in body
-    assert body["result_rows"] == 10
+    assert body["source_kind_reason"] == "DSN 없음"
+    assert body["rows"] == []
+    assert body["result_rows"] == 0
 
 
 def test_adapter_exception_degrades_instead_of_500(
@@ -95,7 +112,7 @@ def test_adapter_exception_degrades_instead_of_500(
     assert response.status_code == 200
     body = response.json()
     assert body["source_kind"] == "in-memory"
-    assert body["pagination"]["total"] == 1248
+    assert body["pagination"]["total"] is None and body["rows"] == []
 
 
 def test_write_executes_with_bound_values_and_returns_rowcount(
@@ -118,13 +135,13 @@ def test_write_executes_with_bound_values_and_returns_rowcount(
 def test_write_degrades_to_stub_when_not_executed(
     client: TestClient, auth_headers: dict[str, str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """본문 값 없는 POST 는 실행되지 않고 기존 결정적 스텁 응답이 유지된다."""
+    """본문 값 없는 POST 는 실행되지 않는다 — 실데이터 모드는 반영 건수를 지어내지 않는다(0)."""
     adapter = _StubAdapter(ExecutionResult.not_executed("실행 조건 미충족"))
     _inject(monkeypatch, adapter)
 
     body = client.post(_URL, json={"data": {}}, headers=auth_headers).json()
 
-    assert body["affected_rows"] == 1
+    assert body["affected_rows"] == 0
     assert body["source_kind"] == "in-memory"
     assert adapter.requests[0].method == "POST"
 
@@ -169,12 +186,12 @@ def test_write_with_non_scalar_value_is_rejected_400(
 
 
 def test_mongo_source_rows_pass_through(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    token = client.post("/api/v3/dataops/token/ds_07_civil_complaints").json()["access_token"]
+    token = client.post(f"/api/v3/dataops/token/{_MONGO_SOURCE}").json()["access_token"]
     docs = [{"seq": 25032, "region_code": "45190", "category": "교통", "sentiment_score": -0.4}]
     _inject(monkeypatch, _StubAdapter(ExecutionResult(rows=docs, total=88, executed=True)))
 
     body = client.get(
-        "/api/v3/dataops/ds_07_civil_complaints", headers={"Authorization": f"Bearer {token}"}
+        f"/api/v3/dataops/{_MONGO_SOURCE}", headers={"Authorization": f"Bearer {token}"}
     ).json()
 
     assert body["query_language"] == "MQL"

@@ -17,8 +17,9 @@ from src.dataops import liveness as liveness_module
 from src.dataops import summary as summary_module
 
 _URL = "/api/v3/overview/summary"
-# 롤업 기본값은 데모 표시 OFF(시드 제외)다 — 시드 소스·시드 지표 모델을 보는 테스트는 ON 경로로 부른다.
+# 롤업 기본값(헤더 없음)은 실데이터 모드다 — 시드 소스·시드 지표 모델을 보는 테스트는 mock 모드로 부른다.
 _DEMO_ON = {"include_seed": "true"}
+_MOCK = {"X-Data-Mode": "mock"}
 
 
 @pytest.fixture(autouse=True)
@@ -37,8 +38,8 @@ class _EmptyCatalog:
 
 def test_rollup_is_public_and_reports_unknown_when_no_storage(client: TestClient) -> None:
     """인증 없이 조회되고, 저장소에 닿지 못하면 0이 아니라 '확인 불가'로 보고한다."""
-    # 집계는 카탈로그 전체(시드 포함)를 센다 — 목록 기본값과 달리 데모 필터를 적용하지 않는다.
-    catalog = client.get("/api/v3/dataops/catalog", params={"include_seed": "true"}).json()
+    # 헤더 없는 조회는 실데이터 모드 — 집계 대상은 같은 모드의 카탈로그 목록과 같다(include_seed 무시).
+    catalog = client.get("/api/v3/dataops/catalog").json()
 
     response = client.get(_URL, params=_DEMO_ON)  # Authorization 헤더 없음 — 공개 조회
     body = response.json()
@@ -59,16 +60,17 @@ def test_rollup_is_public_and_reports_unknown_when_no_storage(client: TestClient
     assert body["endpoint"] == _URL
     assert body["dataops_version"] == "3.0.0-R3"
     adapters = {s["id"]: s["db_adapter"] for s in body["sources"]}
-    assert adapters["ds_04_spatial_geojson"] == "PostGISAdapter (EPSG:4326)"
-    assert adapters["ds_07_civil_complaints"] == "MongoAdapter (Document Store)"
+    assert adapters["ds_08_admin_boundary"] == "PostGISAdapter (EPSG:4326)"
+    # 시드 소스는 실데이터 롤업에 들어오지 않는다.
+    assert not any(s.get("is_seed") for s in catalog) and "ds_01_resident_registry" not in adapters
 
 
 def test_model_snapshot_is_composed_from_orchestration_models(client: TestClient) -> None:
-    """F1·운영 버전은 /orchestration/models 와 같은 출처를 합성한 값이다."""
-    models = client.get("/api/v3/orchestration/models", params=_DEMO_ON).json()
+    """F1·운영 버전은 /orchestration/models 와 같은 출처를 합성한 값이다(데모 mock 모드)."""
+    models = client.get("/api/v3/orchestration/models", headers=_MOCK).json()
     serving = next(m for m in models if m["model_id"] == "population-forecast")
 
-    model = client.get(_URL, params=_DEMO_ON).json()["model"]
+    model = client.get(_URL, headers=_MOCK).json()["model"]
 
     assert model["serving_version"] == serving["version"]
     assert model["f1"] == serving["metrics"]["f1"]
@@ -79,18 +81,18 @@ def test_mixed_catalog_counts_only_reachable_sources(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """일부 소스만 셀 수 있으면 그 소스만 합계에 들어가고 나머지는 '확인 불가'로 남는다."""
-    reachable = {"ds_01_resident_registry": 60, "ds_09_welfare_facility": 17}
+    reachable = {"ds_11_kt_namwon_monthly_dong_visitors": 60, "ds_09_welfare_facility": 17}
     monkeypatch.setattr(liveness_module, "_count", lambda schema: reachable.get(schema["id"]))
 
-    body = client.get(_URL, params=_DEMO_ON).json()
+    body = client.get(_URL).json()
     kinds = {s["id"]: s["source_kind"] for s in body["sources"]}
     rows = {s["id"]: s["archive_rows"] for s in body["sources"]}
 
     assert body["source_kind"] == "database"
-    assert kinds["ds_01_resident_registry"] == "database"
-    assert kinds["ds_05_smartfarm"] == "in-memory"
-    assert rows["ds_01_resident_registry"] == 60
-    assert rows["ds_05_smartfarm"] is None
+    assert kinds["ds_11_kt_namwon_monthly_dong_visitors"] == "database"
+    assert kinds["ds_08_admin_boundary"] == "in-memory"
+    assert rows["ds_11_kt_namwon_monthly_dong_visitors"] == 60
+    assert rows["ds_08_admin_boundary"] is None
     # 합계는 실제로 센 2건만 — 데모 메타데이터(1,248,000 등)가 섞이지 않는다.
     assert body["archive_rows_total"] == 77
     assert body["archive_rows_counted"] == 2
@@ -117,15 +119,19 @@ def test_empty_catalog_returns_zeroed_rollup(
     """소스가 없어도 500 이 아니라 0 으로 채운 롤업을 돌려준다(프론트가 폴백할 수 있게)."""
     monkeypatch.setattr(summary_module, "get_catalog", _EmptyCatalog)
 
-    response = client.get(_URL, params=_DEMO_ON)
+    response = client.get(_URL, headers=_MOCK)
     body = response.json()
 
     assert response.status_code == 200
     assert body["source_count"] == 0
     assert body["archive_rows_total"] == 0
     assert body["sources"] == []
-    assert body["source_kind"] == "in-memory"
+    assert body["source_kind"] == "mock"
     assert body["model"]["model_id"] == "population-forecast"
+    # 실데이터 모드(헤더 없음)에서도 빈 카탈로그는 0으로 채운 롤업이고, 시드 지표 모델은 싣지 않는다.
+    real = client.get(_URL, params=_DEMO_ON).json()
+    assert real["source_count"] == 0 and real["source_kind"] == "in-memory"
+    assert (real["model"] or {}).get("model_id") != "population-forecast"
 
 
 def test_unknown_serving_model_yields_null_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
