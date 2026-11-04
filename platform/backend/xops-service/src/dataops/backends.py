@@ -11,7 +11,10 @@ PUT/PATCH/DELETE 는 실행하지 않고 결정적 스텁을 유지한다(데모
 
 from __future__ import annotations
 
+from datetime import date, datetime
+from decimal import Decimal
 from typing import Any, Sequence
+from uuid import UUID
 
 from src.core.logger import get_logger
 from src.dataops.query_builder import build_count_sql, build_mongo_query, build_write_sql
@@ -22,6 +25,10 @@ _logger = get_logger("xops.dataops.backend")
 
 class DriverUnavailableError(RuntimeError):
     """드라이버 미설치 — 호출자는 In-Memory 로 degrade한다."""
+
+
+class UnsupportedTabularError(ValueError):
+    """학습 등록에서 손실 없이 보존할 수 없는 중첩·바이너리 값."""
 
 
 def _rows_to_dicts(columns: Sequence[str], rows: Sequence[Sequence[Any]]) -> list[dict[str, Any]]:
@@ -80,6 +87,26 @@ class SqlAdapter:
             f"sql executed adapter={self.name} table={table} rows={len(rows)} total={total}"
         )
         return ExecutionResult(rows=rows, total=total, affected_rows=None, executed=True)
+
+    def read_complete(self, request: ExecutionRequest, *, max_rows: int) -> ExecutionResult:
+        """학습 등록용 단일 SELECT. 미리보기 상한과 별개로 상한+1행을 읽어 절단을 감지한다.
+
+        호출자는 page=1, page_size=max_rows+1로 검증한 SELECT만 전달한다. 한 SELECT의
+        관측 결과를 고정하므로 페이지 사이 원천 변경·정렬 중복으로 행을 놓치지 않는다.
+        """
+        if request.method != "GET" or request.page != 1 or request.page_size != max_rows + 1:
+            raise ValueError("전체 조회 요청의 범위를 확인하세요.")
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(request.sql)
+                columns = [desc[0] for desc in (cur.description or [])]
+                fetched = cur.fetchmany(max_rows + 1)
+                if any(value is not None and (not isinstance(value, (str, bool, int, float, Decimal, date, datetime, UUID))
+                       or isinstance(value, Decimal) and not value.is_finite())
+                       for row in fetched for value in row):
+                    raise UnsupportedTabularError("지원하지 않는 표형 값입니다.")
+                rows = _rows_to_dicts(columns, fetched)
+        return ExecutionResult(rows=rows, total=len(rows), executed=True)
 
     def _execute_write(self, request: ExecutionRequest) -> ExecutionResult:
         """쓰기 실행 — 값은 전부 드라이버 파라미터로 바인딩한다(리터럴 조립 없음).

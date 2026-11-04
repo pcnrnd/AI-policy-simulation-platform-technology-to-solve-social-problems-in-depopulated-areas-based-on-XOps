@@ -27,6 +27,8 @@ def register_instance(mode: str, body: dict[str, Any], actor: str, *, instance_i
                       created_at: str | None = None, audit_id: str | None = None) -> dict[str, Any]:
     """모델 등록 — 같은 종류·지역·대상이 있으면 그것을 돌려준다. `instance_id`를 주면 다른 ID의 같은 모델은 충돌(409)."""
     dataset, _ = datasets.load(mode, body["dataset_id"], body["dataset_hash"])
+    if dataset.get("training_compatible") is False:
+        raise HTTPException(400, "등록된 표형 자료입니다. 모델 학습에 필요한 대상·지역·기간 매핑을 먼저 설정하세요.")
     model_type = body["model_type"]
     if model_type not in store.MODEL_TYPES:
         raise HTTPException(400, "모델 종류를 선택하세요.")

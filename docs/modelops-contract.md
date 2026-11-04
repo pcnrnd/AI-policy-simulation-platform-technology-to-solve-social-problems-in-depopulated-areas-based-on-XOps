@@ -4,7 +4,21 @@
 
 앱은 모든 API에 `X-Data-Mode: mock|real`을 전달한다. `/modelops`는 미지정 시 real이며, 레거시 API는 헤더가 없으면 기존 동작을 유지한다. 명시 모드가 있으면 include_seed보다 모드가 우선한다. mock은 seed 입력만 사용하고 real은 등록한 실제 데이터만 사용한다. 모드가 다른 ID는 단건 조회·실행·활성화·복원·삭제에도 사용할 수 없다. `data:read`와 `data:write` 권한은 기존 토큰 계약을 따른다.
 
-## 등록과 학습
+## 카탈로그 원본에서 학습 자료 등록
+
+DataOps STEP①에서 선택한 카탈로그 원본과 STEP③의 조회 조건·정렬을 STEP④ 준비·등록에 사용한다. 카탈로그 메타데이터 자체는 등록본이 아니며 목록 조회로 학습 자료를 생성하지 않는다. 아래 경로는 `/api/v3` 기준이고 `X-Data-Mode`로 격리된다.
+
+| 메서드·경로 | 권한 | 요청·결과 |
+|---|---|---|
+| `POST /modelops/datasets/prepare` | `data:read` | `source_id`, 선택 `filter`·`sort`·`columns`. 전체 조건 결과의 `row_count`, `schema`, `query`, `content_hash`, `complete`, 최대 5행 `preview_rows`를 반환하며 저장하지 않는다. |
+| `POST /modelops/datasets/from-catalog` | `data:write` | 같은 원본·조건과 준비한 `source_hash`, `name`, `purpose`(`training`·`validation`·`test`). 재조회 해시가 같을 때 불변 복사본·등록·감사 기록을 저장하고 등록본을 반환한다(201). |
+| `GET /modelops/datasets/{dataset_id}` | `data:read` | 현재 모드 등록본의 파일 해시를 검증하고 출처·용도·조건·스키마·실제 행 수·내용 해시·생성일을 반환한다. `include_rows=true`는 최대 100행이며 초과 시 `rows_truncated=true`다. |
+
+등록 범위는 미리보기의 `page`·`page_size`가 아니라 원본 범위와 조건에 맞는 전체 행이다. `XOPS_TRAINING_DATASET_MAX_ROWS` 기본 상한은 100,000행이며 상한 초과는 413, 빈 결과·지원하지 않는 형식은 422, 준비 뒤 원본/조건 변경은 409다. 실제 원본 미적재·스키마 불일치는 422, 원본 접근 권한 부족은 403, 연결/조회 실패나 미검증 fallback 응답은 503으로 등록하지 않는다. JWT·scope 부족은 기존 401 계약을 유지한다. real 등록은 실제 SQL 조회만 사용하고 샘플·in-memory 응답으로 대체하지 않는다.
+
+`GET /modelops/datasets` 관리 목록에는 등록 완료 자료만 나온다. 같은 모드·원본·조건·내용·용도는 기존 등록본을 재사용하며 원본 변경이 등록본을 바꾸지 않는다. 일반 표형 자료는 `training_compatible=false`로 보존하고, 기존 모델의 대상·지역·기간 매핑을 확인하기 전 파이프라인/모델 등록에 사용할 수 없다. 다음의 기존 스냅샷 등록·학습 경로는 유지한다.
+
+## 기존 스냅샷 등록과 학습
 
 1. `GET /api/v3/modelops/available-datasets`에서 현재 모드의 원본 ID/hash·지역·target·기간을 확인한다.
 2. `POST /modelops/datasets`에 name, source_dataset_id, source_hash를 전달한다. 서버는 원본을 수정하지 않고 private 등록본을 생성한다. 등록 결과는 dataset_id, content_hash, source_dataset_id, mode/source, region_id, target, observed_from/to, features, row_count, private_hash와 재현 가능한 저장 경로를 포함한다. 같은 모드에 같은 원본(source_dataset_id)·같은 content_hash 등록본이 이미 있으면 새로 만들지 않고 그 등록본을 돌려준다(동시 요청 포함).

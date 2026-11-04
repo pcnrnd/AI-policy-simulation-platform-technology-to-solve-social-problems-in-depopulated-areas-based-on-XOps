@@ -5,6 +5,7 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # xops-service/ 루트 (이 파일: src/core/settings.py → parents[2])
@@ -68,6 +69,8 @@ class Settings(BaseSettings):
     db_timeout_seconds: float = 5.0
     # 실 조회 시 1회 응답 최대 행수 — page_size가 더 커도 이 값으로 자른다.
     db_max_rows: int = 200
+    # 학습 자료 등록용 전체 조회 상한. 미리보기 제한과 별개이며 초과 결과는 등록하지 않는다.
+    training_dataset_max_rows: int = Field(default=100_000, ge=1, le=1_000_000)
 
     # MLOps 드리프트/이상치 임계 (Notion 명세)
     psi_threshold: float = 0.2

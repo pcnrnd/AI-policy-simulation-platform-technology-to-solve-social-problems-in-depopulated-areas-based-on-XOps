@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Header, Query
 from pydantic import BaseModel, Field
 
 from src.api.dependencies import require_auth
-from src.modelops import datasets, demo_history, inference, service, store
+from src.modelops import catalog_datasets, datasets, demo_history, inference, service, store
 
 router = APIRouter(prefix="/modelops", tags=["modelops"])
 Mode = Annotated[Literal["mock", "real"], Header(alias="X-Data-Mode")]
@@ -19,6 +19,20 @@ class DatasetRegistration(BaseModel):
     source_dataset_id: str = Field(min_length=1, max_length=128)
     source_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
     id_prefix: str = Field(default="modelops_", max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+
+
+class CatalogPreparation(BaseModel):
+    model_config = {"extra": "forbid", "str_strip_whitespace": True}
+    source_id: str = Field(min_length=1, max_length=128)
+    filter: str = Field(default="", max_length=256)
+    sort: str = Field(default="", max_length=63)
+    columns: list[str] | None = Field(default=None, min_length=1, max_length=200)
+
+
+class CatalogRegistration(CatalogPreparation):
+    name: str = Field(min_length=1, max_length=120)
+    purpose: Literal["training", "validation", "test"]
+    source_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
 
 
 class InstanceRegistration(BaseModel):
@@ -81,6 +95,21 @@ def list_datasets(auth: Read, mode: Mode = "real") -> dict[str, Any]:
 @router.post("/datasets", status_code=201)
 def register_dataset(body: DatasetRegistration, auth: Write, mode: Mode = "real") -> dict[str, Any]:
     return datasets.register(mode, body.model_dump(), _actor(auth))
+
+
+@router.post("/datasets/prepare")
+def prepare_catalog_dataset(body: CatalogPreparation, auth: Read, mode: Mode = "real") -> dict[str, Any]:
+    return catalog_datasets.prepare(mode, body.model_dump())
+
+
+@router.post("/datasets/from-catalog", status_code=201)
+def register_catalog_dataset(body: CatalogRegistration, auth: Write, mode: Mode = "real") -> dict[str, Any]:
+    return catalog_datasets.register(mode, body.model_dump(), _actor(auth))
+
+
+@router.get("/datasets/{dataset_id}")
+def dataset_detail(dataset_id: str, auth: Read, mode: Mode = "real", include_rows: bool = False) -> dict[str, Any]:
+    return catalog_datasets.detail(mode, dataset_id, include_rows)
 
 
 @router.delete("/datasets/{dataset_id}")
