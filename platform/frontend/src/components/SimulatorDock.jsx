@@ -12,8 +12,9 @@ import TablePager, { usePager } from "./TablePager.jsx";
  *     industry: number, setIndustry: Function, housing: number, setHousing: Function, lockText: string|null },
  *   controls: object[], controlValues: object, onControlChange: Function, controlsLabel: string,
  *   controlsEmptyText: string|null, controlsLockTitle: string|undefined, onResetControls: Function, onRecommend: Function,
- *   recommendDisabled: boolean, notReadyText: string|null, stale: boolean }} props
+ *   recommendDisabled: boolean, notReadyText: string|null, stale: boolean, controlNote?: string|null }} props
  * regionInfo(region) → { chip: { label, style } | null, meta: string }
+ * controlNote: 추천에 반영되지 않는 조절변수를 바꿨을 때의 행동 안내 — 재도출 안내와 같은 자리(재도출 안내가 우선).
  */
 export default function SimulatorDock({
   regions,
@@ -35,7 +36,8 @@ export default function SimulatorDock({
   onRecommend,
   recommendDisabled,
   notReadyText,
-  stale
+  stale,
+  controlNote = null
 }) {
   const locked = Boolean(fixed.lockText);
   const regionList = usePager(regions, undefined, searchText);
@@ -150,9 +152,9 @@ export default function SimulatorDock({
               <i className="fa-solid fa-circle-info"></i> {notReadyText}
             </p>
           )}
-          {stale && (
-            <p style={{ fontSize: 11, color: "var(--accent-orange)", marginTop: 8, textAlign: "center" }}>
-              <i className="fa-solid fa-triangle-exclamation"></i> 변수가 변경되었습니다. 추천을 다시 도출하세요.
+          {(stale || controlNote) && (
+            <p style={{ fontSize: 11, color: stale ? "var(--accent-orange)" : "var(--text-secondary)", marginTop: 8, textAlign: "center" }}>
+              <i className={`fa-solid ${stale ? "fa-triangle-exclamation" : "fa-circle-info"}`}></i> {stale ? "변수가 변경되었습니다. 추천을 다시 도출하세요." : controlNote}
             </p>
           )}
         </div>

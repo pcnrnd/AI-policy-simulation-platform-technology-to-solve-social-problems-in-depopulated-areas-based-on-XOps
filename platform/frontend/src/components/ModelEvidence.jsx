@@ -1,18 +1,19 @@
+import { Fragment } from "react";
 import { typeName } from "../lib/modelops.js";
 import { observedFeatureLabel, targetName, targetUnit, formatUnitValue, formatMonth, baselineName } from "../lib/realSimulation.js";
 
 // 계산 근거 접이식 — 두 모드에 같은 자리로 둔다. demo 는 화면 예시 계산이라는 사실만, 모델 결과는 모델·학습데이터·버전 근거를 보인다.
 // 기여도는 STAGE ① 첫 카드가 보인다(여기서는 검증 오차·기준선·버전·데이터셋 근거만).
 // state: 근거가 없을 때 이유 — "loading"(조회 중) | "error"(조회 실패) | 없음(활성 모델 없음 또는 emptyText).
-export default function ModelEvidence({ summary = "계산 근거", demo = false, result, regions = [], datasetName = (id) => id, slot, state, emptyText, label: featureLabel }) {
+// demoRows: demo 표시의 [항목, 내용] 행 — 없으면 화면 예시 계산 3행.
+const DEMO_ROWS = [["데이터", "예시 사례 데이터"], ["계산", "화면 예시 계산"], ["모델 버전", "없음(예시)"]];
+export default function ModelEvidence({ summary = "계산 근거", demo = false, demoRows = DEMO_ROWS, result, regions = [], datasetName = (id) => id, slot, state, emptyText, label: featureLabel }) {
   if (demo) {
     return (
       <details className="real-flow-evidence" data-slot={slot}>
         <summary>{summary}</summary>
         <dl>
-          <dt>데이터</dt><dd>예시 사례 데이터</dd>
-          <dt>계산</dt><dd>화면 예시 계산</dd>
-          <dt>모델 버전</dt><dd>없음(예시)</dd>
+          {demoRows.map(([term, text]) => <Fragment key={term}><dt>{term}</dt><dd>{text}</dd></Fragment>)}
         </dl>
       </details>
     );
