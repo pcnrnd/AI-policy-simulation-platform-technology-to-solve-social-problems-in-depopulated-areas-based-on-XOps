@@ -17,7 +17,7 @@ import { useChartTheme } from "../hooks/useChartTheme.js";
 import { useRealSimulation } from "../hooks/useRealSimulation.js";
 import { useFactorAnalysis } from "../hooks/useFactorAnalysis.js";
 import { getScrollBehavior } from "../lib/motion.js";
-import { rankStrategies } from "../constants/policyStrategies.js";
+import { facilityRows, recoControlSig, unlinkedControlNote, FACILITY_EVIDENCE_ROWS } from "../lib/facilityRecommendation.js";
 import { YEAR_LABELS, computeTrends, budgetToFactor, controlBoostOf, ANALYSIS_STEPS } from "../lib/simulation.js";
 import {
   REAL_TARGETS, REAL_GUIDE_TEXT, REAL_CONTROLS_LOCK_TEXT, FACTOR_GUIDE_TEXT, FACTOR_PENDING_TEXT, FACTOR_RUN_LOCK_TEXT, FACTOR_IDLE_TEXT,
@@ -105,7 +105,7 @@ export default function SimulatorPage() {
   const budgetFactor = budgetToFactor(budgetTotal);
   const controlBoost = controlBoostOf(controls, controlValues);
 
-  // 정책 추천(실행 버튼으로 도출) 상태 — 데모는 RICE 랭킹 배열, 실데이터는 민감도 패널 view.
+  // 정책 추천(실행 버튼으로 도출) 상태 — 데모는 시설 추천 행({ items }), 실데이터는 민감도 패널 view.
   const [recommendation, setRecommendation] = useState(null);
   const [recoSig, setRecoSig] = useState("");
   const [recoSim, setRecoSim] = useState(null);
@@ -113,7 +113,12 @@ export default function SimulatorPage() {
   const contextKey = inferenceContextKey({ mode, region: currentRegion.id, target: factorTarget, dong: demo ? "" : dong,
     factorModel, simulationProof: demo ? null : simProof });
   const currentSig = `${contextKey}|${welfareWeight}|${industryWeight}|${housingWeight}|${budgetTotal}|${controlSig}`;
-  const recoStale = recommendation !== null && recoSig !== currentSig;
+  // 추천을 다시 도출해야 하는 입력 — 데모 시설 추천은 시설 값에 연결된 조절변수만(예산·정책 강조는 10년 예측에만 쓰인다).
+  // 시설 값이 없는 조절변수를 바꾸면 재도출 안내 대신 같은 자리에 자료 등록 안내를 둔다.
+  const recoInputSig = demo ? `${contextKey}|${recoControlSig(controls, controlValues)}` : currentSig;
+  const controlNote = demo ? unlinkedControlNote(controls, controlValues) : null;
+  const recoStale = recommendation !== null && recoSig !== recoInputSig;
+  const deriveFacilities = (region) => ({ items: facilityRows(region.id, appData.facilities, controls, controlValues) });
 
   // 단계 접기/펼치기 상태 (기본 전부 펼침)
   const [openStages, setOpenStages] = useState(Object.fromEntries(STAGE_IDS.map((id) => [id, true])));
@@ -182,24 +187,23 @@ export default function SimulatorPage() {
     if (saved?.attempted || analysisStatus !== "idle") return;
     updateSimulatorRun(regionId, { version, attempted: true, result: null, recommendation: null, recoSig: "" });
     const startSig = sigRef.current;
-    const weights = { welfare: welfareWeight, industry: industryWeight, housing: housingWeight };
-    const factorOfBudget = budgetFactor;
+    const startRecoSig = recoInputSig;
     const region = currentRegion;
+    const derived = deriveFacilities(region);
     (async () => {
       // 입력이 바뀌었으면 ①의 결과도 게시하지 않고 버린다(훅 안에서 결과 게시 직전에 확인).
       const analysis = await factor.run({ accept: () => sigRef.current === startSig });
       if (!analysis || sigRef.current !== startSig) return;
-      const ranked = rankStrategies(region, weights, factorOfBudget);
-      setRecommendation(ranked);
-      setRecoSig(startSig);
-      addConsoleLog(`INFO: ${region.name} 요인분석·정책 추천 계산 완료 — 1순위 '${ranked[0].name}'`);
+      setRecommendation(derived);
+      setRecoSig(startRecoSig);
+      addConsoleLog(`INFO: ${region.name} 요인분석·시설 활용 추천 계산 완료 — 시설 ${derived.items.length}곳`);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 지역·활성 버전·준비 상태가 바뀔 때만 판정한다
   }, [demoModelReady, currentRegion.id, factorModel?.active_version]);
 
   // ①·④가 현재 입력 기준으로 끝난 데모 결과는 지역별로 보존한다(수동 실행 포함).
   useEffect(() => {
-    if (!demo || !factorModel || analysisStatus !== "done" || !factor.result || !recommendation || recoSig !== currentSig) return;
+    if (!demo || !factorModel || analysisStatus !== "done" || !factor.result || !recommendation || recoSig !== recoInputSig) return;
     updateSimulatorRun(currentRegion.id, { version: factorModel.active_version, attempted: true,
       result: factor.result, recommendation, recoSig,
       inputs: { controlValues, budgetTotal, welfareWeight, industryWeight, housingWeight } });
@@ -256,14 +260,10 @@ export default function SimulatorPage() {
       return;
     }
     if (demo) {
-      const ranked = rankStrategies(
-        currentRegion,
-        { welfare: welfareWeight, industry: industryWeight, housing: housingWeight },
-        budgetFactor
-      );
-      setRecommendation(ranked);
-      setRecoSig(currentSig);
-      addConsoleLog(`INFO: ${currentRegion.name} 정책 추천 도출 완료 — 1순위 '${ranked[0].name}' (점수 ${formatUnitValue(ranked[0].score, "점")}).`);
+      const derived = deriveFacilities(currentRegion);
+      setRecommendation(derived);
+      setRecoSig(recoInputSig);
+      addConsoleLog(`INFO: ${currentRegion.name} 시설 활용 추천 도출 완료 — 시설 ${derived.items.length}곳`);
     } else {
       // 대기 중인 자동 계산이 이 요청을 밀어내지 않게 먼저 끈다.
       clearTimeout(simTimerRef.current);
@@ -637,6 +637,7 @@ export default function SimulatorPage() {
             recommendDisabled={demo ? !analysisDone : !real.ready && !real.loadFailed}
             notReadyText={demo ? (analysisDone ? null : "STAGE ① 요인분석 실행 후 추천을 도출할 수 있습니다.") : realLockTitle}
             stale={recoStale}
+            controlNote={controlNote}
           />
         </div>
 
@@ -764,12 +765,12 @@ export default function SimulatorPage() {
         open={openStages["stage-report"]}
         onToggle={() => toggleStage("stage-report")}
       >
-        {recoReady && (demo || recommendation.items.length > 0) ? (
+        {recoReady && recommendation.items.length > 0 ? (
           demo
-            ? <PolicyRecommendation region={currentRegion} ranked={recommendation} />
+            ? <PolicyRecommendation region={currentRegion} facilityRows={recommendation.items} />
             : <PolicyRecommendation region={currentRegion} view={recommendation} />
         ) : (
-          <Card title="맞춤 정책 추천" icon="fa-lightbulb" dataSource={cardSource} data-slot="sim.report.panel">
+          <Card title={demo ? "시설 활용 추천" : "맞춤 정책 추천"} icon="fa-lightbulb" dataSource={cardSource} data-slot="sim.report.panel">
             <div style={{ textAlign: "center", padding: "32px 16px", color: "var(--text-secondary)", fontSize: 13 }}>
               <i
                 className="fa-solid fa-wand-magic-sparkles"
@@ -778,11 +779,13 @@ export default function SimulatorPage() {
               {!demo && real.missing ? (
                 guide(REAL_GUIDE_TEXT)
               ) : recoReady ? (
-                "관측 범위 안에서 증가 예측을 만든 조정 항목이 없습니다. 행정동이나 학습 대상을 바꿔 확인하세요."
+                demo
+                  ? "시설 대장을 등록하면 시설별 활용 추천이 표시됩니다."
+                  : "관측 범위 안에서 증가 예측을 만든 조정 항목이 없습니다. 행정동이나 학습 대상을 바꿔 확인하세요."
               ) : (
                 <>
-                  STAGE ③에서 {demo ? "정책 변수를" : "관측 입력을"} 조정한 뒤 <strong>[정책 추천 도출]</strong> 버튼을 누르면, 시뮬레이션
-                  결과에 맞는 맞춤 정책 추천이 생성됩니다.
+                  STAGE ③에서 {demo ? "시설 변수를" : "관측 입력을"} 조정한 뒤 <strong>[정책 추천 도출]</strong> 버튼을 누르면, 시뮬레이션
+                  결과에 맞는 {demo ? "시설 활용 추천이" : "맞춤 정책 추천이"} 생성됩니다.
                 </>
               )}
             </div>
@@ -792,6 +795,7 @@ export default function SimulatorPage() {
           slot="sim.report.evidence"
           summary="추천 근거"
           demo={demo}
+          demoRows={FACILITY_EVIDENCE_ROWS}
           state={evidenceState}
           result={(recoReady ? recoSim : null) ?? simShown ?? real.context}
           regions={regions}
@@ -803,7 +807,7 @@ export default function SimulatorPage() {
           <div className="pl-report-handoff-text">
             <i className="fa-solid fa-file-invoice" aria-hidden="true"></i>
             <div>
-              <strong>AI 정책 보고서 생성 및 평가</strong>
+              <strong>{demo ? "시설 활용 계획 작성" : "AI 정책 보고서 생성 및 평가"}</strong>
               <p className="mock-data-output">
                 {demo
                   ? `${currentRegion.name} · ${currentRegion.case.reportFocus}`

@@ -145,7 +145,7 @@
           },
           "constraint": "예산",
           "controls": [
-            { "key": "rental_units", "label": "임대주택 공급 호수", "min": 50, "max": 1500, "default": 300, "step": 50, "unit": "호", "weight": 0.18 },
+            { "key": "rental_units", "label": "임대주택 공급 호수", "min": 50, "max": 1500, "default": 300, "step": 50, "unit": "호", "weight": 0.18, "facility_id": "fac_sa_rental", "field": "supply_units" },
             { "key": "staff", "label": "운영 인력", "min": 10, "max": 300, "default": 50, "step": 5, "unit": "명", "weight": 0.12 }
           ]
         },
@@ -497,6 +497,8 @@
       "lat": 35.4105,
       "lng": 127.3812,
       "operating_budget": 15,
+      "supply_units": 120,
+      "occupancy_rate": 91,
       "metric": "공급 120호 · 입주율 91%"
     },
     {
@@ -507,6 +509,8 @@
       "lat": 34.8421,
       "lng": 126.1019,
       "operating_budget": 21,
+      "supply_units": 300,
+      "occupancy_rate": 84,
       "metric": "공급 300호 · 입주율 84%"
     },
     {

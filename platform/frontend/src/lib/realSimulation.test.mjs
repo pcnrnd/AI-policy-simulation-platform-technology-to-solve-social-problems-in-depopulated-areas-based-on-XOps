@@ -143,8 +143,8 @@ assert.match(page,/split=\{factorView\?\.split\}/);
 // 실데이터 진단은 제약 문구 대신 ① 결과에서 읽은 신호 — 화면에 "등록 후 제공" 같은 문구가 없다.
 assert.match(page,/diagnosis=\{demo \? currentRegion\.case\.problemDiagnosis : factorDiagnosis\(factorView\)\}/);
 assert.doesNotMatch(page+resultStage+read("lib","realSimulation.js"),/등록 후 제공|diagnosisNote/);
-// ④ 추천 전 안내는 실데이터에서 "관측 입력"
-assert.match(page,/\{demo \? "정책 변수를" : "관측 입력을"\}/);
+// ④ 추천 전 안내는 실데이터에서 "관측 입력", 데모 시설 추천에서 "시설 변수"
+assert.match(page,/\{demo \? "시설 변수를" : "관측 입력을"\}/);
 // ── 요인분석 매핑(두 모드 같은 함수) ──
 const panelProof={instance_id:"fa",model_type:"factor_analysis",version_id:"demo_factor_version_123456",job_id:"j",dataset_id:"demo_factor_ds",dataset_hash:"b".repeat(64),
   region_id:"namwon",target:DEMO_FACTOR_TARGET,dong_code:"all",prediction_period:202412,observed_from:201501,observed_to:202412,features:FACTOR_PANEL_FEATURES,
@@ -214,8 +214,9 @@ assert.doesNotMatch(read("lib","realSimulation.js"),/formatValue|maximumFraction
 const forecastCard=read("components","RealForecastResult.jsx"),recoPanel=read("components","PolicyRecommendation.jsx");
 assert.match(forecastCard,/const value = \(number\) => formatUnitValue\(number, unit\);/);assert.equal(forecastCard.match(/\{value\(/g)?.length,6);
 assert.equal(evidence.match(/formatUnitValue\([^)]*, unit\)/g)?.length,3);
-assert.match(recoPanel,/formatUnitValue\(s\.reach, "명"\)/);assert.match(recoPanel,/s\.scoreText \?\? formatUnitValue\(s\.score, scoreUnit\)/);
-assert.match(page,/모델 예측상 변화 \+\$\{formatUnitValue\(ranking\[0\]\.delta, unit\)\}/);assert.match(page,/점수 \$\{formatUnitValue\(ranked\[0\]\.score, "점"\)\}/);
+// 데모 추천은 시설 × 활용 방안 — RICE 구성 열·점수를 패널·도출 로그에 두지 않는다.
+assert.doesNotMatch(recoPanel,/s\.reach|RICE|Impact|Confidence|Effort/);assert.match(recoPanel,/s\.scoreText \?\? formatUnitValue\(s\.score, scoreUnit\)/);
+assert.match(page,/모델 예측상 변화 \+\$\{formatUnitValue\(ranking\[0\]\.delta, unit\)\}/);assert.doesNotMatch(page,/rankStrategies|policyStrategies|"점"\)/);
 assert.equal(page.match(/formatUnitValue\((?:finalPop|baseFinalPop|policyDifference), "명"\)/g)?.length,4);
 for (const text of [forecastCard,evidence,recoPanel,page]) { assert.doesNotMatch(text,/formatValue|maximumFractionDigits: 3/); }
 for (const text of [forecastCard,recoPanel]) assert.doesNotMatch(text,/\.toLocaleString\(\)/);
