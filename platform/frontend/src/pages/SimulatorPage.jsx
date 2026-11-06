@@ -17,7 +17,7 @@ import { useChartTheme } from "../hooks/useChartTheme.js";
 import { useRealSimulation } from "../hooks/useRealSimulation.js";
 import { useFactorAnalysis } from "../hooks/useFactorAnalysis.js";
 import { getScrollBehavior } from "../lib/motion.js";
-import { facilityRows, facilitySourceRow, recoControlSig, unlinkedControlNote, FACILITY_EVIDENCE_ROWS } from "../lib/facilityRecommendation.js";
+import { facilityRows, recoControlSig, unlinkedControlNote } from "../lib/facilityRecommendation.js";
 import { YEAR_LABELS, computeTrends, budgetToFactor, controlBoostOf, ANALYSIS_STEPS } from "../lib/simulation.js";
 import {
   REAL_TARGETS, REAL_GUIDE_TEXT, REAL_CONTROLS_LOCK_TEXT, FACTOR_GUIDE_TEXT, FACTOR_PENDING_TEXT, FACTOR_RUN_LOCK_TEXT, FACTOR_IDLE_TEXT,
@@ -108,7 +108,6 @@ export default function SimulatorPage() {
   // 정책 추천(실행 버튼으로 도출) 상태 — 데모는 시설 추천 행({ items }), 실데이터는 민감도 패널 view.
   const [recommendation, setRecommendation] = useState(null);
   const [recoSig, setRecoSig] = useState("");
-  const [recoSim, setRecoSim] = useState(null);
   const controlSig = controls.map((c) => `${c.key}:${controlValues[c.key] ?? c.default}`).join(",");
   const contextKey = inferenceContextKey({ mode, region: currentRegion.id, target: factorTarget, dong: demo ? "" : dong,
     factorModel, simulationProof: demo ? null : simProof });
@@ -150,7 +149,6 @@ export default function SimulatorPage() {
     setSimResult(null);
     setRecommendation(null);
     setRecoSig("");
-    setRecoSim(null);
     // real.revision: 활성 버전이 바뀌거나(409) 다시 확인해 입력을 다시 읽으면 이전 결과를 비운다.
   }, [demo, currentRegion.id, target, dong, real.revision]);
 
@@ -219,7 +217,6 @@ export default function SimulatorPage() {
       // 데모 ③·④는 ① 결과 뒤에 열린다(기준선 흐름) — 다시 실행하면 이전 추천을 비운다.
       setRecommendation(null);
       setRecoSig("");
-      setRecoSim(null);
     }
     addConsoleLog(`INFO: ${currentRegion.name} 요인분석 실행`);
     const analysis = await factor.run();
@@ -271,7 +268,6 @@ export default function SimulatorPage() {
       if (!sim) return;
       const ranking = rankSensitivity(sim);
       setRecommendation(sensitivityRecommendation(ranking, label, unit, targetName));
-      setRecoSim(sim);
       setRecoSig(currentSig);
       addConsoleLog(ranking.length
         ? `INFO: ${currentRegion.name} 정책 추천 도출 완료 — 1순위 '${label(ranking[0].feature)} ${ranking[0].to > ranking[0].from ? "증가" : "감소"}' (모델 예측상 변화 +${formatUnitValue(ranking[0].delta, unit)}${unit}).`
@@ -791,17 +787,6 @@ export default function SimulatorPage() {
             </div>
           </Card>
         )}
-        <ModelEvidence
-          slot="sim.report.evidence"
-          summary="추천 근거"
-          demo={demo}
-          demoRows={[...FACILITY_EVIDENCE_ROWS, facilitySourceRow(currentRegion.id, appData.facilities)].filter(Boolean)}
-          state={evidenceState}
-          result={(recoReady ? recoSim : null) ?? simShown ?? real.context}
-          regions={regions}
-          datasetName={real.datasetName}
-          label={label}
-        />
 
         <div className="pl-report-handoff" data-slot="sim.report.handoff">
           <div className="pl-report-handoff-text">

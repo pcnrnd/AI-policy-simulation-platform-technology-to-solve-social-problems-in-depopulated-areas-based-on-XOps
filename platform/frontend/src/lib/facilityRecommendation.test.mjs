@@ -4,8 +4,8 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  DEFAULT_CRITERION, EVIDENCE_CHART_SLOTS, FACILITY_EVIDENCE_ROWS, PLAN_TYPES, SORT_CRITERIA,
-  evidenceChartsView, facilityRecommendationView, facilityRows, facilitySourceRow, linkedControls, recoControlSig,
+  DEFAULT_CRITERION, EVIDENCE_CHART_SLOTS, PLAN_TYPES, SORT_CRITERIA,
+  evidenceChartsView, facilityRecommendationView, facilityRows, linkedControls, recoControlSig,
   sortFacilityRows, unlinkedControlNote
 } from "./facilityRecommendation.js";
 
@@ -234,12 +234,18 @@ assert.deepEqual(realCharts.map((c) => c.id), ["population", "case", "plans"]);
 assert.deepEqual(realCharts.map((c) => c.empty), ["생활인구 통계를 연결하면 표시됩니다.", "시설 이용실적을 등록하면 표시됩니다.", "시설 자료를 등록하면 표시됩니다."]);
 for (const c of realCharts) assert.deepEqual([c.labels, c.values, c.scope, c.note], [[], [], "", ""]);
 
-// 추천 근거의 시설 사례 출처 행: 시설 자체 출처가 있는 시설만, 출처 제목만(기사 문장 없음).
-const nwSourceRow = facilitySourceRow("namwon", seed.facilities);
-assert.equal(nwSourceRow[0], "시설 사례 출처");
-for (const name of ["남원 달빛정원 피오리움", "전북대 남원 글로컬캠퍼스(구 서남대)", "남원 옛 두동초 발효·체류시설"]) assert.match(nwSourceRow[1], new RegExp(name.replace(/[()]/g, "\\$&")));
-assert.doesNotMatch(nwSourceRow[1], /스마트팜|임대주택/); // 유형 출처뿐이거나 출처 미확인 시설은 넣지 않는다
-assert.equal(facilitySourceRow("gunwi", seed.facilities), null);
+// 추천 근거 접이식 제외(11-06 사용자 결정 "추천 근거같은 것도 제외"): 근거 행(시설 자료·생활인구 관련 관측·정렬 기준·
+// 시설 사례 출처) 검사는 화면에서 그 영역이 빠져 지웠다. 시설 출처(sources)는 시드에 남기고 위 출처 검사로 계속 확인한다.
+const stageSrc = pageSrc.slice(pageSrc.indexOf('id="stage-report"'));
+const handoffIdx = stageSrc.indexOf('data-slot="sim.report.handoff"');
+assert.ok(handoffIdx > 0);
+assert.doesNotMatch(stageSrc.slice(0, handoffIdx), /ModelEvidence|sim\.report\.evidence|추천 근거/); // 두 모드 모두 STAGE ④에 추천 근거 없음
+assert.doesNotMatch(pageSrc, /FACILITY_EVIDENCE_ROWS|facilitySourceRow|recoSim/); // 그 영역 전용 코드도 남기지 않는다
+// 나머지 구성은 그대로: 추천 패널(두 모드) → 연결 띠, 연결 띠는 모드와 관계없이 한 번. 다른 단계의 계산 근거 접이식 두 곳은 유지.
+assert.equal(pageSrc.match(/data-slot="sim\.report\.handoff"/g)?.length, 1);
+assert.match(stageSrc.slice(0, handoffIdx), /<\/Card>\s*\)\}\s*<div className="pl-report-handoff" $/);
+for (const slot of ["sim.factor.evidence", "sim.sim.evidence"]) assert.equal(pageSrc.split(`slot="${slot}"`).length - 1, 1, slot);
+assert.doesNotMatch(read("lib", "facilityRecommendation.js"), /추천 근거/);
 
 // 화면 문구: 계산 매개변수·계산식·가중치·내부 표기·생활인구 관련 관측 실수치 없음.
 const chartTexts = ["namwon", "shinan"].flatMap((id) => evidenceChartsView(seed.recommendation_charts[id], views[id].items))
@@ -248,15 +254,12 @@ const screenTexts = [
   ...[view, budgetView, utilView, views.shinan].flatMap((v) => [v.title, v.scoreLabel, v.caption, v.basisTip, v.footnote,
     ...v.columns.map((c) => c.label), v.rankColumn.label, v.scoreColumn.label,
     ...v.items.flatMap((i) => [i.name, i.chartLabel, i.category, i.scoreText, i.scoreUnit, i.scoreCell, ...i.cells])]),
-  ...FACILITY_EVIDENCE_ROWS.flat(), ...nwSourceRow, ...facilitySourceRow("shinan", seed.facilities), ...chartTexts,
+  ...chartTexts,
   unlinkedControlNote(nwControls, { farm_scale: 30, staff: 100 })
 ];
 const FORBIDDEN = /RICE|Reach|Impact|Confidence|Effort|점수|가중|비중|÷|×|√|\d+\s*호|room|link|readiness|데모|예시|시드|seed|mock|demo_example|구현|API|KT|BC/i;
 for (const text of screenTexts) assert.doesNotMatch(text, FORBIDDEN, text);
 for (const item of [...view.items, ...budgetView.items]) assert.equal(item.cells[2], "사용 승인 후 확인");
-assert.match(FACILITY_EVIDENCE_ROWS[1][1], /공식 생활인구/);
-assert.match(FACILITY_EVIDENCE_ROWS[0][1], /입주율\(입주 호수 기준\)/);
-assert.match(FACILITY_EVIDENCE_ROWS[2][1], /추천 지수/);
 
 // 패널 구조: 그래프 묶음은 표·페이지 표시·각주 다음 카드 끝에 한 번, 모드 분기 없이(두 모드 같은 자리·같은 구조).
 const panelSrc = read("components", "PolicyRecommendation.jsx");
@@ -268,10 +271,9 @@ assert.ok(panelSrc.indexOf("<TablePager") < footIdx && footIdx < chartsIdx && ch
 assert.doesNotMatch(panelSrc.slice(footIdx, cardEndIdx), /realView|facilityRows\s*&&|\?\s*\(?\s*<section/);
 assert.match(panelSrc, /\{chart\.empty && <ChartEmptyNote>\{chart\.empty\}<\/ChartEmptyNote>\}/); // 캔버스는 그대로, 안내만 겹침
 assert.match(pageSrc, /chartSeed=\{appData\.recommendation_charts\?\.\[currentRegion\.id\]\}/);
-assert.match(pageSrc, /demoRows=\{\[\.\.\.FACILITY_EVIDENCE_ROWS, facilitySourceRow\(currentRegion\.id, appData\.facilities\)\]\.filter\(Boolean\)\}/);
 // 지도 시설물은 위치 자료가 있는 시설만(위치 미수집 시설로 지도가 깨지지 않게).
 const mapSrc = read("components", "SimulatorMap.jsx");
 assert.equal(mapSrc.match(/filter\(hasLocation\)/g)?.length, 2);
 assert.equal(seed.facilities.filter((f) => Number.isFinite(f.lat) && Number.isFinite(f.lng)).length, 6);
 
-console.log("facilityRecommendation: 출처·값 구분·지역별 유형·Top3 임대주택≤1·추천 지수 순위·근거 그래프 3자리·실데이터 안내·화면 문구 PASS");
+console.log("facilityRecommendation: 출처·값 구분·지역별 유형·Top3 임대주택≤1·추천 지수 순위·근거 그래프 3자리·실데이터 안내·추천 근거 제외·화면 문구 PASS");

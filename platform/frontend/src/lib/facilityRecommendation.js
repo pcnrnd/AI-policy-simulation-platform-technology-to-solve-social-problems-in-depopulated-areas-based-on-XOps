@@ -24,12 +24,6 @@ export const SORT_CRITERIA = {
 };
 export const DEFAULT_CRITERION = "rank";
 
-export const FACILITY_EVIDENCE_ROWS = [
-  ["시설 자료", "시설 현황 자료(시설명·유형·운영 예산·입주율) · 활용도 정의: 주거 시설 입주율(입주 호수 기준), 개방 시설 이용률(수용 인원 기준) · 자료 기준일과 기금 투자 여부는 시설 대장으로 확인"],
-  ["생활인구 관련 관측(외지인 방문·소비)", "시설 소재 행정동의 통신·카드 관측으로, 시군구·월 단위 공식 생활인구(주민등록·체류·등록외국인)와 다릅니다. 자료 사용 승인 후 표시됩니다."],
-  ["정렬 기준", "추천 순위는 시설별 추천 지수(0~100, 높을수록 우선 검토) 순입니다. 표는 순위·활용도·운영 예산 열 제목으로 다시 정렬할 수 있습니다. 시설 조절변수의 임대주택 공급 호수는 입주율과 추천 지수에 반영됩니다."]
-];
-
 const isLinked = (c) => Boolean(c.facility_id && c.field);
 const valueOf = (c, controlValues) => controlValues?.[c.key] ?? c.default;
 
@@ -157,7 +151,7 @@ export function facilityRecommendationView(rows, criterionKey = DEFAULT_CRITERIO
     // 검토 구분은 표 정렬과 관계없이 추천 순위로 정한다.
     status: (item) => (item.missing ? { text: "자료 등록 후 검토", strong: false } : { text: item.rank <= 3 ? "우선 검토" : "추가 검토", strong: item.rank <= 3 }),
     caption: `시설별 활용 방안과 관측값 — 정렬 기준 ${criterion.text}`,
-    basisTip: "추천 지수가 높은 시설부터 순위를 정합니다. 시설 자료 출처와 기준일은 추천 근거에서 확인하세요.",
+    basisTip: "추천 지수가 높은 시설부터 순위를 정합니다.",
     footnote: `※ 순위: 추천 지수(0~100) 높은 순 · 표 정렬 기준: ${criterion.text}(순위·활용도·운영 예산 열 제목으로 변경) · 운영 예산은 시설별 관측값이며 총 예산과 합산하지 않습니다.`
   };
 }
@@ -195,12 +189,4 @@ export function evidenceChartsView(regionCharts, items) {
       empty: points.length === 0 ? slot.guide : null
     };
   });
-}
-
-/** 추천 근거 접이식의 지역 시설 출처 행 — 시설 자체 출처가 있는 시설만, 시설명과 출처 표기(제목)만. */
-export function facilitySourceRow(regionId, facilities) {
-  const cited = (facilities ?? []).filter((f) => f.region_id === regionId && f.sources?.some((s) => s.scope === "facility"));
-  if (!cited.length) return null;
-  const titles = (f) => f.sources.filter((s) => s.scope === "facility").map((s) => s.title).join(", ");
-  return ["시설 사례 출처", cited.map((f) => `${f.name} — ${titles(f)}`).join(" · ")];
 }
