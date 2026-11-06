@@ -7,10 +7,16 @@
       "lat": 35.4164,
       "lng": 127.3905,
       "riskIndex": 0.16,
-      "population": 77200,
-      "birthRate": 0.83,
+      "population": 74272,
+      "birthRate": 0.853,
       "agingIndex": 33.4,
       "history": [85200, 83800, 82400, 81100, 80300, 79400, 78600, 78000, 77600, 77200],
+      "basis": { "population": "source", "birthRate": "source", "history": "demo_example", "riskIndex": "demo_example", "agingIndex": "demo_example" },
+      "periods": { "population": "2025-12", "birthRate": "2025" },
+      "sources": [
+        { "fields": ["population"], "title": "행정안전부 주민등록 인구통계 — 주민등록 인구 및 세대현황(전체, 외국인 제외)", "url": "https://jumin.mois.go.kr/statMonth.do", "checked": "2026-11-06" },
+        { "fields": ["birthRate"], "title": "국가데이터처 KOSIS 인구동향조사 — 시군구/합계출산율, 모의 연령별 출산율(DT_1B81A17, 2026-08-26 갱신)", "url": "https://kosis.kr/statHtml/statHtml.do?orgId=101&tblId=DT_1B81A17", "checked": "2026-11-06" }
+      ],
       "policyImpacts": { "welfare": 0.2, "industry": 0.4, "housing": 0.18 },
       "case": {
         "summary": "청년층 유지를 위한 목적으로 임대형 스마트팜 단지 조성 사업을 추진하여, 생산성·고용효과를 높여 청년인구의 귀농을 통한 정주인구 전환을 도모한다.",
@@ -83,10 +89,16 @@
       "lat": 34.8338,
       "lng": 126.1067,
       "riskIndex": 0.13,
-      "population": 38400,
-      "birthRate": 0.76,
+      "population": 41858,
+      "birthRate": 0.896,
       "agingIndex": 43.1,
       "history": [45600, 44700, 43800, 42600, 41700, 40800, 40000, 39300, 38800, 38400],
+      "basis": { "population": "source", "birthRate": "source", "history": "demo_example", "riskIndex": "demo_example", "agingIndex": "demo_example" },
+      "periods": { "population": "2025-12", "birthRate": "2025" },
+      "sources": [
+        { "fields": ["population"], "title": "행정안전부 주민등록 인구통계 — 주민등록 인구 및 세대현황(전체, 외국인 제외)", "url": "https://jumin.mois.go.kr/statMonth.do", "checked": "2026-11-06" },
+        { "fields": ["birthRate"], "title": "국가데이터처 KOSIS 인구동향조사 — 시군구/합계출산율, 모의 연령별 출산율(DT_1B81A17, 2026-08-26 갱신)", "url": "https://kosis.kr/statHtml/statHtml.do?orgId=101&tblId=DT_1B81A17", "checked": "2026-11-06" }
+      ],
       "policyImpacts": { "welfare": 0.22, "industry": 0.15, "housing": 0.42 },
       "case": {
         "summary": "지역주민의 주거환경 개선을 위한 목적으로 정주여건 지원사업(정원수 사회적협동조합 운영, 신재생 개발이익 공유, 어선 임대, 임대주택 지원 등)을 시행하여, 소득 창출·생활수준 향상·주택 개선을 통해 거주민으로 전환을 도모한다.",
