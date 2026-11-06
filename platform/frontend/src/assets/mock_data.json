@@ -477,7 +477,12 @@
       "lat": 35.4382,
       "lng": 127.3661,
       "operating_budget": 42,
-      "metric": "재배면적 12㏊ · 고용 청년 38명"
+      "metric": "재배면적 12㏊ · 고용 청년 38명",
+      "reco_inputs": { "room": 55, "link": 60, "readiness": 70 },
+      "basis": { "location": "demo_example", "operating_budget": "demo_example", "metric": "demo_example", "reco_inputs": "demo_example" },
+      "sources": [
+        { "scope": "type", "title": "연합뉴스 2025-12-17(남원 대산면 청년창업형 스마트 농업단지)", "url": "https://www.yna.co.kr/view/AKR20251217106300055", "checked": "2026-11-05" }
+      ]
     },
     {
       "id": "fac_nw_farm02",
@@ -487,7 +492,12 @@
       "lat": 35.3921,
       "lng": 127.4248,
       "metric": "재배면적 8㏊ · 고용 청년 22명",
-      "operating_budget": 28
+      "operating_budget": 28,
+      "reco_inputs": { "room": 50, "link": 55, "readiness": 60 },
+      "basis": { "location": "demo_example", "operating_budget": "demo_example", "metric": "demo_example", "reco_inputs": "demo_example" },
+      "sources": [
+        { "scope": "type", "title": "연합뉴스 2025-12-17(남원 대산면 청년창업형 스마트 농업단지)", "url": "https://www.yna.co.kr/view/AKR20251217106300055", "checked": "2026-11-05" }
+      ]
     },
     {
       "id": "fac_nw_rental",
@@ -499,7 +509,53 @@
       "operating_budget": 15,
       "supply_units": 120,
       "occupancy_rate": 91,
-      "metric": "공급 120호 · 입주율 91%"
+      "metric": "공급 120호 · 입주율 91%",
+      "reco_inputs": { "link": 50, "readiness": 80 },
+      "basis": { "location": "demo_example", "operating_budget": "demo_example", "supply_units": "demo_example", "occupancy_rate": "demo_example", "metric": "demo_example", "reco_inputs": "demo_example" },
+      "sources": []
+    },
+    {
+      "id": "fac_nw_fiorium",
+      "name": "남원 달빛정원 피오리움",
+      "type": "문화관광",
+      "region_id": "namwon",
+      "address": "전북 남원시 어현동 37-84(옛 비사벌콘도 부지)",
+      "metric": "개관 1년 방문객 약 13만 명 · 회원 7,800명(2025-04 개관)",
+      "use_plan": { "type": "복합화", "text": "전시·정원·광장 복합 운영으로 체류 시간 확대 검토" },
+      "reco_inputs": { "room": 60, "link": 90, "readiness": 70 },
+      "basis": { "address": "source", "metric": "source", "reco_inputs": "demo_example" },
+      "sources": [
+        { "scope": "facility", "title": "전북일보 2025-04-20", "url": "https://www.jjan.kr/article/20250420580050", "checked": "2026-11-05" },
+        { "scope": "facility", "title": "나라살림연구소 2026-05-26", "url": "https://narasallim.net/view3/2124", "checked": "2026-11-05" }
+      ]
+    },
+    {
+      "id": "fac_nw_glocal",
+      "name": "전북대 남원 글로컬캠퍼스(구 서남대)",
+      "type": "교육",
+      "region_id": "namwon",
+      "address": "전북 남원시 구 서남대 부지",
+      "metric": "2027년 개교 목표 · 외국인 유학생 1,000명 유치 목표",
+      "use_plan": { "type": "용도 전환", "text": "폐교 대학 시설을 교육·외국인 지원 거점으로 전환 검토" },
+      "reco_inputs": { "room": 75, "link": 80, "readiness": 55 },
+      "basis": { "address": "source", "metric": "source", "reco_inputs": "demo_example" },
+      "sources": [
+        { "scope": "facility", "title": "한겨레 2025-12-09", "url": "https://www.hani.co.kr/arti/area/honam/1233642.html", "checked": "2026-11-05" }
+      ]
+    },
+    {
+      "id": "fac_nw_dudong",
+      "name": "남원 옛 두동초 발효·체류시설",
+      "type": "폐교 활용",
+      "region_id": "namwon",
+      "address": "전북 남원시 송동면 옛 두동초등학교",
+      "metric": "사업비 25억 원(2019년 계획)",
+      "use_plan": { "type": "복합화", "text": "발효·양조 체험과 숙박·캠핑 기능 복합 운영 검토" },
+      "reco_inputs": { "room": 70, "link": 55, "readiness": 40 },
+      "basis": { "address": "source", "metric": "source", "reco_inputs": "demo_example" },
+      "sources": [
+        { "scope": "facility", "title": "연합뉴스 2019-06-18", "url": "https://www.yna.co.kr/view/AKR20190618117900055", "checked": "2026-11-05" }
+      ]
     },
     {
       "id": "fac_sa_rental",
@@ -511,7 +567,10 @@
       "operating_budget": 21,
       "supply_units": 300,
       "occupancy_rate": 84,
-      "metric": "공급 300호 · 입주율 84%"
+      "metric": "공급 300호 · 입주율 84%",
+      "reco_inputs": { "link": 50, "readiness": 75 },
+      "basis": { "location": "demo_example", "operating_budget": "demo_example", "supply_units": "demo_example", "occupancy_rate": "demo_example", "metric": "demo_example", "reco_inputs": "demo_example" },
+      "sources": []
     },
     {
       "id": "fac_sa_solar",
@@ -521,7 +580,13 @@
       "lat": 34.7902,
       "lng": 126.1554,
       "operating_budget": 33,
-      "metric": "개발이익 공유 가구 1,840호"
+      "metric": "햇빛연금 수혜 16,333명(2025-01, 햇빛아동수당 포함)",
+      "reco_inputs": { "room": 45, "link": 50, "readiness": 70 },
+      "basis": { "location": "demo_example", "operating_budget": "demo_example", "metric": "source", "reco_inputs": "demo_example" },
+      "sources": [
+        { "scope": "facility", "title": "신안군 보도자료(연합뉴스 배포) 2023-10-23", "url": "https://www.yna.co.kr/view/RPR20231023009300353", "checked": "2026-11-05" },
+        { "scope": "facility", "title": "뉴시스 2025-01-24", "url": "https://www.newsis.com/view/NISX20250124_0003045471", "checked": "2026-11-05" }
+      ]
     },
     {
       "id": "fac_sa_garden",
@@ -531,9 +596,81 @@
       "lat": 34.8794,
       "lng": 126.0571,
       "operating_budget": 9,
-      "metric": "조합원 126명 · 연 매출 14억"
+      "metric": "조합원 457명(설립 1년) · 2023년 묘목 31만 본",
+      "reco_inputs": { "room": 55, "link": 70, "readiness": 65 },
+      "basis": { "location": "demo_example", "operating_budget": "demo_example", "metric": "source", "reco_inputs": "demo_example" },
+      "sources": [
+        { "scope": "facility", "title": "연합뉴스 2025-01-16", "url": "https://www.yna.co.kr/view/AKR20250116129400054", "checked": "2026-11-05" }
+      ]
+    },
+    {
+      "id": "fac_sa_museum",
+      "name": "신안 이세돌바둑기념관(1도1뮤지엄)",
+      "type": "폐교 활용",
+      "region_id": "shinan",
+      "address": "전남 신안군 비금면 비금북부길 573-1(옛 대광초등학교)",
+      "metric": "연면적 1,094㎡ · 지상 2층",
+      "use_plan": { "type": "복합화", "text": "전시와 레지던스·체험 프로그램 복합 운영 검토" },
+      "reco_inputs": { "room": 65, "link": 85, "readiness": 70 },
+      "basis": { "address": "source", "metric": "source", "reco_inputs": "demo_example" },
+      "sources": [
+        { "scope": "facility", "title": "신안군 1도1뮤지움 누리집", "url": "https://www.shinan.go.kr/home/museum/museum04/museum05_26/museum05_07", "checked": "2026-11-05" },
+        { "scope": "facility", "title": "전남일보 2021-05-27", "url": "https://www.jnilbo.com/news/articleView.html?idxno=65014450970", "checked": "2026-11-05" }
+      ]
+    },
+    {
+      "id": "fac_sa_purple",
+      "name": "신안 퍼플섬(반월도·박지도)",
+      "type": "섬 관광",
+      "region_id": "shinan",
+      "address": "전남 신안군 안좌면 반월도·박지도",
+      "metric": "누적 관광객 150만 명 이상(2019~2023)",
+      "use_plan": { "type": "운영 개선", "text": "테마 행사·체류 프로그램 운영 개선 검토" },
+      "reco_inputs": { "room": 50, "link": 90, "readiness": 75 },
+      "basis": { "address": "source", "metric": "source", "reco_inputs": "demo_example" },
+      "sources": [
+        { "scope": "facility", "title": "연합뉴스 2024-01-17", "url": "https://www.yna.co.kr/view/AKR20240117129100054", "checked": "2026-11-05" }
+      ]
     }
   ],
+  "recommendation_charts": {
+    "namwon": {
+      "population": {
+        "scope": "남원시 · 2025년 연평균",
+        "unit": "만 명",
+        "points": [{ "label": "생활인구", "value": 34 }, { "label": "체류인구", "value": 26 }],
+        "basis": "source",
+        "source_text": "국가데이터처 호남지방데이터청 2025년 전북 인구감소지역 생활인구 현황(2026-10-22 발표, 보도 인용·약수)",
+        "sources": [{ "title": "국가데이터처 호남지방데이터청 발표 인용 보도", "url": "https://www.gkg.co.kr/194126", "checked": "2026-11-05" }]
+      },
+      "case": {
+        "scope": "달빛정원 피오리움 · 2025-04 개관 후 1년",
+        "unit": "명",
+        "points": [{ "label": "누적 회원", "value": 7800 }, { "label": "재방문 회원", "value": 7200 }],
+        "basis": "source",
+        "source_text": "나라살림연구소(2026-05-26 게시) · 같은 기간 누적 방문객 약 13만 명",
+        "sources": [{ "title": "나라살림연구소 2026-05-26", "url": "https://narasallim.net/view3/2124", "checked": "2026-11-05" }]
+      }
+    },
+    "shinan": {
+      "population": {
+        "scope": "신안군 · 2024년 4분기",
+        "unit": "만 명",
+        "points": [{ "label": "등록인구", "value": 3.8 }, { "label": "체류인구", "value": 52.8 }],
+        "basis": "source",
+        "source_text": "통계청·행정안전부 2024년 4분기 인구감소지역 생활인구(신안군 발표 보도 인용)",
+        "sources": [{ "title": "뉴스1(신안군 발표)", "url": "https://www.news1.kr/local/gwangju-jeonnam/5831545", "checked": "2026-11-05" }]
+      },
+      "case": {
+        "scope": "햇빛연금 연도별 지급액",
+        "unit": "억 원",
+        "points": [{ "label": "2021", "value": 17 }, { "label": "2022", "value": 36 }, { "label": "2023(1~3분기)", "value": 47 }],
+        "basis": "source",
+        "source_text": "신안군 보도자료(2023-10-23) · 2023년은 3분기까지 실적",
+        "sources": [{ "title": "신안군 보도자료(연합뉴스 배포) 2023-10-23", "url": "https://www.yna.co.kr/view/RPR20231023009300353", "checked": "2026-11-05" }]
+      }
+    }
+  },
   "report_templates": [
     {
       "id": "template_extinction_alert",

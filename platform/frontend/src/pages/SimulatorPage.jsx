@@ -17,7 +17,7 @@ import { useChartTheme } from "../hooks/useChartTheme.js";
 import { useRealSimulation } from "../hooks/useRealSimulation.js";
 import { useFactorAnalysis } from "../hooks/useFactorAnalysis.js";
 import { getScrollBehavior } from "../lib/motion.js";
-import { facilityRows, recoControlSig, unlinkedControlNote, FACILITY_EVIDENCE_ROWS } from "../lib/facilityRecommendation.js";
+import { facilityRows, facilitySourceRow, recoControlSig, unlinkedControlNote, FACILITY_EVIDENCE_ROWS } from "../lib/facilityRecommendation.js";
 import { YEAR_LABELS, computeTrends, budgetToFactor, controlBoostOf, ANALYSIS_STEPS } from "../lib/simulation.js";
 import {
   REAL_TARGETS, REAL_GUIDE_TEXT, REAL_CONTROLS_LOCK_TEXT, FACTOR_GUIDE_TEXT, FACTOR_PENDING_TEXT, FACTOR_RUN_LOCK_TEXT, FACTOR_IDLE_TEXT,
@@ -767,7 +767,7 @@ export default function SimulatorPage() {
       >
         {recoReady && recommendation.items.length > 0 ? (
           demo
-            ? <PolicyRecommendation region={currentRegion} facilityRows={recommendation.items} />
+            ? <PolicyRecommendation region={currentRegion} facilityRows={recommendation.items} chartSeed={appData.recommendation_charts?.[currentRegion.id]} />
             : <PolicyRecommendation region={currentRegion} view={recommendation} />
         ) : (
           <Card title={demo ? "시설 활용 추천" : "맞춤 정책 추천"} icon="fa-lightbulb" dataSource={cardSource} data-slot="sim.report.panel">
@@ -795,7 +795,7 @@ export default function SimulatorPage() {
           slot="sim.report.evidence"
           summary="추천 근거"
           demo={demo}
-          demoRows={FACILITY_EVIDENCE_ROWS}
+          demoRows={[...FACILITY_EVIDENCE_ROWS, facilitySourceRow(currentRegion.id, appData.facilities)].filter(Boolean)}
           state={evidenceState}
           result={(recoReady ? recoSim : null) ?? simShown ?? real.context}
           regions={regions}

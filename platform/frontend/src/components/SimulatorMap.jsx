@@ -12,6 +12,8 @@ import { prefersReducedMotion } from "../lib/motion.js";
 // 키가 있으면 공식 WMTS API(+회색 추가), 없으면 공개 타일 서버(xdworld)를 사용(데모용, 운영 시 인증키 권장).
 // 공개 서버 동작 확인: Base·white·midnight(라이브 타일 테스트). gray는 키 필요, Satellite는 라벨 없어 제외.
 const VWORLD_KEY = import.meta.env.VITE_VWORLD_KEY;
+// 지도 시설물은 위치 자료가 있는 시설만(마커·목록 같은 기준).
+const hasLocation = (f) => Number.isFinite(f.lat) && Number.isFinite(f.lng);
 const vworldUrl = (layer) =>
   VWORLD_KEY
     ? `https://api.vworld.kr/req/wmts/1.0.0/${VWORLD_KEY}/${layer}/{z}/{y}/{x}.png`
@@ -135,7 +137,7 @@ export default function SimulatorMap({ appData, currentRegion, setCurrentRegion,
       신재생: "#f59e0b",
       정원수: "#22d3ee"
     };
-    (appData.facilities ?? []).forEach((f) => {
+    (appData.facilities ?? []).filter(hasLocation).forEach((f) => {
       const fColor = FACILITY_COLORS[f.type] ?? "#94a3b8";
       const fMarker = L.circleMarker([f.lat, f.lng], {
         radius: 6,
@@ -353,7 +355,7 @@ export default function SimulatorMap({ appData, currentRegion, setCurrentRegion,
 
 /** 지도 시설물·선택 지역 격자 상세 — 데모 표시에서만 목록, 그 밖에는 같은 자리 안내. */
 export function SimulatorMapDetails({ appData, currentRegion, allowSeed, note }) {
-  const facilities = usePager(allowSeed ? appData.facilities ?? [] : []);
+  const facilities = usePager(allowSeed ? (appData.facilities ?? []).filter(hasLocation) : []);
   const cells = usePager(allowSeed ? buildRegionGrid(currentRegion) : [], undefined, currentRegion.id);
   return (
     <details className="map-data-details" data-slot="sim.map.details">
