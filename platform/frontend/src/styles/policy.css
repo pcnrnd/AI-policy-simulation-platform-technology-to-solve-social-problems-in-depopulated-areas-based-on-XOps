@@ -129,6 +129,11 @@ th[aria-sort="descending"] .reco-sort {
   color: var(--text-muted);
 }
 
+/* 비교 표 머리글은 단어 단위로만 줄바꿈 — 근거 문장이 길어져도 "판단" 같은 열 제목이 글자 단위로 갈라지지 않게 */
+.reco-compare th {
+  word-break: keep-all;
+}
+
 .reco-verdict {
   white-space: nowrap;
   font-size: 11px;

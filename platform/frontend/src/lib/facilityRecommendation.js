@@ -86,10 +86,39 @@ export function scaleGrade(item, rules) {
   if (Number.isFinite(item.scale_area_m2)) return item.scale_area_m2 < small ? "소형" : item.scale_area_m2 < large ? "중형" : "대형";
   return rules.scale_grade_by_type[item.facility_type ?? item.type] ?? "중형";
 }
-// 규모 보정 배수 — 시설이 사례보다 작으면 등급 계수 비율만큼 줄이고, 크더라도 사례 값을 넘겨 늘리지 않는다.
-const scaleRatio = (facility, kase, rules) => Math.min(1, rules.scale_factor[scaleGrade(facility, rules)] / rules.scale_factor[scaleGrade(kase, rules)]);
+// 규모 보정 배수 — 시설 등급 계수 ÷ 사례 등급 계수. 2차 보정부터 큰 시설에도 그대로 걸고(1로 막지 않음), 결과는 시설 수용 상한·지역 상한으로 자른다.
+const scaleRatio = (facility, kase, rules) => rules.scale_factor[scaleGrade(facility, rules)] / rules.scale_factor[scaleGrade(kase, rules)];
 // 운영 중 시설 — 계획·조성 단계가 아니면(단계 자료가 없는 기존 운영 시설 포함) 운영 중으로 본다.
 const isOperating = (facility) => !["계획", "조성"].includes(facility.stage);
+
+/**
+ * 시설 수용 상한(월 방문 인원). 출처 수용 인원이 등록형이면 그 인원 × 등록 회전, 아니면
+ * (출처 연면적 또는 규모 등급 대표 연면적) ÷ 1인당 면적(법정 수용인원 산정 기준) × 일 회전 × 월 운영일.
+ */
+export function capacityCap(facility, rules) {
+  const turnover = rules.capacity_turnover;
+  if (Number.isFinite(facility.capacity_people)) {
+    return facility.capacity_people * (facility.capacity_kind === "등록" ? turnover.enrolled : turnover.daily * turnover.open_days);
+  }
+  const area = Number.isFinite(facility.scale_area_m2) ? facility.scale_area_m2 : rules.capacity_grade_area_m2[scaleGrade(facility, rules)];
+  return Math.round(area / rules.capacity_area_per_person_m2) * turnover.daily * turnover.open_days;
+}
+
+// 비교 가능 사례 — 같은 방안 유형·비슷한 지역 유형(섬·농촌·소도시)·인구감소지역, 그 시설 자신의 사례 제외. 시설·사례 속성만 본다.
+// 같은 시설 유형 사례가 있으면 그것만 쓰고(2곳 이상이면 사례값 범위, 1곳이면 규모 보정 추정),
+// 없으면 그 방안을 적용할 수 있는 다른 유형 사례를 규모로 보정한 추정(참고 사례)으로 쓴다.
+export function comparableCases(option, facility, cases, rules) {
+  const base = cases.filter((c) => c.plan_type === option.planType && c.facility_id !== facility.id
+    && c.depopulation_area === true && rules.comparable_region_types.includes(c.region_type));
+  const same = base.filter((c) => c.facility_type === facility.type);
+  if (same.length) return { tier: same.length >= rules.min_cases_for_range ? "range" : "single", cases: same };
+  const reference = base.filter((c) => c.applies_to.includes(facility.type));
+  return { tier: reference.length ? "reference" : "none", cases: reference };
+}
+const ESTIMATE_NOTE = { single: "같은 유형 시설 규모 기준 추정", reference: "유사 방안 사례 규모 기준 추정" };
+// 기간이 짧은 행사 사례를 연간 효과로 쓸 때 근거 문장에 그 사실을 드러낸다.
+const EVENT_NOTE = "·연 1회 행사 방문을 12개월로 나눈 값";
+const isEvent = (c) => Number.isFinite(c.event_days);
 
 // 방안 하나의 효과 범위 — 값마다 basis(source | synthetic)와 화면 근거 문장을 붙인다.
 function optionEffect(option, facility, housing, ctx) {
@@ -105,35 +134,45 @@ function optionEffect(option, facility, housing, ctx) {
     const settle = option.kind === "house" && useful
       ? span(housing.vacant * fill[0] * region.persons_per_household * inflowRatio, housing.vacant * fill[1] * region.persons_per_household * inflowRatio)
       : span(region.inflow_external * rules.settle_share[0], region.inflow_external * rules.settle_share[1]);
-    return { utilization, living: { ...settle, basis: "synthetic" }, settle: { ...settle, basis: "synthetic" }, note: "전입 통계 기준 추정", cases: [] };
+    return { utilization, living: { ...settle, basis: "synthetic" }, settle: { ...settle, basis: "synthetic" }, note: "전입 통계 기준 추정", cases: [], caseTier: "none" };
   }
   if (option.kind === "stay") {
     const vacant = useful ? housing.vacant : 0;
     const raw = span(vacant * rules.short_stay_per_unit[0], vacant * rules.short_stay_per_unit[1]);
-    return { utilization, living: { ...span(Math.min(raw.low, cap), Math.min(raw.high, cap)), basis: "synthetic" }, settle: null, note: "공실 규모 기준 추정", cases: [] };
+    return { utilization, living: { ...span(Math.min(raw.low, cap), Math.min(raw.high, cap)), basis: "synthetic" }, settle: null, note: "공실 규모 기준 추정", cases: [], caseTier: "none" };
   }
-  // 방문형: 같은 방안 유형·같은 시설 유형의 비교 가능한 출처 사례(인구감소지역, 그 시설 자신의 사례 제외)로 범위를 잡는다.
-  // 사례마다 규모 보정(시설이 사례보다 작으면 줄임)과 운영 중 시설의 증가분(신규 개관 총량 사례일 때)을 곱하고, 지역 상한을 넘으면 자른다.
-  const matched = cases.filter((c) => c.plan_type === option.planType && c.applies_to.includes(facility.type)
-    && c.facility_id !== facility.id && c.depopulation_area === true);
+  // 방문형: 비교 가능 사례마다 규모 보정 배수와 운영 중 시설의 증가분(신규 개관 총량 사례일 때)을 곱하고,
+  // 시설 수용 상한·지역 상한 가운데 작은 값으로 자른다.
+  const limit = Math.min(cap, capacityCap(facility, rules));
+  const { tier, cases: matched } = comparableCases(option, facility, cases, rules);
   if (matched.length) {
     const ranges = matched.map((c) => {
       const scale = scaleRatio(facility, c, rules);
       const [incLow, incHigh] = c.opening === "new" && isOperating(facility) ? rules.operating_increment : [1, 1];
-      return { low: c.monthly * scale * incLow, high: c.monthly * scale * incHigh, adjusted: scale < 1 || incLow < 1 };
+      return { low: c.monthly * scale * incLow, high: c.monthly * scale * incHigh, adjusted: scale !== 1 || incLow < 1 };
     });
     const low = Math.min(...ranges.map((r) => r.low)), high = Math.max(...ranges.map((r) => r.high));
-    const adjusted = ranges.some((r) => r.adjusted) || high > cap;
+    const adjusted = ranges.some((r) => r.adjusted) || high > limit;
+    const event = matched.some(isEvent) ? EVENT_NOTE : "";
+    const isRange = tier === "range";
     return {
       utilization,
-      living: { ...span(Math.min(low, cap), Math.min(high, cap)), basis: adjusted ? "synthetic" : "source" },
+      living: { ...span(Math.min(low, limit), Math.min(high, limit)), basis: isRange && !adjusted ? "source" : "synthetic" },
       settle: null,
-      note: `유사 사례 ${matched.length}곳 기준${adjusted ? "·규모 반영" : ""}`,
-      cases: matched.map((c) => c.id)
+      note: isRange ? `유사 사례 ${matched.length}곳 기준${adjusted ? "·규모 반영" : ""}${event}` : `${ESTIMATE_NOTE[tier]}${event}`,
+      cases: matched.map((c) => c.id),
+      caseTier: tier
     };
   }
   const [a, b] = rules.visit_share[option.planType];
-  return { utilization, living: { ...span(region.stay_monthly * a, region.stay_monthly * b), basis: "synthetic" }, settle: null, note: "같은 유형 시설 기준 추정", cases: [] };
+  return {
+    utilization,
+    living: { ...span(Math.min(region.stay_monthly * a, limit), Math.min(region.stay_monthly * b, limit)), basis: "synthetic" },
+    settle: null,
+    note: "지역 생활인구 규모 기준 추정",
+    cases: [],
+    caseTier: "none"
+  };
 }
 
 // 방안 점수(생활인구 중심 + 정주 보조, 0~100 척도의 가중 합) — 추천 지수에서 추진 여건만 뺀 부분.
@@ -239,6 +278,7 @@ export function facilityRecommendationView(rows, criterionKey = DEFAULT_CRITERIO
       score: row.index,
       options: row.options,
       planCases: row.planCases,
+      caseTier: choice?.caseTier ?? "none",
       // Top3 카드 효과 줄: 고른 방안 유형과 기대 생활인구 변화.
       effectLine: choice ? `${choice.planType} · 생활인구 ${livingText(choice.living)}` : "",
       // Top3 카드 값 줄: 큰 글씨는 숫자만, 지표 이름은 작은 글씨 칸.
@@ -332,12 +372,16 @@ export function evidenceChartsView(regionCharts, items, selected = null) {
   const cases = pick?.planCases ?? [];
   // 고른 방안의 근거가 사례가 아닌 추정이면(사례 묶음 0곳) 사례 그래프 자리에 그 사실만 적는다.
   const noCase = pick && Array.isArray(pick.planCases) && pick.options?.length ? "고른 방안과 같은 유형의 비교 가능한 사례가 없습니다." : null;
+  // 상시 운영 사례는 월평균, 기간이 짧은 행사 사례는 행사 기간 방문객 원값을 그 기간과 함께 그린다(월평균으로 환산해 보이지 않는다).
+  const hasEvent = cases.some((c) => Number.isFinite(c.event_days));
   const caseData = cases.length
     ? {
-      scope: `${pick.planType} 사례 · 월평균 방문`,
+      scope: `${pick.planType} ${pick.caseTier === "range" ? "사례" : "참고 사례"} · ${hasEvent ? "기간별 방문" : "월평균 방문"}`,
       unit: "명",
-      points: cases.map((c) => ({ label: c.name, value: c.monthly })),
-      label: "월평균 방문",
+      points: cases.map((c) => (Number.isFinite(c.event_days)
+        ? { label: `${c.name}(축제 기간 ${c.event_days}일)`, value: c.event_visitors }
+        : { label: `${c.name}(월평균)`, value: c.monthly })),
+      label: hasEvent ? "방문객" : "월평균 방문",
       note: `출처: ${cases.map((c) => c.sources[0].title).join(" · ")}`
     }
     : null;
