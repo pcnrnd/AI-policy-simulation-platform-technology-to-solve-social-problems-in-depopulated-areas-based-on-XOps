@@ -2,13 +2,8 @@ import { useMemo } from "react";
 import Card from "./Card.jsx";
 import TablePager, { usePager } from "./TablePager.jsx";
 import { DEMO_ONLY_HINT } from "./PendingData.jsx";
-
-// 소멸위험지수(낮을수록 위험) → 등급/색상 매핑.
-function riskGrade(riskIndex) {
-  if (riskIndex < 0.15) return { label: "소멸 고위험", color: "var(--accent-red)", rgbToken: "--accent-red-rgb" };
-  if (riskIndex < 0.18) return { label: "소멸 주의", color: "var(--accent-orange)", rgbToken: "--accent-orange-rgb" };
-  return { label: "관찰 단계", color: "var(--accent-teal)", rgbToken: "--accent-teal-rgb" };
-}
+// 소멸위험지수(낮을수록 위험) 등급 — 지도와 같은 공용 기준(한국고용정보원 2025 소멸위험분류).
+import { riskGrade } from "../lib/riskGrade.js";
 
 // 10개년 history 첫값 대비 최근값 감소율(%).
 function declineRate(history) {
@@ -23,7 +18,7 @@ function declineRate(history) {
  * 지자체별 인구감소 현황 요약 — 종합 대시보드의 핵심 도메인 패널.
  * 위험지수 오름차순(고위험 우선) 정렬, 행 클릭 시 해당 지자체로 시뮬레이터 이동.
  *
- * allowSeed=false(데모 표시 OFF)이면 표 구조는 그대로 두고 행만 비운다 — 지자체 인구·고령화지수·
+ * allowSeed=false(데모 표시 OFF)이면 표 구조는 그대로 두고 행만 비운다 — 지자체 인구·고령인구비율·
  * 출산율·위험등급은 mock_data.json 전용 항목이라 실저장소에 대응 값이 없다.
  * @param {{ regions: object[], currentRegionId?: string, onSelectRegion: (region: object) => void, allowSeed?: boolean }} props
  */
@@ -53,7 +48,7 @@ export default function RegionStatusCard({ regions, currentRegionId, onSelectReg
               <th scope="col">지자체</th>
               <th scope="col" className="cell-num">인구수</th>
               <th scope="col" className="cell-num">10년 증감</th>
-              <th scope="col" className="cell-num">고령화지수</th>
+              <th scope="col" className="cell-num">고령인구비율</th>
               <th scope="col" className="cell-num">출산율</th>
               <th scope="col">위험등급</th>
             </tr>

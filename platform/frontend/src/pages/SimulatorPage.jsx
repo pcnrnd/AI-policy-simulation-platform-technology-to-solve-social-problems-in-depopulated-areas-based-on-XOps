@@ -117,7 +117,7 @@ export default function SimulatorPage() {
   const recoInputSig = demo ? `${contextKey}|${recoControlSig(controls, controlValues)}` : currentSig;
   const controlNote = demo ? unlinkedControlNote(controls, controlValues) : null;
   const recoStale = recommendation !== null && recoSig !== recoInputSig;
-  const deriveFacilities = (region) => ({ items: facilityRows(region.id, appData.facilities, controls, controlValues) });
+  const deriveFacilities = (region) => ({ items: facilityRows(region.id, appData.facilities, controls, controlValues, appData.conversion) });
 
   // 단계 접기/펼치기 상태 (기본 전부 펼침)
   const [openStages, setOpenStages] = useState(Object.fromEntries(STAGE_IDS.map((id) => [id, true])));
@@ -393,7 +393,7 @@ export default function SimulatorPage() {
       legend: { display: false },
       tooltip: {
         callbacks: {
-          label: (cx) => `${cx.raw.name}: 위험 ${cx.raw.x}, 인구 ${cx.raw.y.toLocaleString()}명`
+          label: (cx) => `${cx.raw.name}: 위험지수 ${cx.raw.x}, 인구 ${cx.raw.y.toLocaleString()}명`
         }
       }
     }
@@ -501,7 +501,7 @@ export default function SimulatorPage() {
     const g = riskGrade(r.riskIndex);
     return {
       chip: { label: g.label, style: { color: g.color, backgroundColor: `rgba(${g.rgb}, 0.12)`, borderColor: `rgba(${g.rgb}, 0.3)` } },
-      meta: `${r.theme} · ${r.population.toLocaleString()}명 · 위험 ${r.riskIndex}`
+      meta: `${r.theme} · ${r.population.toLocaleString()}명 · 위험지수 ${r.riskIndex}`
     };
   };
 

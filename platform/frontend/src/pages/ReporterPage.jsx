@@ -19,6 +19,7 @@ import {
 import { fetchReportData } from "../lib/dataopsApi.js";
 import { REALDATA_MODEL_LABELS } from "../constants/models.js";
 import { alertText } from "../lib/alertText.js";
+import { riskGrade } from "../lib/riskGrade.js";
 
 const EXPORT_FORMATS = [
   { id: "docx", label: "Word (.docx)", icon: "fa-file-word", ext: "docx" },
@@ -51,8 +52,8 @@ function buildPreview(region, template, live, generatedAt, allowSeed) {
       <p>
         본 분석서의 대상인 <strong>{region.name}</strong>은 현재 등록 인구수{" "}
         <strong>{region.population.toLocaleString()}명</strong>, 평균 가중 출산율{" "}
-        <strong>{region.birthRate}명</strong>으로 고령화 지수가 <strong>{region.agingIndex}%</strong>에
-        달해 인구소멸 위험지수 <strong>{region.riskIndex}</strong> 등급의 극심한 소멸 위험 지역입니다.
+        <strong>{region.birthRate}명</strong>으로 고령인구비율이 <strong>{region.agingIndex}%</strong>에
+        달하고, 인구소멸 위험지수는 <strong>{region.riskIndex}</strong>(소멸위험 <strong>{riskGrade(region.riskIndex).label}</strong> 단계)입니다.
         AI 예측 모델에 따르면, 현행 유지 시 10년 후 인구는 약 <strong>{tenYearPop}명</strong>{" "}
         수준으로 급감할 것으로 예측됩니다.
       </p></>}

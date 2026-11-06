@@ -84,7 +84,7 @@ assert.deepEqual(runDateLabels(["v20260911-78d661", "v20261014-78d661", "v202610
 const dongs = [{ dong_code: "45190250", dong_name: "운봉읍" }];
 assert.deepEqual(["rate_t-1", "rate_t-2", "riskIndex", "birthRate", "agingIndex", "dong_45190250", "dong_45190999", "month_cos", "y_lag2", "y_yoy", "has_yoy"]
   .map((feature) => monitorFeatureLabel(feature, "observed_sales_krw", dongs)),
-["직전 기간 인구 변화율", "2기간 전 인구 변화율", "위험지수", "출산율", "고령화지수", "행정동: 운봉읍", "행정동 45190999", "월별 계절성 2", "2개월 전 관측 소비", "전년 같은 달 관측 소비", "전년 관측값 유무"]);
+["직전 기간 인구 변화율", "2기간 전 인구 변화율", "위험지수", "출산율", "고령인구비율", "행정동: 운봉읍", "행정동 45190999", "월별 계절성 2", "2개월 전 관측 소비", "전년 같은 달 관측 소비", "전년 관측값 유무"]);
 assert.equal(monitorFeatureLabel("스마트팜 단지 규모 (Smartfarm Scale)", "x"), "스마트팜 단지 규모");
 // U11: 게이지 호 = 기준선 대비 비율(0~1), 기준선 없으면 null
 assert.equal(baselineRatio(50, 100), 0.5);assert.equal(baselineRatio(150, 100), 1);

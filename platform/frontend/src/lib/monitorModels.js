@@ -75,7 +75,7 @@ export function runDateLabels(labels = []) {
 }
 
 // 데모 이력(지역 인구 추이) 학습 피처 — 직전 기간 변화율 랙과 지역 정적 지표.
-const DEMO_FEATURES = { riskIndex: "위험지수", birthRate: "출산율", agingIndex: "고령화지수" };
+const DEMO_FEATURES = { riskIndex: "위험지수", birthRate: "출산율", agingIndex: "고령인구비율" };
 /**
  * SHAP 특징 표시명 — 내부 변수명 대신 한글. 행정동 원핫은 대응표의 행정동명, 대응표에 없으면 "행정동 <코드>".
  * @param {Array<{dong_code?: string, dong_name?: string}>} dongEntries 행정동 대응표 entries
