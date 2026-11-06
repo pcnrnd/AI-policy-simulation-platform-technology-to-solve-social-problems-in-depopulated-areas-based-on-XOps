@@ -12,7 +12,7 @@ import { DEFAULT_CRITERION, SORT_CRITERIA, evidenceChartsView, facilityRecommend
 
 const MEDAL = ["🥇", "🥈", "🥉"];
 
-/** 추천 카드 끝 그래프 하나 — 값이 없으면 캔버스 자리를 그대로 두고 행동 안내만 겹친다. */
+/** 근거 그래프 하나 — 값이 없으면 캔버스 자리를 그대로 두고 행동 안내만 겹친다. */
 function EvidenceChart({ chart, ct }) {
   const data = {
     labels: chart.labels,
@@ -55,7 +55,7 @@ function EvidenceChart({ chart, ct }) {
 }
 
 /**
- * 추천 결과 패널 — Top3 요약 + 막대 차트 + 상세 표 + 근거 그래프 묶음.
+ * 추천 결과 패널 — Top3 요약 + 막대 차트 + 근거 그래프 묶음 + 상세 표.
  * 데모 표시: facilityRows(시설 × 활용 방안) — 추천 지수 순위로 Top3·차트를 그리고, 표는 열 제목으로 고른 기준으로 정렬한다.
  * 실데이터 표시: view(sensitivityRecommendation 결과) — 같은 형식에 모델 예측상 변화를 넣는다. 근거 그래프 묶음은 같은 자리에 행동 안내.
  * @param {{ region: object, facilityRows?: object[], view?: object, chartSeed?: object }} props
@@ -156,6 +156,11 @@ export default function PolicyRecommendation({ region, facilityRows = null, view
         <Bar data={chartData} options={chartOpts} />
       </div>
 
+      {/* 근거 그래프 묶음 — 주 그래프 바로 아래·표 위, 두 모드 같은 세 자리 */}
+      <section className="reco-evidence-charts" data-slot="sim.report.charts" aria-label="추천 참고 그래프">
+        {evidenceCharts.map((chart) => <EvidenceChart key={chart.id} chart={chart} ct={ct} />)}
+      </section>
+
       <div className={view.criterion ? "table-container reco-page-table" : "table-container"}>
         <table>
           <caption className="sr-only">{view.caption}</caption>
@@ -209,10 +214,6 @@ export default function PolicyRecommendation({ region, facilityRows = null, view
       <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 12 }}>
         {view.footnote}
       </p>
-      {/* 근거 그래프 묶음 — 카드 끝, 두 모드 같은 세 자리 */}
-      <section className="reco-evidence-charts" data-slot="sim.report.charts" aria-label="추천 참고 그래프">
-        {evidenceCharts.map((chart) => <EvidenceChart key={chart.id} chart={chart} ct={ct} />)}
-      </section>
     </Card>
   );
 }

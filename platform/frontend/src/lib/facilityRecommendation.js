@@ -156,7 +156,7 @@ export function facilityRecommendationView(rows, criterionKey = DEFAULT_CRITERIO
   };
 }
 
-// 추천 카드 끝 그래프 묶음 — 두 모드가 같은 세 자리를 갖는다. 값이 없으면 같은 자리에 행동 안내만.
+// 근거 그래프 묶음(주 그래프 아래) — 두 모드가 같은 세 자리를 갖는다. 값이 없으면 같은 자리에 행동 안내만.
 export const EVIDENCE_CHART_SLOTS = [
   { id: "population", title: "생활인구 관측(공식 통계)", guide: "생활인구 통계를 연결하면 표시됩니다." },
   { id: "case", title: "지역 사례 성과", guide: "시설 이용실적을 등록하면 표시됩니다." },

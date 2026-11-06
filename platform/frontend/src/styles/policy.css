@@ -83,12 +83,13 @@ th[aria-sort="descending"] .reco-sort {
   white-space: nowrap;
 }
 
-/* 추천 카드 끝 근거 그래프 묶음 — 세 자리 고정(값이 없으면 같은 자리에 안내) */
+/* 주 그래프 아래 근거 그래프 묶음 — 세 자리 고정(값이 없으면 같은 자리에 안내).
+   위 간격은 주 그래프의 아래 여백(20px)을 쓰고, 표와의 간격은 같은 20px. */
 .reco-evidence-charts {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
-  margin-top: 16px;
+  margin-bottom: 20px;
 }
 
 .reco-evidence-chart {

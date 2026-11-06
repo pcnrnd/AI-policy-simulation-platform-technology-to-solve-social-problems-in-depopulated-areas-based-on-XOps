@@ -261,14 +261,18 @@ const FORBIDDEN = /RICE|Reach|Impact|Confidence|Effort|점수|가중|비중|÷|�
 for (const text of screenTexts) assert.doesNotMatch(text, FORBIDDEN, text);
 for (const item of [...view.items, ...budgetView.items]) assert.equal(item.cells[2], "사용 승인 후 확인");
 
-// 패널 구조: 그래프 묶음은 표·페이지 표시·각주 다음 카드 끝에 한 번, 모드 분기 없이(두 모드 같은 자리·같은 구조).
+// 패널 구조: 그래프 묶음은 주 그래프 바로 아래·추천 표 위에 한 번, 모드 분기 없이(두 모드 같은 자리·같은 구조).
+// 11-06 사용자 결정(그래프 위치 이동)으로 "각주 다음 카드 끝" 검사를 "주 그래프 다음·표 앞"으로 바꿨다. 표·쪽 넘김·각주 순서는 그대로.
 const panelSrc = read("components", "PolicyRecommendation.jsx");
 assert.equal(panelSrc.match(/data-slot="sim\.report\.charts"/g)?.length, 1);
-const footIdx = panelSrc.indexOf("{view.footnote}");
+const mainChartIdx = panelSrc.indexOf("<Bar data={chartData}");
 const chartsIdx = panelSrc.indexOf('data-slot="sim.report.charts"');
+const tableIdx = panelSrc.indexOf('<div className={view.criterion ? "table-container');
+const footIdx = panelSrc.indexOf("{view.footnote}");
 const cardEndIdx = panelSrc.lastIndexOf("</Card>");
-assert.ok(panelSrc.indexOf("<TablePager") < footIdx && footIdx < chartsIdx && chartsIdx < cardEndIdx);
-assert.doesNotMatch(panelSrc.slice(footIdx, cardEndIdx), /realView|facilityRows\s*&&|\?\s*\(?\s*<section/);
+assert.ok(mainChartIdx > 0 && mainChartIdx < chartsIdx && chartsIdx < tableIdx, "주 그래프 → 그래프 묶음 → 표");
+assert.ok(tableIdx < panelSrc.indexOf("<TablePager") && panelSrc.indexOf("<TablePager") < footIdx && footIdx < cardEndIdx, "표 → 쪽 넘김 → 각주 → 카드 끝");
+assert.doesNotMatch(panelSrc.slice(mainChartIdx, tableIdx), /realView|facilityRows\s*&&|\?\s*\(?\s*<section/);
 assert.match(panelSrc, /\{chart\.empty && <ChartEmptyNote>\{chart\.empty\}<\/ChartEmptyNote>\}/); // 캔버스는 그대로, 안내만 겹침
 assert.match(pageSrc, /chartSeed=\{appData\.recommendation_charts\?\.\[currentRegion\.id\]\}/);
 // 지도 시설물은 위치 자료가 있는 시설만(위치 미수집 시설로 지도가 깨지지 않게).
