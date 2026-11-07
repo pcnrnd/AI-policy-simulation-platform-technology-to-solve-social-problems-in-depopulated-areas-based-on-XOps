@@ -20,12 +20,12 @@ const OPTION_RULES = {
 const DEFAULT_OPTIONS = [["운영 개선", "이용 실적 확인 후 운영 개선 검토"], ["개방·공유", "유휴 공간 개방 검토"]];
 const SETTLE_KINDS = new Set(["house", "job"]);
 
-// 추천 지수 = 생활인구 효과(중심)·정주 효과·추진 여건의 가중 평균(각 0~100). 방안 선택도 같은 비중의 앞 두 항으로 한다.
+// 추천 지수 = 생활인구 효과(중심)·정주 효과·추진 여건의 가중 평균(각 0~100). 방안 선택은 근거 등급을 먼저 보고, 같은 등급 안에서 같은 비중의 앞 두 항으로 한다.
 // 생활인구 효과 점수는 지역 상한(월평균 체류인구 × 상한 비율) 대비 로그 척도, 정주 효과 점수는 지역 연간 다른 시군구 전입의 1%를 만점으로 둔다.
 // 고정 가중치 — 시설 대장 실적(2단계)이 들어오면 실적 기반으로 바꾼다.
 const INDEX_WEIGHTS = { living: 0.6, settle: 0.2, readiness: 0.2 };
 const SETTLE_FULL_SHARE = 0.01;
-// 판단: 시설 안 최고 방안이 추천, 최고 대비 이 비율 이상이면 검토, 그 아래는 보류.
+// 판단: 시설 안에서 고른 방안이 추천, 고른 방안 점수 대비 이 비율 이상이면 검토, 그 아래는 보류.
 const REVIEW_RATIO = 0.8;
 
 // 표 정렬 기준 — rank(추천 순위)가 기본. 값이 없는 시설은 방향과 관계없이 뒤에 둔다.
@@ -92,14 +92,20 @@ const scaleRatio = (facility, kase, rules) => rules.scale_factor[scaleGrade(faci
 const isOperating = (facility) => !["계획", "조성"].includes(facility.stage);
 
 /**
- * 시설 수용 상한(월 방문 인원). 출처 수용 인원이 등록형이면 그 인원 × 등록 회전, 아니면
- * (출처 연면적 또는 규모 등급 대표 연면적) ÷ 1인당 면적(법정 수용인원 산정 기준) × 일 회전 × 월 운영일.
+ * 시설 수용 상한(월 방문 인원). 출처 수용 인원이 등록형(계획 목표 포함)이면 그 인원 × 등록 회전,
+ * 일 최대 방문(관측)이면 그 인원 × 월 운영일, 그 밖의 수용 인원이면 × 일 회전 × 월 운영일.
+ * 수용 인원이 없으면 유형별 일 방문 상한(섬 관광처럼 건물 바닥면적 기준이 맞지 않는 유형) × 월 운영일,
+ * 그것도 없으면 (출처 연면적 또는 규모 등급 대표 연면적) ÷ 1인당 면적(법정 수용인원 산정 기준) × 일 회전 × 월 운영일.
  */
 export function capacityCap(facility, rules) {
   const turnover = rules.capacity_turnover;
   if (Number.isFinite(facility.capacity_people)) {
-    return facility.capacity_people * (facility.capacity_kind === "등록" ? turnover.enrolled : turnover.daily * turnover.open_days);
+    const kind = facility.capacity_kind ?? "";
+    const per = kind.includes("등록") ? turnover.enrolled : kind.startsWith("일 최대 방문") ? turnover.open_days : turnover.daily * turnover.open_days;
+    return facility.capacity_people * per;
   }
+  const daily = rules.capacity_daily_by_type?.[facility.type];
+  if (Number.isFinite(daily)) return daily * turnover.open_days;
   const area = Number.isFinite(facility.scale_area_m2) ? facility.scale_area_m2 : rules.capacity_grade_area_m2[scaleGrade(facility, rules)];
   return Math.round(area / rules.capacity_area_per_person_m2) * turnover.daily * turnover.open_days;
 }
@@ -119,6 +125,10 @@ const ESTIMATE_NOTE = { single: "같은 유형 시설 규모 기준 추정", ref
 // 기간이 짧은 행사 사례를 연간 효과로 쓸 때 근거 문장에 그 사실을 드러낸다.
 const EVENT_NOTE = "·연 1회 행사 방문을 12개월로 나눈 값";
 const isEvent = (c) => Number.isFinite(c.event_days);
+// 계획 목표 수용 인원(실제 정원 출처 없음)으로 잘린 값이면 근거 문장에 그 사실을 드러낸다.
+const PLAN_CAPACITY_NOTE = "·계획 수용 인원 기준";
+const planCapNote = (facility, facilityCap, cap, high) => (
+  String(facility.capacity_kind ?? "").includes("계획") && facilityCap <= cap && high > facilityCap ? PLAN_CAPACITY_NOTE : "");
 
 // 방안 하나의 효과 범위 — 값마다 basis(source | synthetic)와 화면 근거 문장을 붙인다.
 function optionEffect(option, facility, housing, ctx) {
@@ -143,7 +153,8 @@ function optionEffect(option, facility, housing, ctx) {
   }
   // 방문형: 비교 가능 사례마다 규모 보정 배수와 운영 중 시설의 증가분(신규 개관 총량 사례일 때)을 곱하고,
   // 시설 수용 상한·지역 상한 가운데 작은 값으로 자른다.
-  const limit = Math.min(cap, capacityCap(facility, rules));
+  const facilityCap = capacityCap(facility, rules);
+  const limit = Math.min(cap, facilityCap);
   const { tier, cases: matched } = comparableCases(option, facility, cases, rules);
   if (matched.length) {
     const ranges = matched.map((c) => {
@@ -153,15 +164,18 @@ function optionEffect(option, facility, housing, ctx) {
     });
     const low = Math.min(...ranges.map((r) => r.low)), high = Math.max(...ranges.map((r) => r.high));
     const adjusted = ranges.some((r) => r.adjusted) || high > limit;
-    const event = matched.some(isEvent) ? EVENT_NOTE : "";
+    const annualized = matched.some(isEvent);
+    const event = annualized ? EVENT_NOTE : "";
+    const planned = planCapNote(facility, facilityCap, cap, high);
     const isRange = tier === "range";
     return {
       utilization,
       living: { ...span(Math.min(low, limit), Math.min(high, limit)), basis: isRange && !adjusted ? "source" : "synthetic" },
       settle: null,
-      note: isRange ? `유사 사례 ${matched.length}곳 기준${adjusted ? "·규모 반영" : ""}${event}` : `${ESTIMATE_NOTE[tier]}${event}`,
+      note: isRange ? `유사 사례 ${matched.length}곳 기준${adjusted ? "·규모 반영" : ""}${event}${planned}` : `${ESTIMATE_NOTE[tier]}${event}${planned}`,
       cases: matched.map((c) => c.id),
-      caseTier: tier
+      caseTier: tier,
+      annualized
     };
   }
   const [a, b] = rules.visit_share[option.planType];
@@ -169,7 +183,7 @@ function optionEffect(option, facility, housing, ctx) {
     utilization,
     living: { ...span(Math.min(region.stay_monthly * a, limit), Math.min(region.stay_monthly * b, limit)), basis: "synthetic" },
     settle: null,
-    note: "지역 생활인구 규모 기준 추정",
+    note: `지역 생활인구 규모 기준 추정${planCapNote(facility, facilityCap, cap, region.stay_monthly * b)}`,
     cases: [],
     caseTier: "none"
   };
@@ -182,6 +196,12 @@ function optionScore(effect, region, rules) {
   return INDEX_WEIGHTS.living * living + INDEX_WEIGHTS.settle * settle;
 }
 
+// 근거 등급(3차 보정) — 같은 유형 사례 2곳 이상 범위 > 같은 유형 1곳 규모 보정 > 다른 유형 참고 사례 보정 > 통계 기준 추정
+// (지역 생활인구·전입·공실 규모). 시설 안에서는 등급이 높은 방안을 먼저 고르고 같은 등급끼리만 점수로 비교한다.
+// 그래서 등급이 낮은 추정은 값이 커도 추천이 되지 않고, 고른 방안 점수의 일정 비율 이상이면 검토에 머문다.
+const EVIDENCE_GRADE = { range: 4, single: 3, reference: 2, none: 1 };
+const gradeOf = (o) => EVIDENCE_GRADE[o.caseTier];
+
 // 시설 하나의 방안 비교(효과·판단) — 지역 통계가 없으면 null(화면에서 행동 안내).
 function conversionOf(facility, housing, conversion) {
   const region = conversion?.regions?.[facility.region_id];
@@ -192,12 +212,12 @@ function conversionOf(facility, housing, conversion) {
     const effect = optionEffect(option, facility, housing, ctx);
     return { ...option, ...effect, score: optionScore(effect, region, rules) };
   });
-  const best = Math.max(...options.map((o) => o.score));
-  const chosen = options.find((o) => o.score === best);
+  // 같은 등급·같은 점수면 후보 순서가 앞선 방안.
+  const chosen = options.reduce((a, o) => (gradeOf(o) > gradeOf(a) || (gradeOf(o) === gradeOf(a) && o.score > a.score) ? o : a));
   return options.map((o) => ({
     ...o,
     chosen: o === chosen,
-    verdict: o === chosen && o.living.high > 0 ? "추천" : o.score >= best * REVIEW_RATIO && o.living.high > 0 ? "검토" : "보류"
+    verdict: o === chosen && o.living.high > 0 ? "추천" : o.score >= chosen.score * REVIEW_RATIO && o.living.high > 0 ? "검토" : "보류"
   }));
 }
 
@@ -336,7 +356,8 @@ export function conversionCompareView(item) {
       cells: [
         `${o.planType} · ${o.text}`,
         rangeText(o.utilization, "%p"),
-        livingText(o.living),
+        // 연 1회 행사 방문을 12개월로 나눈 값은 숫자 칸에서도 연 환산임을 붙인다(같은 칸 문구만).
+        `${livingText(o.living)}${o.annualized ? "(연 환산)" : ""}`,
         o.settle ? `연 ${rangeText(o.settle, "명")}` : "해당 없음",
         o.note,
         o.verdict

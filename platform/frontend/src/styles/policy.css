@@ -133,6 +133,7 @@ th[aria-sort="descending"] .reco-sort {
 .reco-compare th {
   word-break: keep-all;
 }
+.reco-compare td:nth-child(3) { white-space: nowrap; }
 
 .reco-verdict {
   white-space: nowrap;

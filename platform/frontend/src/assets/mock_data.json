@@ -565,12 +565,13 @@
       "metric": "2027년 개교 목표 · 외국인 유학생 1,000명 유치 목표",
       "stage": "조성",
       "capacity_people": 1000,
-      "capacity_kind": "등록",
+      "capacity_kind": "계획 목표(유치 목표·등록형)",
       "use_plan": { "type": "용도 전환", "text": "폐교 대학 시설을 교육·외국인 지원 거점으로 전환 검토" },
       "reco_inputs": { "readiness": 55 },
-      "basis": { "address": "source", "metric": "source", "stage": "source", "capacity_people": "source", "reco_inputs": "demo_example" },
+      "basis": { "address": "source", "metric": "source", "stage": "source", "capacity_people": "source_plan_target", "reco_inputs": "demo_example" },
       "sources": [
-        { "scope": "facility", "title": "한겨레 2025-12-09", "url": "https://www.hani.co.kr/arti/area/honam/1233642.html", "checked": "2026-11-05" }
+        { "scope": "facility", "title": "한겨레 2025-12-09", "url": "https://www.hani.co.kr/arti/area/honam/1233642.html", "checked": "2026-11-05" },
+        { "scope": "facility", "title": "전북일보 2026-09-29(최종 1000명 유치 목표 · 2026년 입학 242명 · 남원 학사 운영 2028년 3월)", "url": "https://www.jjan.kr/article/20260929500077", "checked": "2026-11-06" }
       ]
     },
     {
@@ -657,11 +658,14 @@
       "address": "전남 신안군 안좌면 반월도·박지도",
       "metric": "누적 관광객 150만 명 이상(2019~2023)",
       "stage": "운영",
+      "capacity_people": 11081,
+      "capacity_kind": "일 최대 방문(관측)",
       "use_plan": { "type": "운영 개선", "text": "테마 행사·체류 프로그램 운영 개선 검토" },
       "reco_inputs": { "readiness": 75 },
-      "basis": { "address": "source", "metric": "source", "stage": "source", "reco_inputs": "demo_example" },
+      "basis": { "address": "source", "metric": "source", "stage": "source", "capacity_people": "source", "reco_inputs": "demo_example" },
       "sources": [
-        { "scope": "facility", "title": "연합뉴스 2024-01-17", "url": "https://www.yna.co.kr/view/AKR20240117129100054", "checked": "2026-11-05" }
+        { "scope": "facility", "title": "연합뉴스 2024-01-17", "url": "https://www.yna.co.kr/view/AKR20240117129100054", "checked": "2026-11-05" },
+        { "scope": "facility", "title": "주간토탈채널 2026-05-30(2026-05-24 하루 1만1,081명 · 개장 이후 역대 최다)", "url": "https://www.ktotalchannel.com/news/articleView.html?idxno=12801", "checked": "2026-11-06" }
       ]
     }
   ],
@@ -750,7 +754,7 @@
     "synthetic": {
       "basis": "synthetic",
       "random_seed": null,
-      "rule_sources": [{ "rules": ["capacity_area_per_person_m2"], "title": "소방시설 설치 및 관리에 관한 법률 시행령 [별표 7] 수용인원의 산정 방법(제17조 관련), 시행 2026-10-02", "url": "https://www.law.go.kr/LSW//lsBylInfoP.do?bylSeq=18481245&lsiSeq=290451&efYd=20261002&directYn=Y", "checked": "2026-11-06" }],
+      "rule_sources": [{ "rules": ["capacity_daily_by_type"], "title": "주간토탈채널 2026-05-30 — 신안 퍼플섬 2026-05-24 하루 방문객 1만1,081명(개장 이후 역대 최다)", "url": "https://www.ktotalchannel.com/news/articleView.html?idxno=12801", "checked": "2026-11-06" }, { "rules": ["capacity_area_per_person_m2"], "title": "소방시설 설치 및 관리에 관한 법률 시행령 [별표 7] 수용인원의 산정 방법(제17조 관련), 시행 2026-10-02", "url": "https://www.law.go.kr/LSW//lsBylInfoP.do?bylSeq=18481245&lsiSeq=290451&efYd=20261002&directYn=Y", "checked": "2026-11-06" }],
       "rules": {
         "visit_share": { "복합화": [0.003, 0.006], "용도 전환": [0.002, 0.004], "운영 개선": [0.002, 0.004], "개방·공유": [0.0005, 0.001] },
         "visit_cap_share": 0.05,
@@ -767,6 +771,7 @@
         "capacity_area_per_person_m2": 4.6,
         "capacity_grade_area_m2": { "소형": 1000, "중형": 6000, "대형": 20000 },
         "capacity_turnover": { "daily": 2, "open_days": 25, "enrolled": 1 },
+        "capacity_daily_by_type": { "섬 관광": 11081 },
         "utilization_pp": { "복합화": [10, 20], "용도 전환": [15, 25], "운영 개선": [5, 10], "개방·공유": [3, 8] }
       },
       "method": {
@@ -785,7 +790,8 @@
         "comparable_region_types": "비슷한 지역 유형 = 섬·농촌·소도시(비도시). 도시 지역 사례는 비교하지 않는다. 사례마다 region_type을 적었다",
         "capacity_area_per_person_m2": "시설 동시 수용 인원 = 연면적 ÷ 4.6㎡(소방시설 설치 및 관리에 관한 법률 시행령 [별표 7] 수용인원의 산정 방법 2.나 강당·문화 및 집회시설 기준, 시행 2026-10-02)",
         "capacity_grade_area_m2": "연면적 출처가 없을 때 규모 등급의 대표 연면적(합성): 소형 1,000㎡(2,000㎡ 미만 구간의 중간), 중형 6,000㎡(2,000~10,000㎡ 구간의 중간), 대형 20,000㎡(10,000㎡ 기준의 2배)",
-        "capacity_turnover": "시설 수용 상한(월) = 동시 수용 인원 × 일 2회전 × 월 25일. 출처 수용 인원이 등록형(학생 등 같은 사람이 매달 이용)이면 수용 인원 × 1. 규모 보정·증가분 뒤 효과의 상·하한이 이 상한이나 지역 상한을 넘으면 자른다",
+        "capacity_turnover": "시설 수용 상한(월) = 동시 수용 인원 × 일 2회전 × 월 25일. 출처 수용 인원이 등록형(학생 등 같은 사람이 매달 이용, 계획 목표 포함)이면 수용 인원 × 1, 일 최대 방문(관측)이면 × 월 25일. 규모 보정·증가분 뒤 효과의 상·하한이 이 상한이나 지역 상한을 넘으면 자른다",
+        "capacity_daily_by_type": "섬 관광 유형은 법정 바닥면적 기준을 적용할 건물이 없어 일 방문 상한 × 월 운영일(25일)로 시설 수용 상한을 둔다. 시설에 출처 관측값(capacity_kind \"일 최대 방문(관측)\")이 있으면 그 값을, 없으면 같은 유형 출처 관측값인 퍼플섬 2026-05-24 하루 1만1,081명(개장 이후 역대 최다)을 기본값(합성)으로 쓴다. 1일 입도 제한·도선 수송 능력의 공식 값은 찾지 못했다",
         "random_seed": "난수를 쓰지 않는다. 같은 시드 값이면 항상 같은 결과다"
       }
     }
