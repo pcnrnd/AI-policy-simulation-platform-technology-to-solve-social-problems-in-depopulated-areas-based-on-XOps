@@ -4,6 +4,7 @@ import PendingData from "./PendingData.jsx";
 import TablePager, { usePager } from "./TablePager.jsx";
 import { buildRegionGrid, densityColor, DENSITY_LEGEND } from "../lib/geo.js";
 import { prefersReducedMotion } from "../lib/motion.js";
+import { RISK_GRADES, riskGrade } from "../lib/riskGrade.js";
 
 // 정책 시뮬레이터 STAGE ③ 공간정보 탐색 지도 — 플로팅 패널(검색·레이어·테마·범례)·출처·시설물/격자 상세.
 // 두 모드 모두 같은 지도·컨트롤을 두고, 예시 오버레이는 데모 표시에서만 레이어에 올린다.
@@ -12,6 +13,8 @@ import { prefersReducedMotion } from "../lib/motion.js";
 // 키가 있으면 공식 WMTS API(+회색 추가), 없으면 공개 타일 서버(xdworld)를 사용(데모용, 운영 시 인증키 권장).
 // 공개 서버 동작 확인: Base·white·midnight(라이브 타일 테스트). gray는 키 필요, Satellite는 라벨 없어 제외.
 const VWORLD_KEY = import.meta.env.VITE_VWORLD_KEY;
+// 지도 시설물은 위치 자료가 있는 시설만(마커·목록 같은 기준).
+const hasLocation = (f) => Number.isFinite(f.lat) && Number.isFinite(f.lng);
 const vworldUrl = (layer) =>
   VWORLD_KEY
     ? `https://api.vworld.kr/req/wmts/1.0.0/${VWORLD_KEY}/${layer}/{z}/{y}/{x}.png`
@@ -26,37 +29,8 @@ const MAP_THEMES = [
 // 기본: 야간 — 다크 톤이라 대시보드와 정합, 지명이 한글로 표기됨.
 const DEFAULT_THEME_ID = "vw-midnight";
 
-// 소멸위험지수(낮을수록 위험) → 지도·목록·팝업에서 함께 쓰는 등급/색상.
-export const RISK_GRADES = [
-  {
-    label: "고위험",
-    rangeLabel: "0.15 미만",
-    maxExclusive: 0.15,
-    color: "var(--accent-red)",
-    markerColor: "#ef4444",
-    rgb: "239, 68, 68"
-  },
-  {
-    label: "주의",
-    rangeLabel: "0.15 이상 0.18 미만",
-    maxExclusive: 0.18,
-    color: "var(--accent-orange)",
-    markerColor: "#f59e0b",
-    rgb: "245, 158, 11"
-  },
-  {
-    label: "관찰",
-    rangeLabel: "0.18 이상",
-    maxExclusive: Number.POSITIVE_INFINITY,
-    color: "var(--accent-teal)",
-    markerColor: "#10b981",
-    rgb: "16, 185, 129"
-  }
-];
-
-export function riskGrade(riskIndex) {
-  return RISK_GRADES.find((grade) => riskIndex < grade.maxExclusive) ?? RISK_GRADES.at(-1);
-}
+// 소멸위험지수(낮을수록 위험) 등급 — 지역 현황 카드·리포트와 같은 공용 기준(한국고용정보원 2025 소멸위험분류).
+export { RISK_GRADES, riskGrade };
 
 /**
  * @param {{ appData: object, currentRegion: object, setCurrentRegion: Function, allowSeed: boolean,
@@ -135,7 +109,7 @@ export default function SimulatorMap({ appData, currentRegion, setCurrentRegion,
       신재생: "#f59e0b",
       정원수: "#22d3ee"
     };
-    (appData.facilities ?? []).forEach((f) => {
+    (appData.facilities ?? []).filter(hasLocation).forEach((f) => {
       const fColor = FACILITY_COLORS[f.type] ?? "#94a3b8";
       const fMarker = L.circleMarker([f.lat, f.lng], {
         radius: 6,
@@ -150,7 +124,7 @@ export default function SimulatorMap({ appData, currentRegion, setCurrentRegion,
           <h4 style="margin-bottom:6px; color:var(--text-primary);"><span aria-hidden="true" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${fColor};margin-right:6px;"></span>${f.name}</h4>
           <p style="font-size:12px; margin: 2px 0;">시설 유형: <strong>${f.type}</strong></p>
           <p style="font-size:12px; margin: 2px 0;">${f.metric}</p>
-          <p style="font-size:12px; margin: 2px 0;">운영 예산: <strong>${f.operating_budget}억</strong></p>
+          <p style="font-size:12px; margin: 2px 0;">운영 예산: ${Number.isFinite(f.operating_budget) ? `<strong>${f.operating_budget}억</strong>` : "예산 자료 등록"}</p>
         </div>
       `);
       fMarker.addTo(facilityLayer);
@@ -353,7 +327,7 @@ export default function SimulatorMap({ appData, currentRegion, setCurrentRegion,
 
 /** 지도 시설물·선택 지역 격자 상세 — 데모 표시에서만 목록, 그 밖에는 같은 자리 안내. */
 export function SimulatorMapDetails({ appData, currentRegion, allowSeed, note }) {
-  const facilities = usePager(allowSeed ? appData.facilities ?? [] : []);
+  const facilities = usePager(allowSeed ? (appData.facilities ?? []).filter(hasLocation) : []);
   const cells = usePager(allowSeed ? buildRegionGrid(currentRegion) : [], undefined, currentRegion.id);
   return (
     <details className="map-data-details" data-slot="sim.map.details">

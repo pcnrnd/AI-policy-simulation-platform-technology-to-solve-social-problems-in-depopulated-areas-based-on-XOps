@@ -1,5 +1,6 @@
 // 보고서 콘텐츠 빌더 — 지자체/템플릿/드리프트 상태로부터 포맷 중립 블록 모델과
 // Excel 표·Markdown 문자열을 생성한다. 템플릿 종류에 따라 본문 구성을 분기.
+import { riskGrade } from "./riskGrade.js";
 
 /**
  * 기준 시점·행정동 표기 — 어느 스냅샷의 어느 행정동 기여도인지 본문에서 드러나야 한다.
@@ -192,8 +193,8 @@ function analysisBlocks(region, populationChange, live, explain) {
         `대상 지자체: ${region.name}`,
         `인구수: ${region.population.toLocaleString()}명`,
         `출산율: ${region.birthRate}명`,
-        `고령화지수: ${region.agingIndex}%`,
-        `인구소멸 위험지수: ${region.riskIndex} (소멸 위험등급 경보)`
+        `고령인구비율: ${region.agingIndex}%`,
+        `인구소멸 위험지수: ${region.riskIndex} (소멸위험 ${riskGrade(region.riskIndex).label} 단계)`
       ]
     },
     ...populationTrendBlock(populationChange),
@@ -288,7 +289,7 @@ export function buildReportRows(region, template, extra = {}) {
     ["기본 현황", "대상 지자체", region.name],
     ["기본 현황", "인구수(명)", region.population],
     ["기본 현황", "출산율(명)", region.birthRate],
-    ["기본 현황", "고령화지수(%)", region.agingIndex],
+    ["기본 현황", "고령인구비율(%)", region.agingIndex],
     ["기본 현황", "인구소멸 위험지수", region.riskIndex],
     // 모델 검증 행은 실측 바인딩이 있을 때만 싣는다 — 없으면 값을 만들지 않고 행을 비운다.
     ...(live

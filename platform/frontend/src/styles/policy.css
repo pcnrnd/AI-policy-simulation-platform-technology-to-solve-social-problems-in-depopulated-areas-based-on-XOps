@@ -36,6 +36,29 @@
   color: var(--text-muted);
 }
 
+/* 1~3순위 카드는 누르면(또는 Enter·Space) 아래 전환 방안 비교가 그 시설로 바뀐다 — 고른 카드만 테두리 강조 */
+.reco-card {
+  cursor: pointer;
+}
+
+.reco-card[aria-pressed="true"] {
+  border-color: var(--accent-blue);
+  box-shadow: inset 0 0 0 1px var(--accent-blue);
+}
+
+.reco-card:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+}
+
+/* 카드 안 효과 줄 — 고른 방안 유형과 기대 생활인구 변화 */
+.reco-effect {
+  min-height: 16px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
 .reco-score {
   margin-top: 4px;
   font-family: "Outfit", sans-serif;
@@ -78,8 +101,110 @@ th[aria-sort="descending"] .reco-sort {
   outline-offset: 2px;
 }
 
+/* 시설 추천 표의 검토 구분 표시는 한 줄로(시설명이 길어 열이 좁아져도) */
+.reco-page-table .system-status {
+  white-space: nowrap;
+}
+
+/* 전환 방안 비교 — 순위 그래프 아래(위 간격은 주 그래프의 아래 여백 20px), 근거 그래프 묶음과의 간격 20px */
+.reco-compare {
+  margin-bottom: 20px;
+}
+
+.reco-compare-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.reco-compare-head strong {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.reco-compare-head span {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* 비교 표 머리글은 단어 단위로만 줄바꿈 — 근거 문장이 길어져도 "판단" 같은 열 제목이 글자 단위로 갈라지지 않게 */
+.reco-compare th {
+  word-break: keep-all;
+}
+.reco-compare td:nth-child(3) { white-space: nowrap; }
+
+.reco-verdict {
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.reco-verdict[data-verdict="추천"] {
+  color: var(--accent-blue);
+}
+
+.reco-verdict[data-verdict="보류"] {
+  color: var(--text-muted);
+}
+
+/* 전환 방안 비교 아래 근거 그래프 묶음 — 세 자리 고정(값이 없으면 같은 자리에 안내).
+   위 간격은 전환 방안 비교의 아래 여백(20px)을 쓰고, 표와의 간격은 같은 20px. */
+.reco-evidence-charts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.reco-evidence-chart {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.reco-evidence-chart figcaption {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 34px;
+}
+
+.reco-evidence-chart figcaption strong {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.reco-evidence-chart figcaption span {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.reco-evidence-canvas {
+  position: relative;
+  height: 180px;
+  width: 100%;
+}
+
+.reco-evidence-note {
+  margin: 0;
+  min-height: 30px;
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
 @media (max-width: 768px) {
-  .reco-top3 {
+  .reco-top3,
+  .reco-evidence-charts {
     grid-template-columns: 1fr;
   }
 }

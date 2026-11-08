@@ -2,15 +2,23 @@
   "regions": [
     {
       "id": "namwon",
-      "name": "전라북도 남원시",
+      "name": "전북특별자치도 남원시",
       "theme": "소득 및 일자리 부족",
       "lat": 35.4164,
       "lng": 127.3905,
-      "riskIndex": 0.16,
-      "population": 77200,
-      "birthRate": 0.83,
-      "agingIndex": 33.4,
+      "riskIndex": 0.204,
+      "population": 74272,
+      "birthRate": 0.853,
+      "agingIndex": 34.5,
       "history": [85200, 83800, 82400, 81100, 80300, 79400, 78600, 78000, 77600, 77200],
+      "basis": { "population": "source", "birthRate": "source", "history": "demo_example", "riskIndex": "source", "agingIndex": "source" },
+      "periods": { "population": "2025-12", "birthRate": "2025", "riskIndex": "2025-06", "agingIndex": "2025-12" },
+      "sources": [
+        { "fields": ["population"], "title": "행정안전부 주민등록 인구통계 — 주민등록 인구 및 세대현황(전체, 외국인 제외)", "url": "https://jumin.mois.go.kr/statMonth.do", "checked": "2026-11-06" },
+        { "fields": ["birthRate"], "title": "국가데이터처 KOSIS 인구동향조사 — 시군구/합계출산율, 모의 연령별 출산율(DT_1B81A17, 2026-08-26 갱신)", "url": "https://kosis.kr/statHtml/statHtml.do?orgId=101&tblId=DT_1B81A17", "checked": "2026-11-06" },
+        { "fields": ["agingIndex"], "title": "행정안전부 주민등록 인구통계 — 지역별 고령 인구현황(65세 이상, 2025년 12월)", "url": "https://jumin.mois.go.kr/etcStatOldAge.do", "checked": "2026-11-06", "method": "65세 이상 인구 ÷ 전체 인구 × 100 = 25,624 ÷ 74,272 × 100(소수 첫째 자리 반올림)" },
+        { "fields": ["riskIndex"], "title": "한국고용정보원 지방소멸위험지수 원시자료(2025년 6월 기준, 남원시 20.40) — 지역산업과 고용 2025년 가을호 「지방소멸 2025」", "url": "https://www.keis.or.kr/keis/ko/bbs/145/detail.do?pstSn=63580", "checked": "2026-11-06", "method": "20~39세 여성 인구 ÷ 65세 이상 인구(원시자료 지수 ÷ 100, 소수 셋째 자리 반올림)" }
+      ],
       "policyImpacts": { "welfare": 0.2, "industry": 0.4, "housing": 0.18 },
       "case": {
         "summary": "청년층 유지를 위한 목적으로 임대형 스마트팜 단지 조성 사업을 추진하여, 생산성·고용효과를 높여 청년인구의 귀농을 통한 정주인구 전환을 도모한다.",
@@ -78,15 +86,23 @@
     },
     {
       "id": "shinan",
-      "name": "전라남도 신안군",
+      "name": "전남광주통합특별시 신안군",
       "theme": "주거환경 열악",
       "lat": 34.8338,
       "lng": 126.1067,
-      "riskIndex": 0.13,
-      "population": 38400,
-      "birthRate": 0.76,
-      "agingIndex": 43.1,
+      "riskIndex": 0.122,
+      "population": 41858,
+      "birthRate": 0.896,
+      "agingIndex": 38.6,
       "history": [45600, 44700, 43800, 42600, 41700, 40800, 40000, 39300, 38800, 38400],
+      "basis": { "population": "source", "birthRate": "source", "history": "demo_example", "riskIndex": "source", "agingIndex": "source" },
+      "periods": { "population": "2025-12", "birthRate": "2025", "riskIndex": "2025-06", "agingIndex": "2025-12" },
+      "sources": [
+        { "fields": ["population"], "title": "행정안전부 주민등록 인구통계 — 주민등록 인구 및 세대현황(전체, 외국인 제외)", "url": "https://jumin.mois.go.kr/statMonth.do", "checked": "2026-11-06" },
+        { "fields": ["birthRate"], "title": "국가데이터처 KOSIS 인구동향조사 — 시군구/합계출산율, 모의 연령별 출산율(DT_1B81A17, 2026-08-26 갱신)", "url": "https://kosis.kr/statHtml/statHtml.do?orgId=101&tblId=DT_1B81A17", "checked": "2026-11-06" },
+        { "fields": ["agingIndex"], "title": "행정안전부 주민등록 인구통계 — 지역별 고령 인구현황(65세 이상, 2025년 12월)", "url": "https://jumin.mois.go.kr/etcStatOldAge.do", "checked": "2026-11-06", "method": "65세 이상 인구 ÷ 전체 인구 × 100 = 16,146 ÷ 41,858 × 100(소수 첫째 자리 반올림)" },
+        { "fields": ["riskIndex"], "title": "한국고용정보원 지방소멸위험지수 원시자료(2025년 6월 기준, 신안군 12.19) — 지역산업과 고용 2025년 가을호 「지방소멸 2025」", "url": "https://www.keis.or.kr/keis/ko/bbs/145/detail.do?pstSn=63580", "checked": "2026-11-06", "method": "20~39세 여성 인구 ÷ 65세 이상 인구(원시자료 지수 ÷ 100, 소수 셋째 자리 반올림)" }
+      ],
       "policyImpacts": { "welfare": 0.22, "industry": 0.15, "housing": 0.42 },
       "case": {
         "summary": "지역주민의 주거환경 개선을 위한 목적으로 정주여건 지원사업(정원수 사회적협동조합 운영, 신재생 개발이익 공유, 어선 임대, 임대주택 지원 등)을 시행하여, 소득 창출·생활수준 향상·주택 개선을 통해 거주민으로 전환을 도모한다.",
@@ -459,15 +475,23 @@
     }
   ],
   "benchmark_regions": [
-    { "name": "경북 의성군", "riskIndex": 0.11, "population": 50100 },
-    { "name": "전남 고흥군", "riskIndex": 0.12, "population": 61800 },
-    { "name": "경남 합천군", "riskIndex": 0.14, "population": 41500 },
-    { "name": "전북 임실군", "riskIndex": 0.15, "population": 26400 },
-    { "name": "충남 부여군", "riskIndex": 0.17, "population": 62300 },
-    { "name": "강원 정선군", "riskIndex": 0.18, "population": 35200 },
-    { "name": "경북 군위군", "riskIndex": 0.1, "population": 23100 },
-    { "name": "충북 괴산군", "riskIndex": 0.19, "population": 37400 }
+    { "name": "경상북도 의성군", "riskIndex": 0.086, "population": 47902 },
+    { "name": "전남광주통합특별시 고흥군", "riskIndex": 0.099, "population": 59455 },
+    { "name": "경상남도 합천군", "riskIndex": 0.09, "population": 39190 },
+    { "name": "전북특별자치도 임실군", "riskIndex": 0.125, "population": 25259 },
+    { "name": "충청남도 부여군", "riskIndex": 0.128, "population": 58377 },
+    { "name": "강원특별자치도 정선군", "riskIndex": 0.15, "population": 34879 },
+    { "name": "대구광역시 군위군", "riskIndex": 0.078, "population": 22452 },
+    { "name": "충청북도 괴산군", "riskIndex": 0.105, "population": 38293 }
   ],
+  "benchmark_basis": {
+    "basis": { "riskIndex": "source", "population": "source" },
+    "periods": { "riskIndex": "2025-06", "population": "2025-12" },
+    "sources": [
+      { "fields": ["riskIndex"], "title": "한국고용정보원 지방소멸위험지수 원시자료(2025년 6월 기준, 시군구) — 지역산업과 고용 2025년 가을호 「지방소멸 2025」", "url": "https://www.keis.or.kr/keis/ko/bbs/145/detail.do?pstSn=63580", "checked": "2026-11-06", "method": "원시자료 지수 ÷ 100, 소수 셋째 자리 반올림" },
+      { "fields": ["population"], "title": "행정안전부 주민등록 인구통계 — 주민등록 인구 및 세대현황(전체, 2025년 12월)", "url": "https://jumin.mois.go.kr/statMonth.do", "checked": "2026-11-06" }
+    ]
+  },
   "facilities": [
     {
       "id": "fac_nw_farm01",
@@ -477,7 +501,12 @@
       "lat": 35.4382,
       "lng": 127.3661,
       "operating_budget": 42,
-      "metric": "재배면적 12㏊ · 고용 청년 38명"
+      "metric": "재배면적 12㏊ · 고용 청년 38명",
+      "reco_inputs": { "readiness": 70 },
+      "basis": { "location": "demo_example", "operating_budget": "demo_example", "metric": "demo_example", "reco_inputs": "demo_example" },
+      "sources": [
+        { "scope": "type", "title": "연합뉴스 2025-12-17(남원 대산면 청년창업형 스마트 농업단지)", "url": "https://www.yna.co.kr/view/AKR20251217106300055", "checked": "2026-11-05" }
+      ]
     },
     {
       "id": "fac_nw_farm02",
@@ -487,7 +516,12 @@
       "lat": 35.3921,
       "lng": 127.4248,
       "metric": "재배면적 8㏊ · 고용 청년 22명",
-      "operating_budget": 28
+      "operating_budget": 28,
+      "reco_inputs": { "readiness": 60 },
+      "basis": { "location": "demo_example", "operating_budget": "demo_example", "metric": "demo_example", "reco_inputs": "demo_example" },
+      "sources": [
+        { "scope": "type", "title": "연합뉴스 2025-12-17(남원 대산면 청년창업형 스마트 농업단지)", "url": "https://www.yna.co.kr/view/AKR20251217106300055", "checked": "2026-11-05" }
+      ]
     },
     {
       "id": "fac_nw_rental",
@@ -499,7 +533,61 @@
       "operating_budget": 15,
       "supply_units": 120,
       "occupancy_rate": 91,
-      "metric": "공급 120호 · 입주율 91%"
+      "metric": "공급 120호 · 입주율 91%",
+      "reco_inputs": { "readiness": 80 },
+      "basis": { "location": "demo_example", "operating_budget": "demo_example", "supply_units": "demo_example", "occupancy_rate": "demo_example", "metric": "demo_example", "reco_inputs": "demo_example" },
+      "sources": []
+    },
+    {
+      "id": "fac_nw_fiorium",
+      "name": "남원 달빛정원 피오리움",
+      "type": "문화관광",
+      "region_id": "namwon",
+      "address": "전북 남원시 어현동 37-84(옛 비사벌콘도 부지)",
+      "metric": "개관 1년 방문객 약 13만 명 · 회원 7,800명(2025-04 개관)",
+      "stage": "운영",
+      "scale_area_m2": 3741,
+      "use_plan": { "type": "복합화", "text": "전시·정원·광장 복합 운영으로 체류 시간 확대 검토" },
+      "reco_inputs": { "readiness": 70 },
+      "basis": { "address": "source", "metric": "source", "stage": "source", "scale_area_m2": "source", "reco_inputs": "demo_example" },
+      "sources": [
+        { "scope": "facility", "title": "전북일보 2025-04-20", "url": "https://www.jjan.kr/article/20250420580050", "checked": "2026-11-05" },
+        { "scope": "facility", "title": "나라살림연구소 2026-05-26", "url": "https://narasallim.net/view3/2124", "checked": "2026-11-05" },
+        { "scope": "facility", "title": "전북일보 2025-10-06(전시관 연면적 3,741㎡)", "url": "https://www.jjan.kr/article/20250923580442", "checked": "2026-11-06" }
+      ]
+    },
+    {
+      "id": "fac_nw_glocal",
+      "name": "전북대 남원 글로컬캠퍼스(구 서남대)",
+      "type": "교육",
+      "region_id": "namwon",
+      "address": "전북 남원시 구 서남대 부지",
+      "metric": "2027년 개교 목표 · 외국인 유학생 1,000명 유치 목표",
+      "stage": "조성",
+      "capacity_people": 1000,
+      "capacity_kind": "계획 목표(유치 목표·등록형)",
+      "use_plan": { "type": "용도 전환", "text": "폐교 대학 시설을 교육·외국인 지원 거점으로 전환 검토" },
+      "reco_inputs": { "readiness": 55 },
+      "basis": { "address": "source", "metric": "source", "stage": "source", "capacity_people": "source_plan_target", "reco_inputs": "demo_example" },
+      "sources": [
+        { "scope": "facility", "title": "한겨레 2025-12-09", "url": "https://www.hani.co.kr/arti/area/honam/1233642.html", "checked": "2026-11-05" },
+        { "scope": "facility", "title": "전북일보 2026-09-29(최종 1000명 유치 목표 · 2026년 입학 242명 · 남원 학사 운영 2028년 3월)", "url": "https://www.jjan.kr/article/20260929500077", "checked": "2026-11-06" }
+      ]
+    },
+    {
+      "id": "fac_nw_dudong",
+      "name": "남원 옛 두동초 발효·체류시설",
+      "type": "폐교 활용",
+      "region_id": "namwon",
+      "address": "전북 남원시 송동면 옛 두동초등학교",
+      "metric": "사업비 25억 원(2019년 계획)",
+      "stage": "계획",
+      "use_plan": { "type": "복합화", "text": "발효·양조 체험과 숙박·캠핑 기능 복합 운영 검토" },
+      "reco_inputs": { "readiness": 40 },
+      "basis": { "address": "source", "metric": "source", "stage": "source", "reco_inputs": "demo_example" },
+      "sources": [
+        { "scope": "facility", "title": "연합뉴스 2019-06-18", "url": "https://www.yna.co.kr/view/AKR20190618117900055", "checked": "2026-11-05" }
+      ]
     },
     {
       "id": "fac_sa_rental",
@@ -511,7 +599,10 @@
       "operating_budget": 21,
       "supply_units": 300,
       "occupancy_rate": 84,
-      "metric": "공급 300호 · 입주율 84%"
+      "metric": "공급 300호 · 입주율 84%",
+      "reco_inputs": { "readiness": 75 },
+      "basis": { "location": "demo_example", "operating_budget": "demo_example", "supply_units": "demo_example", "occupancy_rate": "demo_example", "metric": "demo_example", "reco_inputs": "demo_example" },
+      "sources": []
     },
     {
       "id": "fac_sa_solar",
@@ -520,8 +611,13 @@
       "region_id": "shinan",
       "lat": 34.7902,
       "lng": 126.1554,
-      "operating_budget": 33,
-      "metric": "개발이익 공유 가구 1,840호"
+      "metric": "햇빛연금 수혜 16,333명(2025-01, 햇빛아동수당 포함)",
+      "reco_inputs": { "readiness": 70 },
+      "basis": { "location": "demo_example", "metric": "source", "reco_inputs": "demo_example" },
+      "sources": [
+        { "scope": "facility", "title": "신안군 보도자료(연합뉴스 배포) 2023-10-23", "url": "https://www.yna.co.kr/view/RPR20231023009300353", "checked": "2026-11-05" },
+        { "scope": "facility", "title": "뉴시스 2025-01-24", "url": "https://www.newsis.com/view/NISX20250124_0003045471", "checked": "2026-11-05" }
+      ]
     },
     {
       "id": "fac_sa_garden",
@@ -530,10 +626,176 @@
       "region_id": "shinan",
       "lat": 34.8794,
       "lng": 126.0571,
-      "operating_budget": 9,
-      "metric": "조합원 126명 · 연 매출 14억"
+      "metric": "조합원 457명(설립 1년) · 2023년 묘목 31만 본",
+      "reco_inputs": { "readiness": 65 },
+      "basis": { "location": "demo_example", "metric": "source", "reco_inputs": "demo_example" },
+      "sources": [
+        { "scope": "facility", "title": "연합뉴스 2025-01-16", "url": "https://www.yna.co.kr/view/AKR20250116129400054", "checked": "2026-11-05" }
+      ]
+    },
+    {
+      "id": "fac_sa_museum",
+      "name": "신안 이세돌바둑기념관(1도1뮤지엄)",
+      "type": "폐교 활용",
+      "region_id": "shinan",
+      "address": "전남 신안군 비금면 비금북부길 573-1(옛 대광초등학교)",
+      "metric": "연면적 1,094㎡ · 지상 2층",
+      "stage": "운영",
+      "scale_area_m2": 1094,
+      "use_plan": { "type": "복합화", "text": "전시와 레지던스·체험 프로그램 복합 운영 검토" },
+      "reco_inputs": { "readiness": 70 },
+      "basis": { "address": "source", "metric": "source", "stage": "source", "scale_area_m2": "source", "reco_inputs": "demo_example" },
+      "sources": [
+        { "scope": "facility", "title": "신안군 1도1뮤지움 누리집", "url": "https://www.shinan.go.kr/home/museum/museum04/museum05_26/museum05_07", "checked": "2026-11-05" },
+        { "scope": "facility", "title": "전남일보 2021-05-27", "url": "https://www.jnilbo.com/news/articleView.html?idxno=65014450970", "checked": "2026-11-05" }
+      ]
+    },
+    {
+      "id": "fac_sa_purple",
+      "name": "신안 퍼플섬(반월도·박지도)",
+      "type": "섬 관광",
+      "region_id": "shinan",
+      "address": "전남 신안군 안좌면 반월도·박지도",
+      "metric": "누적 관광객 150만 명 이상(2019~2023)",
+      "stage": "운영",
+      "capacity_people": 11081,
+      "capacity_kind": "일 최대 방문(관측)",
+      "use_plan": { "type": "운영 개선", "text": "테마 행사·체류 프로그램 운영 개선 검토" },
+      "reco_inputs": { "readiness": 75 },
+      "basis": { "address": "source", "metric": "source", "stage": "source", "capacity_people": "source", "reco_inputs": "demo_example" },
+      "sources": [
+        { "scope": "facility", "title": "연합뉴스 2024-01-17", "url": "https://www.yna.co.kr/view/AKR20240117129100054", "checked": "2026-11-05" },
+        { "scope": "facility", "title": "주간토탈채널 2026-05-30(2026-05-24 하루 1만1,081명 · 개장 이후 역대 최다)", "url": "https://www.ktotalchannel.com/news/articleView.html?idxno=12801", "checked": "2026-11-06" }
+      ]
     }
   ],
+  "recommendation_charts": {
+    "namwon": {
+      "population": {
+        "scope": "남원시 · 분기 월평균",
+        "unit": "만 명",
+        "labels": ["25년 1분기", "25년 2분기", "25년 3분기", "25년 4분기", "26년 1분기", "26년 2분기"],
+        "series": [
+          { "label": "등록인구", "values": [7.5, 7.5, 7.5, 7.4, 7.4, 7.4] },
+          { "label": "체류인구", "values": [21.1, 29.7, 27.6, 27.2, 21.0, 29.6] }
+        ],
+        "basis": "source",
+        "source_text": "행정안전부·국가데이터처 인구감소지역 생활인구 산정 결과(월별 값의 분기 평균)",
+        "sources": [{ "title": "행정안전부 인구감소지역 생활인구 산정 결과 공표(2025년 1분기~2026년 2분기, 별첨 생활인구 현황)", "url": "https://www.mois.go.kr/frt/bbs/type013/commonSelectBoardList.do?bbsId=BBSMSTR_000000000006", "checked": "2026-11-06" }]
+      }
+    },
+    "shinan": {
+      "population": {
+        "scope": "신안군 · 분기 월평균",
+        "unit": "만 명",
+        "labels": ["25년 1분기", "25년 2분기", "25년 3분기", "25년 4분기", "26년 1분기", "26년 2분기"],
+        "series": [
+          { "label": "등록인구", "values": [3.8, 3.9, 3.9, 4.1, 4.2, 4.2] },
+          { "label": "체류인구", "values": [11.7, 20.2, 14.0, 14.6, 11.3, 18.2] }
+        ],
+        "basis": "source",
+        "source_text": "행정안전부·국가데이터처 인구감소지역 생활인구 산정 결과(월별 값의 분기 평균)",
+        "sources": [{ "title": "행정안전부 인구감소지역 생활인구 산정 결과 공표(2025년 1분기~2026년 2분기, 별첨 생활인구 현황)", "url": "https://www.mois.go.kr/frt/bbs/type013/commonSelectBoardList.do?bbsId=BBSMSTR_000000000006", "checked": "2026-11-06" }]
+      }
+    }
+  },
+  "conversion": {
+    "regions": {
+      "namwon": {
+        "stay_monthly": 263632, "inflow_total": 6643, "inflow_external": 3528, "persons_per_household": 1.87,
+        "basis": { "stay_monthly": "source", "inflow_total": "source", "inflow_external": "source", "persons_per_household": "source" },
+        "periods": { "stay_monthly": "2025-07~2026-06", "inflow_total": "2025", "inflow_external": "2025", "persons_per_household": "2025-12" },
+        "sources": [
+          { "fields": ["stay_monthly"], "title": "행정안전부 인구감소지역 생활인구 산정 결과 공표(2025년 3분기~2026년 2분기, 별첨 생활인구 현황)", "url": "https://www.mois.go.kr/frt/bbs/type013/commonSelectBoardList.do?bbsId=BBSMSTR_000000000006", "checked": "2026-11-06", "method": "2025년 7월~2026년 6월 월별 체류인구의 평균" },
+          { "fields": ["inflow_total", "inflow_external"], "title": "국가데이터처 KOSIS 국내인구이동통계 — 시군구별 이동자수(DT_1B26001_A01, 2025년, 2026-10-28 갱신)", "url": "https://kosis.kr/statHtml/statHtml.do?orgId=101&tblId=DT_1B26001_A01", "checked": "2026-11-06", "method": "다른 시군구에서 온 전입 = 시도내 시군구간 전입 + 시도간 전입" },
+          { "fields": ["persons_per_household"], "title": "행정안전부 주민등록 인구통계 — 주민등록 인구 및 세대현황(세대당 인구, 2025년 12월)", "url": "https://jumin.mois.go.kr/statMonth.do", "checked": "2026-11-06" }
+        ]
+      },
+      "shinan": {
+        "stay_monthly": 145542, "inflow_total": 7564, "inflow_external": 7077, "persons_per_household": 1.87,
+        "basis": { "stay_monthly": "source", "inflow_total": "source", "inflow_external": "source", "persons_per_household": "source" },
+        "periods": { "stay_monthly": "2025-07~2026-06", "inflow_total": "2025", "inflow_external": "2025", "persons_per_household": "2025-12" },
+        "sources": [
+          { "fields": ["stay_monthly"], "title": "행정안전부 인구감소지역 생활인구 산정 결과 공표(2025년 3분기~2026년 2분기, 별첨 생활인구 현황)", "url": "https://www.mois.go.kr/frt/bbs/type013/commonSelectBoardList.do?bbsId=BBSMSTR_000000000006", "checked": "2026-11-06", "method": "2025년 7월~2026년 6월 월별 체류인구의 평균" },
+          { "fields": ["inflow_total", "inflow_external"], "title": "국가데이터처 KOSIS 국내인구이동통계 — 시군구별 이동자수(DT_1B26001_A01, 2025년, 2026-10-28 갱신)", "url": "https://kosis.kr/statHtml/statHtml.do?orgId=101&tblId=DT_1B26001_A01", "checked": "2026-11-06", "method": "다른 시군구에서 온 전입 = 시도내 시군구간 전입 + 시도간 전입" },
+          { "fields": ["persons_per_household"], "title": "행정안전부 주민등록 인구통계 — 주민등록 인구 및 세대현황(세대당 인구, 2025년 12월)", "url": "https://jumin.mois.go.kr/statMonth.do", "checked": "2026-11-06" }
+        ]
+      }
+    },
+    "cases": [
+      { "id": "case_fiorium", "region_type": "소도시", "name": "남원 달빛정원 피오리움", "plan_type": "복합화", "facility_id": "fac_nw_fiorium", "facility_type": "문화관광", "region": "전북특별자치도 남원시", "depopulation_area": true, "opening": "new", "scale_area_m2": 3741, "applies_to": ["문화관광", "폐교 활용", "교육", "섬 관광", "정원수"],
+        "monthly": 10833, "measure": "개관(2025-04) 후 1년 방문객 약 13만 명(전시관 연면적 3,741㎡)", "method": "13만 명 ÷ 12개월", "basis": "source",
+        "sources": [{ "title": "나라살림연구소 2026-05-26", "url": "https://narasallim.net/view3/2124", "checked": "2026-11-06" }, { "title": "전북일보 2025-10-06(연면적)", "url": "https://www.jjan.kr/article/20250923580442", "checked": "2026-11-06" }] },
+      { "id": "case_gangju", "region_type": "농촌", "name": "함안 강주학교캠프(옛 관동초)", "plan_type": "용도 전환", "facility_type": "폐교 활용", "region": "경상남도 함안군", "depopulation_area": true, "opening": "new", "applies_to": ["폐교 활용", "교육"],
+        "monthly": 1250, "measure": "2022년 개장 후 2025년까지 누적 방문객 6만 명", "method": "6만 명 ÷ 48개월(2022~2025년)", "basis": "source",
+        "sources": [{ "title": "서울신문 2026-09-16", "url": "https://m.go.seoul.co.kr/news/publicnews/local_govern/2026/09/16/20260916500078", "checked": "2026-11-06" }] },
+      { "id": "case_daesu", "region_type": "농촌", "name": "부안 닥나무한지체험학습장(옛 대수초)", "plan_type": "용도 전환", "facility_type": "폐교 활용", "region": "전북특별자치도 부안군", "depopulation_area": true, "opening": "new", "applies_to": ["폐교 활용", "교육"],
+        "monthly": 700, "measure": "개관(2023-06) 후 월평균 체험·방문 700여 명", "method": "발표 월평균 그대로", "basis": "source",
+        "sources": [{ "title": "전북일보 2024-01-30", "url": "https://www.jjan.kr/article/20240130580236", "checked": "2026-11-06" }] },
+      { "id": "case_purple_festival", "region_type": "섬", "name": "신안 퍼플섬 라벤더 축제", "plan_type": "운영 개선", "facility_id": "fac_sa_purple", "facility_type": "섬 관광", "region": "전남광주통합특별시 신안군", "depopulation_area": true, "opening": "added", "applies_to": ["섬 관광", "문화관광"],
+        "event_days": 11, "event_period": "2026-05-15~25", "event_visitors": 50000,
+        "monthly": 4167, "measure": "축제 11일(2026-05-15~25) 관광객 5만여 명", "method": "5만 명 ÷ 12개월(연 1회 행사 기준)", "basis": "source",
+        "sources": [{ "title": "서울신문 2026-05-31", "url": "https://m.go.seoul.co.kr/news/publicnews/2026/05/31/20260531500006", "checked": "2026-11-06" }] },
+      { "id": "case_cheongsan", "region_type": "섬", "name": "완도 청산도 슬로걷기 축제", "plan_type": "운영 개선", "facility_type": "섬 관광", "region": "전남광주통합특별시 완도군", "depopulation_area": true, "opening": "added", "applies_to": ["섬 관광", "문화관광"],
+        "event_days": 30, "event_period": "2025-04-05~05-04", "event_visitors": 50198,
+        "monthly": 4183, "measure": "축제 한 달(2025-04-05~05-04) 방문 50,198명", "method": "50,198명 ÷ 12개월(연 1회 행사 기준)", "basis": "source",
+        "sources": [{ "title": "메트로신문 2025-05-08", "url": "https://www.metroseoul.co.kr/article/20250508500287", "checked": "2026-11-06" }] },
+      { "id": "case_imja", "region_type": "섬", "name": "신안 임자도 섬 홍매화 축제", "plan_type": "운영 개선", "facility_type": "섬 관광", "region": "전남광주통합특별시 신안군", "depopulation_area": true, "opening": "added", "applies_to": ["섬 관광", "문화관광"],
+        "event_days": 4, "event_period": "2026-02-27~03-02", "event_visitors": 20000,
+        "monthly": 1667, "measure": "축제 4일(2026-02-27~03-02) 관람객 2만여 명", "method": "2만 명 ÷ 12개월(연 1회 행사 기준)", "basis": "source",
+        "sources": [{ "title": "코리아타임뉴스 2026-03-03", "url": "https://www.koreatimenews.com/news/article.html?no=1083913", "checked": "2026-11-06" }] },
+      { "id": "case_bonsai", "region_type": "섬", "name": "신안 1004섬 분재정원", "plan_type": "복합화", "facility_type": "정원수", "region": "전남광주통합특별시 신안군", "depopulation_area": true, "opening": "new", "applies_to": ["정원수"],
+        "monthly": 9804, "measure": "2009년 개장 후 누적 방문객 200만 명 돌파(2026-01 보도)", "method": "200만 명 ÷ 204개월(2009~2025년)", "basis": "source",
+        "sources": [{ "title": "뉴스와 2026-01-11", "url": "https://www.news-wa.com/amp/travel/tour-korea/2026/01/11/20260111500036", "checked": "2026-11-06" }] },
+      { "id": "case_sangju", "region_type": "소도시", "name": "상주 스마트팜 혁신밸리 견학", "plan_type": "개방·공유", "facility_type": "스마트팜", "region": "경상북도 상주시", "depopulation_area": true, "opening": "added", "applies_to": ["스마트팜", "신재생"],
+        "monthly": 152, "measure": "운영 개시(2022-01) 후 7월 20일까지 기술 견학 1천여 명", "method": "1천 명 ÷ 6.6개월(1월 1일~7월 20일)", "basis": "source",
+        "sources": [{ "title": "매일신문 2022-07-25", "url": "https://www.imaeil.com/page/view/2022072000482820948", "checked": "2026-11-06" }] }
+    ],
+    "synthetic": {
+      "basis": "synthetic",
+      "random_seed": null,
+      "rule_sources": [{ "rules": ["capacity_daily_by_type"], "title": "주간토탈채널 2026-05-30 — 신안 퍼플섬 2026-05-24 하루 방문객 1만1,081명(개장 이후 역대 최다)", "url": "https://www.ktotalchannel.com/news/articleView.html?idxno=12801", "checked": "2026-11-06" }, { "rules": ["capacity_area_per_person_m2"], "title": "소방시설 설치 및 관리에 관한 법률 시행령 [별표 7] 수용인원의 산정 방법(제17조 관련), 시행 2026-10-02", "url": "https://www.law.go.kr/LSW//lsBylInfoP.do?bylSeq=18481245&lsiSeq=290451&efYd=20261002&directYn=Y", "checked": "2026-11-06" }],
+      "rules": {
+        "visit_share": { "복합화": [0.003, 0.006], "용도 전환": [0.002, 0.004], "운영 개선": [0.002, 0.004], "개방·공유": [0.0005, 0.001] },
+        "visit_cap_share": 0.05,
+        "short_stay_per_unit": [4, 8],
+        "housing_fill": [0.3, 0.5],
+        "settle_share": [0.003, 0.006],
+        "case_area": "인구감소지역",
+        "scale_grade_by_type": { "문화관광": "중형", "섬 관광": "대형", "폐교 활용": "소형", "교육": "대형", "스마트팜": "중형", "신재생": "중형", "정원수": "중형", "임대주택": "중형" },
+        "scale_area_thresholds_m2": [2000, 10000],
+        "scale_factor": { "소형": 1, "중형": 2, "대형": 4 },
+        "operating_increment": [0.25, 0.5],
+        "min_cases_for_range": 2,
+        "comparable_region_types": ["섬", "농촌", "소도시"],
+        "capacity_area_per_person_m2": 4.6,
+        "capacity_grade_area_m2": { "소형": 1000, "중형": 6000, "대형": 20000 },
+        "capacity_turnover": { "daily": 2, "open_days": 25, "enrolled": 1 },
+        "capacity_daily_by_type": { "섬 관광": 11081 },
+        "utilization_pp": { "복합화": [10, 20], "용도 전환": [15, 25], "운영 개선": [5, 10], "개방·공유": [3, 8] }
+      },
+      "method": {
+        "visit_share": "같은 방안의 비교 가능한 출처 사례가 하나도 없을 때(같은 시설 유형도, 그 방안을 적용할 수 있는 다른 유형도 없을 때) 생활인구 변화(월) = 지역 월평균 체류인구(stay_monthly) × 방안 유형별 비율 범위",
+        "visit_cap_share": "규모 보정 뒤 값도 지역 월평균 체류인구의 5%를 넘으면 5%로 자른다. 규모 보정·증가분·상한이 하나라도 들어간 범위는 합성 값으로 표시한다",
+        "short_stay_per_unit": "공실 호실 단기 체류형 전환: 생활인구 변화(월) = 공실 호수(공급 호수 − 현재 입주 호수) × 호실당 월 체류 인원 범위",
+        "housing_fill": "주거 시설 방안: 정주인구 변화(연) = 공실 호수 × 채움 비율 범위 × 세대당 인구 × 다른 시군구 전입 비율(inflow_external ÷ inflow_total), 사용률 변화(%p) = 공실률 × 채움 비율 범위",
+        "settle_share": "주거 호수가 없는 주거·일자리형 방안: 정주인구 변화(연) = 지역 연간 다른 시군구 전입(inflow_external) × 비율 범위. 정주 방안의 생활인구 변화(월)는 정주인구 변화와 같다(등록인구로 매월 포함)",
+        "utilization_pp": "주거 외 시설의 사용률 변화(%p)는 방안 유형별 고정 범위(시설 단위 이용률 공개 통계가 없어 현재 이용률은 쓰지 않는다)",
+        "case_area": "비교 가능한 사례만 쓴다: 사례 지역이 인구감소지역(행정안전부 생활인구 현황 2026년 2분기 별첨의 89개 시군구)에 들어 있는 사례(depopulation_area true). 전주 하얀양옥집(전주시는 인구감소지역 아님)은 이 기준으로 뺐다",
+        "scale_grade_by_type": "시설·사례 규모 등급: 출처에 연면적(scale_area_m2)이 있으면 그 값으로 등급을 정하고(scale_area_thresholds_m2), 없으면 시설 유형별 기본 등급(합성)을 쓴다. 기본 등급은 같은 유형에 출처 연면적이 있으면 그 등급(폐교 활용 = 1도1뮤지엄 1,094㎡ 소형, 문화관광 = 피오리움 3,741㎡ 중형), 없으면 시설 형태(섬 단위 관광지·대학 캠퍼스 대형, 단지·조합 시설 중형)로 정한다",
+        "scale_area_thresholds_m2": "연면적 2,000㎡ 미만 소형, 2,000~10,000㎡ 중형, 10,000㎡ 이상 대형",
+        "scale_factor": "규모 보정 배수 = 시설 등급 계수 ÷ 사례 등급 계수, 계수 소형 1·중형 2·대형 4(한 등급마다 2배). 2차 보정부터 큰 시설에도 배수를 그대로 걸고(1로 막지 않음), 시설 수용 상한과 지역 상한으로 자른다",
+        "operating_increment": "운영 중 시설(stage가 계획·조성이 아닌 시설)에 신규 개관·전환 총량 사례(opening new)를 쓸 때는 그 총량의 25~50%만 변화로 본다. 기존 시설에 더한 프로그램 사례(opening added)는 그대로 증가분이다",
+        "min_cases_for_range": "사례값 범위(근거 문장 \"유사 사례 N곳 기준\")는 같은 방안 유형·같은 시설 유형·비슷한 지역 유형의 비교 가능한 출처 사례가 2곳 이상일 때만 쓴다. 1곳뿐이면 그 사례를 시설 규모로 보정한 추정(\"같은 유형 시설 규모 기준 추정\"), 같은 시설 유형 사례가 없으면 같은 방안을 적용할 수 있는 다른 유형 사례를 규모로 보정한 추정(\"유사 방안 사례 규모 기준 추정\")을 쓴다",
+        "comparable_region_types": "비슷한 지역 유형 = 섬·농촌·소도시(비도시). 도시 지역 사례는 비교하지 않는다. 사례마다 region_type을 적었다",
+        "capacity_area_per_person_m2": "시설 동시 수용 인원 = 연면적 ÷ 4.6㎡(소방시설 설치 및 관리에 관한 법률 시행령 [별표 7] 수용인원의 산정 방법 2.나 강당·문화 및 집회시설 기준, 시행 2026-10-02)",
+        "capacity_grade_area_m2": "연면적 출처가 없을 때 규모 등급의 대표 연면적(합성): 소형 1,000㎡(2,000㎡ 미만 구간의 중간), 중형 6,000㎡(2,000~10,000㎡ 구간의 중간), 대형 20,000㎡(10,000㎡ 기준의 2배)",
+        "capacity_turnover": "시설 수용 상한(월) = 동시 수용 인원 × 일 2회전 × 월 25일. 출처 수용 인원이 등록형(학생 등 같은 사람이 매달 이용, 계획 목표 포함)이면 수용 인원 × 1, 일 최대 방문(관측)이면 × 월 25일. 규모 보정·증가분 뒤 효과의 상·하한이 이 상한이나 지역 상한을 넘으면 자른다",
+        "capacity_daily_by_type": "섬 관광 유형은 법정 바닥면적 기준을 적용할 건물이 없어 일 방문 상한 × 월 운영일(25일)로 시설 수용 상한을 둔다. 시설에 출처 관측값(capacity_kind \"일 최대 방문(관측)\")이 있으면 그 값을, 없으면 같은 유형 출처 관측값인 퍼플섬 2026-05-24 하루 1만1,081명(개장 이후 역대 최다)을 기본값(합성)으로 쓴다. 1일 입도 제한·도선 수송 능력의 공식 값은 찾지 못했다",
+        "random_seed": "난수를 쓰지 않는다. 같은 시드 값이면 항상 같은 결과다"
+      }
+    }
+  },
   "report_templates": [
     {
       "id": "template_extinction_alert",
