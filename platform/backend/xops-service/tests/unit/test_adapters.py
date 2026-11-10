@@ -12,7 +12,7 @@ import pytest
 
 from src.core.settings import Settings
 from src.dataops import adapters as adapters_module
-from src.dataops.adapters import InMemoryAdapter, dsn_for, get_adapter
+from src.dataops.adapters import InMemoryAdapter, SampleAdapter, dsn_for, get_adapter
 from src.dataops.backends import MongoAdapter, SqlAdapter
 from src.dataops.query_builder import build_count_sql, build_mongo_query
 from src.dataops.results import ExecutionRequest
@@ -60,6 +60,22 @@ def test_get_adapter_degrades_when_dsn_missing(monkeypatch: pytest.MonkeyPatch) 
         assert result.executed is False
         assert result.rows == [] and result.total is None
         assert "DSN" in result.reason
+
+
+@pytest.mark.parametrize(("type_name", "values", "from_", "to", "expected"), [
+    ("INTEGER", [202312, 202401, 202412, 202501], "202401", "202412", [202412, 202401]),
+    ("NUMERIC(8,2)", [0.5, 1.5, 2.5, 3.5], "1.5", "2.5", [2.5, 1.5]),
+    ("VARCHAR(6)", ["202312", "202401", "202412", "202501"], "202401", "202412", ["202412", "202401"]),
+    ("VARCHAR(8)", ["QA-001", "QA-002", "QA-003", "QA-004"], "QA-002", "QA-003", ["QA-003", "QA-002"]),
+])
+def test_sample_range_coerces_numeric_metadata_bounds_only(type_name, values, from_, to, expected) -> None:
+    schema = {**_PG, "columns": [{"name": "period", "type": type_name}],
+              "range": {"column": "period", "from": from_, "to": to}}
+    adapter = SampleAdapter("mock", [{"period": value} for value in values])
+    first = adapter.execute(_request(schema, sort="period", page_size=1))
+    second = adapter.execute(_request(schema, sort="period", page=2, page_size=1))
+    assert first.total == second.total == 2
+    assert [first.rows[0]["period"], second.rows[0]["period"]] == expected
 
 
 def test_get_adapter_selects_backend_when_dsn_present(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -191,6 +207,32 @@ def test_sql_adapter_returns_rows_and_total_from_connection() -> None:
     assert conn.executed[1].startswith("SELECT COUNT(*) AS total FROM tb_resident_movement")
     assert "reg_date BETWEEN" in conn.executed[1]
     assert conn.fetch_sizes == [100]  # max_rows 로 잘라 가져온다
+
+
+def test_complete_read_uses_one_query_and_limit_plus_one_not_preview_cap() -> None:
+    conn = _FakeConnection(columns=["value"], rows=[(i,) for i in range(451)], total=999)
+    request = _request(_PG, sql="SELECT value FROM source LIMIT 451 OFFSET 0;", page_size=451)
+    result = _InjectedSqlAdapter(conn).read_complete(request, max_rows=450)
+    assert result.executed and result.total == len(result.rows) == 451
+    assert conn.executed == [request.sql]  # 하나의 SELECT 관측 결과, 페이지·COUNT 경합 없음
+    assert conn.fetch_sizes == [451]  # 기존 preview max_rows=100과 독립
+
+
+@pytest.mark.parametrize("changes", [{"method": "POST"}, {"page": 2}, {"page_size": 10}])
+def test_complete_read_rejects_page_or_write_requests(changes) -> None:
+    conn = _FakeConnection(columns=["value"], rows=[(1,)], total=1)
+    request = _request(_PG, **{"page_size": 21, **changes})
+    with pytest.raises(ValueError, match="범위"):
+        _InjectedSqlAdapter(conn).read_complete(request, max_rows=20)
+    assert conn.executed == []
+
+
+@pytest.mark.parametrize("value", [{"nested": 1}, [1, 2], b"binary"])
+def test_complete_read_does_not_stringify_unsupported_values(value) -> None:
+    from src.dataops.backends import UnsupportedTabularError
+    conn = _FakeConnection(columns=["value"], rows=[(value,)], total=1)
+    with pytest.raises(UnsupportedTabularError):
+        _InjectedSqlAdapter(conn).read_complete(_request(_PG, page_size=21), max_rows=20)
 
 
 def test_sql_adapter_skips_writes_without_values_or_filter() -> None:

@@ -27,6 +27,7 @@ export function pipelineDefinition(form, datasets) {
   if (!MODEL_TYPES.some((type) => type.id === form.model_type)) throw new Error("대상 모델을 선택하세요.");
   const dataset = datasets.find((row) => row.id === form.dataset_id);
   if (!dataset) throw new Error("등록된 학습데이터를 선택하세요.");
+  if (dataset.training_compatible === false) throw new Error("표형 자료의 대상·지역·기간 매핑을 먼저 확인하세요.");
   if (!/^[A-Za-z0-9_-]{3,128}$/.test(form.id.trim())) throw new Error("파이프라인 ID는 영문·숫자·밑줄·하이픈 3~128자로 입력하세요.");
   if (!form.name.trim()) throw new Error("파이프라인 이름을 입력하세요.");
   const experiment = (form.experiment ?? "").trim();

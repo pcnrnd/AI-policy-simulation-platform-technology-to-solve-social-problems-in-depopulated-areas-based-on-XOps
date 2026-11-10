@@ -14,6 +14,7 @@ assert.equal(body.dataset_hash, dataset.content_hash);
 assert.throws(() => pipelineDefinition({ ...form, dataset_id: "other_mode" }, [dataset]));
 assert.throws(() => pipelineDefinition({ ...form, model_type: "population" }, [dataset]));
 assert.throws(() => pipelineDefinition({ ...form, id: "../../x" }, [dataset]));
+assert.throws(() => pipelineDefinition(form, [{ ...dataset, training_compatible: false }]), /매핑/);
 const regions = [{ id: "namwon", name: "남원시" }, { id: "shinan", name: "신안군" }];
 // 목록을 다시 받아도 각 등록 행의 지역을 사용한다. 선택된 원본/다른 행의 지역에 의존하지 않는다.
 const registered = [{ id: "real_namwon", region_id: "namwon" }, { id: "mock_shinan", region_id: "shinan" }];
