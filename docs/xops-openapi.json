@@ -1786,7 +1786,206 @@
         }
       }
     },
+    "/api/v3/modelops/datasets/prepare": {
+      "post": {
+        "tags": [
+          "modelops"
+        ],
+        "summary": "Prepare Catalog Dataset",
+        "operationId": "prepare_catalog_dataset_api_v3_modelops_datasets_prepare_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Data-Mode",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "enum": [
+                "mock",
+                "real"
+              ],
+              "type": "string",
+              "default": "real",
+              "title": "X-Data-Mode"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalogPreparation"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Prepare Catalog Dataset Api V3 Modelops Datasets Prepare Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v3/modelops/datasets/from-catalog": {
+      "post": {
+        "tags": [
+          "modelops"
+        ],
+        "summary": "Register Catalog Dataset",
+        "operationId": "register_catalog_dataset_api_v3_modelops_datasets_from_catalog_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Data-Mode",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "enum": [
+                "mock",
+                "real"
+              ],
+              "type": "string",
+              "default": "real",
+              "title": "X-Data-Mode"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalogRegistration"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Register Catalog Dataset Api V3 Modelops Datasets From Catalog Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v3/modelops/datasets/{dataset_id}": {
+      "get": {
+        "tags": [
+          "modelops"
+        ],
+        "summary": "Dataset Detail",
+        "operationId": "dataset_detail_api_v3_modelops_datasets__dataset_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "dataset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Dataset Id"
+            }
+          },
+          {
+            "name": "include_rows",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Rows"
+            }
+          },
+          {
+            "name": "X-Data-Mode",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "enum": [
+                "mock",
+                "real"
+              ],
+              "type": "string",
+              "default": "real",
+              "title": "X-Data-Mode"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Dataset Detail Api V3 Modelops Datasets  Dataset Id  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
       "delete": {
         "tags": [
           "modelops"
@@ -4294,6 +4493,117 @@
         ],
         "title": "BuiltApiSummary",
         "description": "목록 응답 — 저장 시각(UTC ISO8601)이 추가된다."
+      },
+      "CatalogPreparation": {
+        "properties": {
+          "source_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Source Id"
+          },
+          "filter": {
+            "type": "string",
+            "maxLength": 256,
+            "title": "Filter",
+            "default": ""
+          },
+          "sort": {
+            "type": "string",
+            "maxLength": 63,
+            "title": "Sort",
+            "default": ""
+          },
+          "columns": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array",
+                "maxItems": 200,
+                "minItems": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Columns"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source_id"
+        ],
+        "title": "CatalogPreparation"
+      },
+      "CatalogRegistration": {
+        "properties": {
+          "source_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Source Id"
+          },
+          "filter": {
+            "type": "string",
+            "maxLength": 256,
+            "title": "Filter",
+            "default": ""
+          },
+          "sort": {
+            "type": "string",
+            "maxLength": 63,
+            "title": "Sort",
+            "default": ""
+          },
+          "columns": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array",
+                "maxItems": 200,
+                "minItems": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Columns"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "purpose": {
+            "type": "string",
+            "enum": [
+              "training",
+              "validation",
+              "test"
+            ],
+            "title": "Purpose"
+          },
+          "source_hash": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Source Hash"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source_id",
+          "name",
+          "purpose",
+          "source_hash"
+        ],
+        "title": "CatalogRegistration"
       },
       "ClassificationInput": {
         "properties": {

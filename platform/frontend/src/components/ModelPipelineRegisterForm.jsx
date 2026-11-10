@@ -36,7 +36,7 @@ export default function ModelPipelineRegisterForm({ datasets = [], onRegistered,
       <label><span>파이프라인 이름</span><input value={form.name} onChange={set("name")} placeholder="인구 변화율 요인분석 재학습" required maxLength={120} /></label>
       <label><span>대상 모델</span><select value={form.model_type} onChange={set("model_type")}>{MODEL_TYPES.map((type) => <option key={type.id} value={type.id}>{type.name}</option>)}</select></label>
       <label><span>등록 학습데이터</span><select value={form.dataset_id} onChange={set("dataset_id")} required>
-        <option value="">선택하세요</option>{datasets.map((row) => <option key={row.id} value={row.id}>{row.name} · {TARGET_LABELS[row.target] ?? row.target} · {row.content_hash.slice(0, 12)}</option>)}
+        <option value="">선택하세요</option>{datasets.map((row) => <option key={row.id} value={row.id} disabled={row.training_compatible === false}>{row.name} · {row.training_compatible === false ? "학습 매핑 필요" : TARGET_LABELS[row.target] ?? row.target} · {row.content_hash.slice(0, 12)}</option>)}
       </select></label>
       <label><span>트리거 조건</span><input value={form.trigger_policy} onChange={set("trigger_policy")} placeholder="수동" maxLength={120} /></label>
       <label><span>실험 ID</span><input value={form.experiment} onChange={set("experiment")} placeholder="EXP-POP-DECLINE-031" maxLength={EXPERIMENT_MAX} /></label>

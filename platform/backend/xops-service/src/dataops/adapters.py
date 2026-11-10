@@ -100,11 +100,31 @@ class SampleAdapter:
         from src.dataops.query_builder import filter_conditions
 
         conditions = filter_conditions(request.filter_expr)
+        if request.range_:
+            column = request.range_["column"]
+            type_name = next((str(item.get("type", "")) for item in request.schema.get("columns", [])
+                              if item.get("name") == column), "")
+            conditions += [(column, ">=", _sample_range_bound(request.range_["from"], type_name)),
+                           (column, "<=", _sample_range_bound(request.range_["to"], type_name))]
         rows = [row for row in self._rows if _sample_match(row, conditions)]
         if request.sort:
             rows = sorted(rows, key=lambda row: (row.get(request.sort) is None, row.get(request.sort)), reverse=True)
         start = (request.page - 1) * request.page_size
         return ExecutionResult(rows=rows[start:start + request.page_size], total=len(rows), executed=True)
+
+
+def _sample_range_bound(value: Any, type_name: str) -> Any:
+    """숫자 컬럼의 메타데이터 문자열 경계만 변환한다. VARCHAR 날짜·식별자는 보존한다."""
+    numeric = type_name.strip().upper().startswith(("INT", "SMALLINT", "BIGINT", "NUMERIC", "DECIMAL", "REAL", "FLOAT", "DOUBLE", "NUMBER"))
+    if isinstance(value, str) and numeric:
+        try:
+            return int(value)
+        except ValueError:
+            try:
+                return float(value)
+            except ValueError:
+                return value
+    return value
 
 
 def dsn_for(schema: dict[str, Any]) -> str:

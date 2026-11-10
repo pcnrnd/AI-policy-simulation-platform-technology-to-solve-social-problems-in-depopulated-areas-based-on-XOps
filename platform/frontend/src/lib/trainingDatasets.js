@@ -12,3 +12,16 @@ export function mergeDatasets(incoming = [], existing = []) {
     return true;
   });
 }
+
+/** 준비 결과는 같은 모드·원본·스키마·조건에서만 등록할 수 있다. */
+export function catalogSelectionKey(source, filter = "", sort = "", mode = "real") {
+  return JSON.stringify([mode, source?.id ?? null, source?.source, source?.object, source?.lineage,
+    source?.columns ?? [], source?.range ?? null, filter.trim(), sort]);
+}
+
+export function catalogRegistrationBody(source, filter, sort, prepared, name, purpose, mode) {
+  const key = catalogSelectionKey(source, filter, sort, mode);
+  if (!source || !prepared?.data?.complete || prepared.key !== key) return null;
+  return { source_id: source.id, filter: filter.trim(), sort, name: name.trim(), purpose,
+    columns: prepared.data.query.columns, source_hash: prepared.data.content_hash };
+}

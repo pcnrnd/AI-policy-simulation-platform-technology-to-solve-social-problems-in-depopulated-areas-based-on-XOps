@@ -240,6 +240,8 @@ export default function DataOpsPage() {
   // 카탈로그 로드 — 데모 표시 토글에 따라 시드 포함 여부가 달라지므로 토글할 때 다시 받는다.
   useEffect(() => {
     let alive = true;
+    setLoading(true);
+    setSources([]);
     setCatalogError(null);
     apiGet(catalogListUrl(mockDataVisible))
       .then((list) => {
@@ -728,7 +730,11 @@ export default function DataOpsPage() {
   const trainingStage = (
     <CollapsibleStage id="dstep-training" no="STEP ④" title="학습데이터 관리"
       open={openStages["dstep-training"]} onToggle={() => toggleStage("dstep-training")}>
-      <TrainingDatasetRegistration />
+      <TrainingDatasetRegistration
+        selectedSource={!loading && !catalogError ? sources.find((source) => source.id === sourceId) ?? null : null}
+        filter={filterText}
+        sort={sortCol}
+      />
     </CollapsibleStage>
   );
 
