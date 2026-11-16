@@ -16,7 +16,7 @@ export default function RealForecastResult({ chartData, chartOpts, result, unit,
       </div>
       <div style={{ display: "flex", justifyContent: "space-around", marginTop: 16, textAlign: "center" }}>
         <div>
-          <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>조정 예측 ({formatMonth(result.provenance.prediction_period)})</div>
+          <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>조정 예측 · {formatMonth(result.provenance.prediction_period)}</div>
           <div style={{ fontSize: 18, fontWeight: 700, color: "var(--accent-blue)" }}>
             {value(result.prediction)}{unit}
           </div>

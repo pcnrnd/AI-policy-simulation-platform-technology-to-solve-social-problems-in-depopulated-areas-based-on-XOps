@@ -106,7 +106,7 @@ const REALDATA_DATASETS = [
   { key: "mae", label: "검증 MAE", borderColor: "rgba(239, 68, 68, 1)", backgroundColor: "rgba(239, 68, 68, 0.05)", fill: true, tension: 0.35, borderWidth: 2 },
   { key: "rmse", label: "검증 RMSE", borderColor: "rgba(59, 130, 246, 1)", borderWidth: 1.5, pointStyle: "circle", tension: 0.35 },
   { key: "baseline_mae", label: "기준선 MAE", borderColor: "rgba(148, 163, 184, 1)", borderWidth: 1.5, borderDash: [5, 5], tension: 0.35 },
-  { key: "wape", label: "검증 WAPE (우축)", borderColor: "rgba(168, 85, 247, 1)", borderWidth: 1.5, pointStyle: "rect", tension: 0.35, yAxisID: "y1" }
+  { key: "wape", label: "검증 WAPE", borderColor: "rgba(168, 85, 247, 1)", borderWidth: 1.5, pointStyle: "rect", tension: 0.35, yAxisID: "y1" }
 ];
 
 // 모니터링 옵션 — 조회 구간 (대상 모델은 운영 모델 레지스트리에서 선택).
@@ -416,7 +416,7 @@ export default function MonitorPage() {
       labels: buckets.map(compactRangeLabel),
       datasets: [
         {
-          label: "참조 분포 (Reference Dataset)",
+          label: "참조 분포",
           data: reference,
           backgroundColor: "rgba(59, 130, 246, 0.4)",
           borderColor: "rgba(59, 130, 246, 1)",
@@ -534,7 +534,7 @@ export default function MonitorPage() {
       labels: feats.map((f) => monitorFeatureLabel(f.feature, selectedInstance?.target, dongEntries)),
       datasets: [
         {
-          label: "SHAP 기여도 기여 지수 (음수일수록 유출 기여)",
+          label: "SHAP 기여도 기여 지수",
           data: feats.map((f) => f.value),
           backgroundColor: feats.map((f) =>
             f.value > 0 ? "rgba(16, 185, 129, 0.65)" : "rgba(239, 68, 68, 0.65)"
@@ -641,7 +641,7 @@ export default function MonitorPage() {
     : drifted
       ? "var(--accent-red)"
       : "var(--accent-teal)";
-  const driftLabel = !driftKnown ? "판정 없음" : drifted ? "위험 (Drift)" : "정상";
+  const driftLabel = !driftKnown ? "판정 없음" : drifted ? "위험" : "정상";
   // 정상(teal)은 .system-status 기본 스타일과 같으므로 위험 상태만 덮어쓴다.
   const driftLabelStyle = drifted
     ? { backgroundColor: "rgba(var(--accent-red-rgb), 0.02)", color: "var(--accent-red)" }

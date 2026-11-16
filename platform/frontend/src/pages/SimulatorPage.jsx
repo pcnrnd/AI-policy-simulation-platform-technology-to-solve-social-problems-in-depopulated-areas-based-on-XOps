@@ -361,7 +361,7 @@ export default function SimulatorPage() {
           pointHoverRadius: 8
         },
         {
-          label: "선택 지자체",
+          label: "시범 지자체",
           data: appData.regions.map((r) => ({ x: r.riskIndex, y: r.population, name: r.name })),
           backgroundColor: appData.regions.map((r) =>
             r.id === currentRegion.id ? "rgba(59, 130, 246, 1)" : "rgba(245, 158, 11, 0.7)"
@@ -396,11 +396,14 @@ export default function SimulatorPage() {
         position: "bottom",
         labels: {
           color: ct.tick, boxWidth: 8, font: { size: 11 }, usePointStyle: true,
-          generateLabels: (chart) => chart.data.datasets.map((d, i) => {
-            const color = i === 0 ? "rgba(148, 163, 184, 0.8)" : "rgba(59, 130, 246, 1)";
-            return { text: d.label, fillStyle: color, strokeStyle: color, pointStyle: "circle", datasetIndex: i, hidden: !chart.isDatasetVisible(i), fontColor: ct.tick };
-          })
-        }
+          // 두 번째 계열은 시범 지자체(주황)와 선택 지자체(파랑)가 섞여 있어 범례는 점 색 세 개를 직접 그린다.
+          generateLabels: (chart) => [
+            ["인구감소 지역", "rgba(148, 163, 184, 0.8)", 0],
+            ["시범 지자체", "rgba(245, 158, 11, 0.8)", 1],
+            ["선택 지자체", "rgba(59, 130, 246, 1)", 1]
+          ].map(([text, color, datasetIndex]) => ({ text, fillStyle: color, strokeStyle: color, pointStyle: "circle", datasetIndex, hidden: false, fontColor: ct.tick })),
+        },
+        onClick: () => {}
       },
       tooltip: {
         callbacks: {
@@ -485,7 +488,7 @@ export default function SimulatorPage() {
       <label>
         학습 대상
         <select aria-label="학습 대상" value={demo ? "demo" : target} disabled={analysisRunning} onChange={(e) => { if (!demo) { setDong(""); setTarget(e.target.value); } }}>
-          {demo ? <option value="demo">인구 (데모 사례)</option> : Object.entries(REAL_TARGETS).map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+          {demo ? <option value="demo">인구</option> : Object.entries(REAL_TARGETS).map(([id, name]) => <option key={id} value={id}>{name}</option>)}
         </select>
       </label>
       <label>
@@ -580,11 +583,11 @@ export default function SimulatorPage() {
           </div>
           <div className="pl-sim-vars">
             <div className="pl-sim-cell">
-              <span className="pl-sim-tag">수요 (x)</span>
+              <span className="pl-sim-tag">수요</span>
               <span className="mock-data-output">{frame.demand}</span>
             </div>
             <div className="pl-sim-cell">
-              <span className="pl-sim-tag">공급 (y)</span>
+              <span className="pl-sim-tag">공급</span>
               <span className="mock-data-output">{frame.supply}</span>
             </div>
             <div className="pl-sim-cell">
@@ -635,7 +638,7 @@ export default function SimulatorPage() {
             controls={controls}
             controlValues={controlValues}
             onControlChange={edited((key, value) => setControlValues((prev) => ({ ...prev, [key]: value })))}
-            controlsLabel={demo ? "시설 조절변수 (x)" : "관측 입력 조정 (x)"}
+            controlsLabel={demo ? "시설 조절변수" : "관측 입력 조정"}
             controlsEmptyText={demo ? null : real.missing ? "시뮬레이션 모델 준비 후 조정할 수 있습니다." : real.loading ? "관측 입력 확인 중…" : null}
             controlsLockTitle={realLockTitle ?? "조정할 조절변수가 없습니다."}
             onResetControls={edited(() => { if (controls.length) setControlValues(defaultValues()); })}
@@ -670,7 +673,7 @@ export default function SimulatorPage() {
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-around", marginTop: 16, textAlign: "center" }}>
                   <div>
-                    <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>시뮬레이션 인구 (10년 후)</div>
+                    <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>10년 후 인구</div>
                     <div className="mock-data-output" style={{ fontSize: 18, fontWeight: 700, color: "var(--accent-blue)" }}>
                       {formatUnitValue(finalPop, "명")}명
                     </div>

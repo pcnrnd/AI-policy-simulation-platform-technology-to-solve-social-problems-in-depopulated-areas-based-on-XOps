@@ -13,8 +13,8 @@ import {
 import { alertText } from "../../lib/alertText.js";
 
 const MODEL_LABELS = {
-  "namwon-nonlocal-visitors-next-month": "남원 타지역 방문객 (익월)",
-  "namwon-observed-sales-next-month": "남원 관측 소비 (익월)"
+  "namwon-nonlocal-visitors-next-month": "남원 타지역 방문객",
+  "namwon-observed-sales-next-month": "남원 관측 소비"
 };
 
 const orDash = (v) => (v === null || v === undefined || v === "" ? "–" : v);
@@ -111,7 +111,7 @@ export default function RealdataEvaluationPanel() {
         labels: explain.contributions.map((c) => c.feature),
         datasets: [
           {
-            label: "기여도(phi)",
+            label: "기여도",
             data: explain.contributions.map((c) => c.phi),
             backgroundColor: explain.contributions.map((c) => (c.phi >= 0 ? "rgba(59,130,246,0.6)" : "rgba(239,68,68,0.6)"))
           }
@@ -171,7 +171,7 @@ export default function RealdataEvaluationPanel() {
             </thead>
             <tbody>
               <tr>
-                <td>검증(validation)</td>
+                <td>검증</td>
                 <td className="cell-num">{fmtNum(validation.metrics?.mae)}</td>
                 <td className="cell-num">{fmtNum(validation.metrics?.rmse)}</td>
                 <td className="cell-num">{fmtNum(validation.metrics?.wape)}</td>
@@ -180,7 +180,7 @@ export default function RealdataEvaluationPanel() {
                 </td>
               </tr>
               <tr>
-                <td>운영(operational)</td>
+                <td>운영</td>
                 {operational?.kind === "operational" ? (
                   <>
                     <td className="cell-num">{fmtNum(operational.metrics?.mae)}</td>
@@ -203,7 +203,7 @@ export default function RealdataEvaluationPanel() {
 
       <div className="realdata-controls">
         <label className="realdata-field">
-          <span>기준월(YYYYMM)</span>
+          <span>기준월</span>
           <input type="number" value={baseYm} onChange={(e) => setBaseYm(e.target.value)} placeholder="202310" />
         </label>
         <label className="realdata-field">

@@ -69,7 +69,7 @@ export default function Overview() {
     ? "측정 없음"
     : measuredF1 !== null && f1ServingVersion
       ? `실측 (${f1ServingVersion})`
-      : "최적 (SOTA)";
+      : "최적";
   const f1Sub =
     measuredF1 !== null
       ? f1Override !== null
@@ -224,7 +224,7 @@ export default function Overview() {
         {/* 전국 소멸위기 지역수는 시드 상수다 — 전국 집계를 내려주는 실 엔드포인트가 아직 없어
             데모 OFF에서는 값을 비우고 사유만 같은 자리에 남긴다(카드 구조는 그대로). */}
         <StatCard
-          label="AI 예측 소멸위기 지역수 (전국 기준)"
+          label="AI 예측 소멸위기 지역수"
           icon="fa-triangle-exclamation"
           value={allowSeed ? "89" : "–"}
           unit={allowSeed ? "개소" : undefined}

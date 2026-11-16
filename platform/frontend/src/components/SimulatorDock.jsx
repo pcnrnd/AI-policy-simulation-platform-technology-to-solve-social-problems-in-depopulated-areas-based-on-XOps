@@ -100,9 +100,9 @@ export default function SimulatorDock({
           <Slider label="총 예산" value={fixed.budgetTotal} onChange={fixed.setBudgetTotal} min={100} max={2000} step={50} unit="억" locked={locked} lockTitle={fixed.lockText} />
 
           <div className="sim-var-group-label">정책 강조 가중치</div>
-          <Slider label="복지 예산 (Welfare)" value={fixed.welfare} onChange={fixed.setWelfare} locked={locked} lockTitle={fixed.lockText} />
-          <Slider label="산업 일자리 (Industry)" value={fixed.industry} onChange={fixed.setIndustry} locked={locked} lockTitle={fixed.lockText} />
-          <Slider label="주거·주택 (Housing)" value={fixed.housing} onChange={fixed.setHousing} locked={locked} lockTitle={fixed.lockText} />
+          <Slider label="복지 예산" value={fixed.welfare} onChange={fixed.setWelfare} locked={locked} lockTitle={fixed.lockText} />
+          <Slider label="산업 일자리" value={fixed.industry} onChange={fixed.setIndustry} locked={locked} lockTitle={fixed.lockText} />
+          <Slider label="주거·주택" value={fixed.housing} onChange={fixed.setHousing} locked={locked} lockTitle={fixed.lockText} />
         </div>
 
         <div data-slot="sim.dock.controls">

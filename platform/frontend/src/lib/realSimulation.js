@@ -257,7 +257,7 @@ export function sensitivityRecommendation(ranking, label, unit, targetName) {
   const items = ranking.map((row) => ({
     id: row.feature, name: `${label(row.feature)} ${row.to > row.from ? "증가" : "감소"}`, category: "관측 입력 가정",
     score: row.delta, scoreText: `+${formatUnitValue(row.delta, unit)}`,
-    cells: [`${formatUnitValue(row.from, unit)} → ${formatUnitValue(row.to, unit)} ${unit}`, `${formatUnitValue(row.delta, unit)} ${unit}`]
+    cells: [`${formatUnitValue(row.from, unit)} → ${formatUnitValue(row.to, unit)}${unit}`, `${formatUnitValue(row.delta, unit)}${unit}`]
   }));
   return {
     items,
