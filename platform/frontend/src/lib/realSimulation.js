@@ -102,7 +102,6 @@ export const FACTOR_IDLE_TEXT = "[요인분석 실행] 후 표시됩니다.";
 export const FACTOR_FAILED_TEXT = "요인분석을 실행하지 못했습니다. 잠시 뒤 다시 실행하세요.";
 export const FACTOR_VERSION_CHANGED_TEXT = "활성 버전이 바뀌었습니다. [요인분석 실행]을 다시 누르세요.";
 export const FACTOR_EXPLAIN_TEXT = "기여도는 학습 기간 평균 대비 최근 관측값이 모델 추정을 높인(+)·낮춘(−) 크기입니다.";
-export const FACTOR_FOOTNOTE = "※ 모델 추정의 기여도이며 정책의 인과 효과가 아닙니다.";
 export const CORRELATION_BASIS_TEXT = "STAGE ① 요인 기여도의 방향(+ 높임 / − 낮춤) 기준";
 // 알림(role=alert) 고정 문구 — 서버·브라우저 원문은 활동 로그에만 남긴다.
 export const REAL_LOAD_FAILED_TEXT = "모델 정보를 불러오지 못했습니다. 잠시 뒤 다시 시도하세요.";
@@ -263,12 +262,11 @@ export function sensitivityRecommendation(ranking, label, unit, targetName) {
   }));
   return {
     items,
-    scoreLabel: `모델 예측상 변화 (${unit})`,
+    scoreLabel: "모델 예측상 변화",
     scoreUnit: unit,
     columns: [{ label: "관측 지표 입력 가정" }, { label: `입력 변화 (${unit})`, numeric: true }, { label: `모델 예측상 변화 (${unit})`, numeric: true }],
     caption: "시뮬레이션 예측 변화량에 근거한 관측 지표 정책 추천 순위",
-    infoTip: `각 관측 입력을 선택 행정동 학습 범위의 1%만큼 늘리거나 줄인 단일 변경 예측 중, ${targetName} 증가가 큰 방향을 지표별로 고릅니다.`,
-    footnote: "※ 추천 순위는 모델 예측의 민감도이며, 정책의 실제 인과 효과를 검증한 결과가 아닙니다."
+    infoTip: `각 관측 입력을 선택 행정동 학습 범위의 1%만큼 늘리거나 줄인 단일 변경 예측 중, ${targetName} 증가가 큰 방향을 지표별로 고릅니다.`
   };
 }
 

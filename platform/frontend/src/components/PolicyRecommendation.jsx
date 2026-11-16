@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Bar } from "react-chartjs-2";
+import { Bar, Line } from "react-chartjs-2";
 import Card from "./Card.jsx";
 import InfoTip from "./InfoTip.jsx";
 import PerfBadge from "./PerfBadge.jsx";
@@ -16,40 +16,49 @@ const MEDAL = ["🥇", "🥈", "🥉"];
 const SERIES_COLORS = [["rgba(59, 130, 246, 0.75)", "rgba(59, 130, 246, 1)"], ["rgba(14, 165, 233, 0.45)", "rgba(14, 165, 233, 1)"]];
 const PLAN_COLORS = ["rgba(139, 92, 246, 0.55)", "rgba(139, 92, 246, 1)"];
 
-/** 근거 그래프 하나 — 값이 없으면 캔버스 자리를 그대로 두고 행동 안내만 겹친다. 계열이 둘이면 쌓은 막대(등록·체류). */
+/** 근거 그래프 하나 — 값이 없으면 캔버스 자리를 그대로 두고 행동 안내만 겹친다. 생활인구 추이는 선 그래프(생활인구·등록인구), 나머지는 막대. */
 function EvidenceChart({ chart, ct }) {
-  const stacked = chart.series.length > 1;
+  const isLine = chart.kind === "line";
+  const tickUnit = chart.unit.replace(/ 명$/, "");
   const data = {
     labels: chart.labels,
     datasets: (chart.series.length ? chart.series : [{ label: chart.title, values: [] }]).map((s, i) => {
       const [fill, line] = chart.id === "plans" ? PLAN_COLORS : SERIES_COLORS[i] ?? SERIES_COLORS[0];
-      return { label: s.label || chart.title, data: s.values, backgroundColor: fill, borderColor: line, borderWidth: 1.5, borderRadius: 4, maxBarThickness: 44 };
+      return isLine
+        ? { label: s.label || chart.title, data: s.values, borderColor: line, backgroundColor: line, borderWidth: 2, pointRadius: 3, pointHoverRadius: 5, tension: 0.25 }
+        : { label: s.label || chart.title, data: s.values, backgroundColor: fill, borderColor: line, borderWidth: 1.5, borderRadius: 4, maxBarThickness: 44 };
     })
   };
   const options = {
     responsive: true,
     maintainAspectRatio: false,
     scales: {
-      x: { stacked, grid: { display: false }, ticks: { color: ct.tickStrong, font: { size: 11 } } },
-      // 단위는 그래프 제목 아래 범위 줄에 적는다(세로 축 제목은 한글이 눕혀져 읽기 어렵다).
-      y: { stacked, beginAtZero: true, grid: { color: ct.grid }, ticks: { color: ct.tick, precision: stacked ? undefined : 0 } }
+      x: { grid: { display: false }, ticks: { color: ct.tickStrong, font: { size: 11 } } },
+      // 단위는 눈금과 툴팁 값에 붙인다(축 제목·부제는 두지 않는다).
+      y: { beginAtZero: true, grid: { color: ct.grid }, ticks: { color: ct.tick, precision: isLine ? undefined : 0, callback: (v) => `${v.toLocaleString("ko-KR")}${tickUnit}` } }
     },
     plugins: {
-      legend: { display: stacked, position: "bottom", labels: { color: ct.tick, boxWidth: 10, font: { size: 10 } } },
-      tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label} ${ctx.parsed.y.toLocaleString("ko-KR")} ${chart.unit}` } }
+      legend: { display: chart.series.length > 1, position: "bottom", labels: { color: ct.tick, boxWidth: 10, font: { size: 10 } } },
+      tooltip: {
+        callbacks: {
+          label: (ctx) => {
+            const period = chart.periods?.[ctx.dataIndex];
+            return `${ctx.dataset.label} ${ctx.parsed.y.toLocaleString("ko-KR")}${tickUnit}${period ? ` · ${period}` : ""}`;
+          }
+        }
+      }
     }
   };
+  const Chart = isLine ? Line : Bar;
   return (
     <figure className="reco-evidence-chart">
       <figcaption>
         <strong>{chart.title}</strong>
-        <span>{chart.scope}</span>
       </figcaption>
       <div className="reco-evidence-canvas">
-        <Bar data={data} options={options} aria-label={`${chart.title} 그래프`} role="img" />
+        <Chart data={data} options={options} aria-label={`${chart.title} 그래프`} role="img" />
         {chart.empty && <ChartEmptyNote>{chart.empty}</ChartEmptyNote>}
       </div>
-      <p className="reco-evidence-note">{chart.note}</p>
     </figure>
   );
 }
@@ -88,7 +97,7 @@ function ConversionCompare({ compare }) {
 }
 
 /**
- * 추천 결과 패널 — Top3 요약 + 막대 차트 + 전환 방안 비교 + 근거 그래프 묶음 + 상세 표.
+ * 추천 결과 패널 — Top3 요약 + 막대 차트 + 근거 그래프 묶음(순위 그래프 바로 아래) + 전환 방안 비교 + 상세 표.
  * 데모 표시: facilityRows(시설 × 활용 방안) — 추천 지수 순위로 Top3·차트를 그리고, 표는 열 제목으로 고른 기준으로 정렬한다.
  * 실데이터 표시: view(sensitivityRecommendation 결과) — 같은 형식에 모델 예측상 변화를 넣는다. 전환 방안 비교·근거 그래프 묶음은 같은 자리에 행동 안내.
  * @param {{ region: object, facilityRows?: object[], view?: object, chartSeed?: object }} props
@@ -152,11 +161,11 @@ export default function PolicyRecommendation({ region, facilityRows = null, view
     maintainAspectRatio: false,
     scales: {
       // 시설 추천은 값 축에 정렬 기준과 단위를 적는다.
-      x: { grid: { color: ct.grid }, ticks: { color: ct.tick }, ...(view.criterion && { title: { display: true, text: scoreLabel, color: ct.tick } }),
+      x: { grid: { color: ct.grid }, ticks: { color: ct.tick, ...(view.scoreUnit && { callback: (v) => `${v.toLocaleString("ko-KR")}${view.scoreUnit}` }) }, ...(view.criterion && { title: { display: true, text: scoreLabel, color: ct.tick } }),
         ...(view.scoreMax && { min: 0, max: view.scoreMax }) },
       y: { grid: { display: false }, ticks: { color: ct.tickStrong, font: { size: 11 } } }
     },
-    plugins: { legend: { display: false } }
+    plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => `${scoreLabel} ${ctx.parsed.x.toLocaleString("ko-KR")}${view.scoreUnit ?? ""}` } } }
   };
 
   const top3 = ranked.slice(0, 3);
@@ -202,13 +211,13 @@ export default function PolicyRecommendation({ region, facilityRows = null, view
         <Bar data={chartData} options={chartOpts} />
       </div>
 
-      {/* 전환 방안 비교 — 순위 그래프 바로 아래·근거 그래프 위, 두 모드 같은 표 구조 */}
-      <ConversionCompare compare={compare} />
-
-      {/* 근거 그래프 묶음 — 전환 방안 비교 아래·표 위, 두 모드 같은 세 자리 */}
+      {/* 근거 그래프 묶음 — 순위 그래프 바로 아래(그래프 4개를 한 영역에), 두 모드 같은 세 자리 */}
       <section className="reco-evidence-charts" data-slot="sim.report.charts" aria-label="추천 참고 그래프">
         {evidenceCharts.map((chart) => <EvidenceChart key={chart.id} chart={chart} ct={ct} />)}
       </section>
+
+      {/* 전환 방안 비교 — 순위 그래프 바로 아래·근거 그래프 위, 두 모드 같은 표 구조 */}
+      <ConversionCompare compare={compare} />
 
       <div className={view.criterion ? "table-container reco-page-table" : "table-container"}>
         <table>
@@ -260,9 +269,6 @@ export default function PolicyRecommendation({ region, facilityRows = null, view
         </table>
       </div>
       <TablePager {...rows.pager} />
-      <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 12 }}>
-        {view.footnote}
-      </p>
     </Card>
   );
 }

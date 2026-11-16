@@ -312,7 +312,7 @@ export default function SimulatorPage() {
       labels: demo ? YEAR_LABELS : series.labels,
       datasets: [
         {
-          label: demo ? "자연 감소 예측 추이 (Base Model)" : "기준 입력 예측",
+          label: demo ? "자연 감소 예측 추이" : "기준 입력 예측",
           data: demo ? baseTrend : series.baseline,
           borderColor: "rgba(239, 68, 68, 0.65)",
           borderDash: [5, 5],
@@ -379,12 +379,12 @@ export default function SimulatorPage() {
     maintainAspectRatio: false,
     scales: {
       x: {
-        title: { display: true, text: "인구소멸 위험지수 (낮을수록 위험)", color: ct.tick },
+        title: { display: true, text: "인구소멸 위험지수", color: ct.tick },
         grid: { color: ct.grid },
         ticks: { color: ct.tick }
       },
       y: {
-        title: { display: true, text: "인구수(명)", color: ct.tick },
+        title: { display: true, text: "인구수", color: ct.tick },
         grid: { color: ct.grid },
         ticks: { color: ct.tick }
       }
@@ -672,7 +672,7 @@ export default function SimulatorPage() {
                     </div>
                   </div>
                 </div>
-                <p className="chart-summary">
+                <p className="chart-summary sr-only">
                   자연감소 기준 10년 후 {formatUnitValue(baseFinalPop, "명")}명, 정책 적용 시 {formatUnitValue(finalPop, "명")}명으로
                   기준 대비 {policyDifference >= 0 ? "+" : ""}{formatUnitValue(policyDifference, "명")}명입니다.
                 </p>
@@ -697,14 +697,14 @@ export default function SimulatorPage() {
           <Card title="전 지자체 위험지수 vs 인구 분포" icon="fa-braille" dataSource={cardSource} data-slot="sim.sim.distribution">
             {demo && resultsReady ? (
               <>
-                <p style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 12 }}>
+                <p className="sr-only">
                   전국 인구감소 지역(회색 점) 분포 속 시범 분석 대상 지자체의 상대 위치. 파란 점이 현재 선택
                   지자체입니다.
                 </p>
                 <div style={{ position: "relative", height: 220, width: "100%" }}>
                   <Scatter data={scatterData} options={scatterOpts} />
                 </div>
-                <p className="chart-summary">
+                <p className="chart-summary sr-only">
                   {currentRegion.name}은 위험지수 {currentRegion.riskIndex}, 인구 {currentRegion.population.toLocaleString()}명입니다.
                   비교 대상 {distributionRegions.length}곳 중 위험지수는 낮은 순 {riskRank}위(낮을수록 고위험), 인구는 큰 순 {populationRank}위입니다.
                   회색은 전국 비교군, 주황은 분석 대상, 파랑은 현재 선택 지역입니다.

@@ -291,7 +291,7 @@ export default function Overview() {
 
       <div className="grid-cols-2">
         <Card
-          title="연동 데이터 소스 아카이브 적재 현황 (행 수)"
+          title="연동 데이터 소스 아카이브 적재 현황"
           icon="fa-chart-pie"
           dataSource={catalogOrigin}
         >
@@ -313,7 +313,7 @@ export default function Overview() {
               </li>
             ))}
           </ul>
-          <p className="chart-summary">
+          <p className={sourceRowsEmpty ? "chart-summary" : "chart-summary sr-only"}>
             {sourceRowsEmpty ? (
               SOURCE_EMPTY_HINT
             ) : (
@@ -356,7 +356,7 @@ export default function Overview() {
           <div style={{ position: "relative", height: 240, width: "100%" }}>
             <Radar data={radarData} options={radarOpts} />
           </div>
-          <p className="chart-summary">
+          <p className={radarSummary === null ? "chart-summary" : "chart-summary sr-only"}>
             {radarSummary === null
               ? DEMO_ONLY_HINT
               : `${currentRegion.name} 지표: ${radarSummary}.`}

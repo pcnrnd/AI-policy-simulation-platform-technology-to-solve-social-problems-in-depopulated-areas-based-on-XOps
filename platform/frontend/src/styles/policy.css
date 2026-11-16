@@ -106,7 +106,13 @@ th[aria-sort="descending"] .reco-sort {
   white-space: nowrap;
 }
 
-/* 전환 방안 비교 — 순위 그래프 아래(위 간격은 주 그래프의 아래 여백 20px), 근거 그래프 묶음과의 간격 20px */
+/* 열 제목이 짧아도 한글이 글자 단위로 갈라지지 않게 단어 단위로만 줄바꿈 */
+.reco-page-table th,
+.reco-page-table td {
+  word-break: keep-all;
+}
+
+/* 전환 방안 비교 — 근거 그래프 묶음 아래(위 간격은 묶음의 아래 여백 20px), 표와의 간격 20px */
 .reco-compare {
   margin-bottom: 20px;
 }
@@ -150,8 +156,8 @@ th[aria-sort="descending"] .reco-sort {
   color: var(--text-muted);
 }
 
-/* 전환 방안 비교 아래 근거 그래프 묶음 — 세 자리 고정(값이 없으면 같은 자리에 안내).
-   위 간격은 전환 방안 비교의 아래 여백(20px)을 쓰고, 표와의 간격은 같은 20px. */
+/* 순위 그래프 바로 아래 근거 그래프 묶음 — 세 자리 고정(값이 없으면 같은 자리에 안내).
+   위 간격은 순위 그래프의 아래 여백(20px)을 쓰고, 전환 방안 비교와의 간격은 같은 20px. */
 .reco-evidence-charts {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -174,7 +180,6 @@ th[aria-sort="descending"] .reco-sort {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  min-height: 34px;
 }
 
 .reco-evidence-chart figcaption strong {
@@ -183,23 +188,10 @@ th[aria-sort="descending"] .reco-sort {
   color: var(--text-primary);
 }
 
-.reco-evidence-chart figcaption span {
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
 .reco-evidence-canvas {
   position: relative;
   height: 180px;
   width: 100%;
-}
-
-.reco-evidence-note {
-  margin: 0;
-  min-height: 30px;
-  font-size: 10.5px;
-  line-height: 1.45;
-  color: var(--text-muted);
 }
 
 @media (max-width: 768px) {
