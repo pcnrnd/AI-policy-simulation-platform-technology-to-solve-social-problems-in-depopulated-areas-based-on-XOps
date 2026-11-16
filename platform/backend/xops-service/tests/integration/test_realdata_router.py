@@ -42,7 +42,7 @@ def test_health_reports_table_status_when_dsn_configured(
     assert body["status"] == "ok"
     assert body["data"]["pg_dsn_configured"] is True
     status = body["data"]["table_status"]
-    assert set(status) == ALLOWED_TABLES  # 29개 전부 계속 보고한다(계약 축소 없음)
+    assert set(status) == ALLOWED_TABLES  # 31개 전부 계속 보고한다(계약 축소 없음)
     assert status["ext_gwto_daily_trend"] is False
     assert all(v is True for k, v in status.items() if k != "ext_gwto_daily_trend")
 
