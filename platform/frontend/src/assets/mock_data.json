@@ -472,6 +472,52 @@
         { "name": "traveler_group", "type": "TEXT", "description": "방문객 구분(외지인/외국인/전체)" },
         { "name": "tourist_count", "type": "NUMERIC", "description": "관광객 수, 반올림 없음" }
       ]
+    },
+    {
+      "id": "ds_14_kto_spot_monthly_visitors",
+      "is_seed": false,
+      "label": "주요관광지점 월별 입장객",
+      "source": "RDB · PostgreSQL",
+      "object": "ext_kto_spot_monthly_visitors",
+      "description": "한국문화관광연구원 관광지식정보시스템 주요관광지점 입장객 통계의 관광지점별 월별 입장객(내국인·외국인·합계). 정책 추천 유사 사례 성과 그래프에 쓴다. 원본 platform/data/real/kto/*.xls(통계표 내려받기)",
+      "archive": { "tier": "Hot", "retention": "5년 보존", "loaded_at": "2026-11-17", "rows": 186 },
+      "lineage": { "origin": "관광지식정보시스템 통계표 https://know.tour.go.kr/stat/visitStatDis/table.do (월별·관광지점별 조회 후 내려받기, 분기 잠정치 공표 약 45일 뒤 갱신)", "version": "v1", "commit": "963d2c" },
+      "range": { "column": "base_ym", "from": 202301, "to": 202603 },
+      "tags": ["관광", "입장객", "공표통계", "실데이터"],
+      "columns": [
+        { "name": "base_ym", "type": "INTEGER", "description": "기준년월(YYYYMM)" },
+        { "name": "sido_name", "type": "TEXT", "description": "시도명" },
+        { "name": "sigungu_name", "type": "TEXT", "description": "시군구명" },
+        { "name": "spot_name", "type": "TEXT", "description": "관광지점명(통계표 그대로)" },
+        { "name": "visitors_domestic", "type": "BIGINT", "description": "내국인 입장객" },
+        { "name": "visitors_foreign", "type": "BIGINT", "description": "외국인 입장객" },
+        { "name": "visitors_total", "type": "BIGINT", "description": "입장객 합계" },
+        { "name": "source_file", "type": "TEXT", "description": "내려받은 파일 이름" },
+        { "name": "checked_on", "type": "DATE", "description": "받은 날짜" }
+      ]
+    },
+    {
+      "id": "ds_15_mois_living_population_quarterly",
+      "is_seed": false,
+      "label": "인구감소지역 생활인구 분기",
+      "source": "RDB · PostgreSQL",
+      "object": "ext_mois_living_population_quarterly",
+      "description": "행정안전부 인구감소지역 생활인구 분기 발표의 지역별 등록인구·체류인구. 정책 추천 생활인구 추이 그래프에 쓴다. 원본 platform/data/real/mois/living_population_quarterly.csv(발표 첨부 표 값)",
+      "archive": { "tier": "Hot", "retention": "5년 보존", "loaded_at": "2026-11-17", "rows": 12 },
+      "lineage": { "origin": "행정안전부 인구감소지역 생활인구 산정 결과 공표 https://www.mois.go.kr/frt/bbs/type013/commonSelectBoardList.do?bbsId=BBSMSTR_000000000006 (분기 발표)", "version": "v1", "commit": "5efe27" },
+      "range": { "column": "base_year", "from": 2025, "to": 2026 },
+      "tags": ["생활인구", "공표통계", "실데이터"],
+      "columns": [
+        { "name": "sigungu_name", "type": "TEXT", "description": "지역명" },
+        { "name": "base_year", "type": "BIGINT", "description": "기준 연도" },
+        { "name": "quarter", "type": "BIGINT", "description": "분기(1~4)" },
+        { "name": "registered_population", "type": "NUMERIC", "description": "등록인구" },
+        { "name": "stay_population", "type": "NUMERIC", "description": "체류인구" },
+        { "name": "unit", "type": "TEXT", "description": "발표 단위" },
+        { "name": "source_title", "type": "TEXT", "description": "발표 자료 이름" },
+        { "name": "source_url", "type": "TEXT", "description": "발표 자료 주소" },
+        { "name": "checked_on", "type": "DATE", "description": "확인한 날짜" }
+      ]
     }
   ],
   "benchmark_regions": [
@@ -669,36 +715,6 @@
       ]
     }
   ],
-  "recommendation_charts": {
-    "namwon": {
-      "population": {
-        "scope": "남원시 · 분기 월평균",
-        "unit": "만 명",
-        "labels": ["25년 1분기", "25년 2분기", "25년 3분기", "25년 4분기", "26년 1분기", "26년 2분기"],
-        "series": [
-          { "label": "등록인구", "values": [7.5, 7.5, 7.5, 7.4, 7.4, 7.4] },
-          { "label": "체류인구", "values": [21.1, 29.7, 27.6, 27.2, 21.0, 29.6] }
-        ],
-        "basis": "source",
-        "source_text": "행정안전부·국가데이터처 인구감소지역 생활인구 산정 결과(월별 값의 분기 평균)",
-        "sources": [{ "title": "행정안전부 인구감소지역 생활인구 산정 결과 공표(2025년 1분기~2026년 2분기, 별첨 생활인구 현황)", "url": "https://www.mois.go.kr/frt/bbs/type013/commonSelectBoardList.do?bbsId=BBSMSTR_000000000006", "checked": "2026-11-06" }]
-      }
-    },
-    "shinan": {
-      "population": {
-        "scope": "신안군 · 분기 월평균",
-        "unit": "만 명",
-        "labels": ["25년 1분기", "25년 2분기", "25년 3분기", "25년 4분기", "26년 1분기", "26년 2분기"],
-        "series": [
-          { "label": "등록인구", "values": [3.8, 3.9, 3.9, 4.1, 4.2, 4.2] },
-          { "label": "체류인구", "values": [11.7, 20.2, 14.0, 14.6, 11.3, 18.2] }
-        ],
-        "basis": "source",
-        "source_text": "행정안전부·국가데이터처 인구감소지역 생활인구 산정 결과(월별 값의 분기 평균)",
-        "sources": [{ "title": "행정안전부 인구감소지역 생활인구 산정 결과 공표(2025년 1분기~2026년 2분기, 별첨 생활인구 현황)", "url": "https://www.mois.go.kr/frt/bbs/type013/commonSelectBoardList.do?bbsId=BBSMSTR_000000000006", "checked": "2026-11-06" }]
-      }
-    }
-  },
   "conversion": {
     "regions": {
       "namwon": {
@@ -735,10 +751,12 @@
       { "id": "case_purple_festival", "region_type": "섬", "name": "신안 퍼플섬 라벤더 축제", "plan_type": "운영 개선", "facility_id": "fac_sa_purple", "facility_type": "섬 관광", "region": "전남광주통합특별시 신안군", "depopulation_area": true, "opening": "added", "applies_to": ["섬 관광", "문화관광"],
         "event_days": 11, "event_period": "2026-05-15~25", "event_visitors": 50000,
         "monthly": 4167, "measure": "축제 11일(2026-05-15~25) 관광객 5만여 명", "method": "5만 명 ÷ 12개월(연 1회 행사 기준)", "basis": "source",
+        "trend_label": "신안 퍼플섬", "trend_spot": "퍼플교",
         "sources": [{ "title": "서울신문 2026-05-31", "url": "https://m.go.seoul.co.kr/news/publicnews/2026/05/31/20260531500006", "checked": "2026-11-06" }] },
       { "id": "case_cheongsan", "region_type": "섬", "name": "완도 청산도 슬로걷기 축제", "plan_type": "운영 개선", "facility_type": "섬 관광", "region": "전남광주통합특별시 완도군", "depopulation_area": true, "opening": "added", "applies_to": ["섬 관광", "문화관광"],
         "event_days": 30, "event_period": "2025-04-05~05-04", "event_visitors": 50198,
         "monthly": 4183, "measure": "축제 한 달(2025-04-05~05-04) 방문 50,198명", "method": "50,198명 ÷ 12개월(연 1회 행사 기준)", "basis": "source",
+        "trend_label": "완도 청산도", "trend_spot": "슬로시티청산도",
         "sources": [{ "title": "메트로신문 2025-05-08", "url": "https://www.metroseoul.co.kr/article/20250508500287", "checked": "2026-11-06" }] },
       { "id": "case_imja", "region_type": "섬", "name": "신안 임자도 섬 홍매화 축제", "plan_type": "운영 개선", "facility_type": "섬 관광", "region": "전남광주통합특별시 신안군", "depopulation_area": true, "opening": "added", "applies_to": ["섬 관광", "문화관광"],
         "event_days": 4, "event_period": "2026-02-27~03-02", "event_visitors": 20000,
@@ -746,7 +764,14 @@
         "sources": [{ "title": "코리아타임뉴스 2026-03-03", "url": "https://www.koreatimenews.com/news/article.html?no=1083913", "checked": "2026-11-06" }] },
       { "id": "case_bonsai", "region_type": "섬", "name": "신안 1004섬 분재정원", "plan_type": "복합화", "facility_type": "정원수", "region": "전남광주통합특별시 신안군", "depopulation_area": true, "opening": "new", "applies_to": ["정원수"],
         "monthly": 9804, "measure": "2009년 개장 후 누적 방문객 200만 명 돌파(2026-01 보도)", "method": "200만 명 ÷ 204개월(2009~2025년)", "basis": "source",
+        "trend_label": "신안 1004섬 분재정원", "trend_spot": "천사섬 분재공원",
         "sources": [{ "title": "뉴스와 2026-01-11", "url": "https://www.news-wa.com/amp/travel/tour-korea/2026/01/11/20260111500036", "checked": "2026-11-06" }] },
+      { "id": "case_yeonhong", "region_type": "섬", "name": "고흥 연홍미술관(옛 연홍분교)", "plan_type": "용도 전환", "facility_type": "폐교 활용", "region": "전남광주통합특별시 고흥군", "depopulation_area": true, "opening": "new", "applies_to": ["폐교 활용", "교육"],
+        "trend_only": true, "trend_label": "고흥 연홍미술관", "trend_spot": "연홍미술관", "basis": "source",
+        "sources": [{ "title": "레이디경향 2020-05-28(1998년 폐교한 연홍분교장을 고친 미술관, 2006년 개관)", "url": "https://lady.khan.co.kr/travel/article/202005281024001", "checked": "2026-11-17" }] },
+      { "id": "case_ypark", "region_type": "농촌", "name": "영월 젊은달 와이파크(옛 술샘박물관)", "plan_type": "복합화", "facility_type": "문화관광", "region": "강원특별자치도 영월군", "depopulation_area": true, "opening": "new", "applies_to": ["문화관광", "폐교 활용", "교육"],
+        "trend_only": true, "trend_label": "영월 젊은달 와이파크", "trend_spot": "젊은달 와이파크(술샘박물관)", "basis": "source",
+        "sources": [{ "title": "트위그 2019-09-20(술샘박물관을 고친 복합예술공간)", "url": "https://twig24.com/news/lifestyle/trip/2019/09/20/20190920033003", "checked": "2026-11-17" }] },
       { "id": "case_sangju", "region_type": "소도시", "name": "상주 스마트팜 혁신밸리 견학", "plan_type": "개방·공유", "facility_type": "스마트팜", "region": "경상북도 상주시", "depopulation_area": true, "opening": "added", "applies_to": ["스마트팜", "신재생"],
         "monthly": 152, "measure": "운영 개시(2022-01) 후 7월 20일까지 기술 견학 1천여 명", "method": "1천 명 ÷ 6.6개월(1월 1일~7월 20일)", "basis": "source",
         "sources": [{ "title": "매일신문 2022-07-25", "url": "https://www.imaeil.com/page/view/2022072000482820948", "checked": "2026-11-06" }] }

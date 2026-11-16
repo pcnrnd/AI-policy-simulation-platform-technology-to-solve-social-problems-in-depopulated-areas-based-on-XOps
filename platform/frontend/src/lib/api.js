@@ -10,12 +10,14 @@ const BASE = import.meta.env.VITE_API_BASE_URL || "";
 // 호출부가 opts.timeoutMs로 늘리거나 줄일 수 있다.
 const DEFAULT_TIMEOUT_MS = 30000;
 
-/** 쿼리 파라미터 객체를 ?a=b&c=d 문자열로 (null/undefined 제외). */
-function toQuery(params) {
+/** 쿼리 파라미터 객체를 ?a=b&c=d 문자열로 (null/undefined 제외, 배열은 같은 이름을 반복). */
+export function toQuery(params) {
   if (!params) return "";
   const usp = new URLSearchParams();
   Object.entries(params).forEach(([k, v]) => {
-    if (v !== null && v !== undefined && v !== "") usp.append(k, String(v));
+    (Array.isArray(v) ? v : [v]).forEach((item) => {
+      if (item !== null && item !== undefined && item !== "") usp.append(k, String(item));
+    });
   });
   const s = usp.toString();
   return s ? `?${s}` : "";

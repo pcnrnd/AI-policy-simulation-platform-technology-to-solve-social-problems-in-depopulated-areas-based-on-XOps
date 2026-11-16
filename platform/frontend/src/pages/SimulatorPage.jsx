@@ -777,7 +777,7 @@ export default function SimulatorPage() {
       >
         {recoReady && recommendation.items.length > 0 ? (
           demo
-            ? <PolicyRecommendation region={currentRegion} facilityRows={recommendation.items} chartSeed={appData.recommendation_charts?.[currentRegion.id]} />
+            ? <PolicyRecommendation region={currentRegion} facilityRows={recommendation.items} />
             : <PolicyRecommendation region={currentRegion} view={recommendation} />
         ) : (
           <Card title={demo ? "시설 활용 추천" : "맞춤 정책 추천"} icon="fa-lightbulb" dataSource={cardSource} data-slot="sim.report.panel">

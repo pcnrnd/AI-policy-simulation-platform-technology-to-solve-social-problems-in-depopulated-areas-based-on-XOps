@@ -30,7 +30,7 @@ check("모든 카탈로그 소스가 is_seed 를 명시한다", () => {
   }
 });
 
-check("ds_01~07 은 시드, ds_08~13 은 실데이터다", () => {
+check("ds_01~07 은 시드, ds_08~15 는 실데이터다", () => {
   const seedIds = schemas.filter((s) => s.is_seed).map((s) => s.id);
   const realIds = schemas.filter((s) => !s.is_seed).map((s) => s.id);
   assert.deepEqual(seedIds, [
@@ -48,7 +48,9 @@ check("ds_01~07 은 시드, ds_08~13 은 실데이터다", () => {
     "ds_10_bccard_dong_industry_sales",
     "ds_11_kt_namwon_monthly_dong_visitors",
     "ds_12_kt_namwon_visitors_by_sex_age",
-    "ds_13_gwto_tourism_indicators"
+    "ds_13_gwto_tourism_indicators",
+    "ds_14_kto_spot_monthly_visitors",
+    "ds_15_mois_living_population_quarterly"
   ]);
 });
 

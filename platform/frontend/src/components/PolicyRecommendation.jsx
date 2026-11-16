@@ -6,26 +6,31 @@ import PerfBadge from "./PerfBadge.jsx";
 import TablePager, { usePager } from "./TablePager.jsx";
 import { ChartEmptyNote } from "./PendingData.jsx";
 import { useChartTheme } from "../hooks/useChartTheme.js";
+import { usePublicTrends } from "../hooks/usePublicTrends.js";
 import { useRenderTiming } from "../lib/perf.js";
 import { formatUnitValue } from "../lib/realSimulation.js";
 import {
-  COMPARE_COLUMNS, DEFAULT_CRITERION, SORT_CRITERIA, conversionCompareView, evidenceChartsView, facilityRecommendationView
+  COMPARE_COLUMNS, DEFAULT_CRITERION, SORT_CRITERIA, caseTrendSpots, conversionCompareView, evidenceChartsView, facilityRecommendationView
 } from "../lib/facilityRecommendation.js";
 
 const MEDAL = ["🥇", "🥈", "🥉"];
-const SERIES_COLORS = [["rgba(59, 130, 246, 0.75)", "rgba(59, 130, 246, 1)"], ["rgba(14, 165, 233, 0.45)", "rgba(14, 165, 233, 1)"]];
+const SERIES_COLORS = [["rgba(59, 130, 246, 0.75)", "rgba(59, 130, 246, 1)"], ["rgba(14, 165, 233, 0.45)", "rgba(14, 165, 233, 1)"], ["rgba(16, 185, 129, 0.45)", "rgba(16, 185, 129, 1)"]];
 const PLAN_COLORS = ["rgba(139, 92, 246, 0.55)", "rgba(139, 92, 246, 1)"];
 
 /** 근거 그래프 하나 — 값이 없으면 캔버스 자리를 그대로 두고 행동 안내만 겹친다. 생활인구 추이는 선 그래프(생활인구·등록인구), 나머지는 막대. */
 function EvidenceChart({ chart, ct }) {
   const isLine = chart.kind === "line";
   const tickUnit = chart.unit.replace(/ 명$/, "");
+  // 월별처럼 눈금이 많은 선 그래프는 점을 감추고 눈금을 듬성듬성(공표된 달의 값은 그대로 선에 있다).
+  const dense = isLine && chart.labels.length > 12;
+  // 눈금은 5개만 — 처음과 마지막 달은 항상 보이게 고르게 나눈다.
+  const shownTicks = new Set(Array.from({ length: 5 }, (_, k) => Math.round((k * (chart.labels.length - 1)) / 4)));
   const data = {
     labels: chart.labels,
     datasets: (chart.series.length ? chart.series : [{ label: chart.title, values: [] }]).map((s, i) => {
       const [fill, line] = chart.id === "plans" ? PLAN_COLORS : SERIES_COLORS[i] ?? SERIES_COLORS[0];
       return isLine
-        ? { label: s.label || chart.title, data: s.values, borderColor: line, backgroundColor: line, borderWidth: 2, pointRadius: 3, pointHoverRadius: 5, tension: 0.25 }
+        ? { label: s.label || chart.title, data: s.values, borderColor: line, backgroundColor: line, borderWidth: 2, pointRadius: dense ? 0 : 3, pointHoverRadius: 5, tension: 0.25 }
         : { label: s.label || chart.title, data: s.values, backgroundColor: fill, borderColor: line, borderWidth: 1.5, borderRadius: 4, maxBarThickness: 44 };
     })
   };
@@ -33,18 +38,15 @@ function EvidenceChart({ chart, ct }) {
     responsive: true,
     maintainAspectRatio: false,
     scales: {
-      x: { grid: { display: false }, ticks: { color: ct.tickStrong, font: { size: 11 } } },
+      x: { grid: { display: false }, ticks: { color: ct.tickStrong, font: { size: 11 }, ...(dense && { autoSkip: false, maxRotation: 0, callback: (_, i) => (shownTicks.has(i) ? chart.labels[i] : "") }) } },
       // 단위는 눈금과 툴팁 값에 붙인다(축 제목·부제는 두지 않는다).
       y: { beginAtZero: true, grid: { color: ct.grid }, ticks: { color: ct.tick, precision: isLine ? undefined : 0, callback: (v) => (v === 0 ? "0" : `${v.toLocaleString("ko-KR")}${tickUnit}`) } }
     },
     plugins: {
-      legend: { display: chart.series.length > 1, position: "bottom", labels: { color: ct.tick, boxWidth: 10, font: { size: 10 } } },
+      legend: { display: chart.series.length > 1 || chart.id === "case", position: "bottom", labels: { color: ct.tick, boxWidth: 10, font: { size: 10 } } },
       tooltip: {
         callbacks: {
-          label: (ctx) => {
-            const period = chart.periods?.[ctx.dataIndex];
-            return `${ctx.dataset.label} ${ctx.parsed.y.toLocaleString("ko-KR")}${tickUnit}${period ? ` · ${period}` : ""}`;
-          }
+          label: (ctx) => `${ctx.dataset.label} ${ctx.parsed.y.toLocaleString("ko-KR")}${tickUnit}`
         }
       }
     }
@@ -99,10 +101,11 @@ function ConversionCompare({ compare }) {
 /**
  * 추천 결과 패널 — Top3 요약 + 막대 차트 + 근거 그래프 묶음(순위 그래프 바로 아래) + 전환 방안 비교 + 상세 표.
  * 데모 표시: facilityRows(시설 × 활용 방안) — 추천 지수 순위로 Top3·차트를 그리고, 표는 열 제목으로 고른 기준으로 정렬한다.
- * 실데이터 표시: view(sensitivityRecommendation 결과) — 같은 형식에 모델 예측상 변화를 넣는다. 전환 방안 비교·근거 그래프 묶음은 같은 자리에 행동 안내.
- * @param {{ region: object, facilityRows?: object[], view?: object, chartSeed?: object }} props
+ * 실데이터 표시: view(sensitivityRecommendation 결과) — 같은 형식에 모델 예측상 변화를 넣는다. 전환 방안 비교·시설 기반 그래프는 같은 자리에 행동 안내.
+ * 생활인구 추이·유사 사례 성과 값은 두 표시 모두 플랫폼 공표 통계 API(usePublicTrends)에서 온다.
+ * @param {{ region: object, facilityRows?: object[], view?: object }} props
  */
-export default function PolicyRecommendation({ region, facilityRows = null, view: realView = null, chartSeed = null }) {
+export default function PolicyRecommendation({ region, facilityRows = null, view: realView = null }) {
   const ct = useChartTheme();
   const [criterion, setCriterion] = useState(DEFAULT_CRITERION);
   const view = useMemo(
@@ -114,9 +117,11 @@ export default function PolicyRecommendation({ region, facilityRows = null, view
   const [selectedId, setSelectedId] = useState(null);
   const selected = ranked.find((s) => s.id === selectedId) ?? ranked[0] ?? null;
   const compare = useMemo(() => conversionCompareView(realView ? null : selected), [realView, selected]);
+  const trendSpots = useMemo(() => (realView ? [] : caseTrendSpots(ranked)), [realView, ranked]);
+  const trends = usePublicTrends(region?.name, trendSpots);
   const evidenceCharts = useMemo(
-    () => (realView ? evidenceChartsView(null, null) : evidenceChartsView(chartSeed, ranked, selected)),
-    [realView, chartSeed, ranked, selected]
+    () => (realView ? evidenceChartsView(trends, null) : evidenceChartsView(trends, ranked, selected)),
+    [realView, trends, ranked, selected]
   );
   const vizMs = useRenderTiming([ranked]);
   const { scoreLabel, scoreUnit, columns } = view;
