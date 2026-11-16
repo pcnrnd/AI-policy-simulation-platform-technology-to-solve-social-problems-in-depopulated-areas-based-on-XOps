@@ -1,0 +1,42 @@
+# flows 데이터(63개 테이블)용 PostgreSQL — 기존 DB(population-db)·앱(platform)과 분리한 project=population-flows.
+# 기동: docker compose -p population-flows --env-file platform/deploy/db.volumes.env -f platform/compose.flows.yaml up -d
+# 운영(dts·EC2): compose.flows.ec2.yaml을 겹친다 — deploy/flows-db-runbook.md 참고.
+#
+# 데이터 볼륨·망은 이 Compose가 만들지 않는다(external). 볼륨 이름은 deploy/db.volumes.env의 POP_DB_FLOWS_VOLUME으로
+# 반드시 지정하며, 누락·오타·미존재면 기동이 실패한다 — 새 빈 볼륨으로 "성공"하는 경로를 막기 위함이다.
+# 앱은 같은 외부망 population-db-data에서 별칭 flows-db로 접속한다.
+name: population-flows
+
+services:
+  # 이미지는 compose.db.yaml의 pg와 같은 postgis/postgis:16-3.4 — 서버에 이미 있는 이미지를 재사용한다.
+  flows-db:
+    image: postgis/postgis:16-3.4
+    # 총 메모리 1.9GB EC2에서 기존 DB 3종과 함께 돌리므로 공유 버퍼·연결 수를 줄인다.
+    command: ["postgres", "-c", "shared_buffers=64MB", "-c", "max_connections=20"]
+    environment:
+      POSTGRES_USER: xops
+      POSTGRES_PASSWORD: xops
+      POSTGRES_DB: flows
+    volumes:
+      - flows-data:/var/lib/postgresql/data
+    networks:
+      db-data:
+        aliases:
+          - flows-db
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U xops -d flows"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+networks:
+  db-data:
+    external: true
+    name: population-db-data
+
+volumes:
+  flows-data:
+    external: true
+    name: ${POP_DB_FLOWS_VOLUME:?deploy/db.volumes.env에 POP_DB_FLOWS_VOLUME 필요}

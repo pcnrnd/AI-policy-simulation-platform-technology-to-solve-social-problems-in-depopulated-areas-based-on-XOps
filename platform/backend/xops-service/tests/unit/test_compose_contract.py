@@ -174,3 +174,30 @@ def test_driver_requirements_are_installed_in_image() -> None:
     assert "requirements-db.txt" in dockerfile
     drivers = (service_root / "requirements-db.txt").read_text(encoding="utf-8")
     assert "psycopg" in drivers and "pymongo" in drivers
+
+
+_FLOWS_COMPOSE = _PLATFORM / "compose.flows.yaml"
+_FLOWS_EC2_COMPOSE = _PLATFORM / "compose.flows.ec2.yaml"
+
+
+def test_flows_compose_is_separate_project_without_host_port() -> None:
+    spec = _load(_FLOWS_COMPOSE)
+    assert spec["name"] == "population-flows"
+    service = spec["services"]["flows-db"]
+    assert service["image"] == _load(_DB_COMPOSE)["services"]["pg"]["image"]
+    assert "ports" not in service
+    assert service["healthcheck"]["test"]
+    assert spec["networks"]["db-data"] == {"external": True, "name": _SHARED_NETWORK}
+    assert service["networks"]["db-data"]["aliases"] == ["flows-db"]
+    volume = spec["volumes"]["flows-data"]
+    assert volume["external"] is True
+    assert re.fullmatch(r"\$\{POP_DB_FLOWS_VOLUME:\?.+\}", volume["name"])
+    assert "flows-data:/var/lib/postgresql/data" in service["volumes"]
+
+
+def test_flows_ec2_overlay_pins_digest_and_binds_loopback() -> None:
+    service = _load(_FLOWS_EC2_COMPOSE)["services"]["flows-db"]
+    assert service["pull_policy"] == "never"
+    assert service["image"].startswith("${POP_DB_PG_IMAGE:?")
+    assert service["ports"] == ["127.0.0.1:5435:5432"]
+    assert service["environment"]["POSTGRES_PASSWORD"].startswith("${DB_PASSWORD:?")
