@@ -337,7 +337,7 @@ export function facilityRecommendationView(rows, criterionKey = DEFAULT_CRITERIO
   };
 }
 
-// 전환 방안 비교(순위 그래프 아래) — 두 모드가 같은 표 구조를 갖는다. 값이 없으면 같은 자리에 행동 안내만.
+// 전환 방안 비교(근거 그래프 묶음 아래) — 두 모드가 같은 표 구조를 갖는다. 값이 없으면 같은 자리에 행동 안내만.
 export const COMPARE_COLUMNS = ["전환 방안", "사용률 변화", "생활인구 변화", "정주인구 변화", "근거", "판단"];
 const COMPARE_GUIDE = "시설 자료를 등록하면 전환 방안을 비교합니다.";
 
@@ -365,7 +365,7 @@ export function conversionCompareView(item) {
   };
 }
 
-// 근거 그래프 묶음(전환 방안 비교 아래) — 두 모드가 같은 세 자리를 갖는다. 값이 없으면 같은 자리에 행동 안내만.
+// 근거 그래프 묶음(순위 그래프 바로 아래, 전환 방안 비교 위) — 두 모드가 같은 세 자리를 갖는다. 값이 없으면 같은 자리에 행동 안내만.
 export const EVIDENCE_CHART_SLOTS = [
   { id: "population", title: "생활인구 추이", guide: "생활인구 통계를 연결하면 표시됩니다." },
   { id: "case", title: "유사 사례 성과", guide: "시설 이용실적을 등록하면 표시됩니다." },

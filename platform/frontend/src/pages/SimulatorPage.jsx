@@ -354,14 +354,14 @@ export default function SimulatorPage() {
       datasets: [
         {
           // 전국 인구감소 지역 분포 속에서 분석 대상의 상대 위치를 보여주는 배경 점
-          label: "전국 비교 지자체",
+          label: "인구감소 지역",
           data: (appData.benchmark_regions ?? []).map((r) => ({ x: r.riskIndex, y: r.population, name: r.name })),
           backgroundColor: "rgba(148, 163, 184, 0.55)",
           pointRadius: 5,
           pointHoverRadius: 8
         },
         {
-          label: "분석 대상 지자체",
+          label: "선택 지자체",
           data: appData.regions.map((r) => ({ x: r.riskIndex, y: r.population, name: r.name })),
           backgroundColor: appData.regions.map((r) =>
             r.id === currentRegion.id ? "rgba(59, 130, 246, 1)" : "rgba(245, 158, 11, 0.7)"
@@ -390,7 +390,18 @@ export default function SimulatorPage() {
       }
     },
     plugins: {
-      legend: { display: false },
+      // 점 색의 뜻: 회색 = 인구감소 지역, 파랑 = 선택 지자체(두 번째 계열은 점마다 색이 달라 범례 색을 직접 정한다).
+      legend: {
+        display: true,
+        position: "bottom",
+        labels: {
+          color: ct.tick, boxWidth: 8, font: { size: 11 }, usePointStyle: true,
+          generateLabels: (chart) => chart.data.datasets.map((d, i) => {
+            const color = i === 0 ? "rgba(148, 163, 184, 0.8)" : "rgba(59, 130, 246, 1)";
+            return { text: d.label, fillStyle: color, strokeStyle: color, pointStyle: "circle", datasetIndex: i, hidden: !chart.isDatasetVisible(i), fontColor: ct.tick };
+          })
+        }
+      },
       tooltip: {
         callbacks: {
           label: (cx) => `${cx.raw.name}: 위험지수 ${cx.raw.x}, 인구 ${cx.raw.y.toLocaleString()}명`

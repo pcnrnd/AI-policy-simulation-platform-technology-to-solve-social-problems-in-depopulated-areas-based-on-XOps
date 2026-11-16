@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { activeModelPair, selectedFactorModel, inferenceMatches, inferenceContextKey, inferenceRequest, validateInference, rankSensitivity, observedFeatureLabel, createRequestGate,
   contributionFactors, contributionSplit, realSliderControls, forecastSeries, sensitivityRecommendation, regionRealStatus,
   REAL_GUIDE_TEXT, FACTOR_GUIDE_TEXT, FACTOR_PENDING_TEXT, FACTOR_RUN_LOCK_TEXT, REAL_LOAD_FAILED_TEXT, REAL_PREDICT_FAILED_TEXT, REAL_VERSION_CHANGED_TEXT,
-  FACTOR_IDLE_TEXT, FACTOR_FAILED_TEXT, FACTOR_VERSION_CHANGED_TEXT, FACTOR_EXPLAIN_TEXT, CORRELATION_BASIS_TEXT,
+  FACTOR_IDLE_TEXT, FACTOR_FAILED_TEXT, FACTOR_VERSION_CHANGED_TEXT, FACTOR_EXPLAIN_TEXT,
   DEMO_FACTOR_TARGET, FACTOR_PANEL_FEATURES, FACTOR_LIST_LIMIT, factorAnalysisView, factorDiagnosis, featureUnit, targetUnit, formatUnitValue, sliderValueText } from "./realSimulation.js";
 const proof={instance_id:"factor",model_type:"factor_analysis",version_id:"v1",job_id:"job1",dataset_id:"registered1",dataset_hash:"a".repeat(64),region_id:"namwon",target:"observed_sales_krw",dong_code:"45190250",prediction_period:202401,features:["y_lag1"],mode:"real",source:"real"};
 const sim={provenance:{...proof,instance_id:"sim",model_type:"simulation",dataset_id:"registered2",version_id:"v2",job_id:"job2"}};
@@ -67,7 +67,7 @@ assert.equal(regionRealStatus({instances:[statusCatalog.instances[0]]},"namwon",
 // 안내·알림 문구에 내부 사유·구현명·서버/브라우저 원문 금지
 const INTERNAL=/세종대|미수신|릿지|ridge|lag|XGBoost|SHAP|HTTP|fetch|Failed|Error|mock|seed|시드|modelops|\/api\//i;
 const guideTexts=[REAL_GUIDE_TEXT,FACTOR_GUIDE_TEXT,FACTOR_PENDING_TEXT,FACTOR_RUN_LOCK_TEXT,REAL_LOAD_FAILED_TEXT,REAL_PREDICT_FAILED_TEXT,REAL_VERSION_CHANGED_TEXT,
-  FACTOR_IDLE_TEXT,FACTOR_FAILED_TEXT,FACTOR_VERSION_CHANGED_TEXT,FACTOR_EXPLAIN_TEXT,CORRELATION_BASIS_TEXT];
+  FACTOR_IDLE_TEXT,FACTOR_FAILED_TEXT,FACTOR_VERSION_CHANGED_TEXT,FACTOR_EXPLAIN_TEXT];
 // 인과로 과장하는 표현 금지 — 각주의 "인과 효과가 아닙니다"만 허용한다.
 const CAUSAL=/효과가 있|때문에|유발|원인|덕분/;
 for (const text of guideTexts) { assert.doesNotMatch(text,INTERNAL,text); assert.doesNotMatch(text,CAUSAL,text); }
@@ -207,7 +207,7 @@ assert.doesNotMatch(hook,/set(?:Feedback|LoadFailed)\([^)]*(?:error|err)\b/);
 assert.doesNotMatch(hook,/runAnalysis|factor_analysis/);
 // ③·④ 수치도 ①과 같은 단위 규칙 — 원·명은 정수 천 단위(소수 3자리 원문 금지), 데모 ③·④도 같은 함수를 지난다.
 const fracView=sensitivityRecommendation([{feature:"y_lag1",from:405844595.289,to:406455718.59,delta:611123.301}],label,"원","관측 소비");
-assert.equal(fracView.items[0].scoreText,"+611,123");assert.deepEqual(fracView.items[0].cells,["405,844,595 → 406,455,719","611,123"]);
+assert.equal(fracView.items[0].scoreText,"+611,123");assert.deepEqual(fracView.items[0].cells,["405,844,595 → 406,455,719 원","611,123 원"]);
 assert.equal(formatUnitValue(425891010.194,"원"),"425,891,010");assert.equal(formatUnitValue(1234.6,"점"),"1,235");
 assert.doesNotMatch(read("lib","realSimulation.js"),/formatValue|maximumFractionDigits: 3/);
 const forecastCard=read("components","RealForecastResult.jsx"),recoPanel=read("components","PolicyRecommendation.jsx");

@@ -444,7 +444,7 @@ export default function ReporterPage() {
         </div>
       </Card>
 
-      <Card title="보고서 미리보기 (A4 레이아웃)" icon="fa-eye">
+      <Card title="보고서 미리보기" icon="fa-eye">
         {/* 미리보기 패널은 데모 토글과 무관하게 같은 자리에 남긴다 — 예전엔 CSS로 패널을 통째로
             가려서 "왜 비었는지"를 읽을 수 없었다. 표시할 데이터가 없으면 제목만 남긴다. */}
         <div className="report-preview-panel">

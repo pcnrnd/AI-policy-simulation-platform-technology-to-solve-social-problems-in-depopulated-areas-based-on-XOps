@@ -35,7 +35,7 @@ function EvidenceChart({ chart, ct }) {
     scales: {
       x: { grid: { display: false }, ticks: { color: ct.tickStrong, font: { size: 11 } } },
       // 단위는 눈금과 툴팁 값에 붙인다(축 제목·부제는 두지 않는다).
-      y: { beginAtZero: true, grid: { color: ct.grid }, ticks: { color: ct.tick, precision: isLine ? undefined : 0, callback: (v) => `${v.toLocaleString("ko-KR")}${tickUnit}` } }
+      y: { beginAtZero: true, grid: { color: ct.grid }, ticks: { color: ct.tick, precision: isLine ? undefined : 0, callback: (v) => (v === 0 ? "0" : `${v.toLocaleString("ko-KR")}${tickUnit}`) } }
     },
     plugins: {
       legend: { display: chart.series.length > 1, position: "bottom", labels: { color: ct.tick, boxWidth: 10, font: { size: 10 } } },
@@ -216,7 +216,7 @@ export default function PolicyRecommendation({ region, facilityRows = null, view
         {evidenceCharts.map((chart) => <EvidenceChart key={chart.id} chart={chart} ct={ct} />)}
       </section>
 
-      {/* 전환 방안 비교 — 순위 그래프 바로 아래·근거 그래프 위, 두 모드 같은 표 구조 */}
+      {/* 전환 방안 비교 — 근거 그래프 묶음 아래·표 위, 두 모드 같은 표 구조 */}
       <ConversionCompare compare={compare} />
 
       <div className={view.criterion ? "table-container reco-page-table" : "table-container"}>

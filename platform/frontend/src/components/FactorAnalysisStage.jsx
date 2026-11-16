@@ -115,7 +115,7 @@ export default function FactorAnalysisStage({
               <div className="pl-source-note">
                 <i className="fa-solid fa-database" aria-hidden="true"></i> {view.basis}
               </div>
-              <p className="pl-stat-baseline">{FACTOR_EXPLAIN_TEXT}</p>
+              <p className="pl-stat-baseline sr-only">{FACTOR_EXPLAIN_TEXT}</p>
             </>
         ))}
 
