@@ -399,3 +399,10 @@
 .real-flow-evidence dd { margin: 0; overflow-wrap: anywhere; }
 .real-flow-guide { border-left: 3px solid var(--accent-blue); padding-left: 12px; }
 @media (max-width: 640px) { .real-flow-evidence dl { grid-template-columns: 1fr; } }
+/* ③ 릿지·Chronos-2 다음 달 예측 나란히 */
+.sim-compare { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-color); text-align: center; }
+.sim-compare-cell { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sim-compare-tag { font-size: 11px; color: var(--text-secondary); }
+.sim-compare-cell strong { font-size: 16px; font-weight: 700; color: var(--text-primary); }
+.sim-compare-range { font-size: 11px; color: var(--text-secondary); }
+.sim-compare-guide { margin: 2px 0 0; font-size: 12px; color: var(--text-secondary); }

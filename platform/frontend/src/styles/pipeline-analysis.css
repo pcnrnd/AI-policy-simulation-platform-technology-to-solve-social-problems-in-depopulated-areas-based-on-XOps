@@ -485,8 +485,59 @@
 .pl-corr li {
   font-size: 12px;
   color: var(--text-secondary);
-  padding: 3px 0;
+  padding: 1px 0; /* 이름이 두 줄로 내려가도 옆 진단 카드와 줄 높이가 맞게(카드 아래 빈 공간 40px 이하) */
 }
+/* ② 요인 기여도 — 이름 왼쪽, 기여도 값 오른쪽 정렬 */
+.pl-corr li:has(b) {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+.pl-corr li:has(b) span {
+  min-width: 0;
+  overflow-wrap: anywhere; /* 이름을 자르지 않는다 — 좁은 폭에서는 두 줄로 내려 전체가 보이게 */
+}
+.pl-corr li b {
+  flex-shrink: 0;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.pl-corr-pos li b { color: var(--accent-teal); }
+.pl-corr-neg li b { color: var(--accent-red); }
+.pl-contrib-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 12px;
+}
+.pl-contrib-more {
+  flex-shrink: 0;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--accent-blue);
+  border-radius: 999px;
+  padding: 3px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.pl-contrib-more:hover { background: var(--surface-hover); }
+.pl-contrib-more:focus-visible { outline: 2px solid var(--border-focus); outline-offset: 2px; }
+/* ② 둘째 줄(모델 정보·검증) — 모델 카드는 기여도 분해·학습 모델 상자를 나란히 두고, 입력 요인 칩은 정해진 높이 안에서 넘겨 본다
+   (요인이 많은 실데이터에서도 옆 검증 카드와 줄 높이를 맞춘다). */
+.pl-result-row { margin-top: 20px; }
+.pl-model-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+.pl-model-pair .pl-model-box { margin: 0; padding: 10px 12px; }
+.pl-model-pair .pl-model-chips { max-height: 96px; }
+/* 1280 폭 등에서는 학습 모델 상자 제목이 두 줄이 된다 — 칩 상자를 줄여 옆 검증 카드와 줄 높이를 맞춘다(카드 아래 빈 공간 40px 이하). */
+@media (max-width: 1365px) { .pl-model-pair .pl-model-chips { max-height: 92px; } }  /* 칩 세 줄(줄 간격 33px)이 잘리지 않는 높이 */
 
 /* STAGE② 문제 진단 — 유형·변화율 머리, 요인 행, 진단 항목, 지표별 상태 */
 .pl-diag {

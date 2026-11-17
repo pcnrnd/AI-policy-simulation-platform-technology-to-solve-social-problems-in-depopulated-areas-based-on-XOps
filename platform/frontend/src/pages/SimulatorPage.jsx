@@ -12,19 +12,22 @@ import ModelEvidence from "../components/ModelEvidence.jsx";
 import SimulatorMap, { SimulatorMapDetails, riskGrade } from "../components/SimulatorMap.jsx";
 import SimulatorDock from "../components/SimulatorDock.jsx";
 import RealForecastResult from "../components/RealForecastResult.jsx";
+import ForecastCompare from "../components/ForecastCompare.jsx";
 import { useAppState } from "../context/AppStateContext.jsx";
 import { useChartTheme } from "../hooks/useChartTheme.js";
 import { useRealSimulation } from "../hooks/useRealSimulation.js";
 import { useFactorAnalysis } from "../hooks/useFactorAnalysis.js";
+import { useForecastCompare } from "../hooks/useForecastCompare.js";
 import { usePublicTrends, useRegionStay } from "../hooks/usePublicTrends.js";
 import { getScrollBehavior } from "../lib/motion.js";
 import { facilityRows, recoControlSig, unlinkedControlNote, withRegionStay } from "../lib/facilityRecommendation.js";
 import { YEAR_LABELS, computeTrends, budgetToFactor, controlBoostOf, ANALYSIS_STEPS } from "../lib/simulation.js";
+import { instanceLabel } from "../lib/modelops.js";
 import {
-  REAL_TARGETS, REAL_GUIDE_TEXT, REAL_CONTROLS_LOCK_TEXT, FACTOR_GUIDE_TEXT, FACTOR_PENDING_TEXT, FACTOR_RUN_LOCK_TEXT, FACTOR_IDLE_TEXT,
+  REAL_TARGETS, REAL_GUIDE_TEXT, REAL_CONTROLS_LOCK_TEXT, FACTOR_GUIDE_TEXT, FACTOR_PENDING_TEXT, FACTOR_RUN_LOCK_TEXT,
   diagnosisView, simFrameView, quarterYoyChange, AUTO_TARGET, AUTO_TARGET_LABEL, DEMO_FACTOR_TARGET, realUnavailableText, selectedFactorModel, inferenceMatches, inferenceContextKey, factorAnalysisView,
   observedFeatureLabel, rankSensitivity, targetUnit, formatUnitValue,
-  realSliderControls, forecastSeries, sensitivityRecommendation, regionRealStatus
+  realSliderControls, forecastSeries, sensitivityRecommendation, regionRealStatus, FACTOR_SCOPES, activeModelPair, forecastCompareView
 } from "../lib/realSimulation.js";
 
 // 실데이터 표시에서 관측 입력을 바꾼 뒤 시뮬레이션 추론(읽기 전용 계산)을 다시 부르기까지의 대기.
@@ -73,6 +76,8 @@ export default function SimulatorPage() {
   const [target, setTarget] = useState("observed_sales_krw");
   // 실데이터 학습 대상 "자동(가장 나빠진 지표)" — 기본값. [요인분석 실행]이 지표별로 추론해 target 을 고른 지표로 옮긴다.
   const [auto, setAuto] = useState(true);
+  // ① 요인 범위 — ② 기여도 카드의 표시 범위(전체 / 정책 관련 요인만). 두 모드 같음, 기본 전체.
+  const [factorScope, setFactorScope] = useState("all");
   // 행정동은 고른 지역과 함께 기억한다 — 지역이 바뀌면 "전체"(첫 옵션)로 돌아가 이전 지역 코드를 요청에 싣지 않는다.
   const [dongPick, setDongPick] = useState({ regionId: currentRegion.id, code: "" });
   const dong = dongPick.regionId === currentRegion.id ? dongPick.code : "";
@@ -110,8 +115,15 @@ export default function SimulatorPage() {
   const dongOptions = real.context?.dong_options ?? [];
   const label = (feature) => observedFeatureLabel(feature, target, dongOptions);
   const regions = appData.regions.map(({ id, name }) => ({ id, name }));
+  const regionNameOf = (id) => appData.regions.find((r) => r.id === id)?.name ?? id;
   const simProof = real.context?.provenance;
   const dongName = dongOptions.find((row) => row.code === simProof?.dong_code)?.name ?? simProof?.dong_code ?? "—";
+  // ③ 릿지·Chronos-2 비교 줄 — 실데이터는 시뮬레이션 활성 모델(선택 행정동), 데모는 합성 패널의 요인분석 활성 모델(같은 경로).
+  const compareModel = demo ? factorModel : real.ready ? activeModelPair(real.catalog, currentRegion.id, target).simulation : undefined;
+  const compareDong = demo ? "" : simProof?.dong_code;
+  const compare = useForecastCompare({ mode, model: compareModel, dong: compareDong });
+  const compareView = forecastCompareView(compare.result, { mode, modelId: compareModel?.id, versionId: compareModel?.active_version,
+    dong: compareDong }, demo ? targetUnit(DEMO_FACTOR_TARGET) : unit);
   // 조절변수(x) — 데모는 지역 사례의 시설 변수, 실데이터는 시뮬레이션 모델의 조정 가능한 관측 입력. 바뀌면 기본값으로.
   const controls = demo ? currentRegion.case.simulation.controls ?? [] : realSliderControls(real.context, label, unit);
   const controlsKey = [mode, currentRegion.id, demo ? factorModel?.active_version : simProof?.version_id,
@@ -510,9 +522,8 @@ export default function SimulatorPage() {
   const demoYoy = demo ? quarterYoyChange(demoTrends.population?.points) : null;
   const diagHead = demo ? { change: demoYoy, basis: "전년 같은 분기 대비" } : {};
   const autoRanking = !auto || !factorView ? null : demo ? [{ target: DEMO_FACTOR_TARGET, change: demoYoy }] : factor.ranking;
-  const factorLine = <PendingData text={FACTOR_PENDING_TEXT} />;
-  const factorIdle = <PendingData running={analysisRunning} text={FACTOR_IDLE_TEXT} />;
-  const factorPlaceholders = factorMissing ? [guide(FACTOR_GUIDE_TEXT, moveAction), factorLine, factorLine] : [factorIdle, factorIdle, factorIdle];
+  // ① 실행 바 아래 안내 — 활성 요인분석 모델이 없을 때만(모델이 있는 지역으로 이동 버튼 포함). 결과 자리 안내는 ②가 맡는다.
+  const factorNotice = factorMissing ? guide(FACTOR_GUIDE_TEXT, moveAction) : null;
   const factorRunInfo = factorView ? factorView.runInfo
     : demo ? "인구 구조·시설 지표 9개 요인 · 학습 대상 생활인구" : `등록 학습데이터 기준 · 학습 대상 ${targetName}`;
   // ③ 설정 띠 다섯 칸 — 두 모드 같은 형식(값·표지·칩), 값만 다르다.
@@ -546,7 +557,14 @@ export default function SimulatorPage() {
           onChange={(event) => moveToModel(factorModels.find((row) => row.id === event.target.value))}
         >
           {!factorModel && <option value="">{factor.loading ? "모델 확인 중…" : factor.loadFailed ? "모델 목록 조회 실패" : "이 지역·대상의 활성 모델 없음"}</option>}
-          {factorModels.map((row) => <option key={row.id} value={row.id}>{row.name} · {appData.regions.find((r) => r.id === row.region_id)?.name} · {demo ? "생활인구" : REAL_TARGETS[row.target]}</option>)}
+          {/* 내부 등록 이름 대신 사람이 읽는 이름(종류 · 지역 · 학습 대상, 오케스트레이터와 같은 규칙) */}
+          {factorModels.map((row) => <option key={row.id} value={row.id}>{instanceLabel(row, regionNameOf)}</option>)}
+        </select>
+      </label>
+      <label>
+        요인 범위
+        <select aria-label="요인 범위" value={factorScope} onChange={(e) => setFactorScope(e.target.value)}>
+          {FACTOR_SCOPES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
         </select>
       </label>
       {!demo && real.loading && <p role="status">모델과 관측 입력 확인 중…</p>}
@@ -584,14 +602,11 @@ export default function SimulatorPage() {
         stepIndex={factor.step}
         steps={ANALYSIS_STEPS}
         onRun={handleRunAnalysis}
-        view={factorView}
-        placeholders={factorPlaceholders}
+        versionTitle={factorView?.model.versionId}
+        notice={factorNotice}
         conditions={conditions}
         runLockTitle={factorLockTitle}
         runTitle={factorRetry ? "다시 확인" : null}
-        evidence={<ModelEvidence slot="sim.factor.evidence" result={factorResult?.analysis} regions={regions} label={factorLabel}
-          datasetName={() => factorResult?.dataset?.name ?? factorResult?.analysis.provenance.dataset_id}
-          emptyText={factorMissing ? FACTOR_PENDING_TEXT : "[요인분석 실행] 후 모델·학습데이터 근거가 표시됩니다."} />}
       />
 
       {/* ── STAGE ② 요인분석 결과 ── */}
@@ -600,7 +615,11 @@ export default function SimulatorPage() {
         onToggle={() => toggleStage("stage-result")}
         locked={analysisStatus !== "done"}
         running={analysisRunning}
-        split={factorView?.split}
+        view={factorView}
+        scope={factorScope}
+        evidence={<ModelEvidence slot="sim.factor.evidence" result={factorResult?.analysis} regions={regions} label={factorLabel}
+          datasetName={() => factorResult?.dataset?.name ?? factorResult?.analysis.provenance.dataset_id}
+          emptyText={factorMissing ? FACTOR_PENDING_TEXT : "[요인분석 실행] 후 모델·학습데이터 근거가 표시됩니다."} />}
         diagnosis={diagnosisView(factorView, autoRanking, demo ? currentRegion.case.problemDiagnosis : [], diagHead)}
         diagnosisSource={cardSource}
         pendingText={factorMissing ? FACTOR_PENDING_TEXT : null}
@@ -727,6 +746,7 @@ export default function SimulatorPage() {
             ) : (
               realPending
             )}
+            <ForecastCompare view={compareView} loading={compare.loading} />
             {/* 계산 근거 — 예측 입력 기여도·검증 오차·기준선·활성 버전(이전 STAGE ①·② 실데이터 내용) */}
             <ModelEvidence slot="sim.sim.evidence" demo={demo} state={evidenceState} result={simShown ?? real.context} regions={regions} datasetName={real.datasetName} label={label} />
           </Card>

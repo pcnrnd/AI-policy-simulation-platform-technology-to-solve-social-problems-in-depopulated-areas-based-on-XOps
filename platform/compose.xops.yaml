@@ -23,6 +23,9 @@ services:
       # 조회 전용 클라이언트(타 부서 서버 보관) — 값은 기동 환경(.env)에서 주입, 미설정이면 비활성.
       - XOPS_READONLY_CLIENT_ID=${XOPS_READONLY_CLIENT_ID:-}
       - XOPS_READONLY_CLIENT_SECRET=${XOPS_READONLY_CLIENT_SECRET:-}
+      # 원격 예측 모델(Chronos-2) 주소·토큰 — 기동 환경(.env)에서만 주입, 미설정이면 원격 예측 없음(릿지만).
+      - XOPS_REMOTE_FORECAST_URL=${XOPS_REMOTE_FORECAST_URL:-}
+      - XOPS_REMOTE_FORECAST_TOKEN=${XOPS_REMOTE_FORECAST_TOKEN:-}
     healthcheck:
       # 생존 확인(liveness) — 프로세스가 GET /에 응답하는지만 본다. DB 준비(readiness)가 아니다.
       # slim 이미지에 curl이 없어 python urllib을 쓴다(비-2xx·연결 실패는 예외 → 종료코드 1).
