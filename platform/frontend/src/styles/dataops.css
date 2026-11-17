@@ -400,7 +400,7 @@
   vertical-align: middle;
 }
 
-/* 1280 폭에서 카탈로그 표가 넘치지 않게 긴 객체명·수집 범위는 말줄임(전체 값은 title) */
+/* 1280 폭에서 카탈로그 표가 넘치지 않게 긴 객체명·수집 범위는 칸 폭(132px) 안에서 줄바꿈 */
 .catalog-table th {
   white-space: nowrap;
 }
@@ -413,9 +413,8 @@
 .catalog-cell-clip {
   display: inline-block;
   max-width: 132px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere; /* 자르지 않고 칸 폭 안에서 줄바꿈(전체 값이 보이게) */
+  white-space: normal;
   vertical-align: middle;
 }
 
@@ -759,6 +758,6 @@
 }
 .training-dataset-table { table-layout: fixed; width: 100%; }
 .training-dataset-table th, .training-dataset-table td { padding: 12px 8px; white-space: nowrap; }
-.training-dataset-table td > span { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.training-dataset-table td > span { display: block; min-width: 0; overflow-wrap: anywhere; white-space: normal; } /* 자르지 않고 칸 안에서 줄바꿈 */
 .training-dataset-actions .btn { padding: 4px 8px; font-size: 12px; }
 .training-registration-detail code { overflow-wrap: anywhere; }

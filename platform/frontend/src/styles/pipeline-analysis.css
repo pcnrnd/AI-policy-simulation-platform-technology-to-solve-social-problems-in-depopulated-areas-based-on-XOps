@@ -485,19 +485,18 @@
 .pl-corr li {
   font-size: 12px;
   color: var(--text-secondary);
-  padding: 3px 0;
+  padding: 1px 0; /* 이름이 두 줄로 내려가도 옆 진단 카드와 줄 높이가 맞게(카드 아래 빈 공간 40px 이하) */
 }
 /* ② 요인 기여도 — 이름 왼쪽, 기여도 값 오른쪽 정렬 */
 .pl-corr li:has(b) {
   display: flex;
   justify-content: space-between;
+  align-items: baseline;
   gap: 10px;
 }
 .pl-corr li:has(b) span {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap; /* 한 줄로 두어 폭이 좁아도 줄 높이가 늘지 않게(전체 이름은 title) */
+  overflow-wrap: anywhere; /* 이름을 자르지 않는다 — 좁은 폭에서는 두 줄로 내려 전체가 보이게 */
 }
 .pl-corr li b {
   flex-shrink: 0;

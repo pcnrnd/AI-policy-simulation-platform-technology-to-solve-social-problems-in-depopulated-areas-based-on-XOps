@@ -54,7 +54,7 @@
 
 .card-title i { color: var(--accent-blue); }
 
-/* 대시보드 정책 영향 프로파일 — 선택 상자는 줄이지 않고 긴 제목만 말줄임해 한 줄을 유지한다. */
+/* 대시보드 정책 영향 프로파일 — 선택 상자는 줄이지 않고, 긴 제목은 자르지 않고 줄바꿈해 전체를 보인다. */
 .policy-profile-card .card-title {
   min-width: 0;
 }
@@ -62,9 +62,7 @@
   flex-shrink: 0;
 }
 .policy-profile-card .card-title-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
   min-width: 0;
 }
 

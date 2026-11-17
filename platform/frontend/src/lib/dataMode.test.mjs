@@ -96,5 +96,12 @@ assert.equal(new Set(palette).size, palette.length);
 assert.match(overview, /<Radar data=\{radarData\} options=\{radarOpts\} \/>\s*<\/div>/);
 assert.equal(overview.match(/radarSummary === null\s*\? DEMO_ONLY_HINT/g)?.length, 1);
 assert.match(srcText("styles/components.css"), /\.card-title-area \{[^}]*gap: 12px;/);
-assert.match(srcText("styles/components.css"), /\.policy-profile-card \.card-title-text \{[^}]*text-overflow: ellipsis;/);
+// 긴 정책 영향 프로파일 제목은 자르지 않고 줄바꿈해 전체를 보인다(11-17 잘림 개선).
+assert.match(srcText("styles/components.css"), /\.policy-profile-card \.card-title-text \{[^}]*overflow-wrap: anywhere;/);
+assert.doesNotMatch(srcText("styles/components.css"), /\.policy-profile-card \.card-title-text \{[^}]*text-overflow: ellipsis;/);
+// ② 요인 이름·DataOps 카탈로그·학습데이터 표 칸도 말줄임 대신 줄바꿈(이름 전체가 보이게).
+for (const [file, rule] of [["styles/pipeline-analysis.css", /\.pl-corr li:has\(b\) span \{[^}]*\}/], ["styles/dataops.css", /\.catalog-cell-clip \{[^}]*\}/], ["styles/dataops.css", /\.training-dataset-table td > span \{[^}]*\}/]]) {
+  const block = srcText(file).match(rule)[0];
+  assert.match(block, /overflow-wrap: anywhere/, block); assert.doesNotMatch(block, /text-overflow: ellipsis/, block);
+}
 console.log("dataMode: 전환 요청 취소·epoch 격리·추천 저장키·mock 보고서 실측 호출 0·real 보고서 시드 값 차단·모드 배지 문구·화면 문구 금지어·알림 원문 차단 PASS");
