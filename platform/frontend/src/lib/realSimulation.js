@@ -191,6 +191,35 @@ const DIAGNOSIS_TREND_PCT = 5;
 // 계절 영향 표시 기준 — 월별 계절성 두 항의 |기여도| 합이 전체 |기여도| 합에서 차지하는 비율.
 const DIAGNOSIS_SEASONAL_SHARE = 0.15;
 
+const trendKind = (change) => (change < -DIAGNOSIS_TREND_PCT ? "감소형" : change > DIAGNOSIS_TREND_PCT ? "증가형" : "정체형");
+
+/** 다음 달 추정이 전년 같은 달 관측보다 몇 % 변하는지(요인분석 view 기준). 전년 같은 달 값이 없으면 null. */
+export function yoyChange(view) {
+  const all = [...view.factors, ...view.rest];
+  const input = (feature) => all.find((row) => row.feature === feature)?.input;
+  const yoy = input("y_yoy");
+  const prediction = view.model.prediction;
+  if (Number.isFinite(yoy) && yoy > 0 && input("has_yoy") !== 0 && Number.isFinite(prediction)) return ((prediction - yoy) / yoy) * 100;
+  return null;
+}
+
+export const AUTO_TARGET = "auto";
+export const AUTO_TARGET_LABEL = "자동(가장 나빠진 지표)";
+
+/** 학습 대상별 변화율 → 가장 많이 줄어든 순(전년 비교 불가는 맨 뒤, 같으면 입력 순서). */
+export function rankTargets(entries) {
+  const rank = (e) => (Number.isFinite(e.change) ? e.change : Infinity);
+  return entries.map((e, i) => [e, i]).sort(([a, i], [b, j]) => rank(a) - rank(b) || i - j).map(([e]) => e);
+}
+
+/** ② 진단 카드의 지표별 한 줄 — 순위 순. */
+export function indicatorLine(ranked) {
+  const text = (e) => (Number.isFinite(e.change)
+    ? `${REAL_TARGETS[e.target] ?? e.target} ${trendKind(e.change)} ${e.change < 0 ? "−" : "+"}${Math.abs(e.change).toFixed(1)}%`
+    : `${REAL_TARGETS[e.target] ?? e.target} 전년 비교 불가`);
+  return `지표별: ${ranked.map(text).join(" · ")}`;
+}
+
 /**
  * 요인분석 결과만으로 읽는 문제 유형 진단(실데이터 STAGE ②) — 유형(추정 대 전년 같은 달)·주된 하방/상방 요인·계절 영향.
  * 행정동 항목은 선택 동이 아닌 동의 평균 대비 보정이라 요인으로 내세우지 않는다. 읽을 신호가 없으면 빈 배열.
@@ -200,14 +229,11 @@ const DIAGNOSIS_SEASONAL_SHARE = 0.15;
 export function factorDiagnosis(view) {
   if (!view) return null;
   const all = [...view.factors, ...view.rest];
-  const input = (feature) => all.find((row) => row.feature === feature)?.input;
   const amount = (row) => `${formatUnitValue(row.value, view.unit)} ${view.unit}`;
   const lines = [];
-  const yoy = input("y_yoy");
-  const prediction = view.model.prediction;
-  if (Number.isFinite(yoy) && yoy > 0 && input("has_yoy") !== 0 && Number.isFinite(prediction)) {
-    const change = ((prediction - yoy) / yoy) * 100;
-    const kind = change < -DIAGNOSIS_TREND_PCT ? "감소형" : change > DIAGNOSIS_TREND_PCT ? "증가형" : "정체형";
+  const change = yoyChange(view);
+  if (change !== null) {
+    const kind = trendKind(change);
     lines.push(`유형: ${kind} — 다음 달 추정값이 전년 같은 달 관측보다 ${Math.abs(change).toFixed(1)}% ${change < 0 ? "낮습니다" : "높습니다"}.`);
   }
   const drivers = all.filter((row) => !row.feature.startsWith("dong_")); // |기여도| 내림차순 유지

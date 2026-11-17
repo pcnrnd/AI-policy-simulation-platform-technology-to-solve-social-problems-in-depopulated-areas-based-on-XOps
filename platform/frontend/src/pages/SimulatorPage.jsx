@@ -22,7 +22,7 @@ import { facilityRows, recoControlSig, unlinkedControlNote, withRegionStay } fro
 import { YEAR_LABELS, computeTrends, budgetToFactor, controlBoostOf, ANALYSIS_STEPS } from "../lib/simulation.js";
 import {
   REAL_TARGETS, REAL_GUIDE_TEXT, REAL_CONTROLS_LOCK_TEXT, FACTOR_GUIDE_TEXT, FACTOR_PENDING_TEXT, FACTOR_RUN_LOCK_TEXT, FACTOR_IDLE_TEXT,
-  factorDiagnosis, DEMO_FACTOR_TARGET, realUnavailableText, selectedFactorModel, inferenceMatches, inferenceContextKey, factorAnalysisView,
+  factorDiagnosis, indicatorLine, AUTO_TARGET, AUTO_TARGET_LABEL, DEMO_FACTOR_TARGET, realUnavailableText, selectedFactorModel, inferenceMatches, inferenceContextKey, factorAnalysisView,
   observedFeatureLabel, rankSensitivity, targetUnit, formatUnitValue, formatMonth,
   realSliderControls, forecastSeries, sensitivityRecommendation, regionRealStatus
 } from "../lib/realSimulation.js";
@@ -47,6 +47,8 @@ export default function SimulatorPage() {
 
   // 실데이터 분석 조건 — 두 모드에 같은 select 를 두고 데모는 선택지 1개.
   const [target, setTarget] = useState("observed_sales_krw");
+  // 실데이터 학습 대상 "자동(가장 나빠진 지표)" — 기본값. [요인분석 실행]이 지표별로 추론해 target 을 고른 지표로 옮긴다.
+  const [auto, setAuto] = useState(true);
   // 행정동은 고른 지역과 함께 기억한다 — 지역이 바뀌면 "전체"(첫 옵션)로 돌아가 이전 지역 코드를 요청에 싣지 않는다.
   const [dongPick, setDongPick] = useState({ regionId: currentRegion.id, code: "" });
   const dong = dongPick.regionId === currentRegion.id ? dongPick.code : "";
@@ -145,9 +147,10 @@ export default function SimulatorPage() {
   // 실데이터는 같은 지역·학습 대상의 요인분석 활성 모델이 있어야 실행된다(데모는 자동 준비). 조회 중·실패·모델 없음을 구분한다.
   // 조회 실패면 잠그지 않고 [요인분석 실행]이 목록·입력을 다시 읽는다(재시도).
   const factorRetry = factor.loadFailed && !factorModel;
-  const factorLockTitle = factorModel || factorRetry ? null
+  const autoReady = !demo && auto && factorModels.some((row) => row.region_id === currentRegion.id);
+  const factorLockTitle = factorModel || factorRetry || autoReady ? null
     : factor.loading ? "모델 목록을 확인하는 중입니다." : FACTOR_RUN_LOCK_TEXT;
-  const factorMissing = !factor.loading && !factor.loadFailed && (!factorModel || factor.missing);
+  const factorMissing = !factor.loading && !factor.loadFailed && (!(factorModel || autoReady) || factor.missing);
 
   // 지역·학습 대상·행정동 변경 시 결과 초기화 (지역별 요인분석은 별도 실행 — 요인분석 상태는 훅이 비운다)
   useEffect(() => {
@@ -226,7 +229,12 @@ export default function SimulatorPage() {
       setRecoSig("");
     }
     addConsoleLog(`INFO: ${currentRegion.name} 요인분석 실행`);
-    const analysis = await factor.run();
+    const analysis = !demo && auto
+      ? await factor.runAuto({ onPick: (model) => {
+        setModelPick({ context: [mode, model.region_id, model.target].join("|"), id: model.id, version: model.active_version, explicit: true });
+        setTarget(model.target);
+      } })
+      : await factor.run();
     if (!analysis) return;
     addConsoleLog(`SUCCESS: ${currentRegion.name} 요인분석 완료 — 요인 ${analysis.contributions.length}개 기여도 표시`);
     setOpenStages((s) => ({ ...s, "stage-result": true, "stage-sim": true }));
@@ -447,7 +455,7 @@ export default function SimulatorPage() {
     if (!model || !region) return;
     setModelPick({ context: [mode, model.region_id, model.target].join("|"), id: model.id, version: model.active_version, explicit: true });
     setDongPick({ regionId: region.id, code: "" });
-    if (!demo) setTarget(model.target);
+    if (!demo) { setTarget(model.target); setAuto(false); }
     setCurrentRegion(region);
     addConsoleLog(`INFO: 요인분석 모델이 있는 ${region.name}(으)로 이동했습니다.`);
   };
@@ -494,8 +502,15 @@ export default function SimulatorPage() {
     <div className="real-flow-controls" data-slot="sim.factor.conditions">
       <label>
         학습 대상
-        <select aria-label="학습 대상" value={demo ? "demo" : target} disabled={analysisRunning} onChange={(e) => { if (!demo) { setDong(""); setTarget(e.target.value); } }}>
-          {demo ? <option value="demo">인구</option> : Object.entries(REAL_TARGETS).map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+        <select aria-label="학습 대상" value={demo ? "demo" : auto ? AUTO_TARGET : target} disabled={analysisRunning} onChange={(e) => {
+          if (demo) return;
+          setDong("");
+          if (e.target.value === AUTO_TARGET) { setAuto(true); return; }
+          setAuto(false);
+          setTarget(e.target.value);
+        }}>
+          {demo ? <option value="demo">인구</option> : [<option key={AUTO_TARGET} value={AUTO_TARGET}>{AUTO_TARGET_LABEL}</option>,
+            ...Object.entries(REAL_TARGETS).map(([id, name]) => <option key={id} value={id}>{name}</option>)]}
         </select>
       </label>
       <label>
@@ -563,7 +578,7 @@ export default function SimulatorPage() {
         locked={analysisStatus !== "done"}
         running={analysisRunning}
         split={factorView?.split}
-        diagnosis={demo ? currentRegion.case.problemDiagnosis : factorDiagnosis(factorView)}
+        diagnosis={demo ? currentRegion.case.problemDiagnosis : factorView && factor.ranking?.length ? [...(factorDiagnosis(factorView) ?? []), indicatorLine(factor.ranking)] : factorDiagnosis(factorView)}
         diagnosisSource={cardSource}
         pendingText={factorMissing ? FACTOR_PENDING_TEXT : null}
         showDerive={demo}

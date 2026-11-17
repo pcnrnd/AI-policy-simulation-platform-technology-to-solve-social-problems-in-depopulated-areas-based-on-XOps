@@ -6,7 +6,7 @@ import { activeModelPair, selectedFactorModel, inferenceMatches, inferenceContex
   contributionFactors, contributionSplit, realSliderControls, forecastSeries, sensitivityRecommendation, regionRealStatus,
   REAL_GUIDE_TEXT, FACTOR_GUIDE_TEXT, FACTOR_PENDING_TEXT, FACTOR_RUN_LOCK_TEXT, REAL_LOAD_FAILED_TEXT, REAL_PREDICT_FAILED_TEXT, REAL_VERSION_CHANGED_TEXT,
   FACTOR_IDLE_TEXT, FACTOR_FAILED_TEXT, FACTOR_VERSION_CHANGED_TEXT, FACTOR_EXPLAIN_TEXT,
-  DEMO_FACTOR_TARGET, FACTOR_PANEL_FEATURES, FACTOR_LIST_LIMIT, factorAnalysisView, factorDiagnosis, featureUnit, targetUnit, formatUnitValue, sliderValueText } from "./realSimulation.js";
+  DEMO_FACTOR_TARGET, FACTOR_PANEL_FEATURES, FACTOR_LIST_LIMIT, factorAnalysisView, factorDiagnosis, yoyChange, rankTargets, indicatorLine, AUTO_TARGET_LABEL, featureUnit, targetUnit, formatUnitValue, sliderValueText } from "./realSimulation.js";
 const proof={instance_id:"factor",model_type:"factor_analysis",version_id:"v1",job_id:"job1",dataset_id:"registered1",dataset_hash:"a".repeat(64),region_id:"namwon",target:"observed_sales_krw",dong_code:"45190250",prediction_period:202401,features:["y_lag1"],mode:"real",source:"real"};
 const sim={provenance:{...proof,instance_id:"sim",model_type:"simulation",dataset_id:"registered2",version_id:"v2",job_id:"job2"}};
 const request=inferenceRequest(sim,{y_lag1:100});
@@ -104,7 +104,7 @@ for (const src of [page,factorStage,resultStage]) assert.doesNotMatch(src,/입�
 assert.match(page,/steps=\{ANALYSIS_STEPS\}/);
 assert.match(page,/conditions=\{conditions\}/);
 assert.match(page,/runLockTitle=\{factorLockTitle\}/);
-assert.match(page,/const factorLockTitle = factorModel \|\| factorRetry \? null/);
+assert.match(page,/const factorLockTitle = factorModel || factorRetry || autoReady ? null/); // 자동 대상: 지역에 활성 요인분석 모델이 하나라도 있으면 실행 가능
 assert.match(factorStage,/aria-disabled=\{runLockTitle \? true : undefined\}/);
 // 실데이터 조회 실패면 [요인분석 실행]이 잠기지 않고 재시도(목록·입력 다시 읽기)가 된다 — title "다시 확인".
 assert.match(page,/const factorRetry = factor\.loadFailed && !factorModel;/);
@@ -140,7 +140,7 @@ assert.doesNotMatch(factorHook,/set(?:Feedback|Missing)\([^)]*(?:error|err)\b/);
 // ② 상관관계는 ① 기여도 부호, 진단은 데모 서사/실데이터 안내.
 assert.match(page,/split=\{factorView\?\.split\}/);
 // 실데이터 진단은 제약 문구 대신 ① 결과에서 읽은 신호 — 화면에 "등록 후 제공" 같은 문구가 없다.
-assert.match(page,/diagnosis=\{demo \? currentRegion\.case\.problemDiagnosis : factorDiagnosis\(factorView\)\}/);
+assert.match(page,/diagnosis=\{demo \? currentRegion\.case\.problemDiagnosis : factorView && factor\.ranking\?\.length \? \[\.\.\.\(factorDiagnosis\(factorView\) \?\? \[\]\), indicatorLine\(factor\.ranking\)\] : factorDiagnosis\(factorView\)\}/); // 자동 실행이면 지표별 한 줄을 진단 끝에 더한다
 assert.doesNotMatch(page+resultStage+read("lib","realSimulation.js"),/등록 후 제공|diagnosisNote/);
 // ④ 추천 전 안내는 실데이터에서 "관측 입력", 데모 시설 추천에서 "시설 변수"
 assert.match(page,/\{demo \? "시설 변수를" : "관측 입력을"\}/);
@@ -280,4 +280,21 @@ assert.match(read("hooks","useRealSimulation.js"),/const predictOnly = useCallba
 assert.match(page,/guide\(FACTOR_GUIDE_TEXT, moveAction\)/);
 assert.match(page,/onClick=\{\(\) => moveToModel\(movableModel\)\}[\s\S]*모델이 있는 지역으로 이동/);
 assert.equal(page.match(/moveToModel\(/g)?.length,2); // 호출은 모델 선택 1 + 이동 버튼 1뿐(진입 시 자동 호출 없음)
+// 결정 18: 자동(가장 나빠진 지표) — 순위·지표별 한 줄. 전년 같은 달 값이 없으면 맨 뒤·"전년 비교 불가".
+const entry = (target, change) => ({ target, change });
+assert.deepEqual(rankTargets([entry("nonlocal_visitors", 1), entry("observed_sales_krw", -8.2)]).map((e) => e.target), ["observed_sales_krw", "nonlocal_visitors"]);
+assert.deepEqual(rankTargets([entry("observed_sales_krw", null), entry("nonlocal_visitors", 3)]).map((e) => e.target), ["nonlocal_visitors", "observed_sales_krw"]);
+assert.deepEqual(rankTargets([entry("observed_sales_krw", null), entry("nonlocal_visitors", null)]).map((e) => e.target), ["observed_sales_krw", "nonlocal_visitors"]); // 둘 다 불가 → 입력 순서
+assert.equal(indicatorLine([entry("observed_sales_krw", -8.2), entry("nonlocal_visitors", 1)]), "지표별: 관측 소비 감소형 −8.2% · 타지역 방문객 정체형 +1.0%");
+assert.equal(indicatorLine([entry("nonlocal_visitors", 9.04), entry("observed_sales_krw", null)]), "지표별: 타지역 방문객 증가형 +9.0% · 관측 소비 전년 비교 불가");
+assert.equal(AUTO_TARGET_LABEL, "자동(가장 나빠진 지표)");
+// 변화율은 ② 진단의 유형 계산과 같다(다음 달 추정 대 전년 같은 달).
+const yoyView = (yoy, prediction, has = 1) => factorAnalysisView({ provenance: { ...proof, metrics: {}, baseline: {} }, intercept: 0, prediction,
+  contributions: [{ feature: "y_yoy", input: yoy, value: 1 }, { feature: "has_yoy", input: has, value: 0 }] }, { demo: false, dataset: null, label: salesLabel });
+assert.equal(yoyChange(yoyView(100, 90)), -10);
+assert.equal(yoyChange(yoyView(100, 90, 0)), null); // 전년 같은 달 값 없음
+assert.equal(yoyChange(yoyView(0, 90)), null);
+// 페이지: 학습 대상 첫 항목 자동·기본값, 실행은 자동이면 runAuto
+assert.match(page, /useState\(true\)/);
+assert.match(page, /factor\.runAuto\(\{ onPick/);
 console.log("PASS: current mode/model/version/district provenance, recommendation identity and late response isolation, U20 시나리오 예측 칸·U21 이동 버튼");
