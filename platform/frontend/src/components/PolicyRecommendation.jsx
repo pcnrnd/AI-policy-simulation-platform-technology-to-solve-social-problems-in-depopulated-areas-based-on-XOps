@@ -16,6 +16,22 @@ import {
 const MEDAL = ["🥇", "🥈", "🥉"];
 const SERIES_COLORS = [["rgba(59, 130, 246, 0.75)", "rgba(59, 130, 246, 1)"], ["rgba(14, 165, 233, 0.45)", "rgba(14, 165, 233, 1)"], ["rgba(16, 185, 129, 0.45)", "rgba(16, 185, 129, 1)"]];
 
+const END_DIFF_PLUGIN = {
+  id: "endDiff",
+  afterDatasetsDraw(c) {
+    const text = c.options.plugins.endDiff?.text;
+    const pt = c.getDatasetMeta(1)?.data.at(-1);
+    if (!text || !pt) return;
+    const { ctx } = c;
+    ctx.save();
+    ctx.font = "600 11px sans-serif";
+    ctx.fillStyle = SERIES_COLORS[1][1];
+    ctx.textAlign = "right";
+    ctx.fillText(text, pt.x - 6, pt.y - 8);
+    ctx.restore();
+  }
+};
+
 /** 근거 그래프 하나(선 그래프) — 값이 없으면 캔버스 자리를 그대로 두고 행동 안내만 겹친다. */
 function EvidenceChart({ chart, ct }) {
   const tickUnit = chart.unit.replace(/ 명$/, "");
@@ -28,25 +44,11 @@ function EvidenceChart({ chart, ct }) {
     datasets: (chart.series.length ? chart.series : [{ label: chart.title, values: [] }]).map((s, i) => {
       const line = (SERIES_COLORS[i] ?? SERIES_COLORS[0])[1];
       // 정책 반영 선은 미반영 선(바로 앞 데이터셋)과의 사이를 옅게 칠한다(차이가 없으면 칠하지 않음).
-      const fill = i === 1 && chart.endDiff ? { target: "-1", above: `${line.replace("1)", "0.18)")}`, below: `${line.replace("1)", "0.18)")}` } : false;
+      const fill = i === 1 && chart.endDiff ? { target: "-1", above: `${line.replace("1)", "0.28)")}`, below: `${line.replace("1)", "0.28)")}` } : false;
       return { label: s.label || chart.title, data: s.values, borderColor: line, backgroundColor: line, fill, borderWidth: 2, pointRadius: 2, pointHoverRadius: 5, tension: 0.25, segment: { borderDash: (c) => (c.p1DataIndex >= chart.observed ? [5, 4] : undefined) }, ranges: s.ranges };
     })
   };
-  // 마지막 예측 분기의 반영 선 옆에 차이 값만(+0.29만).
-  const endLabel = {
-    id: "endDiff",
-    afterDatasetsDraw(c) {
-      if (!chart.endDiff) return;
-      const pt = c.getDatasetMeta(1).data.at(-1);
-      const { ctx } = c;
-      ctx.save();
-      ctx.font = "600 11px sans-serif";
-      ctx.fillStyle = SERIES_COLORS[1][1];
-      ctx.textAlign = "right";
-      ctx.fillText(`${chart.endDiff > 0 ? "+" : "−"}${Math.abs(chart.endDiff).toFixed(2)}${tickUnit}`, pt.x - 6, pt.y - 8);
-      ctx.restore();
-    }
-  };
+  const yRange = axisRange(chart.series); // 0이 아니라 값 범위에 맞춘다(눈금은 chart.js가 정리)
   const options = {
     responsive: true,
     maintainAspectRatio: false,
@@ -54,9 +56,11 @@ function EvidenceChart({ chart, ct }) {
     scales: {
       x: { grid: { display: false }, ticks: { color: ct.tickStrong, font: { size: 11 }, ...(dense && { autoSkip: false, maxRotation: 0, callback: (_, i) => (shownTicks.has(i) ? chart.labels[i] : "") }) } },
       // 단위는 눈금과 툴팁 값에 붙인다(축 제목·부제는 두지 않는다).
-      y: { ...axisRange(chart.series), grid: { color: ct.grid }, ticks: { color: ct.tick, callback: (v) => (`${Math.round(v * 10) / 10}${tickUnit}`) } }
+      y: { suggestedMin: yRange?.min, suggestedMax: yRange?.max, grid: { color: ct.grid }, ticks: { color: ct.tick, callback: (v) => (`${+v.toFixed(2)}${tickUnit}`) } }
     },
     plugins: {
+      // 마지막 예측 분기의 반영 선 옆에 차이 값만(+0.29만) — 값은 옵션으로 넘겨 다시 그릴 때마다 최신 값을 쓴다.
+      endDiff: { text: chart.endDiff ? `${chart.endDiff > 0 ? "+" : "−"}${Math.abs(chart.endDiff).toFixed(2)}${tickUnit}` : null },
       legend: { display: chart.series.length > 1, position: "bottom", labels: { color: ct.tick, boxWidth: 10, font: { size: 10 } } },
       tooltip: {
         callbacks: {
@@ -75,7 +79,7 @@ function EvidenceChart({ chart, ct }) {
         <strong>{chart.title}</strong>
       </figcaption>
       <div className="reco-evidence-canvas">
-        <Line data={data} options={options} plugins={[endLabel]} aria-label={`${chart.title} 그래프`} role="img" />
+        <Line data={data} options={options} plugins={[END_DIFF_PLUGIN]} aria-label={`${chart.title} 그래프`} role="img" />
         {chart.empty && <ChartEmptyNote>{chart.empty}</ChartEmptyNote>}
       </div>
     </figure>
