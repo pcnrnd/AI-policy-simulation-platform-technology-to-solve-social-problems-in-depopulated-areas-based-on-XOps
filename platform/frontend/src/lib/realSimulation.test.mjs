@@ -215,9 +215,9 @@ const hook=read("hooks","useRealSimulation.js");
 assert.doesNotMatch(hook,/set(?:Feedback|LoadFailed)\([^)]*(?:error|err)\b/);
 assert.doesNotMatch(hook,/runAnalysis|factor_analysis/);
 // ③·④ 수치도 ①과 같은 단위 규칙 — 원·명은 정수 천 단위(소수 3자리 원문 금지), 데모 ③·④도 같은 함수를 지난다.
-const fracView=sensitivityRecommendation([{feature:"y_lag1",from:405844595.289,to:406455718.59,delta:611123.301}],label,"원","관측 소비");
-assert.equal(fracView.items[0].scoreText,"+611,123");assert.deepEqual(fracView.items[0].cells,["405,844,595 → 406,455,719원","611,123원"]);
-assert.equal(formatUnitValue(425891010.194,"원"),"425,891,010");assert.equal(formatUnitValue(1234.6,"점"),"1,235");
+const fracView=sensitivityRecommendation([{feature:"y_lag1",from:410000000.289,to:410600000.6,delta:600000.311}],label,"원","관측 소비");
+assert.equal(fracView.items[0].scoreText,"+600,000");assert.deepEqual(fracView.items[0].cells,["410,000,000 → 410,600,001원","600,000원"]);
+assert.equal(formatUnitValue(430000000.194,"원"),"430,000,000");assert.equal(formatUnitValue(1234.6,"점"),"1,235");
 assert.doesNotMatch(read("lib","realSimulation.js"),/formatValue|maximumFractionDigits: 3/);
 const forecastCard=read("components","RealForecastResult.jsx"),recoPanel=read("components","PolicyRecommendation.jsx");
 assert.match(forecastCard,/const value = \(number\) => formatUnitValue\(number, unit\);/);assert.equal(forecastCard.match(/\{value\(/g)?.length,6);
@@ -230,7 +230,7 @@ for (const text of [forecastCard,evidence,recoPanel,page]) { assert.doesNotMatch
 for (const text of [forecastCard,recoPanel]) assert.doesNotMatch(text,/\.toLocaleString\(\)/);
 // 슬라이더 현재값 — 데모 정수 칸 표시는 그대로, 실데이터 원은 정수(소수 3자리 원문 금지), 1 미만 칸만 단위 규칙.
 assert.deepEqual([sliderValueText(50,"%",1),sliderValueText(1000,"억",50),sliderValueText(18,"㏊",1),sliderValueText(300,"호",50),sliderValueText(60,"명",5)],["50","1,000","18","300","60"]);
-assert.equal(sliderValueText(405844595.289,"원",4100000),"405,844,595");assert.equal(sliderValueText(405844595.289,"원",0.5),"405,844,595");
+assert.equal(sliderValueText(410000000.289,"원",4000000),"410,000,000");assert.equal(sliderValueText(410000000.289,"원",0.5),"410,000,000");
 assert.equal(sliderValueText(8.934,"%",0.01),"8.93");assert.equal(sliderValueText(NaN,"원",1),"—");
 const dock=read("components","SimulatorDock.jsx");
 assert.doesNotMatch(dock,/maximumFractionDigits: 3/);assert.match(dock,/const shown = sliderValueText\(value, unit, step\);/);assert.equal(dock.match(/\{rangeText\((?:min|max|step)\)\}/g)?.length,3);
@@ -246,10 +246,10 @@ for (const [id,region,target,mode] of [["other","namwon","observed_sales_krw","r
 assert.equal(selectedFactorModel({...selectionCatalog,versions:[{id:"active",instance_id:"other",mode:"real"}]},"chosen","namwon","observed_sales_krw","real"),undefined);
 assert.equal(selectedFactorModel({...selectionCatalog,versions:[]},"chosen","namwon","observed_sales_krw","real"),undefined);
 // min/step 격자에 맞추려고 관측 기본값을 변형하면 기준 예측이 달라진다.
-const exact=realSliderControls({controls:[{feature:"y_lag1",min:255018260,max:668114408,default:403738634.457}],inputs:{}},label,"원")[0];
-assert.equal(exact.default,403738634.457);
+const exact=realSliderControls({controls:[{feature:"y_lag1",min:250000000,max:650000000,default:400000000.5}],inputs:{}},label,"원")[0];
+assert.equal(exact.default,400000000.5);
 assert.equal(exact.exactValue,true);
-assert.equal(exact.step,4100000);
+assert.equal(exact.step,4000000);
 
 // 실제 화면/추론 훅이 공유하는 경계: 이전 모드·선택·버전의 결과는 노출하거나 다시 계산에 쓰지 않는다.
 const expectedContext={mode:"real",region:"namwon",target:"observed_sales_krw",dong:"45190250",modelId:"factor",versionId:"v1"};
@@ -319,9 +319,9 @@ assert.deepEqual(demoFrame, {
   constraint: { value: "1,200억 원", meta: "총 예산" } });
 const realFrame = simFrameView({ demo: false, target: "observed_sales_krw", dongName: "운봉읍",
   controls: ["y_lag1", "y_lag2", "y_yoy"].map((f) => ({ label: observedFeatureLabel(f, "observed_sales_krw") })),
-  context: { inputs: { y_lag1: 403738634 }, provenance: { prediction_period: 202401, range_provenance: { from: 201904, to: 202309 } } } });
+  context: { inputs: { y_lag1: 400000000 }, provenance: { prediction_period: 202401, range_provenance: { from: 201904, to: 202309 } } } });
 assert.deepEqual(realFrame, {
-  objective: { value: "관측 소비 증가", meta: "예측월 2024년 1월" }, demand: { value: "403,738,634원", meta: "전월 관측 소비 · 운봉읍" },
+  objective: { value: "관측 소비 증가", meta: "예측월 2024년 1월" }, demand: { value: "400,000,000원", meta: "전월 관측 소비 · 운봉읍" },
   supply: { value: "해당 없음", meta: null }, adjust: { chips: ["전월", "2개월 전", "전년 같은 달"], meta: "관측 소비" },
   constraint: { value: "2019년 4월~2023년 9월", meta: "입력 조정 범위" } });
 // 모델 준비 전에는 다섯 칸 모두 같은 자리에 "–"(칩 없음).
