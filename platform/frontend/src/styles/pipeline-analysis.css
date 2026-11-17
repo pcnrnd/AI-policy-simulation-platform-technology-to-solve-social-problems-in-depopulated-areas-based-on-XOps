@@ -487,6 +487,63 @@
   color: var(--text-secondary);
   padding: 3px 0;
 }
+/* ② 요인 기여도 — 이름 왼쪽, 기여도 값 오른쪽 정렬 */
+.pl-corr li:has(b) {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+.pl-corr li:has(b) span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap; /* 한 줄로 두어 폭이 좁아도 줄 높이가 늘지 않게(전체 이름은 title) */
+}
+.pl-corr li b {
+  flex-shrink: 0;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.pl-corr-pos li b { color: var(--accent-teal); }
+.pl-corr-neg li b { color: var(--accent-red); }
+.pl-contrib-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+}
+.pl-contrib-foot .pl-source-note { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pl-contrib-more {
+  flex-shrink: 0;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--accent-blue);
+  border-radius: 999px;
+  padding: 3px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.pl-contrib-more:hover { background: var(--surface-hover); }
+.pl-contrib-more:focus-visible { outline: 2px solid var(--border-focus); outline-offset: 2px; }
+/* ② 둘째 줄(모델 정보·검증) — 모델 카드는 기여도 분해·학습 모델 상자를 나란히 두고, 입력 요인 칩은 정해진 높이 안에서 넘겨 본다
+   (요인이 많은 실데이터에서도 옆 검증 카드와 줄 높이를 맞춘다). */
+.pl-result-row { margin-top: 20px; }
+.pl-model-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+.pl-model-pair .pl-model-box { margin: 0; padding: 10px 12px; }
+.pl-model-pair .pl-model-chips { max-height: 96px; }
+/* ① 학습 조건 바꾸기(오케스트레이터로) */
+.pl-train-link {
+  align-self: flex-end;
+  padding: 7px 14px;
+  font-size: 12px;
+}
 
 /* STAGE② 문제 진단 — 유형·변화율 머리, 요인 행, 진단 항목, 지표별 상태 */
 .pl-diag {

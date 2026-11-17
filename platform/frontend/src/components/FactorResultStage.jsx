@@ -1,16 +1,31 @@
+import { useState } from "react";
 import Card from "./Card.jsx";
 import CollapsibleStage from "./CollapsibleStage.jsx";
 import PendingData from "./PendingData.jsx";
+import { displayId } from "../lib/modelops.js";
+import { formatUnitValue, signedAmount, scopeFactors, FACTOR_EXPLAIN_TEXT, FACTOR_IDLE_TEXT, FACTOR_SCOPE_EMPTY_TEXT } from "../lib/realSimulation.js";
 
-// STAGE ② 요인분석 결과
-// 상관관계: STAGE ① 요인 기여도의 +/− 방향(두 모드 같은 함수). 문제 유형 진단: 데모는 예시 서사, 실데이터는 ① 결과에서 읽은 신호.
-// UI(카드 구조)는 항상 노출하고, 데이터는 STAGE ① 요인분석 완료(locked=false) 후 공개한다. 두 카드는 같은 높이(pl-flow-grid stretch).
-// split: { positive, negative } — ① 카드에 보인 요인 행.
-// diagnosis: 두 모드 같은 diagnosisView 결과({ kind, change, rows, items, indicators }). 아래 ③ 연결 줄도 두 모드 같다.
-// pendingText: 잠금 중 대신 보일 문구(예: 모델 준비 안내). diagnosisSource: 진단 값의 출처("mock" 데모 서사 | "api").
-export default function FactorResultStage({ open, onToggle, locked = false, running = false, split = null, diagnosis = null,
-  diagnosisSource = "api", pendingText = null }) {
-  const list = (rows) => rows.length ? rows.map((row) => <li key={row.feature}>{row.label}</li>) : <li>해당 요인 없음</li>;
+// STAGE ② 요인분석 결과 = 모든 결과(결정 26). 두 모드 같은 구조, 값만 다르다.
+// 첫 줄: 요인 기여도(+/− 구역에 요인 이름·기여도 값) + 문제 유형 진단. 둘째 줄: 모델 정보 + 검증. 아래 계산 근거.
+// UI(카드 구조)는 항상 노출하고, 데이터는 STAGE ① 요인분석 완료(locked=false) 후 공개한다. 줄마다 두 카드는 같은 높이(pl-flow-grid stretch).
+// view: factorAnalysisView 결과. scope: 요인 범위("all" | "policy") — 기여도 카드의 표시 범위만 바꾼다(모델·예측값·기여도 합 검증은 전체 기준).
+// diagnosis: 두 모드 같은 diagnosisView 결과. pendingText: 잠금 중 대신 보일 문구. diagnosisSource: 진단 값의 출처("mock" | "api").
+// 구역마다 기여도 큰 순 ZONE_LIMIT개를 먼저 보이고, 더 있으면 [모두 보기]로 펼친다.
+const ZONE_LIMIT = 5;
+export default function FactorResultStage({ open, onToggle, locked = false, running = false, view = null, scope = "all", diagnosis = null,
+  diagnosisSource = "api", pendingText = null, evidence = null }) {
+  const [expanded, setExpanded] = useState(false);
+  const ready = !locked && view;
+  const pending = () => <PendingData running={running} text={pendingText ?? FACTOR_IDLE_TEXT} />;
+  const rows = ready ? scopeFactors([...view.factors, ...view.rest], scope) : [];
+  const zones = [
+    { key: "pos", title: "높인 요인", icon: "fa-arrow-trend-up", rows: rows.filter((r) => r.value > 0) },
+    { key: "neg", title: "낮춘 요인", icon: "fa-arrow-trend-down", rows: rows.filter((r) => r.value < 0) }
+  ];
+  const more = zones.some((z) => z.rows.length > ZONE_LIMIT);
+  const value = (number) => formatUnitValue(number, view?.unit);
+  const versionTitle = view?.model.versionId; // 화면은 짧은 ID, 전체 ID는 title
+  const basisText = view?.basis; // 한 줄로 줄인 출처 줄의 전체 문구(마우스 올리면)
   return (
     <CollapsibleStage
       id="stage-result"
@@ -21,26 +36,34 @@ export default function FactorResultStage({ open, onToggle, locked = false, runn
       onToggle={onToggle}
     >
       <div className="pl-flow-grid pl-flow-2">
-        <Card title="상관관계 분석" icon="fa-scale-balanced" dataSource="api" data-slot="sim.result.card-1">
-          {!locked && split ? (
+        {/* 요인 기여도 — 기존 ①-1 목록과 ② 상관관계 카드를 합쳤다(+/− 구역에 이름과 기여도 값). */}
+        <Card title="AI + 인구학적 요인 분석 결과" icon="fa-list-check" dataSource="api" data-slot="sim.result.card-1">
+          {!ready ? pending() : rows.length === 0 ? <PendingData text={FACTOR_SCOPE_EMPTY_TEXT} /> : (
             <>
               <div className="pl-corr-grid">
-                <div className="pl-corr pl-corr-pos">
-                  <div className="pl-corr-head">
-                    <i className="fa-solid fa-arrow-trend-up" aria-hidden="true"></i> 양의 상관
+                {zones.map((z) => (
+                  <div key={z.key} className={`pl-corr pl-corr-${z.key}`}>
+                    <div className="pl-corr-head">
+                      <i className={`fa-solid ${z.icon}`} aria-hidden="true"></i> {z.title}
+                    </div>
+                    <ul>
+                      {z.rows.length ? (expanded ? z.rows : z.rows.slice(0, ZONE_LIMIT)).map((r) => (
+                        <li key={r.feature}><span title={r.label}>{r.label}</span><b>{signedAmount(r.value, view.unit)}</b></li>
+                      )) : <li>해당 요인 없음</li>}
+                    </ul>
                   </div>
-                  <ul>{list(split.positive)}</ul>
-                </div>
-                <div className="pl-corr pl-corr-neg">
-                  <div className="pl-corr-head">
-                    <i className="fa-solid fa-arrow-trend-down" aria-hidden="true"></i> 음의 상관
-                  </div>
-                  <ul>{list(split.negative)}</ul>
-                </div>
+                ))}
               </div>
+              <div className="pl-contrib-foot">
+                <span className="pl-source-note" title={basisText}><i className="fa-solid fa-database" aria-hidden="true"></i> {view.basis}</span>
+                {more && (
+                  <button type="button" className="pl-contrib-more" onClick={() => setExpanded((v) => !v)} aria-expanded={expanded}>
+                    {expanded ? "접기" : `모두 보기 (${rows.length})`}
+                  </button>
+                )}
+              </div>
+              <p className="pl-stat-baseline sr-only">{FACTOR_EXPLAIN_TEXT}</p>
             </>
-          ) : (
-            <PendingData running={running} text={pendingText ?? "[요인분석 실행] 후 상관관계 분석 결과가 표시됩니다."} />
           )}
         </Card>
 
@@ -55,6 +78,48 @@ export default function FactorResultStage({ open, onToggle, locked = false, runn
           )}
         </Card>
       </div>
+
+      <div className="pl-flow-grid pl-flow-2 pl-result-row">
+        {/* 모델 정보 — 기여도 분해식과 활성 버전. 요인분석 모델은 릿지 회귀(백엔드 RidgeRegressor). */}
+        <Card title="릿지 회귀 예측 모델" icon="fa-microchip" dataSource="api" data-slot="sim.result.card-3">
+          {!ready ? pending() : (
+            <div className="pl-model-pair">
+              <div className="pl-model-box pl-model-xai">
+                <span className="pl-model-tag">기여도 분해</span>
+                <strong>요인별 기여도 합 + 기준값 {value(view.model.intercept)} {view.unit}</strong>
+                <p>= 모델 추정값 {value(view.model.prediction)} {view.unit}</p>
+              </div>
+              <div className="pl-model-box pl-model-dl">
+                <span className="pl-model-tag">학습 모델</span>
+                <strong>요인분석 · 활성 버전 <span title={versionTitle}>{displayId(versionTitle)}</span></strong>
+                <div className="pl-model-chips">
+                  {view.model.features.map((m) => <span className="pl-chip" key={m}>{m}</span>)}
+                </div>
+              </div>
+            </div>
+          )}
+        </Card>
+
+        {/* 검증 결과(결과 융합) */}
+        <Card title="통계적 모델 분석 결과" icon="fa-chart-column" dataSource="api" data-slot="sim.result.card-4">
+          {!ready ? pending() : (
+            <>
+              <div className="pl-fusion-mark">
+                <i className="fa-solid fa-plus" aria-hidden="true"></i> 결과 융합
+              </div>
+              <p className="pl-stat-baseline">
+                검증 평균 절대 오차 {value(view.validation.mae)} {view.unit} · 기준선 {value(view.validation.baselineMae)} {view.unit}
+                {view.validation.baselineName ? `(${view.validation.baselineName})` : ""}
+              </p>
+              <div className="pl-stage-label">분석 대상</div>
+              <ul className="pl-mini-list">
+                {view.validation.targets.map((t) => <li key={t}>{t}</li>)}
+              </ul>
+            </>
+          )}
+        </Card>
+      </div>
+      {evidence}
     </CollapsibleStage>
   );
 }

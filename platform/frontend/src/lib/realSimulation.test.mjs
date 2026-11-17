@@ -2,11 +2,12 @@ import assert from "node:assert/strict";
 import { readFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { instanceLabel } from "./modelops.js";
 import { activeModelPair, selectedFactorModel, inferenceMatches, inferenceContextKey, inferenceRequest, validateInference, rankSensitivity, observedFeatureLabel, createRequestGate,
   contributionFactors, contributionSplit, realSliderControls, forecastSeries, sensitivityRecommendation, regionRealStatus,
   REAL_GUIDE_TEXT, FACTOR_GUIDE_TEXT, FACTOR_PENDING_TEXT, FACTOR_RUN_LOCK_TEXT, REAL_LOAD_FAILED_TEXT, REAL_PREDICT_FAILED_TEXT, REAL_VERSION_CHANGED_TEXT,
   FACTOR_IDLE_TEXT, FACTOR_FAILED_TEXT, FACTOR_VERSION_CHANGED_TEXT, FACTOR_EXPLAIN_TEXT,
-  DEMO_FACTOR_TARGET, FACTOR_PANEL_FEATURES, FACTOR_LIST_LIMIT, factorAnalysisView, diagnosisView, simFrameView, monthText, quarterYoyChange, yoyChange, rankTargets, AUTO_TARGET_LABEL, featureUnit, targetUnit, formatUnitValue, sliderValueText } from "./realSimulation.js";
+  DEMO_FACTOR_TARGET, FACTOR_PANEL_FEATURES, FACTOR_LIST_LIMIT, factorAnalysisView, diagnosisView, simFrameView, monthText, scopeFactors, isNonPolicyFeature, FACTOR_SCOPES, signedAmount, quarterYoyChange, yoyChange, rankTargets, AUTO_TARGET_LABEL, featureUnit, targetUnit, formatUnitValue, sliderValueText } from "./realSimulation.js";
 const proof={instance_id:"factor",model_type:"factor_analysis",version_id:"v1",job_id:"job1",dataset_id:"registered1",dataset_hash:"a".repeat(64),region_id:"namwon",target:"observed_sales_krw",dong_code:"45190250",prediction_period:202401,features:["y_lag1"],mode:"real",source:"real"};
 const sim={provenance:{...proof,instance_id:"sim",model_type:"simulation",dataset_id:"registered2",version_id:"v2",job_id:"job2"}};
 const request=inferenceRequest(sim,{y_lag1:100});
@@ -93,11 +94,12 @@ assert.deepEqual(modeBranchComponents(page),[]);
 assert.deepEqual(modeBranchComponents("const demo = mockDataVisible; return demo ? <MockPage /> : <RealFlow />;"),["MockPage"]);
 assert.deepEqual(modeBranchComponents("const { mockDataVisible: isReal } = s; return isReal ? null : <RealFlow />;"),["RealFlow"]);
 assert.deepEqual(modeBranchComponents("const mock = mockDataVisible; return <>{mock && <MockPanel />}</>;"),["MockPanel"]);
-// ①·② 카드 제목은 두 모드가 같다(기준선 제목) — view 가 제목을 바꾸지 않고, 실데이터 전용 제목이 남지 않는다.
+// 결정 26: ①은 설정·실행만, 결과 카드는 모두 ②. 카드 제목은 두 모드가 같다(view 가 제목을 바꾸지 않는다).
 const read=(...path) => readFileSync(join(here,"..",...path),"utf-8");
 const factorStage=read("components","FactorAnalysisStage.jsx"), resultStage=read("components","FactorResultStage.jsx");
-for (const title of ["AI + 인구학적 요인 분석 결과","XAI · 딥러닝 예측 모델","통계적 모델 분석 결과"]) assert.match(factorStage,new RegExp(`card\\(\\d, "${title.replace(/[+.]/g,"\\$&")}"`));
-for (const title of ["상관관계 분석","문제 유형 진단 결과"]) assert.match(resultStage,new RegExp(`<Card title="${title}"`));
+for (const title of ["AI + 인구학적 요인 분석 결과","문제 유형 진단 결과","릿지 회귀 예측 모델","통계적 모델 분석 결과"]) assert.match(resultStage,new RegExp(`<Card title="${title.replace(/[+.]/g,"\\$&")}"`));
+assert.doesNotMatch(factorStage,/<Card|usePager|TablePager|view\./); // ①에 결과 카드·목록 없음(결정 26)
+assert.doesNotMatch(factorStage+resultStage,/XAI · 딥러닝|상관관계 분석|양의 상관|음의 상관/); // 실제 모델(릿지 회귀)·기여도와 맞지 않는 제목 제거
 for (const src of [factorStage,resultStage]) assert.doesNotMatch(src,/title=\{view|view\.cards\[index\]\.title|corrTitle/);
 for (const src of [page,factorStage,resultStage]) assert.doesNotMatch(src,/입력 지표 기여도 분석|"기여 방향"|"검증 결과"|title: "예측 모델"/);
 // 같은 컨트롤: 단계 칩·조건 select·실행 버튼은 두 모드 공용(실데이터는 실행만 aria-disabled + 사유 title).
@@ -111,14 +113,22 @@ assert.match(page,/const factorRetry = factor\.loadFailed && !factorModel;/);
 assert.match(page,/if \(factorRetry\) \{ factor\.reload\(\); return; \}/);
 assert.match(page,/runTitle=\{factorRetry \? "다시 확인" : null\}/);
 assert.match(factorStage,/title=\{runLockTitle \?\? runTitle \?\? undefined\}/);
-// ①-1 요인 목록은 전체(상위 10 + 나머지)를 5개씩 페이지로 넘겨 본다 — 삭제된 계산 근거 행을 가리키지 않는다.
+// ② 요인 기여도: 전체 요인(상위 10 + 나머지)을 요인 범위로 거른 뒤 +/− 구역에 이름·기여도 값, 구역마다 5개 먼저·[모두 보기]로 전체.
 assert.doesNotMatch(factorStage,/계산 근거에서 확인|<details/);
-assert.match(factorStage,/usePager\(view \? \[\.\.\.view\.factors, \.\.\.view\.rest\] : \[\], undefined, view\?\.listKey\)[\s\S]*factorList\.pageRows\.map\(factorRow\)[\s\S]*<TablePager \{\.\.\.factorList\.pager\} \/>/);
+assert.match(resultStage,/scopeFactors\(\[\.\.\.view\.factors, \.\.\.view\.rest\], scope\)/);
+assert.match(resultStage,/const ZONE_LIMIT = 5;[\s\S]*signedAmount\(r\.value, view\.unit\)[\s\S]*모두 보기/);
+assert.match(resultStage,/rows\.length === 0 \? <PendingData text=\{FACTOR_SCOPE_EMPTY_TEXT\} \/>/);
+// ① 조건 줄: 요인 범위·학습 조건 바꾸기(오케스트레이터)·사람이 읽는 모델 이름 — 두 모드 같음.
+assert.match(page,/aria-label="요인 범위"[\s\S]*FACTOR_SCOPES\.map/);
+assert.match(page,/navigateToTab\("tab-mlops-orch"\)[\s\S]*학습 조건 바꾸기/);
+assert.match(page,/instanceLabel\(row, regionNameOf\)/);
+assert.doesNotMatch(page,/\{row\.name\} ·/); // 내부 등록 이름(phaseb_… 등)을 모델 선택 칸에 보이지 않는다
 // 데모 진단은 사례 서사(출처 mock), 실데이터 진단은 요인분석 결과(출처 api)로 표기한다.
 assert.match(page,/diagnosisSource=\{cardSource\}/);assert.match(resultStage,/dataSource=\{diagnosisSource\}/);
 // 단위별 반올림(공용 포맷) — 카드 수치는 formatUnitValue 로만, 활성 버전은 짧은 ID + title 전체 ID.
 assert.doesNotMatch(factorStage,/formatValue/);
-assert.match(factorStage,/const versionTitle = view\?\.model\.versionId;/);assert.equal(factorStage.match(/title=\{versionTitle\}/g)?.length,2);
+assert.match(resultStage,/const versionTitle = view\?\.model\.versionId;/);assert.equal(resultStage.match(/title=\{versionTitle\}/g)?.length,1);
+assert.equal(factorStage.match(/title=\{versionTitle\}/g)?.length,1);assert.match(page,/versionTitle=\{factorView\?\.model\.versionId\}/);
 // 활성 버전 변경(추론 409)은 다시 실행 안내로 처리하며 자동 학습으로 우회하지 않는다.
 const hookSource=read("hooks","useFactorAnalysis.js");
 assert.match(hookSource,/phase === "predict" && error\?\.status === 409/);
@@ -137,8 +147,8 @@ const factorHook=read("hooks","useFactorAnalysis.js");
 assert.doesNotMatch(factorHook,/ensureDemoFactorModel|\/activate|\/pipelines|available-datasets/);
 assert.match(factorHook,/selectedFactorModel\(catalog, modelId, region, target, mode\)/);
 assert.doesNotMatch(factorHook,/set(?:Feedback|Missing)\([^)]*(?:error|err)\b/);
-// ② 상관관계는 ① 기여도 부호, 진단은 데모 서사/실데이터 안내.
-assert.match(page,/split=\{factorView\?\.split\}/);
+// ② 기여도 카드는 같은 요인분석 view 와 ① 요인 범위를 받는다.
+assert.match(page,/view=\{factorView\}\s*scope=\{factorScope\}/);
 // 실데이터 진단은 제약 문구 대신 ① 결과에서 읽은 신호 — 화면에 "등록 후 제공" 같은 문구가 없다.
 assert.match(page,/diagnosis=\{diagnosisView\(factorView, autoRanking, demo \? currentRegion\.case\.problemDiagnosis : \[\], diagHead\)\}/); // 두 모드 같은 진단 함수·구조(데모 머리 칸은 공표 통계 전년 같은 분기 대비)
 assert.doesNotMatch(page+resultStage+read("lib","realSimulation.js"),/등록 후 제공|diagnosisNote/);
@@ -341,4 +351,15 @@ assert.deepEqual([kindOf(quarterYoyChange(shinanQ)), kindOf(-3), kindOf(20)], ["
 const demoHead = diagOf(salesRows, 90, [{ target: DEMO_FACTOR_TARGET, change: quarterYoyChange(shinanQ) }], [], { change: quarterYoyChange(shinanQ), basis: "전년 같은 분기 대비" });
 assert.deepEqual([demoHead.kind, demoHead.change, demoHead.basis, demoHead.indicators[0].kind, demoHead.indicators[0].change], ["감소형", "−7.1%", "전년 같은 분기 대비", "감소형", "−7.1%"]);
 assert.deepEqual([diagOf(salesRows, 90, null, [], { change: null, basis: "전년 같은 분기 대비" }).change, diagOf(salesRows, 90).basis], ["전년 비교 불가", "전년 같은 달 대비"]);
+// 결정 26: 요인 범위 — "정책 관련 요인만"은 계절성·과거 관측값(y_*)·전년 유무·행정동 보정을 뺀다(순서 유지). 전체는 그대로.
+assert.deepEqual(FACTOR_SCOPES.map((x) => x.label), ["전체", "정책 관련 요인만"]);
+const scopeRows = ["y_lag1", "month_sin", "aging_index", "dong_45", "has_yoy", "month_cos", "y_yoy", "edu_facility_density"].map((feature) => ({ feature }));
+assert.deepEqual(scopeFactors(scopeRows, "policy").map((r) => r.feature), ["aging_index", "edu_facility_density"]);
+assert.equal(scopeFactors(scopeRows, "all"), scopeRows);
+assert.deepEqual(scopeFactors(scopeRows.filter((r) => isNonPolicyFeature(r.feature)), "policy"), []); // 실데이터 입력만이면 빈 목록 → 같은 자리 안내
+assert.deepEqual(FACTOR_PANEL_FEATURES.filter(isNonPolicyFeature), []); // 데모 요인 패널은 모두 정책 관련
+assert.deepEqual([signedAmount(-24000, "원"), signedAmount(3973, "명")], ["−24,000원", "+3,973명"]);
+// 모델 선택 칸 이름: 내부 등록 이름이 아니라 종류 · 지역 · 학습 대상.
+assert.equal(instanceLabel({ name: "phaseb_factor_namwon_x", model_type: "factor_analysis", region_id: "namwon", target: "observed_sales_krw" }, () => "전북특별자치도 남원시"),
+  "요인분석 · 전북특별자치도 남원시 · 관측 소비");
 console.log("PASS: current mode/model/version/district provenance, recommendation identity and late response isolation, U20 시나리오 예측 칸·U21 이동 버튼");

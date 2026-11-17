@@ -155,6 +155,16 @@ const BASELINE_NAMES = { yoy_or_prev_month: "전년 같은 달·전월 관측값
 export const baselineName = (name) => BASELINE_NAMES[name];
 export const FACTOR_LIST_LIMIT = 10;
 
+// ① 요인 범위(결정 26) — 결과에 보일 요인의 표시 범위. 모델·예측값·기여도 합 검증은 전체 기준 그대로.
+export const FACTOR_SCOPES = [{ id: "all", label: "전체" }, { id: "policy", label: "정책 관련 요인만" }];
+/** 정책으로 바꿀 수 없는 입력 — 월별 계절성, 과거 관측값(y_*)·전년 관측값 유무, 행정동 보정(dong_*). */
+export const isNonPolicyFeature = (feature) => feature === "month_sin" || feature === "month_cos" || feature === "has_yoy"
+  || feature.startsWith("y_") || feature.startsWith("dong_");
+/** 요인 범위로 거른 행(순서 유지). scope가 "policy"가 아니면 그대로. */
+export const scopeFactors = (rows, scope) => (scope === "policy" ? rows.filter((row) => !isNonPolicyFeature(row.feature)) : rows);
+// 정책 관련 요인만 골랐는데 남는 요인이 없을 때(실데이터 입력은 과거 관측값·계절성·행정동뿐) 같은 자리의 안내.
+export const FACTOR_SCOPE_EMPTY_TEXT = "정책 관련 요인이 든 학습데이터를 등록해 학습하면 표시됩니다.";
+
 /**
  * 요인분석 추론 결과 → STAGE ①(카드 3개)·②(상관관계) 표시 데이터. 두 모드가 같은 함수를 쓰고,
  * 모드는 출처 문구(basis)만 바꾼다. dataset: 결과의 등록 학습데이터(카탈로그 행, 없으면 ID로 표기).
@@ -280,7 +290,8 @@ export function quarterYoyChange(points) {
   if (!prior || !(living(prior) > 0)) return null;
   return ((living(latest) - living(prior)) / living(prior)) * 100;
 }
-const signedText = (value, unit) => `${value < 0 ? "−" : "+"}${formatUnitValue(Math.abs(value), unit)}${unit}`;
+/** 부호 붙은 금액·인원(−는 긴 빼기 기호) — 예: "−24,000원", "+3,973명". */
+export const signedAmount = (value, unit) => `${value < 0 ? "−" : "+"}${formatUnitValue(Math.abs(value), unit)}${unit}`;
 const percentText = (change) => `${change < 0 ? "−" : "+"}${Math.abs(change).toFixed(1)}%`;
 
 /**
@@ -300,8 +311,8 @@ export function diagnosisView(view, ranking = null, items = [], head = {}) {
   const down = drivers.find((row) => row.value < 0);
   const up = drivers.find((row) => row.value > 0);
   const rows = [
-    down && { dir: "down", name: "하방 요인", label: down.label, value: signedText(down.value, view.unit) },
-    up && { dir: "up", name: "상방 요인", label: up.label, value: signedText(up.value, view.unit) }
+    down && { dir: "down", name: "하방 요인", label: down.label, value: signedAmount(down.value, view.unit) },
+    up && { dir: "up", name: "상방 요인", label: up.label, value: signedAmount(up.value, view.unit) }
   ].filter(Boolean);
   const total = all.reduce((sum, row) => sum + Math.abs(row.value), 0);
   const seasonal = all.filter((row) => row.feature === "month_sin" || row.feature === "month_cos")
