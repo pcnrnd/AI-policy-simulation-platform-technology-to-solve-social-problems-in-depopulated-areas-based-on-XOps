@@ -5,8 +5,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   COMPARE_COLUMNS, DEFAULT_CRITERION, EVIDENCE_CHART_SLOTS, PLAN_TYPES, SORT_CRITERIA,
-  caseTrendData, caseTrendSpots, conversionCompareView, evidenceChartsView, facilityRecommendationView, facilityRows, linkedControls, optionCandidates,
-  capacityCap, comparableCases, populationTrend, recoControlSig, scaleGrade, sortFacilityRows, unlinkedControlNote, withRegionStay, NO_CASE_GUIDE
+  conversionCompareView, evidenceChartsView, facilityRecommendationView, facilityRows, linkedControls, optionCandidates,
+  capacityCap, comparableCases, populationForecast, recoControlSig, scaleGrade, sortFacilityRows, unlinkedControlNote, withRegionStay
 } from "./facilityRecommendation.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -490,7 +490,7 @@ for (const real of [conversionCompareView(null), conversionCompareView({ id: "s"
 
 // 근거 그래프 묶음: 두 자리 고정(추천 활용 방안 구성 그래프는 11-17 사용자 결정으로 삭제). 생활인구 추이·사례 성과 값은 플랫폼 공표 통계 API(usePublicTrends)에서 오고 시드에는 없다.
 // 아래 값은 API 응답과 모양만 같은 합성 숫자다(공표 값은 저장소에 두지 않는다).
-assert.deepEqual(EVIDENCE_CHART_SLOTS.map((s) => s.id), ["population", "case"]);
+assert.deepEqual(EVIDENCE_CHART_SLOTS.map((s) => s.id), ["population", "settle"]);
 assert.equal(seed.recommendation_charts, undefined, "시드에 생활인구 발표 값 없음");
 assert.ok(conversion.cases.every((c) => c.monthly_series === undefined && c.monthly_sources === undefined), "시드에 월별 공표 값 없음");
 // 사례 → 통계표 관광지점 이름(연결 키)만 시드에 둔다. 선 이름은 장소 이름(trend_label).
@@ -499,85 +499,65 @@ assert.deepEqual(conversion.cases.filter((c) => c.trend_spot).map((c) => [c.id, 
   ["case_bonsai", "신안 1004섬 분재정원", "천사섬 분재공원"], ["case_yeonhong", "고흥 연홍미술관", "연홍미술관"],
   ["case_ypark", "영월 젊은달 와이파크", "젊은달 와이파크(술샘박물관)"]
 ]);
-const ymOf = (m) => `${Math.floor(m / 12)}-${String((m % 12) + 1).padStart(2, "0")}`;
-const synthMonths = (start, n, base) => Array.from({ length: n }, (_, k) => ({ ym: ymOf(start + k), value: base + k }));
-const synthSpots = Object.fromEntries(conversion.cases.filter((c) => c.trend_spot).map((c, n) => [c.trend_spot, synthMonths(2023 * 12, 30 + n, 100 * (n + 1))]));
-const synthPopulation = { unit: "만 명", points: [1, 2, 3, 4].map((q) => ({ year: 2025, quarter: q, registered: 1 + q / 10, stay: 3 + q })) };
-const trends = { population: synthPopulation, spots: synthSpots };
-// 생활인구 추이는 선 그래프: 생활인구(등록+체류 합계)와 등록인구 두 선, 발표 분기 그대로.
-assert.deepEqual(populationTrend(synthPopulation), {
-  unit: "만 명", labels: ["25년 1분기", "25년 2분기", "25년 3분기", "25년 4분기"],
-  series: [{ label: "생활인구", values: [5.1, 6.2, 7.3, 8.4] }, { label: "등록인구", values: [1.1, 1.2, 1.3, 1.4] }]
-});
+// 생활인구·정주인구 전망: 합성 분기 값(2024 1분기~2025 4분기, 8개). 생활인구 = 등록+체류, 정주인구 = 등록.
+const synthPopulation = { unit: "만 명", points: [2024, 2025].flatMap((y, yi) => [1, 2, 3, 4].map((q) => ({ year: y, quarter: q, registered: 1 + yi * 0.4 + q / 10, stay: 3 + yi + q }))) };
+const trends = { population: synthPopulation };
+const living = (p) => p.registered + p.stay;
+// 정책 미반영: 4분기 차이 쌍 4개의 평균 증감(생활인구 +1.4, 등록 +0.4)을 같은 분기 전년 값(예측값끼리 이어서)에 더한다.
+const fc = populationForecast(synthPopulation, living, null);
+assert.equal(fc.unit, "만 명");
+assert.equal(fc.labels.length, 16);
+assert.deepEqual([fc.labels[0], fc.labels[3], fc.labels[4], fc.labels[15]], ["25년 1분기", "25년 4분기", "26년 1분기", "28년 4분기"]);
+assert.equal(fc.observed, 4);
+assert.deepEqual(fc.series.map((x) => x.label), ["정책 미반영"]); // 효과 없음 → 반영 선 없음
+assert.deepEqual(fc.series[0].values.slice(0, 5), [6.5, 7.6, 8.7, 9.8, 7.9]); // 관측 4분기, 26년 1분기 = 6.5+1.4
+assert.equal(fc.series[0].values[15], 14); // 9.8 + 3년치 1.4×3 // 28년 4분기 = 25년 4분기 + 3년치
+// 정책 반영: 예측 구간에서만, 효과 중간값을 첫 4분기에 25·50·75·100%로 늘린 뒤 유지. 관측 구간은 미반영과 같다(이어짐).
+const withEffect = populationForecast(synthPopulation, living, { low: 10000, high: 30000 });
+const [none, applied] = withEffect.series;
+assert.deepEqual(withEffect.series.map((x) => x.label), ["정책 미반영", "정책 반영"]);
+assert.deepEqual(applied.values.slice(0, 4), none.values.slice(0, 4));
+assert.deepEqual(applied.values.slice(4, 9).map((v, k) => Math.round((v - none.values[4 + k]) * 100) / 100), [0.5, 1, 1.5, 2, 2]); // 중간값 2만 명
+assert.equal(Math.round((applied.values[15] - none.values[15]) * 100) / 100, 2);
+assert.deepEqual([applied.ranges[3], applied.ranges[4], applied.ranges[8]], [null, [none.values[4] + 0.25, none.values[4] + 0.75].map((v) => Math.round(v * 100) / 100), [none.values[8] + 1, none.values[8] + 3].map((v) => Math.round(v * 100) / 100)]);
+// 4분기 차이 쌍이 없으면(관측 4분기 이하) 마지막 관측값을 유지한다.
+const short = populationForecast({ unit: "만 명", points: synthPopulation.points.slice(0, 4) }, living, null);
+assert.deepEqual(short.series[0].values, [5.1, 6.2, 7.3, ...Array(13).fill(8.4)]);
+// 효과 0(정주 효과 없는 방안) → 반영 선 = 미반영 선.
+const zero = populationForecast(synthPopulation, (p) => p.registered, { low: 0, high: 0 });
+assert.deepEqual(zero.series[1].values, zero.series[0].values);
 for (const id of ["namwon", "shinan"]) {
   const charts = evidenceChartsView(trends, views[id].items);
-  assert.deepEqual(charts.map((c) => c.id), ["population", "case"]);
+  assert.deepEqual(charts.map((c) => [c.id, c.title]), [["population", "생활인구 전망"], ["settle", "정주인구 전망"]]);
   for (const chart of charts) {
     assert.equal(chart.empty, null, `${id} ${chart.id}`);
-    assert.ok(chart.series.length >= 1 && chart.series.every((s) => s.values.length === chart.labels.length && (chart.id === "case" ? s.values.some(Number.isFinite) : s.values.every(Number.isFinite))));
+    assert.equal(chart.labels.length, 16);
+    assert.deepEqual(chart.series.map((s) => s.label), ["정책 미반영", "정책 반영"], `${id} ${chart.id} 시설 표시는 두 선`);
+    assert.ok(chart.series.every((s) => s.values.length === 16 && s.values.every(Number.isFinite)));
     assert.ok(chart.title && !("scope" in chart) && !("note" in chart), `${id} ${chart.id} 부제·출처 줄 없음`);
   }
-  assert.deepEqual(charts[0].series.map((s) => s.label), ["생활인구", "등록인구"]);
+  // 반영 선은 고른 방안의 생활인구 효과 중간값만큼 마지막 분기에서 벌어진다(만 명 단위).
+  const choice = views[id].items[0].options.find((o) => o.chosen);
+  const [n, a] = charts[0].series;
+  assert.ok(Math.abs(a.values[15] - n.values[15] - (choice.living.low + choice.living.high) / 2 / 10000) < 0.011, `${id} 생활인구 효과`);
 }
-// 사례 성과: 고른 방문형 방안과 비교할 수 있는 사례 묶음(자기 사례 제외) 가운데 API 월별 값이 있는 사례만, 사례마다 선 하나.
-// 값은 API 값 그대로 — 받지 못한 달은 null로 비우고, 나누거나 채운 값은 없다.
-const labelYm = (ym) => `${ym.slice(2, 4)}년 ${Number(ym.slice(5, 7))}월`;
-const nwCases = evidenceChartsView(trends, view.items)[1];
-// 1순위 피오리움 운영 개선: 퍼플섬·청산도만 선(임자도 홍매화는 통계 지점 없음).
-assert.deepEqual(nwCases.series.map((x) => x.label), ["신안 퍼플섬", "완도 청산도"]);
-assert.ok(nwCases.labels.length <= 36 && nwCases.labels.every((l) => /^\d{2}년 \d{1,2}월$/.test(l)));
-for (const line of nwCases.series) {
-  const src = new Map(synthSpots[conversion.cases.find((c) => c.trend_label === line.label).trend_spot].map((p) => [p.ym, p.value]));
-  line.values.forEach((v, n) => assert.equal(v, src.get([...src.keys()].find((ym) => labelYm(ym) === nwCases.labels[n])) ?? null, `${line.label} ${nwCases.labels[n]}`));
+// 고른 시설 효과 — 고른 시설이 바뀌면 반영 선이 따라 바뀐다. 정주 효과가 없는 방안(방문형)은 두 선이 같다.
+const [first, second] = view.items;
+const gapOf = (item, k) => { const [n, a] = evidenceChartsView(trends, view.items, item)[k].series; return Math.round((a.values[15] - n.values[15]) * 100) / 100; };
+for (const item of [first, second]) {
+  const c = item.options.find((o) => o.chosen);
+  assert.equal(gapOf(item, 1), c.settle ? Math.round(((c.settle.low + c.settle.high) / 2 / 10000) * 100) / 100 : 0, `${item.id} 정주 효과`);
 }
-// 남원 2순위(글로컬캠퍼스 복합화)·3순위(옛 두동초 용도 전환) 빈 자리는 추이 참고 사례로 채운다.
-const linesOf = (id) => evidenceChartsView(trends, view.items, view.items.find((i) => i.id === id))[1].series.map((x) => x.label);
-assert.deepEqual([view.items[1].id, view.items[2].id], ["fac_nw_glocal", "fac_nw_dudong"]);
-assert.deepEqual(linesOf("fac_nw_glocal"), ["영월 젊은달 와이파크"]);
-assert.deepEqual(linesOf("fac_nw_dudong"), ["고흥 연홍미술관"]);
-// 통계 지점이 걸린 사례가 없는 묶음(스마트팜 개방·공유)은 같은 자리에 안내만.
-const farm = evidenceChartsView(trends, view.items, view.items.find((i) => i.id === "fac_nw_farm01"))[1];
-// 사례 없음 빈 상태는 같은 자리의 짧은 행동 안내(다른 순위 카드 선택 또는 사례 이용실적 등록).
-assert.equal(NO_CASE_GUIDE, "다른 순위 카드를 고르거나 비교 사례 이용실적을 등록하세요.");
-assert.deepEqual([farm.labels, farm.series, farm.empty], [[], [], NO_CASE_GUIDE]);
-// 값을 받지 못하면(적재 전·조회 실패) 자리의 기본 안내.
-assert.deepEqual(evidenceChartsView({ population: null, spots: null }, view.items).map((c) => c.empty),
-  ["생활인구 통계를 연결하면 표시됩니다.", "시설 이용실적을 등록하면 표시됩니다."]);
-for (const item of [...view.items, ...facilityRecommendationView(shinan).items]) {
-  const chosen = item.options.find((o) => o.chosen);
-  const chart = evidenceChartsView(trends, view.items, item)[1];
-  const drawn = item.planCases.filter((c) => synthSpots[c.trend_spot]);
-  assert.deepEqual(chart.series.map((x) => x.label), drawn.map((c) => c.trend_label), `${item.id} 그래프 = 비교 사례 중 월별 값이 있는 사례`);
-  assert.ok(!item.planCases.some((c) => c.facility_id === item.id), `${item.id} 자기 사례를 그리지 않음`);
-  assert.ok(chosen.cases.every((id) => !caseById[id].trend_only), `${item.id} 효과 추정에 추이 참고 사례 없음`);
-  if (!item.planCases.some((c) => c.trend_spot)) assert.equal(chart.empty, NO_CASE_GUIDE);
-}
-// API에 한 번에 묻는 지점 목록: 추천 행 전체 사례 묶음의 지점 이름, 중복 없음.
-const askSpots = caseTrendSpots(view.items);
-assert.equal(new Set(askSpots).size, askSpots.length);
-assert.deepEqual([...askSpots].sort(), [...new Set(view.items.flatMap((i) => i.planCases.map((c) => c.trend_spot)).filter(Boolean))].sort());
-assert.ok(askSpots.length <= 10, "API 지점 수 상한 안");
-// 시계열 변환 규칙: 최근 36개월 안, 받지 못한 달은 null, 월별 값 없는 사례 제외, 사례가 모두 없으면 null.
-const synthCases = [{ name: "가", trend_spot: "A" }, { name: "나", trend_label: "나 장소", trend_spot: "B" }, { name: "다" }, { name: "라", trend_spot: "C" }];
-const synthSeries = {
-  A: [{ ym: "2020-01", value: 5 }, { ym: "2023-01", value: 10 }, { ym: "2023-03", value: 30 }, { ym: "2025-12", value: 99 }],
-  B: [{ ym: "2025-10", value: 7 }],
-  C: []
-};
-const trend = caseTrendData(synthCases, synthSeries);
-assert.equal(trend.labels.length, 36);
-assert.deepEqual([trend.labels[0], trend.labels[35]], ["23년 1월", "25년 12월"]);
-assert.deepEqual(trend.series.map((x) => x.label), ["가", "나 장소"]);
-assert.deepEqual([trend.series[0].values[0], trend.series[0].values[1], trend.series[0].values[2], trend.series[0].values[35]], [10, null, 30, 99]);
-assert.equal(trend.series[1].values.filter((v) => v !== null).length, 1);
-assert.equal(caseTrendData([{ name: "다" }], synthSeries), null);
-assert.equal(caseTrendData(synthCases, null), null);
-assert.equal(caseTrendData([], synthSeries), null);
+// 값을 받지 못하면(적재 전·조회 실패) 같은 자리에 기본 안내.
+assert.deepEqual(evidenceChartsView({ population: null }, view.items).map((c) => c.empty), ["생활인구 통계를 연결하면 표시됩니다.", "생활인구 통계를 연결하면 표시됩니다."]);
 const realCharts = evidenceChartsView(null, null);
-assert.deepEqual(realCharts.map((c) => c.empty), ["생활인구 통계를 연결하면 표시됩니다.", "시설 이용실적을 등록하면 표시됩니다."]);
+assert.deepEqual(realCharts.map((c) => c.empty), ["생활인구 통계를 연결하면 표시됩니다.", "생활인구 통계를 연결하면 표시됩니다."]);
 for (const c of realCharts) assert.deepEqual([c.labels, c.series], [[], []]);
-// 실데이터 표시도 같은 API의 생활인구 추이를 같은 자리에 그린다(시설 기반 사례 자리는 안내).
-assert.deepEqual(evidenceChartsView(trends, null).map((c) => c.empty), [null, "시설 이용실적을 등록하면 표시됩니다."]);
+// 실데이터 표시(시설 없음)는 시설 효과가 없으므로 정책 미반영 선만 그린다.
+for (const c of evidenceChartsView(trends, null)) assert.deepEqual(c.series.map((x) => x.label), ["정책 미반영"]);
+// 사례 월별 그래프 코드는 화면에서 빠졌다.
+assert.doesNotMatch(read("lib", "facilityRecommendation.js"), /caseTrendData|caseTrendSpots|NO_CASE_GUIDE|TREND_MONTHS/);
+assert.doesNotMatch(read("hooks", "usePublicTrends.js"), /spot-visitors|spots/);
 // 삭제한 두 요소(11-17 사용자 결정)의 전용 코드·문구가 남지 않는다. 그래프 줄은 두 칸이 줄 너비를 고르게 나누고 좁은 화면은 한 칸.
 assert.doesNotMatch(read("lib", "facilityRecommendation.js"), /추천 활용 방안 구성|ESTIMATE_NOTE|EVENT_NOTE|planCapNote|\bnote:|"plans"/);
 assert.doesNotMatch(read("components", "PolicyRecommendation.jsx"), /PLAN_COLORS|"plans"|chart\.kind|<Bar data=\{data\}/);
@@ -598,7 +578,7 @@ assert.doesNotMatch(read("lib", "facilityRecommendation.js"), /추천 근거/);
 
 // 화면 문구: 계산 매개변수·계산식·가중치·내부 표기(데모·예시·합성 등) 없음.
 const chartTexts = ["namwon", "shinan"].flatMap((id) => evidenceChartsView(trends, views[id].items))
-  .concat(realCharts, evidenceChartsView(trends, view.items, view.items.find((i) => i.id === "fac_nw_farm01"))[1]).flatMap((c) => [c.title, c.empty ?? "", ...c.labels, ...c.series.map((s) => s.label)]);
+  .concat(realCharts).flatMap((c) => [c.title, c.empty ?? "", ...c.labels, ...c.series.map((s) => s.label)]);
 const compareTexts = compares.concat(conversionCompareView(null)).flatMap((c) => [c.title, c.scope, c.empty ?? "", ...c.rows.flatMap((r) => r.cells)]);
 const screenTexts = [
   ...[view, budgetView, utilView, views.shinan].flatMap((v) => [v.title, v.scoreLabel, v.caption, v.basisTip,
@@ -635,7 +615,7 @@ assert.doesNotMatch(panelSrc.slice(mainChartIdx, tableIdx), /facilityRows\s*&&|\
 assert.match(panelSrc, /conversionCompareView\(realView \? null : selected\)/); // 실데이터는 같은 표에 행동 안내
 assert.match(panelSrc, /\{chart\.empty && <ChartEmptyNote>\{chart\.empty\}<\/ChartEmptyNote>\}/);
 assert.doesNotMatch(pageSrc, /chartSeed|recommendation_charts/); // 그래프 값은 시드가 아니라 패널이 API에서 읽는다
-assert.match(panelSrc, /usePublicTrends\(region\?\.name, trendSpots\)/); // 두 표시 공통 경로(모드 분기 없음)
+assert.match(panelSrc, /usePublicTrends\(region\?\.name\)/); // 두 표시 공통 경로(모드 분기 없음)
 // 1~3순위 카드: 같은 div 카드에 버튼 역할·탭 순서·눌림 상태·Enter/Space 선택, 카드 안 효과 줄 1개.
 const cardSrc = panelSrc.slice(panelSrc.indexOf('className="reco-card"'), panelSrc.indexOf('className="reco-score"'));
 for (const attr of ['role="button"', "tabIndex={0}", "aria-pressed={s.id === selected?.id}", "onClick={() => setSelectedId(s.id)}", 'e.key === "Enter" || e.key === " "']) assert.ok(cardSrc.includes(attr), attr);

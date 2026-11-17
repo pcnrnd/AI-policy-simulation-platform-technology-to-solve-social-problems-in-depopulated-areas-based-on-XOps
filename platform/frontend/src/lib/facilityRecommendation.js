@@ -365,78 +365,68 @@ export function conversionCompareView(item) {
 }
 
 // 근거 그래프 묶음(순위 그래프 바로 아래, 전환 방안 비교 위) — 두 모드가 같은 두 자리(선 그래프)를 갖는다. 값이 없으면 같은 자리에 행동 안내만.
-// 고른 방안에 그릴 비교 사례가 없을 때 같은 자리의 행동 안내.
-export const NO_CASE_GUIDE = "다른 순위 카드를 고르거나 비교 사례 이용실적을 등록하세요.";
 export const EVIDENCE_CHART_SLOTS = [
-  { id: "population", title: "생활인구 추이", guide: "생활인구 통계를 연결하면 표시됩니다." },
-  { id: "case", title: "유사 사례 성과", guide: "시설 이용실적을 등록하면 표시됩니다." }
+  { id: "population", title: "생활인구 전망", guide: "생활인구 통계를 연결하면 표시됩니다." },
+  { id: "settle", title: "정주인구 전망", guide: "생활인구 통계를 연결하면 표시됩니다." }
 ];
 
-// 생활인구 추이는 선 그래프 — 생활인구(등록+체류 합계)와 등록인구 두 선. 발표 값(등록·체류, 플랫폼 API)은 그대로 두고 여기서 합산한다.
-const round1 = (v) => Math.round(v * 10) / 10;
-/** @param {{ unit: string, points: {year: number, quarter: number, registered: number, stay: number}[] }} data */
-export function populationTrend(data) {
-  return {
-    unit: data.unit,
-    labels: data.points.map((p) => `${String(p.year).slice(2)}년 ${p.quarter}분기`),
-    series: [
-      { label: "생활인구", values: data.points.map((p) => round1(p.registered + p.stay)) },
-      { label: "등록인구", values: data.points.map((p) => p.registered) }
-    ]
-  };
+const round2 = (v) => Math.round(v * 100) / 100;
+const quarterLabel = (idx) => `${String(Math.floor(idx / 4)).slice(2)}년 ${(idx % 4) + 1}분기`;
+const OBSERVED_QUARTERS = 4; // 가로축에 그리는 최근 관측 분기 수
+const FORECAST_QUARTERS = 12; // 향후 3년
+const RAMP_QUARTERS = 4; // 효과가 100%에 닿는 데 걸리는 분기(25·50·75·100%)
+const PERSONS_PER_MAN = 10000; // 효과는 명, 그래프 단위는 만 명
+
+/**
+ * 인구 전망 — 관측 마지막 4분기 + 향후 12분기. 방법과 가정(화면에는 쓰지 않는다):
+ *  - 정책 미반영: 같은 분기 전년 값 + 평균 연간 증감(관측 구간에서 4분기 차이 나는 쌍들의 평균). 예측값끼리 이어 12분기까지, 쌍이 없으면 마지막 관측값 유지.
+ *  - 정책 반영: 예측 구간에서만 미반영 + 효과 중간값(low·high 평균)을 첫 4분기에 25·50·75·100%로 늘리고 그 뒤 유지. 효과가 null이면 반영선을 만들지 않는다.
+ * @param {{ unit: string, points: {year: number, quarter: number, registered: number, stay: number}[] }} data 공표 분기 값(만 명)
+ * @param {(p: object) => number} valueOf 그릴 값(생활인구 = 등록+체류, 정주인구 = 등록)
+ * @param {{low: number, high: number}|null} effect 고른 방안의 효과(명), 없으면 null
+ */
+export function populationForecast(data, valueOf, effect) {
+  const byIdx = new Map(data.points.map((p) => [p.year * 4 + p.quarter - 1, valueOf(p)]));
+  const idxs = [...byIdx.keys()].sort((a, b) => a - b);
+  const last = idxs[idxs.length - 1];
+  const diffs = idxs.filter((i) => byIdx.has(i - 4)).map((i) => byIdx.get(i) - byIdx.get(i - 4));
+  const annual = diffs.length ? diffs.reduce((a, b) => a + b, 0) / diffs.length : null;
+  const shown = idxs.slice(-OBSERVED_QUARTERS);
+  const base = new Map(byIdx);
+  const future = Array.from({ length: FORECAST_QUARTERS }, (_, k) => last + k + 1);
+  for (const i of future) base.set(i, annual === null ? byIdx.get(last) : (base.get(i - 4) ?? byIdx.get(last)) + annual);
+  const axis = [...shown, ...future];
+  const mid = effect ? (effect.low + effect.high) / 2 / PERSONS_PER_MAN : 0;
+  const bounds = effect ? [effect.low / PERSONS_PER_MAN, effect.high / PERSONS_PER_MAN] : [0, 0];
+  const ramp = (i) => Math.min(Math.max(i - last, 0), RAMP_QUARTERS) / RAMP_QUARTERS;
+  const series = [{ label: "정책 미반영", values: axis.map((i) => round2(base.get(i))) }];
+  if (effect) {
+    series.push({
+      label: "정책 반영",
+      values: axis.map((i) => round2(base.get(i) + mid * ramp(i))),
+      // 예측 구간의 하한~상한(툴팁용) — 관측 구간은 null
+      ranges: axis.map((i) => (i > last ? bounds.map((b) => round2(base.get(i) + b * ramp(i))) : null))
+    });
+  }
+  return { unit: data.unit, labels: axis.map(quarterLabel), observed: shown.length, series };
 }
 
 /**
- * 그래프 묶음 표시 형식. trends(플랫폼 공표 통계)와 items(추천 행)가 없으면 모든 자리가 행동 안내.
- * 사례 성과는 고른 시설(selected)의 방안과 비교할 수 있는 사례 묶음의 관광지점 월별 입장객으로 그린다. 그 묶음이 비면 같은 자리에 안내.
- * 화면에는 제목·축 눈금·범례·값만 나가고 출처·산출 설명은 싣지 않는다(월은 툴팁 제목).
- * @param {{ population: object|null, spots: Record<string, {ym: string, value: number}[]>|null }|null} trends usePublicTrends 결과
+ * 그래프 묶음 표시 형식. trends(플랫폼 공표 통계)가 없으면 모든 자리가 행동 안내.
+ * 고른 시설(selected, 없으면 1순위)의 고른 방안 효과로 정책 반영 선을 더한다. 시설이 없으면(실데이터 표시) 정책 미반영 선만.
+ * 화면에는 제목·축 눈금·범례·값만 나간다.
+ * @param {{ population: object|null }|null} trends usePublicTrends 결과
  * @param {object[]|null} items facilityRecommendationView(...).items
  * @param {object|null} selected items 가운데 고른 시설(없으면 1순위)
  */
-const TREND_MONTHS = 36;
-const ymIndex = (ym) => Number(ym.slice(0, 4)) * 12 + Number(ym.slice(5, 7)) - 1;
-const ymLabel = (index) => `${String(Math.floor(index / 12)).slice(2)}년 ${(index % 12) + 1}월`;
-
-/** 추천 행들의 사례 묶음에 걸린 관광지점 이름(중복 없이) — 공표 통계 API에 한 번에 묻는다. */
-export function caseTrendSpots(items) {
-  return [...new Set((items ?? []).flatMap((i) => (i.planCases ?? []).map((c) => c.trend_spot)).filter(Boolean))];
-}
-
-/**
- * 유사 사례 월별 추이 — 관광지점(trend_spot)의 공표된 월별 입장객이 있는 사례만 선 하나씩, 최근 36개월 안에서.
- * 값이 공표되지 않은 달은 null로 비워 두고(나누거나 채우지 않는다), 월별 값이 없는 사례는 뺀다. 하나도 없으면 null.
- * @param {object[]} cases conversion.cases 가운데 고른 방안의 사례 묶음
- * @param {Record<string, {ym: string, value: number}[]>|null|undefined} spotSeries 관광지점 이름 → 월별 값(플랫폼 API)
- */
-export function caseTrendData(cases, spotSeries) {
-  const withSeries = cases.map((c) => ({ c, points: spotSeries?.[c.trend_spot] ?? [] })).filter((x) => x.points.length);
-  if (!withSeries.length) return null;
-  const indexes = withSeries.flatMap((x) => x.points.map((p) => ymIndex(p.ym)));
-  const end = Math.max(...indexes);
-  const start = Math.max(Math.min(...indexes), end - TREND_MONTHS + 1);
-  const labels = Array.from({ length: end - start + 1 }, (_, i) => ymLabel(start + i));
-  return {
-    unit: "명",
-    labels,
-    series: withSeries.map(({ c, points }) => {
-      const byMonth = new Map(points.map((p) => [ymIndex(p.ym), p.value]));
-      return { label: c.trend_label ?? c.name, values: labels.map((_, i) => byMonth.get(start + i) ?? null) };
-    })
-  };
-}
-
 export function evidenceChartsView(trends, items, selected = null) {
-  const pick = selected ?? items?.[0] ?? null;
-  const cases = pick?.planCases ?? [];
-  // 고른 방안에 월별 통계가 있는 비교 사례가 없으면 사례 그래프 자리에 그 사실만 적는다.
-  // 통계 지점이 걸린 사례가 있는데 값을 받지 못했으면(적재 전·조회 실패) 자리의 기본 안내를 쓴다.
-  const noCase = pick && Array.isArray(pick.planCases) && pick.options?.length && !pick.planCases.some((c) => c.trend_spot)
-    ? NO_CASE_GUIDE : null;
-  // 사례 성과는 공표된 월별 방문객 선 그래프. 월별 값이 있는 사례가 없으면 같은 자리에 안내만.
-  const caseData = caseTrendData(cases, trends?.spots);
-  const trend = trends?.population ? populationTrend(trends.population) : null;
-  const dataOf = { population: trend, case: caseData };
+  const choice = (selected ?? items?.[0] ?? null)?.options?.find((o) => o.chosen) ?? null;
+  const pop = trends?.population ?? null;
+  const dataOf = {
+    population: pop && populationForecast(pop, (p) => p.registered + p.stay, choice?.living ?? null),
+    // 방문형 방안은 정주 효과가 없다(settle null) — 반영 선은 미반영과 같다.
+    settle: pop && populationForecast(pop, (p) => p.registered, choice ? choice.settle ?? { low: 0, high: 0 } : null)
+  };
   return EVIDENCE_CHART_SLOTS.map((slot) => {
     const data = dataOf[slot.id];
     const labels = data?.labels ?? [];
@@ -445,8 +435,9 @@ export function evidenceChartsView(trends, items, selected = null) {
       title: slot.title,
       unit: data?.unit ?? "",
       labels,
+      observed: data?.observed ?? 0,
       series: data?.series ?? [],
-      empty: labels.length === 0 ? (slot.id === "case" && noCase ? noCase : slot.guide) : null
+      empty: labels.length === 0 ? slot.guide : null
     };
   });
 }
