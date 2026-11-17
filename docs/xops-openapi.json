@@ -2418,6 +2418,95 @@
         }
       }
     },
+    "/api/v3/modelops/instances/{instance_id}/versions/{version_id}/forecast-compare": {
+      "get": {
+        "tags": [
+          "modelops"
+        ],
+        "summary": "Forecast Compare",
+        "operationId": "forecast_compare_api_v3_modelops_instances__instance_id__versions__version_id__forecast_compare_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "instance_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Instance Id"
+            }
+          },
+          {
+            "name": "version_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Version Id"
+            }
+          },
+          {
+            "name": "dong_code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 32
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dong Code"
+            }
+          },
+          {
+            "name": "X-Data-Mode",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "enum": [
+                "mock",
+                "real"
+              ],
+              "type": "string",
+              "default": "real",
+              "title": "X-Data-Mode"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Forecast Compare Api V3 Modelops Instances  Instance Id  Versions  Version Id  Forecast Compare Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v3/modelops/instances/{instance_id}/versions/{version_id}/activate": {
       "post": {
         "tags": [

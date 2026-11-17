@@ -5,7 +5,7 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # xops-service/ 루트 (이 파일: src/core/settings.py → parents[2])
@@ -97,6 +97,10 @@ class Settings(BaseSettings):
     # 행정동 대응표는 코드와 함께 배포되는 정적 자산이라 data/(gitignore·볼륨 마운트 대상)가
     # 아니라 패키지 경로(src/realdata/)에 둔다. settings.py는 src/core/에 있으므로 parents[1] = src.
     realdata_dong_map_path: Path = Path(__file__).resolve().parents[1] / "realdata" / "namwon_dong_map.json"
+
+    # 원격 예측 모델(Chronos-2) 서버 — 비우면(기본) 원격 예측 없음. 토큰은 기동 환경(.env)에서만 넣는다.
+    remote_forecast_url: str = ""
+    remote_forecast_token: SecretStr = SecretStr("")
 
     def validate_runtime(self) -> None:
         """기동 시 정합성 검증 — prod에서 기본 JWT 시크릿이거나 클라이언트 자격증명이 없으면 거부."""

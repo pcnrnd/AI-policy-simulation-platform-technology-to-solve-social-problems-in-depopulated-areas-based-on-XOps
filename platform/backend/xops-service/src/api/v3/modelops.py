@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Header, Query
 from pydantic import BaseModel, Field
 
 from src.api.dependencies import require_auth
-from src.modelops import catalog_datasets, datasets, demo_history, inference, service, store
+from src.modelops import catalog_datasets, datasets, demo_history, inference, remote_forecast, service, store
 
 router = APIRouter(prefix="/modelops", tags=["modelops"])
 Mode = Annotated[Literal["mock", "real"], Header(alias="X-Data-Mode")]
@@ -78,6 +78,8 @@ def recover_jobs() -> None:
 @router.get("/catalog")
 def catalog(auth: Read, mode: Mode = "real") -> dict[str, Any]:
     return {"mode": mode, "source": mode, "types": [{"model_type": key, "name": name} for key, name in store.MODEL_TYPES.items()],
+            # 원격 예측 모델 종류 — 학습·등록 없이 활성 릿지 버전의 학습데이터로 비교 예측만 한다.
+            "remote_types": [{**remote_forecast.REMOTE_MODEL, "available": remote_forecast.available()}],
             "instances": service.instances(mode), "datasets": store.list_assets(mode, "dataset"), "versions": service.versions(mode),
             "pipelines": store.list_assets(mode, "pipeline"), "jobs": store.list_assets(mode, "job"), "audit": store.list_assets(mode, "audit")}
 
@@ -140,6 +142,11 @@ def inference_inputs(instance_id: str, version_id: str, auth: Read, mode: Mode =
 @router.post("/instances/{instance_id}/versions/{version_id}/predict")
 def predict_version(instance_id: str, version_id: str, body: PredictionInput, auth: Read, mode: Mode = "real") -> dict[str, Any]:
     return inference.predict(mode, instance_id, version_id, body.model_dump())
+
+
+@router.get("/instances/{instance_id}/versions/{version_id}/forecast-compare")
+def forecast_compare(instance_id: str, version_id: str, auth: Read, mode: Mode = "real", dong_code: str | None = Query(None, max_length=32)) -> dict[str, Any]:
+    return remote_forecast.compare(mode, instance_id, version_id, dong_code)
 
 
 @router.post("/instances/{instance_id}/versions/{version_id}/activate")
