@@ -382,7 +382,7 @@ const AXIS_PAD = 0.15; // 세로축 위아래 여유(값 범위 대비)
  * 인구 전망 — 관측 마지막 4분기 + 향후 12분기. 방법과 가정(화면에는 쓰지 않는다):
  *  - 정책 미반영: 같은 분기 전년 값 + 그 해의 증감. 증감은 평균 연간 증감 d(관측 구간에서 4분기 차이 나는 쌍들의 평균)를 1년차 d, 2년차 d/2, 3년차 d/4로 줄여 쓴다(추세 감쇠).
  *    예측값끼리 이어 12분기까지, 쌍이 없으면 마지막 관측값 유지.
- *  - 정책 반영: 예측 구간에서만 미반영 + 효과 중간값(low·high 평균)을 첫 4분기에 25·50·75·100%로 늘리고 그 뒤 유지. 효과가 null이면 반영선을 만들지 않는다.
+ *  - 정책 반영: 예측 구간에서만 미반영 + 효과 중간값(low·high 평균)을 첫 4분기에 25·50·75·100%로 늘리고 그 뒤 유지. 효과가 null이면 범례 항목만 두고 값은 null.
  * @param {{ unit: string, points: {year: number, quarter: number, registered: number, stay: number}[] }} data 공표 분기 값(만 명)
  * @param {(p: object) => number} valueOf 그릴 값(생활인구 = 등록+체류, 정주인구 = 등록)
  * @param {{low: number, high: number}|null} effect 고른 방안의 효과(명), 없으면 null
@@ -403,15 +403,14 @@ export function populationForecast(data, valueOf, effect, reflectLabel = REFLECT
   const bounds = effect ? [effect.low / PERSONS_PER_MAN, effect.high / PERSONS_PER_MAN] : [0, 0];
   const ramp = (i) => Math.min(Math.max(i - last, 0), RAMP_QUARTERS) / RAMP_QUARTERS;
   const series = [{ label: "정책 미반영", values: axis.map((i) => round2(base.get(i))) }];
-  if (effect) {
-    series.push({
-      label: reflectLabel,
-      values: axis.map((i) => round2(base.get(i) + mid * ramp(i))),
-      // 예측 구간의 하한~상한(툴팁용) — 관측 구간은 null
-      ranges: axis.map((i) => (i > last ? bounds.map((b) => round2(base.get(i) + b * ramp(i))) : null))
-    });
-  }
-  const gap = series[1] ? round2(series[1].values[axis.length - 1] - series[0].values[axis.length - 1]) : 0;
+  // 두 모드 같은 범례(두 항목) — 효과가 없으면(실데이터 표시) 반영 선 값은 만들지 않고 빈 값(null)으로 둔다.
+  series.push(effect ? {
+    label: reflectLabel,
+    values: axis.map((i) => round2(base.get(i) + mid * ramp(i))),
+    // 예측 구간의 하한~상한(툴팁용) — 관측 구간은 null
+    ranges: axis.map((i) => (i > last ? bounds.map((b) => round2(base.get(i) + b * ramp(i))) : null))
+  } : { label: reflectLabel, values: axis.map(() => null) });
+  const gap = effect ? round2(series[1].values[axis.length - 1] - series[0].values[axis.length - 1]) : 0;
   // 마지막 예측 분기의 반영-미반영 차이(0이면 null: 칠하기·값 표기 없음)
   return { unit: data.unit, labels: axis.map(quarterLabel), observed: shown.length, endDiff: gap || null, series };
 }
@@ -444,7 +443,7 @@ export function axisRange(series) {
 
 /**
  * 그래프 묶음 표시 형식. trends(플랫폼 공표 통계)가 없으면 모든 자리가 행동 안내.
- * 고른 시설(selected, 없으면 1순위)의 고른 방안 효과로 정책 반영 선을 더한다. 시설이 없으면(실데이터 표시) 정책 미반영 선만.
+ * 고른 시설(selected, 없으면 1순위)의 고른 방안 효과로 정책 반영 선을 그린다. 시설이 없으면(실데이터 표시) 같은 범례 두 항목에 반영 값은 비워 둔다.
  * 화면에는 제목·축 눈금·범례·값만 나간다.
  * @param {{ population: object|null }|null} trends usePublicTrends 결과
  * @param {object[]|null} items facilityRecommendationView(...).items

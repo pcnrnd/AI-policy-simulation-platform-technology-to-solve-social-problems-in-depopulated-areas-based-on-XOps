@@ -94,6 +94,7 @@ function EvidenceChart({ chart, ct }) {
       endDiff: { text: chart.endDiff ? `${chart.endDiff > 0 ? "+" : "−"}${Math.abs(chart.endDiff).toFixed(2)}${tickUnit}` : null },
       legend: { display: chart.series.length > 1, position: "bottom", labels: { color: ct.tick, boxWidth: 10, font: { size: 10 } } },
       tooltip: {
+        filter: (item) => item.parsed.y != null, // 값이 없는 반영 항목(실데이터)은 툴팁에 넣지 않는다
         callbacks: {
           label: (ctx) => {
             const range = ctx.dataset.ranges?.[ctx.dataIndex];

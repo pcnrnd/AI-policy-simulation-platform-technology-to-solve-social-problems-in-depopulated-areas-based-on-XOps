@@ -509,7 +509,8 @@ assert.equal(fc.unit, "만 명");
 assert.equal(fc.labels.length, 16);
 assert.deepEqual([fc.labels[0], fc.labels[3], fc.labels[4], fc.labels[15]], ["25년 1분기", "25년 4분기", "26년 1분기", "28년 4분기"]);
 assert.equal(fc.observed, 4);
-assert.deepEqual(fc.series.map((x) => x.label), ["정책 미반영"]); // 효과 없음 → 반영 선 없음
+assert.deepEqual(fc.series.map((x) => x.label), ["정책 미반영", "정책 반영"]); // 효과 없음 → 같은 범례 두 항목, 반영 값은 만들지 않음
+assert.ok(fc.series[1].values.every((v) => v === null) && fc.series[1].values.length === 16);
 assert.deepEqual(fc.series[0].values.slice(0, 5), [6.5, 7.6, 8.7, 9.8, 7.9]); // 관측 4분기, 26년 1분기 = 6.5+1.4
 // 추세 감쇠: 1년차 d(1.4), 2년차 d/2, 3년차 d/4를 같은 분기 전년(예측) 값에 더한다.
 assert.deepEqual([fc.series[0].values[4], fc.series[0].values[8], fc.series[0].values[12]], [7.9, 8.6, 8.95]); // 26년 1분기·27년 1분기·28년 1분기
@@ -577,7 +578,11 @@ const realCharts = evidenceChartsView(null, null);
 assert.deepEqual(realCharts.map((c) => c.empty), ["생활인구 통계를 연결하면 표시됩니다.", "생활인구 통계를 연결하면 표시됩니다."]);
 for (const c of realCharts) assert.deepEqual([c.labels, c.series], [[], []]);
 // 실데이터 표시(시설 없음)는 시설 효과가 없으므로 정책 미반영 선만 그린다.
-for (const c of evidenceChartsView(trends, null)) assert.deepEqual(c.series.map((x) => x.label), ["정책 미반영"]);
+for (const c of evidenceChartsView(trends, null)) {
+  // 실데이터 표시(시설 효과 없음): 범례는 데모와 같은 두 항목, 반영 선 값은 비움·차이 값 없음.
+  assert.deepEqual(c.series.map((x) => x.label), ["정책 미반영", "정책 반영"]);
+  assert.ok(c.series[1].values.every((v) => v === null) && c.endDiff === null);
+}
 // 관측→전망 경계 표지는 관측 분기 수(observed)로 그린다.
 assert.match(read("components", "PolicyRecommendation.jsx"), /phase: \{ observed: chart\.observed/);
 // 사례 월별 그래프 코드는 화면에서 빠졌다.

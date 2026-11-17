@@ -140,7 +140,7 @@ assert.doesNotMatch(factorHook,/set(?:Feedback|Missing)\([^)]*(?:error|err)\b/);
 // ② 상관관계는 ① 기여도 부호, 진단은 데모 서사/실데이터 안내.
 assert.match(page,/split=\{factorView\?\.split\}/);
 // 실데이터 진단은 제약 문구 대신 ① 결과에서 읽은 신호 — 화면에 "등록 후 제공" 같은 문구가 없다.
-assert.match(page,/diagnosis=\{demo \? \{ items: currentRegion\.case\.problemDiagnosis \} : diagnosisView\(factorView, factor\.ranking\)\}/); // 데모는 진단 항목, 실데이터는 구조화한 진단(자동 실행이면 지표별 포함)
+assert.match(page,/diagnosis=\{diagnosisView\(factorView, autoRanking, demo \? currentRegion\.case\.problemDiagnosis : \[\]\)\}/); // 두 모드 같은 진단 함수·구조(점검 항목은 데모 사례 정의에만)
 assert.doesNotMatch(page+resultStage+read("lib","realSimulation.js"),/등록 후 제공|diagnosisNote/);
 // ④ 추천 전 안내는 실데이터에서 "관측 입력", 데모 시설 추천에서 "시설 변수"
 assert.match(page,/\{demo \? "시설 변수를" : "관측 입력을"\}/);
@@ -181,16 +181,19 @@ const dongView=factorAnalysisView({...panelResult,provenance:{...panelProof,dong
 assert.equal(demoView.listKey,`${panelProof.version_id}|all`);assert.notEqual(dongView.listKey,demoView.listKey);
 // 문제 유형 진단(실데이터 ②) — 추정 대 전년 같은 달로 유형, 행정동 제외 최대 하방·상방 요인, 계절 비중.
 const salesLabel=(feature) => observedFeatureLabel(feature,"observed_sales_krw",[{code:"1",name:"운봉읍"}]);
-const diagOf=(contributions,prediction,ranking=null) => diagnosisView(factorAnalysisView({provenance:{...proof,metrics:{},baseline:{}},intercept:0,prediction,contributions},{demo:false,dataset:null,label:salesLabel}),ranking);
+const diagOf=(contributions,prediction,ranking=null,items=[]) => diagnosisView(factorAnalysisView({provenance:{...proof,metrics:{},baseline:{}},intercept:0,prediction,contributions},{demo:false,dataset:null,label:salesLabel}),ranking,items);
 const salesRows=[{feature:"dong_1",input:0,value:-90},{feature:"y_yoy",input:100,value:40},{feature:"month_cos",input:0.5,value:-30},{feature:"has_yoy",input:1,value:0},{feature:"y_lag1",input:80,value:-20}];
 // 머리: 유형·변화율(전년 같은 달 대비), 행: 하방·상방 요인(행정동 제외, 부호 붙은 기여도), 계절 비중 15% 이상이면 계절 행.
-assert.deepEqual(diagOf(salesRows,90),{kind:"감소형",change:"−10.0%",rows:[
+assert.deepEqual(diagOf(salesRows,90),{kind:"감소형",change:"−10.0%",items:[],rows:[
   {dir:"down",name:"하방 요인",label:"월별 계절성 2",value:"−30원"},{dir:"up",name:"상방 요인",label:"전년 같은 달 관측 소비",value:"+40원"},
   {dir:"season",name:"계절 영향",label:"월별 계절성",value:"17%"}],indicators:[]});
 assert.deepEqual([diagOf(salesRows,103).kind,diagOf(salesRows,103).change],["정체형","+3.0%"]);
 // 전년 관측이 없으면 유형을 단정하지 않는다(요인 행만), 결과가 없으면 null.
 const noYoy=diagOf(salesRows.map((r)=>r.feature==="has_yoy"?{...r,input:0}:r),90);
-assert.deepEqual([noYoy.kind,noYoy.change,noYoy.rows.length],[null,null,3]);
+assert.deepEqual([noYoy.kind,noYoy.change,noYoy.rows.length],[null,"전년 비교 불가",3]); // 머리 자리는 그대로, 사실 표시
+// 점검 항목: 넘긴 목록 그대로(데모 사례 정의), 지표별 이름은 데모 대상(생활인구)도 같은 함수로.
+assert.deepEqual(diagOf(salesRows,90,[{target:DEMO_FACTOR_TARGET,change:null}],["가","나"]).items,["가","나"]);
+assert.deepEqual(diagOf(salesRows,90,[{target:DEMO_FACTOR_TARGET,change:null}]).indicators,[{target:DEMO_FACTOR_TARGET,name:"생활인구",kind:null,change:"전년 비교 불가"}]);
 assert.equal(diagnosisView(null),null);
 // 지표별 상태(자동 실행 순위 순) — 비교 불가는 유형 없이 "전년 비교 불가".
 assert.deepEqual(diagOf(salesRows,90,[{target:"observed_sales_krw",change:-8.24},{target:"nonlocal_visitors",change:null}]).indicators,[
@@ -301,6 +304,10 @@ assert.equal(yoyChange(yoyView(0, 90)), null);
 // 페이지: 학습 대상 첫 항목 자동·기본값, 실행은 자동이면 runAuto
 assert.match(page, /useState\(true\)/);
 assert.match(page, /factor\.runAuto\(\{ onPick/);
+// 두 모드 같은 학습 대상 선택지 체계(첫 항목 자동, 기본값 자동)·같은 ③ 표지.
+assert.match(page, /<option value=\{AUTO_TARGET\}>\{AUTO_TARGET_LABEL\}<\/option>\s*\{demo \? <option value=\{DEMO_FACTOR_TARGET\}>생활인구<\/option>/);
+assert.match(page, /status=\{analysisDone \? "② 진단 반영" : null\}/);
+assert.doesNotMatch(page + resultStage, /showDerive/);
 // ③ 설정 띠 다섯 칸 — 두 모드 같은 형식, 기간은 "2019년 4월", 숫자는 천 단위·단위, 조절변수는 반복 이름 없는 칩.
 assert.equal(monthText(201904), "2019년 4월"); assert.equal(monthText(null), "—");
 const demoFrame = simFrameView({ demo: true, sim: { objective: "목적제 기반 강화학습 — 정주여건 만족도 극대화", factors: { demand: "주거·정주 수요량", supply: "임대주택·정주여건 시설 공급" }, constraint: "예산" },

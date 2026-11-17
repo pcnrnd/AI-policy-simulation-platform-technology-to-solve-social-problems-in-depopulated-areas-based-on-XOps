@@ -22,7 +22,7 @@ import { facilityRows, recoControlSig, unlinkedControlNote, withRegionStay } fro
 import { YEAR_LABELS, computeTrends, budgetToFactor, controlBoostOf, ANALYSIS_STEPS } from "../lib/simulation.js";
 import {
   REAL_TARGETS, REAL_GUIDE_TEXT, REAL_CONTROLS_LOCK_TEXT, FACTOR_GUIDE_TEXT, FACTOR_PENDING_TEXT, FACTOR_RUN_LOCK_TEXT, FACTOR_IDLE_TEXT,
-  diagnosisView, simFrameView, AUTO_TARGET, AUTO_TARGET_LABEL, DEMO_FACTOR_TARGET, realUnavailableText, selectedFactorModel, inferenceMatches, inferenceContextKey, factorAnalysisView,
+  diagnosisView, simFrameView, yoyChange, AUTO_TARGET, AUTO_TARGET_LABEL, DEMO_FACTOR_TARGET, realUnavailableText, selectedFactorModel, inferenceMatches, inferenceContextKey, factorAnalysisView,
   observedFeatureLabel, rankSensitivity, targetUnit, formatUnitValue,
   realSliderControls, forecastSeries, sensitivityRecommendation, regionRealStatus
 } from "../lib/realSimulation.js";
@@ -503,6 +503,8 @@ export default function SimulatorPage() {
   // ①·② 요인분석 — 두 모드 같은 매핑(factorAnalysisView). 실데이터 모델 없음이면 안내(전문은 ① 첫 카드 한 곳, 나머지는 한 줄).
   const factorLabel = (feature) => observedFeatureLabel(feature, factorTarget, factorResult?.analysis.dong_options ?? dongOptions);
   const factorView = factorResult ? factorAnalysisView(factorResult.analysis, { demo, dataset: factorResult.dataset, label: factorLabel }) : null;
+  // 지표별 상태 — 자동 실행일 때만. 데모는 대상이 하나(생활인구)라 자동 = 그 지표 하나의 변화율.
+  const autoRanking = !auto || !factorView ? null : demo ? [{ target: DEMO_FACTOR_TARGET, change: yoyChange(factorView) }] : factor.ranking;
   const factorLine = <PendingData text={FACTOR_PENDING_TEXT} />;
   const factorIdle = <PendingData running={analysisRunning} text={FACTOR_IDLE_TEXT} />;
   const factorPlaceholders = factorMissing ? [guide(FACTOR_GUIDE_TEXT, moveAction), factorLine, factorLine] : [factorIdle, factorIdle, factorIdle];
@@ -516,15 +518,17 @@ export default function SimulatorPage() {
     <div className="real-flow-controls" data-slot="sim.factor.conditions">
       <label>
         학습 대상
-        <select aria-label="학습 대상" value={demo ? "demo" : auto ? AUTO_TARGET : target} disabled={analysisRunning} onChange={(e) => {
+        <select aria-label="학습 대상" value={auto ? AUTO_TARGET : demo ? DEMO_FACTOR_TARGET : target} disabled={analysisRunning} onChange={(e) => {
+          // 두 모드 같은 선택지 체계: 첫 항목 "자동(가장 나빠진 지표)"(기본) + 학습 대상. 데모는 대상이 생활인구 하나다.
+          const isAuto = e.target.value === AUTO_TARGET;
+          setAuto(isAuto);
           if (demo) return;
           setDong("");
-          if (e.target.value === AUTO_TARGET) { setAuto(true); return; }
-          setAuto(false);
-          setTarget(e.target.value);
+          if (!isAuto) setTarget(e.target.value);
         }}>
-          {demo ? <option value="demo">인구</option> : [<option key={AUTO_TARGET} value={AUTO_TARGET}>{AUTO_TARGET_LABEL}</option>,
-            ...Object.entries(REAL_TARGETS).map(([id, name]) => <option key={id} value={id}>{name}</option>)]}
+          <option value={AUTO_TARGET}>{AUTO_TARGET_LABEL}</option>
+          {demo ? <option value={DEMO_FACTOR_TARGET}>생활인구</option>
+            : Object.entries(REAL_TARGETS).map(([id, name]) => <option key={id} value={id}>{name}</option>)}
         </select>
       </label>
       <label>
@@ -592,10 +596,9 @@ export default function SimulatorPage() {
         locked={analysisStatus !== "done"}
         running={analysisRunning}
         split={factorView?.split}
-        diagnosis={demo ? { items: currentRegion.case.problemDiagnosis } : diagnosisView(factorView, factor.ranking)}
+        diagnosis={diagnosisView(factorView, autoRanking, demo ? currentRegion.case.problemDiagnosis : [])}
         diagnosisSource={cardSource}
         pendingText={factorMissing ? FACTOR_PENDING_TEXT : null}
-        showDerive={demo}
       />
 
       {/* ── STAGE ③ 시뮬레이션: 공간정보 탐색 + 강화학습 변수 + 예측 ── */}
@@ -609,7 +612,7 @@ export default function SimulatorPage() {
         {/* 강화학습 변수 프레임 */}
         <div className="pl-sim-frame" data-slot="sim.sim.frame">
           <SimFrameCell kind="obj" tag="목적함수" cell={frame.objective}
-            status={demo && analysisDone ? "② 진단 반영" : null} />
+            status={analysisDone ? "② 진단 반영" : null} />
           <SimFrameCell tag="수요" cell={frame.demand} />
           <SimFrameCell tag="공급" cell={frame.supply} />
           <SimFrameCell kind="adjust" tag="조절변수" cell={frame.adjust} />

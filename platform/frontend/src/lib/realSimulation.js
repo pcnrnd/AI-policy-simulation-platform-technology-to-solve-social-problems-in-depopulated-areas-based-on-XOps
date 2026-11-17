@@ -274,8 +274,10 @@ const percentText = (change) => `${change < 0 ? "−" : "+"}${Math.abs(change).t
  * 행정동 항목은 요인으로 내세우지 않는다. 읽을 신호가 하나도 없으면 빈 형식(rows 0·kind null).
  * @param {ReturnType<typeof factorAnalysisView> | null} view
  * @param {{ target: string, change: number|null }[] | null} ranking 자동 실행의 지표별 순위
+ * @param {string[]} items 지역 점검 항목(데모 사례 정의에만 있음, 실데이터는 빈 배열 → 같은 자리에 "해당 항목 없음")
+ * 두 모드가 같은 함수·같은 형식을 쓴다. 전년 같은 달 값이 없으면 머리의 변화율 자리에 "전년 비교 불가".
  */
-export function diagnosisView(view, ranking = null) {
+export function diagnosisView(view, ranking = null, items = []) {
   if (!view) return null;
   const all = [...view.factors, ...view.rest];
   const change = yoyChange(view);
@@ -294,11 +296,12 @@ export function diagnosisView(view, ranking = null) {
   }
   return {
     kind: change === null ? null : trendKind(change),
-    change: change === null ? null : percentText(change),
+    change: change === null ? "전년 비교 불가" : percentText(change),
     rows,
+    items: [...items],
     indicators: (ranking ?? []).map((e) => ({
       target: e.target,
-      name: REAL_TARGETS[e.target] ?? e.target,
+      name: REAL_TARGETS[e.target] ?? targetName(e.target),
       kind: Number.isFinite(e.change) ? trendKind(e.change) : null,
       change: Number.isFinite(e.change) ? percentText(e.change) : "전년 비교 불가"
     }))
