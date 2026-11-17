@@ -376,10 +376,12 @@ const OBSERVED_QUARTERS = 4; // 가로축에 그리는 최근 관측 분기 수
 const FORECAST_QUARTERS = 12; // 향후 3년
 const RAMP_QUARTERS = 4; // 효과가 100%에 닿는 데 걸리는 분기(25·50·75·100%)
 const PERSONS_PER_MAN = 10000; // 효과는 명, 그래프 단위는 만 명
+const AXIS_PAD = 0.15; // 세로축 위아래 여유(값 범위 대비)
 
 /**
  * 인구 전망 — 관측 마지막 4분기 + 향후 12분기. 방법과 가정(화면에는 쓰지 않는다):
- *  - 정책 미반영: 같은 분기 전년 값 + 평균 연간 증감(관측 구간에서 4분기 차이 나는 쌍들의 평균). 예측값끼리 이어 12분기까지, 쌍이 없으면 마지막 관측값 유지.
+ *  - 정책 미반영: 같은 분기 전년 값 + 그 해의 증감. 증감은 평균 연간 증감 d(관측 구간에서 4분기 차이 나는 쌍들의 평균)를 1년차 d, 2년차 d/2, 3년차 d/4로 줄여 쓴다(추세 감쇠).
+ *    예측값끼리 이어 12분기까지, 쌍이 없으면 마지막 관측값 유지.
  *  - 정책 반영: 예측 구간에서만 미반영 + 효과 중간값(low·high 평균)을 첫 4분기에 25·50·75·100%로 늘리고 그 뒤 유지. 효과가 null이면 반영선을 만들지 않는다.
  * @param {{ unit: string, points: {year: number, quarter: number, registered: number, stay: number}[] }} data 공표 분기 값(만 명)
  * @param {(p: object) => number} valueOf 그릴 값(생활인구 = 등록+체류, 정주인구 = 등록)
@@ -394,7 +396,7 @@ export function populationForecast(data, valueOf, effect) {
   const shown = idxs.slice(-OBSERVED_QUARTERS);
   const base = new Map(byIdx);
   const future = Array.from({ length: FORECAST_QUARTERS }, (_, k) => last + k + 1);
-  for (const i of future) base.set(i, annual === null ? byIdx.get(last) : (base.get(i - 4) ?? byIdx.get(last)) + annual);
+  future.forEach((i, k) => base.set(i, annual === null ? byIdx.get(last) : (base.get(i - 4) ?? byIdx.get(last)) + annual / 2 ** Math.floor(k / 4)));
   const axis = [...shown, ...future];
   const mid = effect ? (effect.low + effect.high) / 2 / PERSONS_PER_MAN : 0;
   const bounds = effect ? [effect.low / PERSONS_PER_MAN, effect.high / PERSONS_PER_MAN] : [0, 0];
@@ -408,7 +410,19 @@ export function populationForecast(data, valueOf, effect) {
       ranges: axis.map((i) => (i > last ? bounds.map((b) => round2(base.get(i) + b * ramp(i))) : null))
     });
   }
-  return { unit: data.unit, labels: axis.map(quarterLabel), observed: shown.length, series };
+  const gap = series[1] ? round2(series[1].values[axis.length - 1] - series[0].values[axis.length - 1]) : 0;
+  // 마지막 예측 분기의 반영-미반영 차이(0이면 null: 칠하기·값 표기 없음)
+  return { unit: data.unit, labels: axis.map(quarterLabel), observed: shown.length, endDiff: gap || null, series };
+}
+
+/** 세로축 범위 — 그려진 모든 값(선·반영 상한)에 위아래 여유를 둔다. 값이 없으면 null. */
+export function axisRange(series) {
+  const all = series.flatMap((s) => [...s.values, ...(s.ranges ?? []).flatMap((r) => r ?? [])]).filter(Number.isFinite);
+  if (!all.length) return null;
+  const lo = Math.min(...all);
+  const hi = Math.max(...all);
+  const pad = (hi - lo || Math.abs(hi) || 1) * AXIS_PAD;
+  return { min: lo - pad, max: hi + pad };
 }
 
 /**
@@ -436,6 +450,7 @@ export function evidenceChartsView(trends, items, selected = null) {
       unit: data?.unit ?? "",
       labels,
       observed: data?.observed ?? 0,
+      endDiff: data?.endDiff ?? null,
       series: data?.series ?? [],
       empty: labels.length === 0 ? slot.guide : null
     };

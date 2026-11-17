@@ -10,7 +10,7 @@ import { usePublicTrends } from "../hooks/usePublicTrends.js";
 import { useRenderTiming } from "../lib/perf.js";
 import { formatUnitValue } from "../lib/realSimulation.js";
 import {
-  COMPARE_COLUMNS, DEFAULT_CRITERION, SORT_CRITERIA, conversionCompareView, evidenceChartsView, facilityRecommendationView
+  COMPARE_COLUMNS, DEFAULT_CRITERION, axisRange, SORT_CRITERIA, conversionCompareView, evidenceChartsView, facilityRecommendationView
 } from "../lib/facilityRecommendation.js";
 
 const MEDAL = ["🥇", "🥈", "🥉"];
@@ -27,8 +27,25 @@ function EvidenceChart({ chart, ct }) {
     labels: chart.labels,
     datasets: (chart.series.length ? chart.series : [{ label: chart.title, values: [] }]).map((s, i) => {
       const line = (SERIES_COLORS[i] ?? SERIES_COLORS[0])[1];
-      return { label: s.label || chart.title, data: s.values, borderColor: line, backgroundColor: line, borderWidth: 2, pointRadius: 2, pointHoverRadius: 5, tension: 0.25, segment: { borderDash: (c) => (c.p1DataIndex >= chart.observed ? [5, 4] : undefined) }, ranges: s.ranges };
+      // 정책 반영 선은 미반영 선(바로 앞 데이터셋)과의 사이를 옅게 칠한다(차이가 없으면 칠하지 않음).
+      const fill = i === 1 && chart.endDiff ? { target: "-1", above: `${line.replace("1)", "0.18)")}`, below: `${line.replace("1)", "0.18)")}` } : false;
+      return { label: s.label || chart.title, data: s.values, borderColor: line, backgroundColor: line, fill, borderWidth: 2, pointRadius: 2, pointHoverRadius: 5, tension: 0.25, segment: { borderDash: (c) => (c.p1DataIndex >= chart.observed ? [5, 4] : undefined) }, ranges: s.ranges };
     })
+  };
+  // 마지막 예측 분기의 반영 선 옆에 차이 값만(+0.29만).
+  const endLabel = {
+    id: "endDiff",
+    afterDatasetsDraw(c) {
+      if (!chart.endDiff) return;
+      const pt = c.getDatasetMeta(1).data.at(-1);
+      const { ctx } = c;
+      ctx.save();
+      ctx.font = "600 11px sans-serif";
+      ctx.fillStyle = SERIES_COLORS[1][1];
+      ctx.textAlign = "right";
+      ctx.fillText(`${chart.endDiff > 0 ? "+" : "−"}${Math.abs(chart.endDiff).toFixed(2)}${tickUnit}`, pt.x - 6, pt.y - 8);
+      ctx.restore();
+    }
   };
   const options = {
     responsive: true,
@@ -37,7 +54,7 @@ function EvidenceChart({ chart, ct }) {
     scales: {
       x: { grid: { display: false }, ticks: { color: ct.tickStrong, font: { size: 11 }, ...(dense && { autoSkip: false, maxRotation: 0, callback: (_, i) => (shownTicks.has(i) ? chart.labels[i] : "") }) } },
       // 단위는 눈금과 툴팁 값에 붙인다(축 제목·부제는 두지 않는다).
-      y: { beginAtZero: true, grid: { color: ct.grid }, ticks: { color: ct.tick, callback: (v) => (v === 0 ? "0" : `${v.toLocaleString("ko-KR")}${tickUnit}`) } }
+      y: { ...axisRange(chart.series), grid: { color: ct.grid }, ticks: { color: ct.tick, callback: (v) => (`${Math.round(v * 10) / 10}${tickUnit}`) } }
     },
     plugins: {
       legend: { display: chart.series.length > 1, position: "bottom", labels: { color: ct.tick, boxWidth: 10, font: { size: 10 } } },
@@ -58,7 +75,7 @@ function EvidenceChart({ chart, ct }) {
         <strong>{chart.title}</strong>
       </figcaption>
       <div className="reco-evidence-canvas">
-        <Line data={data} options={options} aria-label={`${chart.title} 그래프`} role="img" />
+        <Line data={data} options={options} plugins={[endLabel]} aria-label={`${chart.title} 그래프`} role="img" />
         {chart.empty && <ChartEmptyNote>{chart.empty}</ChartEmptyNote>}
       </div>
     </figure>

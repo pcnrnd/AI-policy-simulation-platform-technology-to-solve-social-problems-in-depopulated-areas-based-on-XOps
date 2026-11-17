@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  COMPARE_COLUMNS, DEFAULT_CRITERION, EVIDENCE_CHART_SLOTS, PLAN_TYPES, SORT_CRITERIA,
+  COMPARE_COLUMNS, DEFAULT_CRITERION, EVIDENCE_CHART_SLOTS, axisRange, PLAN_TYPES, SORT_CRITERIA,
   conversionCompareView, evidenceChartsView, facilityRecommendationView, facilityRows, linkedControls, optionCandidates,
   capacityCap, comparableCases, populationForecast, recoControlSig, scaleGrade, sortFacilityRows, unlinkedControlNote, withRegionStay
 } from "./facilityRecommendation.js";
@@ -511,7 +511,10 @@ assert.deepEqual([fc.labels[0], fc.labels[3], fc.labels[4], fc.labels[15]], ["25
 assert.equal(fc.observed, 4);
 assert.deepEqual(fc.series.map((x) => x.label), ["정책 미반영"]); // 효과 없음 → 반영 선 없음
 assert.deepEqual(fc.series[0].values.slice(0, 5), [6.5, 7.6, 8.7, 9.8, 7.9]); // 관측 4분기, 26년 1분기 = 6.5+1.4
-assert.equal(fc.series[0].values[15], 14); // 9.8 + 3년치 1.4×3 // 28년 4분기 = 25년 4분기 + 3년치
+// 추세 감쇠: 1년차 d(1.4), 2년차 d/2, 3년차 d/4를 같은 분기 전년(예측) 값에 더한다.
+assert.deepEqual([fc.series[0].values[4], fc.series[0].values[8], fc.series[0].values[12]], [7.9, 8.6, 8.95]); // 26년 1분기·27년 1분기·28년 1분기
+assert.equal(fc.series[0].values[15], 12.25); // 9.8 + 1.4 + 0.7 + 0.35
+assert.equal(fc.endDiff, null); // 효과 없음 → 차이 값 없음 // 28년 4분기 = 25년 4분기 + 3년치
 // 정책 반영: 예측 구간에서만, 효과 중간값을 첫 4분기에 25·50·75·100%로 늘린 뒤 유지. 관측 구간은 미반영과 같다(이어짐).
 const withEffect = populationForecast(synthPopulation, living, { low: 10000, high: 30000 });
 const [none, applied] = withEffect.series;
@@ -519,6 +522,14 @@ assert.deepEqual(withEffect.series.map((x) => x.label), ["정책 미반영", "�
 assert.deepEqual(applied.values.slice(0, 4), none.values.slice(0, 4));
 assert.deepEqual(applied.values.slice(4, 9).map((v, k) => Math.round((v - none.values[4 + k]) * 100) / 100), [0.5, 1, 1.5, 2, 2]); // 중간값 2만 명
 assert.equal(Math.round((applied.values[15] - none.values[15]) * 100) / 100, 2);
+assert.equal(withEffect.endDiff, 2); // 마지막 예측 분기 차이(만 명)
+// 세로축: 선·반영 상한 전체 범위에 15% 여유(0에서 시작하지 않는다).
+const rangeAll = withEffect.series.flatMap((x) => [...x.values, ...(x.ranges ?? []).flatMap((r) => r ?? [])]);
+const ax = axisRange(withEffect.series);
+const [lo, hi] = [Math.min(...rangeAll), Math.max(...rangeAll)];
+assert.ok(Math.abs(ax.min - (lo - (hi - lo) * 0.15)) < 1e-9 && Math.abs(ax.max - (hi + (hi - lo) * 0.15)) < 1e-9 && ax.min > 0);
+assert.equal(axisRange([{ values: [] }]), null);
+assert.deepEqual(axisRange([{ values: [5, 5] }]), { min: 4.25, max: 5.75 }); // 값이 모두 같으면 값의 15%
 assert.deepEqual([applied.ranges[3], applied.ranges[4], applied.ranges[8]], [null, [none.values[4] + 0.25, none.values[4] + 0.75].map((v) => Math.round(v * 100) / 100), [none.values[8] + 1, none.values[8] + 3].map((v) => Math.round(v * 100) / 100)]);
 // 4분기 차이 쌍이 없으면(관측 4분기 이하) 마지막 관측값을 유지한다.
 const short = populationForecast({ unit: "만 명", points: synthPopulation.points.slice(0, 4) }, living, null);
@@ -526,6 +537,7 @@ assert.deepEqual(short.series[0].values, [5.1, 6.2, 7.3, ...Array(13).fill(8.4)]
 // 효과 0(정주 효과 없는 방안) → 반영 선 = 미반영 선.
 const zero = populationForecast(synthPopulation, (p) => p.registered, { low: 0, high: 0 });
 assert.deepEqual(zero.series[1].values, zero.series[0].values);
+assert.equal(zero.endDiff, null); // 차이 0 → 칠하기·값 표기 없음
 for (const id of ["namwon", "shinan"]) {
   const charts = evidenceChartsView(trends, views[id].items);
   assert.deepEqual(charts.map((c) => [c.id, c.title]), [["population", "생활인구 전망"], ["settle", "정주인구 전망"]]);
