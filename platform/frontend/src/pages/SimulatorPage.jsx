@@ -16,14 +16,14 @@ import { useAppState } from "../context/AppStateContext.jsx";
 import { useChartTheme } from "../hooks/useChartTheme.js";
 import { useRealSimulation } from "../hooks/useRealSimulation.js";
 import { useFactorAnalysis } from "../hooks/useFactorAnalysis.js";
-import { useRegionStay } from "../hooks/usePublicTrends.js";
+import { usePublicTrends, useRegionStay } from "../hooks/usePublicTrends.js";
 import { getScrollBehavior } from "../lib/motion.js";
 import { facilityRows, recoControlSig, unlinkedControlNote, withRegionStay } from "../lib/facilityRecommendation.js";
 import { YEAR_LABELS, computeTrends, budgetToFactor, controlBoostOf, ANALYSIS_STEPS } from "../lib/simulation.js";
 import {
   REAL_TARGETS, REAL_GUIDE_TEXT, REAL_CONTROLS_LOCK_TEXT, FACTOR_GUIDE_TEXT, FACTOR_PENDING_TEXT, FACTOR_RUN_LOCK_TEXT, FACTOR_IDLE_TEXT,
-  factorDiagnosis, DEMO_FACTOR_TARGET, realUnavailableText, selectedFactorModel, inferenceMatches, inferenceContextKey, factorAnalysisView,
-  observedFeatureLabel, rankSensitivity, targetUnit, formatUnitValue, formatMonth,
+  diagnosisView, simFrameView, quarterYoyChange, AUTO_TARGET, AUTO_TARGET_LABEL, DEMO_FACTOR_TARGET, realUnavailableText, selectedFactorModel, inferenceMatches, inferenceContextKey, factorAnalysisView,
+  observedFeatureLabel, rankSensitivity, targetUnit, formatUnitValue,
   realSliderControls, forecastSeries, sensitivityRecommendation, regionRealStatus
 } from "../lib/realSimulation.js";
 
@@ -35,6 +35,30 @@ const STAGE_IDS = ["stage-factor", "stage-result", "stage-sim", "stage-report"];
 // ①·②: 두 모드 모두 선택한 기존 활성 요인분석 모델의 결과(useFactorAnalysis).
 // ③·④: 데모는 지역 사례(mock_data.json)와 화면 예시 계산, 실데이터는 같은 지역·학습 대상의 활성 시뮬레이션 버전
 // 추론(useRealSimulation) — 실데이터 ③·④는 ① 실행과 무관하다. 실데이터 대응이 없는 요소는 같은 자리에 행동 안내를 둔다.
+/** ③ 설정 띠의 한 칸 — 이름은 작은 표지, 값은 크게(조절변수는 항목 칩), 보조 정보는 한 줄. */
+function SimFrameCell({ kind = "", tag, cell, status = null }) {
+  return (
+    <div className={`pl-sim-cell${kind ? ` pl-sim-${kind}` : ""}`}>
+      <div className="pl-sim-cell-head">
+        <span className="pl-sim-tag">{tag}</span>
+        {status && (
+          <span className="pl-param-chip">
+            <i className="fa-solid fa-circle-check" aria-hidden="true"></i> {status}
+          </span>
+        )}
+      </div>
+      {cell.chips ? (
+        <div className="pl-sim-chips mock-data-output">
+          {cell.chips.length ? cell.chips.map((chip) => <span key={chip} className="pl-sim-chip">{chip}</span>) : <strong className="pl-sim-value">–</strong>}
+        </div>
+      ) : (
+        <strong className="pl-sim-value mock-data-output">{cell.value}</strong>
+      )}
+      {cell.meta && <span className="pl-sim-meta">{cell.meta}</span>}
+    </div>
+  );
+}
+
 export default function SimulatorPage() {
   const {
     appData, currentRegion, setCurrentRegion,
@@ -47,6 +71,8 @@ export default function SimulatorPage() {
 
   // 실데이터 분석 조건 — 두 모드에 같은 select 를 두고 데모는 선택지 1개.
   const [target, setTarget] = useState("observed_sales_krw");
+  // 실데이터 학습 대상 "자동(가장 나빠진 지표)" — 기본값. [요인분석 실행]이 지표별로 추론해 target 을 고른 지표로 옮긴다.
+  const [auto, setAuto] = useState(true);
   // 행정동은 고른 지역과 함께 기억한다 — 지역이 바뀌면 "전체"(첫 옵션)로 돌아가 이전 지역 코드를 요청에 싣지 않는다.
   const [dongPick, setDongPick] = useState({ regionId: currentRegion.id, code: "" });
   const dong = dongPick.regionId === currentRegion.id ? dongPick.code : "";
@@ -117,6 +143,8 @@ export default function SimulatorPage() {
   // 시설 값이 없는 조절변수를 바꾸면 재도출 안내 대신 같은 자리에 자료 등록 안내를 둔다.
   // 지역 월평균 체류인구는 공표 통계 API 값(시드에 없음) — 늦게 도착하면 추천 입력이 바뀐 것으로 본다.
   const regionStay = useRegionStay(demo ? currentRegion.name : undefined);
+  // 데모 ② 진단 머리 칸의 근거 — 생활인구 공표 통계(정책 추천 전망 그래프와 같은 값)
+  const demoTrends = usePublicTrends(demo ? currentRegion.name : undefined);
   const recoInputSig = demo ? `${contextKey}|${recoControlSig(controls, controlValues)}|stay:${regionStay ?? ""}` : currentSig;
   const controlNote = demo ? unlinkedControlNote(controls, controlValues) : null;
   const recoStale = recommendation !== null && recoSig !== recoInputSig;
@@ -145,9 +173,10 @@ export default function SimulatorPage() {
   // 실데이터는 같은 지역·학습 대상의 요인분석 활성 모델이 있어야 실행된다(데모는 자동 준비). 조회 중·실패·모델 없음을 구분한다.
   // 조회 실패면 잠그지 않고 [요인분석 실행]이 목록·입력을 다시 읽는다(재시도).
   const factorRetry = factor.loadFailed && !factorModel;
-  const factorLockTitle = factorModel || factorRetry ? null
+  const autoReady = !demo && auto && factorModels.some((row) => row.region_id === currentRegion.id);
+  const factorLockTitle = factorModel || factorRetry || autoReady ? null
     : factor.loading ? "모델 목록을 확인하는 중입니다." : FACTOR_RUN_LOCK_TEXT;
-  const factorMissing = !factor.loading && !factor.loadFailed && (!factorModel || factor.missing);
+  const factorMissing = !factor.loading && !factor.loadFailed && (!(factorModel || autoReady) || factor.missing);
 
   // 지역·학습 대상·행정동 변경 시 결과 초기화 (지역별 요인분석은 별도 실행 — 요인분석 상태는 훅이 비운다)
   useEffect(() => {
@@ -226,7 +255,12 @@ export default function SimulatorPage() {
       setRecoSig("");
     }
     addConsoleLog(`INFO: ${currentRegion.name} 요인분석 실행`);
-    const analysis = await factor.run();
+    const analysis = !demo && auto
+      ? await factor.runAuto({ onPick: (model) => {
+        setModelPick({ context: [mode, model.region_id, model.target].join("|"), id: model.id, version: model.active_version, explicit: true });
+        setTarget(model.target);
+      } })
+      : await factor.run();
     if (!analysis) return;
     addConsoleLog(`SUCCESS: ${currentRegion.name} 요인분석 완료 — 요인 ${analysis.contributions.length}개 기여도 표시`);
     setOpenStages((s) => ({ ...s, "stage-result": true, "stage-sim": true }));
@@ -447,7 +481,7 @@ export default function SimulatorPage() {
     if (!model || !region) return;
     setModelPick({ context: [mode, model.region_id, model.target].join("|"), id: model.id, version: model.active_version, explicit: true });
     setDongPick({ regionId: region.id, code: "" });
-    if (!demo) setTarget(model.target);
+    if (!demo) { setTarget(model.target); setAuto(false); }
     setCurrentRegion(region);
     addConsoleLog(`INFO: 요인분석 모델이 있는 ${region.name}(으)로 이동했습니다.`);
   };
@@ -471,31 +505,35 @@ export default function SimulatorPage() {
   // ①·② 요인분석 — 두 모드 같은 매핑(factorAnalysisView). 실데이터 모델 없음이면 안내(전문은 ① 첫 카드 한 곳, 나머지는 한 줄).
   const factorLabel = (feature) => observedFeatureLabel(feature, factorTarget, factorResult?.analysis.dong_options ?? dongOptions);
   const factorView = factorResult ? factorAnalysisView(factorResult.analysis, { demo, dataset: factorResult.dataset, label: factorLabel }) : null;
+  // 지표별 상태 — 자동 실행일 때만. 데모는 대상이 하나(생활인구)라 자동 = 그 지표 하나의 변화율.
+  // 데모 ② 머리 칸·지표별: 생활인구 공표 통계(정책 추천 전망과 같은 API)의 전년 같은 분기 대비. 못 받으면 null → "전년 비교 불가".
+  const demoYoy = demo ? quarterYoyChange(demoTrends.population?.points) : null;
+  const diagHead = demo ? { change: demoYoy, basis: "전년 같은 분기 대비" } : {};
+  const autoRanking = !auto || !factorView ? null : demo ? [{ target: DEMO_FACTOR_TARGET, change: demoYoy }] : factor.ranking;
   const factorLine = <PendingData text={FACTOR_PENDING_TEXT} />;
   const factorIdle = <PendingData running={analysisRunning} text={FACTOR_IDLE_TEXT} />;
   const factorPlaceholders = factorMissing ? [guide(FACTOR_GUIDE_TEXT, moveAction), factorLine, factorLine] : [factorIdle, factorIdle, factorIdle];
   const factorRunInfo = factorView ? factorView.runInfo
     : demo ? "인구 구조·시설 지표 9개 요인 · 학습 대상 생활인구" : `등록 학습데이터 기준 · 학습 대상 ${targetName}`;
-  const rangeProof = simProof?.range_provenance;
-  const frame = demo
-    ? { objective: sim.objective, demand: sim.factors.demand, supply: sim.factors.supply, adjust: sim.factors.adjust, constraint: `${sim.constraint} · ${budgetTotal.toLocaleString()}억` }
-    : real.ready
-      ? {
-          objective: `다음 달 ${targetName} 예측 (예측월 ${formatMonth(simProof.prediction_period)})`,
-          demand: `${targetName} 관측 · ${dongName}`,
-          supply: simResult ? `기준 예측 ${formatUnitValue(simResult.baseline_prediction, unit)} ${unit}` : "–",
-          adjust: `관측 입력 ${controls.length}개 (${controls.map((c) => c.label).join("·")})`,
-          constraint: `학습 구간 관측 범위 안 조정 · ${formatMonth(rangeProof?.from)}~${formatMonth(rangeProof?.to)}`
-        }
-      : { objective: "–", demand: "–", supply: "–", adjust: "–", constraint: "–" };
+  // ③ 설정 띠 다섯 칸 — 두 모드 같은 형식(값·표지·칩), 값만 다르다.
+  const frame = simFrameView({ demo, sim, budgetTotal, controls, target, context: real.ready ? real.context : null, dongName });
   const cardSource = demo ? "mock" : "api";
 
   const conditions = (
     <div className="real-flow-controls" data-slot="sim.factor.conditions">
       <label>
         학습 대상
-        <select aria-label="학습 대상" value={demo ? "demo" : target} disabled={analysisRunning} onChange={(e) => { if (!demo) { setDong(""); setTarget(e.target.value); } }}>
-          {demo ? <option value="demo">인구</option> : Object.entries(REAL_TARGETS).map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+        <select aria-label="학습 대상" value={auto ? AUTO_TARGET : demo ? DEMO_FACTOR_TARGET : target} disabled={analysisRunning} onChange={(e) => {
+          // 두 모드 같은 선택지 체계: 첫 항목 "자동(가장 나빠진 지표)"(기본) + 학습 대상. 데모는 대상이 생활인구 하나다.
+          const isAuto = e.target.value === AUTO_TARGET;
+          setAuto(isAuto);
+          if (demo) return;
+          setDong("");
+          if (!isAuto) setTarget(e.target.value);
+        }}>
+          <option value={AUTO_TARGET}>{AUTO_TARGET_LABEL}</option>
+          {demo ? <option value={DEMO_FACTOR_TARGET}>생활인구</option>
+            : Object.entries(REAL_TARGETS).map(([id, name]) => <option key={id} value={id}>{name}</option>)}
         </select>
       </label>
       <label>
@@ -563,10 +601,9 @@ export default function SimulatorPage() {
         locked={analysisStatus !== "done"}
         running={analysisRunning}
         split={factorView?.split}
-        diagnosis={demo ? currentRegion.case.problemDiagnosis : factorDiagnosis(factorView)}
+        diagnosis={diagnosisView(factorView, autoRanking, demo ? currentRegion.case.problemDiagnosis : [], diagHead)}
         diagnosisSource={cardSource}
         pendingText={factorMissing ? FACTOR_PENDING_TEXT : null}
-        showDerive={demo}
       />
 
       {/* ── STAGE ③ 시뮬레이션: 공간정보 탐색 + 강화학습 변수 + 예측 ── */}
@@ -579,33 +616,12 @@ export default function SimulatorPage() {
       >
         {/* 강화학습 변수 프레임 */}
         <div className="pl-sim-frame" data-slot="sim.sim.frame">
-          <div className="pl-sim-cell pl-sim-obj">
-            <span className="pl-sim-tag">목적함수</span>
-            <span className="mock-data-output">{frame.objective}</span>
-            {analysisDone && (
-              <span className="pl-param-chip">
-                <i className="fa-solid fa-circle-check" aria-hidden="true"></i> STAGE ② 도출 파라미터 적용
-              </span>
-            )}
-          </div>
-          <div className="pl-sim-vars">
-            <div className="pl-sim-cell">
-              <span className="pl-sim-tag">수요</span>
-              <span className="mock-data-output">{frame.demand}</span>
-            </div>
-            <div className="pl-sim-cell">
-              <span className="pl-sim-tag">공급</span>
-              <span className="mock-data-output">{frame.supply}</span>
-            </div>
-            <div className="pl-sim-cell">
-              <span className="pl-sim-tag">조절변수</span>
-              <span className="mock-data-output">{frame.adjust}</span>
-            </div>
-            <div className="pl-sim-cell pl-sim-constraint">
-              <span className="pl-sim-tag">제약요소</span>
-              <span className="mock-data-output">{frame.constraint}</span>
-            </div>
-          </div>
+          <SimFrameCell kind="obj" tag="목적함수" cell={frame.objective}
+            status={analysisDone ? "② 진단 반영" : null} />
+          <SimFrameCell tag="수요" cell={frame.demand} />
+          <SimFrameCell tag="공급" cell={frame.supply} />
+          <SimFrameCell kind="adjust" tag="조절변수" cell={frame.adjust} />
+          <SimFrameCell kind="constraint" tag="제약요소" cell={frame.constraint} />
         </div>
 
         {/* 공간정보 탐색: 전체 지도 + 플로팅 패널 + 우측 지자체 독 */}

@@ -4,7 +4,7 @@ import { apiGet, apiSend } from "../lib/api.js";
 import { dataModeEpoch } from "../lib/dataMode.js";
 import { displayId } from "../lib/modelops.js";
 import {
-  selectedFactorModel, inferenceRequest, validateInference, createRequestGate, formatUnitValue, formatMonth, targetUnit,
+  selectedFactorModel, inferenceRequest, factorAnalysisView, yoyChange, rankTargets, REAL_TARGETS, validateInference, createRequestGate, formatUnitValue, formatMonth, targetUnit,
   FACTOR_FAILED_TEXT, FACTOR_VERSION_CHANGED_TEXT
 } from "../lib/realSimulation.js";
 
@@ -47,6 +47,8 @@ export function useFactorAnalysis({ demo, region, target, dong, modelId, version
   const [result, setResult] = useState(null); // { analysis(추론 결과), dataset(카탈로그 행) }
   const [feedback, setFeedback] = useState(null);
   const [missing, setMissing] = useState(false);
+  const [ranking, setRanking] = useState(null); // 자동 실행의 지표별 순위 [{ target, change }]
+  const adopt = useRef(null); // 자동 실행이 고른 지표로 조건이 바뀐 뒤 결과를 이어 받는다
   const logRef = useRef(log);
   logRef.current = log;
   const mounted = useRef(true);
@@ -58,7 +60,13 @@ export function useFactorAnalysis({ demo, region, target, dong, modelId, version
 
   useEffect(() => {
     gate.current.cancel();
-    setStatus("idle"); setStep(0); setResult(null); setFeedback(null); setMissing(false);
+    const a = adopt.current;
+    adopt.current = null;
+    if (a && a.region === region && a.target === target && a.dong === dong && a.modelId === modelId && a.versionId === versionId) {
+      setResult(a.result); setRanking(a.ranking); setStatus("done"); setStep(4); setFeedback(null); setMissing(false);
+      return;
+    }
+    setStatus("idle"); setStep(0); setResult(null); setRanking(null); setFeedback(null); setMissing(false);
   }, [demo, region, target, dong, modelId, versionId]);
 
   // accept: 결과를 게시하기 직전에 부른다 — false면 결과를 버리고 처음 상태로 둔다(자동 계산 중 입력이 바뀐 경우).
@@ -109,11 +117,60 @@ export function useFactorAnalysis({ demo, region, target, dong, modelId, version
     }
   }, [demo, region, target, dong, modelId, versionId]);
 
+  // 자동(가장 나빠진 지표) — 이 지역에 활성 요인분석 모델이 있는 학습 대상마다 같은 추론을 돌려, 다음 달 추정이
+  // 전년 같은 달보다 가장 많이 줄어든 지표를 고른다(전년 비교 불가는 맨 뒤). 고른 지표로 조건을 옮기고(onPick) 그 결과를 보인다.
+  const runAuto = useCallback(async ({ onPick }) => {
+    const begun = gate.current.begin();
+    const current = () => mounted.current && begun();
+    const at = async (promise) => { const value = await promise; if (!current()) throw CANCELLED; return value; };
+    const say = (message) => logRef.current?.(message);
+    setStatus("running"); setStep(1); setResult(null); setRanking(null); setFeedback(null); setMissing(false);
+    try {
+      const token = await at(getRealdataToken());
+      const catalog = await at(apiGet(`${BASE}/catalog`, { token }));
+      setCatalog(catalog);
+      const found = [];
+      for (const t of Object.keys(REAL_TARGETS)) {
+        const inst = catalog.instances?.find((row) => row.region_id === region && row.target === t && row.model_type === "factor_analysis" && row.active_version);
+        const model = inst && selectedFactorModel(catalog, inst.id, region, t, "real");
+        if (!model) continue;
+        const inputs = await at(apiGet(endpoint(model) + "/inputs", { token, params: { dong_code: dong || undefined } }));
+        setStep(2);
+        const raw = await at(apiSend("POST", endpoint(model) + "/predict", { token, body: inferenceRequest(inputs) }));
+        const analysis = validateInference(raw, inputs);
+        const dataset = catalog.datasets.find((row) => row.id === inputs.provenance.dataset_id) ?? null;
+        const change = yoyChange(factorAnalysisView(analysis, { demo: false, dataset, label: (f) => f }));
+        found.push({ target: t, change, model, analysis, dataset });
+        say(`INFO: [요인분석 자동] ${REAL_TARGETS[t]} 추론 완료`);
+      }
+      if (!found.length) throw MISSING;
+      setStep(4);
+      const ranked = rankTargets(found);
+      const best = ranked[0];
+      const summary = ranked.map(({ target: t, change }) => ({ target: t, change }));
+      const next = { result: { analysis: best.analysis, dataset: best.dataset }, ranking: summary };
+      if (best.target === target && best.model.id === modelId && best.model.active_version === versionId) {
+        setResult(next.result); setRanking(summary); setStatus("done");
+      } else {
+        adopt.current = { ...next, region, target: best.target, dong, modelId: best.model.id, versionId: best.model.active_version };
+        onPick(best.model);
+      }
+      return best.analysis;
+    } catch (error) {
+      if (error === CANCELLED || !current()) return null;
+      setStatus("idle"); setStep(0);
+      if (error === MISSING) { setMissing(true); return null; }
+      say(`WARN: 요인분석 실행 실패 — ${rawText(error)}`);
+      setFeedback(FACTOR_FAILED_TEXT);
+      return null;
+    }
+  }, [region, target, dong, modelId, versionId]);
+
   // 같은 조건에서 이미 끝난 결과(앱 상태에 보존)를 다시 계산하지 않고 되살린다 — 진행 중 실행은 버린다.
   const restore = useCallback((saved) => {
     gate.current.cancel();
     setResult(saved); setStatus("done"); setStep(4); setFeedback(null); setMissing(false);
   }, []);
 
-  return { catalog, loading, loadFailed, reload: () => setRevision((value) => value + 1), status, step, result, feedback, missing, run, restore };
+  return { catalog, loading, loadFailed, reload: () => setRevision((value) => value + 1), status, step, result, feedback, missing, ranking, run, runAuto, restore };
 }

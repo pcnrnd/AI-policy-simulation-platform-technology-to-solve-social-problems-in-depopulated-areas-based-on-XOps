@@ -191,38 +191,27 @@ const DIAGNOSIS_TREND_PCT = 5;
 // 계절 영향 표시 기준 — 월별 계절성 두 항의 |기여도| 합이 전체 |기여도| 합에서 차지하는 비율.
 const DIAGNOSIS_SEASONAL_SHARE = 0.15;
 
-/**
- * 요인분석 결과만으로 읽는 문제 유형 진단(실데이터 STAGE ②) — 유형(추정 대 전년 같은 달)·주된 하방/상방 요인·계절 영향.
- * 행정동 항목은 선택 동이 아닌 동의 평균 대비 보정이라 요인으로 내세우지 않는다. 읽을 신호가 없으면 빈 배열.
- * @param {ReturnType<typeof factorAnalysisView> | null} view
- * @returns {string[] | null}
- */
-export function factorDiagnosis(view) {
-  if (!view) return null;
+const trendKind = (change) => (change < -DIAGNOSIS_TREND_PCT ? "감소형" : change > DIAGNOSIS_TREND_PCT ? "증가형" : "정체형");
+
+/** 다음 달 추정이 전년 같은 달 관측보다 몇 % 변하는지(요인분석 view 기준). 전년 같은 달 값이 없으면 null. */
+export function yoyChange(view) {
   const all = [...view.factors, ...view.rest];
   const input = (feature) => all.find((row) => row.feature === feature)?.input;
-  const amount = (row) => `${formatUnitValue(row.value, view.unit)} ${view.unit}`;
-  const lines = [];
   const yoy = input("y_yoy");
   const prediction = view.model.prediction;
-  if (Number.isFinite(yoy) && yoy > 0 && input("has_yoy") !== 0 && Number.isFinite(prediction)) {
-    const change = ((prediction - yoy) / yoy) * 100;
-    const kind = change < -DIAGNOSIS_TREND_PCT ? "감소형" : change > DIAGNOSIS_TREND_PCT ? "증가형" : "정체형";
-    lines.push(`유형: ${kind} — 다음 달 추정값이 전년 같은 달 관측보다 ${Math.abs(change).toFixed(1)}% ${change < 0 ? "낮습니다" : "높습니다"}.`);
-  }
-  const drivers = all.filter((row) => !row.feature.startsWith("dong_")); // |기여도| 내림차순 유지
-  const down = drivers.find((row) => row.value < 0);
-  const up = drivers.find((row) => row.value > 0);
-  if (down) lines.push(`주된 하방 요인: ${down.label} (기여도 ${amount(down)})`);
-  if (up) lines.push(`주된 상방 요인: ${up.label} (기여도 +${amount(up)})`);
-  const total = all.reduce((sum, row) => sum + Math.abs(row.value), 0);
-  const seasonal = all.filter((row) => row.feature === "month_sin" || row.feature === "month_cos")
-    .reduce((sum, row) => sum + Math.abs(row.value), 0);
-  if (total > 0 && seasonal / total >= DIAGNOSIS_SEASONAL_SHARE) {
-    lines.push(`계절 영향: 월별 계절성이 전체 기여의 ${Math.round((seasonal / total) * 100)}%를 차지합니다.`);
-  }
-  return lines;
+  if (Number.isFinite(yoy) && yoy > 0 && input("has_yoy") !== 0 && Number.isFinite(prediction)) return ((prediction - yoy) / yoy) * 100;
+  return null;
 }
+
+export const AUTO_TARGET = "auto";
+export const AUTO_TARGET_LABEL = "자동(가장 나빠진 지표)";
+
+/** 학습 대상별 변화율 → 가장 많이 줄어든 순(전년 비교 불가는 맨 뒤, 같으면 입력 순서). */
+export function rankTargets(entries) {
+  const rank = (e) => (Number.isFinite(e.change) ? e.change : Infinity);
+  return entries.map((e, i) => [e, i]).sort(([a, i], [b, j]) => rank(a) - rank(b) || i - j).map(([e]) => e);
+}
+
 
 // 범위/100을 유효숫자 2자리로 — 슬라이더 한 칸.
 function sliderStep(span) {
@@ -274,4 +263,105 @@ export function regionRealStatus(catalog, regionId, target) {
   const ready = (catalog?.instances ?? []).some((row) => row.mode === "real" && row.region_id === regionId && row.target === target &&
     row.model_type === "simulation" && row.active_version);
   return ready ? "실데이터 시뮬레이션 모델 준비됨" : "실데이터 모델 없음";
+}
+
+// ── ② 문제 유형 진단 카드 표시 형식 ──
+
+/**
+ * 생활인구 공표 통계(분기, 생활인구 = 등록 + 체류)의 가장 최근 분기 대 전년 같은 분기 변화율(%) — 데모 ② 머리 칸.
+ * 정책 추천 전망 그래프와 같은 API 값. 전년 같은 분기 값이 없으면 null.
+ * @param {{ year: number, quarter: number, registered: number, stay: number }[] | null | undefined} points
+ */
+export function quarterYoyChange(points) {
+  if (!points?.length) return null;
+  const latest = points.reduce((a, p) => (p.year * 4 + p.quarter > a.year * 4 + a.quarter ? p : a));
+  const prior = points.find((p) => p.year === latest.year - 1 && p.quarter === latest.quarter);
+  const living = (p) => p.registered + p.stay;
+  if (!prior || !(living(prior) > 0)) return null;
+  return ((living(latest) - living(prior)) / living(prior)) * 100;
+}
+const signedText = (value, unit) => `${value < 0 ? "−" : "+"}${formatUnitValue(Math.abs(value), unit)}${unit}`;
+const percentText = (change) => `${change < 0 ? "−" : "+"}${Math.abs(change).toFixed(1)}%`;
+
+/**
+ * ② 문제 유형 진단 카드(실데이터) — 유형·변화율(머리), 하방·상방 요인 행, 계절 영향 행, 지표별 상태(자동 실행일 때).
+ * 행정동 항목은 요인으로 내세우지 않는다. 읽을 신호가 하나도 없으면 빈 형식(rows 0·kind null).
+ * @param {ReturnType<typeof factorAnalysisView> | null} view
+ * @param {{ target: string, change: number|null }[] | null} ranking 자동 실행의 지표별 순위
+ * @param {string[]} items 지역 점검 항목(데모 사례 정의에만 있음, 실데이터는 빈 배열 → 같은 자리에 "해당 항목 없음")
+ * @param {{ change?: number|null, basis?: string }} head 머리 칸 변화율을 모델 대신 다른 근거로 줄 때(데모: 공표 통계 전년 같은 분기 대비)
+ * 두 모드가 같은 함수·같은 형식을 쓴다. 변화율을 못 구하면 머리의 변화율 자리에 "전년 비교 불가".
+ */
+export function diagnosisView(view, ranking = null, items = [], head = {}) {
+  if (!view) return null;
+  const all = [...view.factors, ...view.rest];
+  const change = "change" in head ? head.change : yoyChange(view);
+  const drivers = all.filter((row) => !row.feature.startsWith("dong_")); // |기여도| 내림차순 유지
+  const down = drivers.find((row) => row.value < 0);
+  const up = drivers.find((row) => row.value > 0);
+  const rows = [
+    down && { dir: "down", name: "하방 요인", label: down.label, value: signedText(down.value, view.unit) },
+    up && { dir: "up", name: "상방 요인", label: up.label, value: signedText(up.value, view.unit) }
+  ].filter(Boolean);
+  const total = all.reduce((sum, row) => sum + Math.abs(row.value), 0);
+  const seasonal = all.filter((row) => row.feature === "month_sin" || row.feature === "month_cos")
+    .reduce((sum, row) => sum + Math.abs(row.value), 0);
+  if (total > 0 && seasonal / total >= DIAGNOSIS_SEASONAL_SHARE) {
+    rows.push({ dir: "season", name: "계절 영향", label: "월별 계절성", value: `${Math.round((seasonal / total) * 100)}%` });
+  }
+  return {
+    kind: change === null ? null : trendKind(change),
+    change: change === null ? "전년 비교 불가" : percentText(change),
+    basis: head.basis ?? "전년 같은 달 대비",
+    rows,
+    items: [...items],
+    indicators: (ranking ?? []).map((e) => ({
+      target: e.target,
+      name: REAL_TARGETS[e.target] ?? targetName(e.target),
+      kind: Number.isFinite(e.change) ? trendKind(e.change) : null,
+      change: Number.isFinite(e.change) ? percentText(e.change) : "전년 비교 불가"
+    }))
+  };
+}
+
+// ── ③ 시뮬레이션 설정 띠 표시 형식 ──
+/** YYYYMM → "2019년 4월" */
+export const monthText = (value) => (value ? `${String(value).slice(0, 4)}년 ${Number(String(value).slice(4))}월` : "—");
+
+// 데모 조절변수 중 정책 강조 가중치 슬라이더(SimulatorDock) — 시설 조절변수 앞에 둔다.
+const DEMO_WEIGHT_CONTROLS = ["복지 예산", "산업 일자리", "주거·주택"];
+
+/**
+ * ③ 시뮬레이션 설정 띠 — 다섯 칸(목적함수·수요·공급·조절변수·제약요소)의 값. 두 모드가 같은 형식({ value, meta, chips })이다.
+ * 데모: 지역 사례의 시뮬레이션 정의와 현재 총 예산. 실데이터: 활성 시뮬레이션 모델의 근거(예측월·전월 관측·조정 입력·학습 구간).
+ * 실데이터 모델에는 공급 입력이 없어 공급 칸은 "해당 없음"이다.
+ */
+export function simFrameView({ demo, sim = null, budgetTotal = null, controls = [], target = null, context = null, dongName = "" }) {
+  if (demo) {
+    return {
+      // 사례 정의의 "방식 — 목표" 가운데 목표만 보인다(방식은 화면 문구 규칙상 싣지 않음).
+      objective: { value: String(sim.objective).split(" — ").at(-1), meta: null },
+      demand: { value: sim.factors.demand, meta: null },
+      supply: { value: sim.factors.supply, meta: null },
+      adjust: { chips: [...DEMO_WEIGHT_CONTROLS, ...controls.map((c) => c.label)], meta: null },
+      constraint: { value: `${Number(budgetTotal).toLocaleString("ko-KR")}억 원`, meta: `총 ${sim.constraint}` }
+    };
+  }
+  const proof = context?.provenance;
+  if (!proof) {
+    const empty = { value: "–", meta: null };
+    return { objective: empty, demand: empty, supply: empty, adjust: { chips: [], meta: null }, constraint: empty };
+  }
+  const noun = targetName(target);
+  const unit = targetUnit(target);
+  const lastObserved = context.inputs?.y_lag1;
+  const range = proof.range_provenance;
+  return {
+    objective: { value: `${noun} 증가`, meta: `예측월 ${monthText(proof.prediction_period)}` },
+    demand: { value: Number.isFinite(lastObserved) ? `${formatUnitValue(lastObserved, unit)}${unit}` : "–", meta: `전월 ${noun} · ${dongName}` },
+    supply: { value: "해당 없음", meta: null },
+    // 조정 입력 이름에서 반복되는 학습 대상 이름은 칸 표지(meta)로 한 번만 둔다.
+    adjust: { chips: controls.map((c) => c.label.replace(noun, "").trim() || c.label), meta: noun },
+    constraint: { value: `${monthText(range?.from)}~${monthText(range?.to)}`, meta: "입력 조정 범위" }
+  };
 }

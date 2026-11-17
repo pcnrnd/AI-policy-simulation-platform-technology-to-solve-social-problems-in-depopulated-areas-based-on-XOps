@@ -10,16 +10,62 @@ import { usePublicTrends } from "../hooks/usePublicTrends.js";
 import { useRenderTiming } from "../lib/perf.js";
 import { formatUnitValue } from "../lib/realSimulation.js";
 import {
-  COMPARE_COLUMNS, DEFAULT_CRITERION, SORT_CRITERIA, caseTrendSpots, conversionCompareView, evidenceChartsView, facilityRecommendationView
+  COMPARE_COLUMNS, DEFAULT_CRITERION, axisRange, SORT_CRITERIA, conversionCompareView, evidenceChartsView, facilityRecommendationView
 } from "../lib/facilityRecommendation.js";
 
 const MEDAL = ["🥇", "🥈", "🥉"];
 const SERIES_COLORS = [["rgba(59, 130, 246, 0.75)", "rgba(59, 130, 246, 1)"], ["rgba(14, 165, 233, 0.45)", "rgba(14, 165, 233, 1)"], ["rgba(16, 185, 129, 0.45)", "rgba(16, 185, 129, 1)"]];
 
+const END_DIFF_PLUGIN = {
+  id: "endDiff",
+  afterDatasetsDraw(c) {
+    const text = c.options.plugins.endDiff?.text;
+    const pt = c.getDatasetMeta(1)?.data.at(-1);
+    if (!text || !pt) return;
+    const { ctx } = c;
+    ctx.save();
+    ctx.font = "600 11px sans-serif";
+    ctx.fillStyle = SERIES_COLORS[1][1];
+    ctx.textAlign = "right";
+    ctx.fillText(text, pt.x - 6, pt.y - 8);
+    ctx.restore();
+  }
+};
+
+// 관측→전망 경계: 마지막 관측 분기와 첫 전망 분기 사이 옅은 세로선, 위쪽에 짧은 표지 "관측"·"전망".
+// 값은 옵션으로 받는다(차트는 처음 한 번만 만들어져 닫힌 값이 낡는다).
+const PHASE_PLUGIN = {
+  id: "phase",
+  afterDatasetsDraw(c) {
+    const opt = c.options.plugins.phase;
+    const pts = c.getDatasetMeta(0)?.data;
+    if (!opt?.observed || !pts?.[opt.observed] || !pts[opt.observed - 1]) return;
+    const { top, bottom, left, right } = c.chartArea;
+    const x = (pts[opt.observed - 1].x + pts[opt.observed].x) / 2;
+    const { ctx } = c;
+    ctx.save();
+    ctx.strokeStyle = opt.color;
+    ctx.globalAlpha = 0.45;
+    ctx.beginPath();
+    ctx.moveTo(x, top);
+    ctx.lineTo(x, bottom);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = opt.color;
+    ctx.font = "600 11px sans-serif";
+    ctx.textBaseline = "top";
+    ctx.textAlign = "right";
+    ctx.fillText("관측", Math.max(left + 28, x - 6), top + 2);
+    ctx.textAlign = "left";
+    ctx.fillText("전망", Math.min(right - 28, x + 6), top + 2);
+    ctx.restore();
+  }
+};
+
 /** 근거 그래프 하나(선 그래프) — 값이 없으면 캔버스 자리를 그대로 두고 행동 안내만 겹친다. */
 function EvidenceChart({ chart, ct }) {
   const tickUnit = chart.unit.replace(/ 명$/, "");
-  // 월별처럼 눈금이 많은 선 그래프는 점을 감추고 눈금을 듬성듬성(공표된 달의 값은 그대로 선에 있다).
+  // 분기 눈금이 많아 듬성듬성(관측 구간은 실선, 예측 구간은 점선).
   const dense = chart.labels.length > 12;
   // 눈금은 5개만 — 처음과 마지막 달은 항상 보이게 고르게 나눈다.
   const shownTicks = new Set(Array.from({ length: 5 }, (_, k) => Math.round((k * (chart.labels.length - 1)) / 4)));
@@ -27,22 +73,34 @@ function EvidenceChart({ chart, ct }) {
     labels: chart.labels,
     datasets: (chart.series.length ? chart.series : [{ label: chart.title, values: [] }]).map((s, i) => {
       const line = (SERIES_COLORS[i] ?? SERIES_COLORS[0])[1];
-      return { label: s.label || chart.title, data: s.values, borderColor: line, backgroundColor: line, borderWidth: 2, pointRadius: dense ? 0 : 3, pointHoverRadius: 5, tension: 0.25 };
+      // 정책 반영 선은 미반영 선(바로 앞 데이터셋)과의 사이를 옅게 칠한다(차이가 없으면 칠하지 않음).
+      const fill = i === 1 && chart.endDiff ? { target: "-1", above: `${line.replace("1)", "0.28)")}`, below: `${line.replace("1)", "0.28)")}` } : false;
+      return { label: s.label || chart.title, data: s.values, borderColor: line, backgroundColor: line, fill, borderWidth: 2, pointRadius: 2, pointHoverRadius: 5, tension: 0.25, segment: { borderDash: (c) => (c.p1DataIndex >= chart.observed ? [5, 4] : undefined) }, ranges: s.ranges };
     })
   };
+  const yRange = axisRange(chart.series); // 0이 아니라 값 범위에 맞춘다(눈금은 chart.js가 정리)
   const options = {
     responsive: true,
     maintainAspectRatio: false,
+    interaction: { mode: "index", intersect: false },
     scales: {
       x: { grid: { display: false }, ticks: { color: ct.tickStrong, font: { size: 11 }, ...(dense && { autoSkip: false, maxRotation: 0, callback: (_, i) => (shownTicks.has(i) ? chart.labels[i] : "") }) } },
       // 단위는 눈금과 툴팁 값에 붙인다(축 제목·부제는 두지 않는다).
-      y: { beginAtZero: true, grid: { color: ct.grid }, ticks: { color: ct.tick, callback: (v) => (v === 0 ? "0" : `${v.toLocaleString("ko-KR")}${tickUnit}`) } }
+      y: { suggestedMin: yRange?.min, suggestedMax: yRange?.max, grid: { color: ct.grid }, ticks: { color: ct.tick, callback: (v) => (`${+v.toFixed(2)}${tickUnit}`) } }
     },
     plugins: {
-      legend: { display: chart.series.length > 1 || chart.id === "case", position: "bottom", labels: { color: ct.tick, boxWidth: 10, font: { size: 10 } } },
+      // 마지막 예측 분기의 반영 선 옆에 차이 값만(+0.29만) — 값은 옵션으로 넘겨 다시 그릴 때마다 최신 값을 쓴다.
+      phase: { observed: chart.observed, color: ct.tick },
+      endDiff: { text: chart.endDiff ? `${chart.endDiff > 0 ? "+" : "−"}${Math.abs(chart.endDiff).toFixed(2)}${tickUnit}` : null },
+      legend: { display: chart.series.length > 1, position: "bottom", labels: { color: ct.tick, boxWidth: 10, font: { size: 10 } } },
       tooltip: {
+        filter: (item) => item.parsed.y != null, // 값이 없는 반영 항목(실데이터)은 툴팁에 넣지 않는다
         callbacks: {
-          label: (ctx) => `${ctx.dataset.label} ${ctx.parsed.y.toLocaleString("ko-KR")}${tickUnit}`
+          label: (ctx) => {
+            const range = ctx.dataset.ranges?.[ctx.dataIndex];
+            const text = `${ctx.dataset.label} ${ctx.parsed.y.toLocaleString("ko-KR")}${tickUnit}`;
+            return range ? `${text} (${range[0].toLocaleString("ko-KR")}~${range[1].toLocaleString("ko-KR")}${tickUnit})` : text;
+          }
         }
       }
     }
@@ -53,7 +111,7 @@ function EvidenceChart({ chart, ct }) {
         <strong>{chart.title}</strong>
       </figcaption>
       <div className="reco-evidence-canvas">
-        <Line data={data} options={options} aria-label={`${chart.title} 그래프`} role="img" />
+        <Line data={data} options={options} plugins={[END_DIFF_PLUGIN, PHASE_PLUGIN]} aria-label={`${chart.title} 그래프`} role="img" />
         {chart.empty && <ChartEmptyNote>{chart.empty}</ChartEmptyNote>}
       </div>
     </figure>
@@ -97,7 +155,7 @@ function ConversionCompare({ compare }) {
  * 추천 결과 패널 — Top3 요약 + 막대 차트 + 근거 그래프 묶음(순위 그래프 바로 아래) + 전환 방안 비교 + 상세 표.
  * 데모 표시: facilityRows(시설 × 활용 방안) — 추천 지수 순위로 Top3·차트를 그리고, 표는 열 제목으로 고른 기준으로 정렬한다.
  * 실데이터 표시: view(sensitivityRecommendation 결과) — 같은 형식에 모델 예측상 변화를 넣는다. 전환 방안 비교·시설 기반 그래프는 같은 자리에 행동 안내.
- * 생활인구 추이·유사 사례 성과 값은 두 표시 모두 플랫폼 공표 통계 API(usePublicTrends)에서 온다.
+ * 생활인구·정주인구 전망의 관측 값은 두 표시 모두 플랫폼 공표 통계 API(usePublicTrends)에서 온다(정책 반영 선은 시설 표시만).
  * @param {{ region: object, facilityRows?: object[], view?: object }} props
  */
 export default function PolicyRecommendation({ region, facilityRows = null, view: realView = null }) {
@@ -108,15 +166,14 @@ export default function PolicyRecommendation({ region, facilityRows = null, view
     [realView, facilityRows, criterion]
   );
   const ranked = view.items;
-  // 1~3순위 카드로 고른 시설(기본 1순위) — 전환 방안 비교와 사례 성과 그래프가 따라 바뀐다.
+  // 1~3순위 카드로 고른 시설(기본 1순위) — 전환 방안 비교와 정책 반영 전망 선이 따라 바뀐다.
   const [selectedId, setSelectedId] = useState(null);
   const selected = ranked.find((s) => s.id === selectedId) ?? ranked[0] ?? null;
   const compare = useMemo(() => conversionCompareView(realView ? null : selected), [realView, selected]);
-  const trendSpots = useMemo(() => (realView ? [] : caseTrendSpots(ranked)), [realView, ranked]);
-  const trends = usePublicTrends(region?.name, trendSpots);
+  const trends = usePublicTrends(region?.name);
   const evidenceCharts = useMemo(
-    () => (realView ? evidenceChartsView(trends, null) : evidenceChartsView(trends, ranked, selected)),
-    [realView, trends, ranked, selected]
+    () => (realView ? evidenceChartsView(trends, null) : evidenceChartsView(trends, ranked, selected, region?.name)),
+    [realView, trends, ranked, selected, region?.name]
   );
   const vizMs = useRenderTiming([ranked]);
   const { scoreLabel, scoreUnit, columns } = view;
@@ -159,6 +216,7 @@ export default function PolicyRecommendation({ region, facilityRows = null, view
     indexAxis: "y",
     responsive: true,
     maintainAspectRatio: false,
+    interaction: { mode: "index", intersect: false },
     scales: {
       // 시설 추천은 값 축에 정렬 기준과 단위를 적는다.
       x: { grid: { color: ct.grid }, ticks: { color: ct.tick, ...(view.scoreUnit && { callback: (v) => `${v.toLocaleString("ko-KR")}${view.scoreUnit}` }) }, ...(view.criterion && { title: { display: true, text: scoreLabel, color: ct.tick } }),
