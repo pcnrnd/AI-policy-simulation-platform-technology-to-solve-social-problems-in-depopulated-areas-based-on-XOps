@@ -12,10 +12,12 @@ import ModelEvidence from "../components/ModelEvidence.jsx";
 import SimulatorMap, { SimulatorMapDetails, riskGrade } from "../components/SimulatorMap.jsx";
 import SimulatorDock from "../components/SimulatorDock.jsx";
 import RealForecastResult from "../components/RealForecastResult.jsx";
+import ForecastCompare from "../components/ForecastCompare.jsx";
 import { useAppState } from "../context/AppStateContext.jsx";
 import { useChartTheme } from "../hooks/useChartTheme.js";
 import { useRealSimulation } from "../hooks/useRealSimulation.js";
 import { useFactorAnalysis } from "../hooks/useFactorAnalysis.js";
+import { useForecastCompare } from "../hooks/useForecastCompare.js";
 import { usePublicTrends, useRegionStay } from "../hooks/usePublicTrends.js";
 import { getScrollBehavior } from "../lib/motion.js";
 import { facilityRows, recoControlSig, unlinkedControlNote, withRegionStay } from "../lib/facilityRecommendation.js";
@@ -25,7 +27,7 @@ import {
   REAL_TARGETS, REAL_GUIDE_TEXT, REAL_CONTROLS_LOCK_TEXT, FACTOR_GUIDE_TEXT, FACTOR_PENDING_TEXT, FACTOR_RUN_LOCK_TEXT,
   diagnosisView, simFrameView, quarterYoyChange, AUTO_TARGET, AUTO_TARGET_LABEL, DEMO_FACTOR_TARGET, realUnavailableText, selectedFactorModel, inferenceMatches, inferenceContextKey, factorAnalysisView,
   observedFeatureLabel, rankSensitivity, targetUnit, formatUnitValue,
-  realSliderControls, forecastSeries, sensitivityRecommendation, regionRealStatus, FACTOR_SCOPES
+  realSliderControls, forecastSeries, sensitivityRecommendation, regionRealStatus, FACTOR_SCOPES, activeModelPair, forecastCompareView
 } from "../lib/realSimulation.js";
 
 // 실데이터 표시에서 관측 입력을 바꾼 뒤 시뮬레이션 추론(읽기 전용 계산)을 다시 부르기까지의 대기.
@@ -116,6 +118,12 @@ export default function SimulatorPage() {
   const regionNameOf = (id) => appData.regions.find((r) => r.id === id)?.name ?? id;
   const simProof = real.context?.provenance;
   const dongName = dongOptions.find((row) => row.code === simProof?.dong_code)?.name ?? simProof?.dong_code ?? "—";
+  // ③ 릿지·Chronos-2 비교 줄 — 실데이터는 시뮬레이션 활성 모델(선택 행정동), 데모는 합성 패널의 요인분석 활성 모델(같은 경로).
+  const compareModel = demo ? factorModel : real.ready ? activeModelPair(real.catalog, currentRegion.id, target).simulation : undefined;
+  const compareDong = demo ? "" : simProof?.dong_code;
+  const compare = useForecastCompare({ mode, model: compareModel, dong: compareDong });
+  const compareView = forecastCompareView(compare.result, { mode, modelId: compareModel?.id, versionId: compareModel?.active_version,
+    dong: compareDong }, demo ? targetUnit(DEMO_FACTOR_TARGET) : unit);
   // 조절변수(x) — 데모는 지역 사례의 시설 변수, 실데이터는 시뮬레이션 모델의 조정 가능한 관측 입력. 바뀌면 기본값으로.
   const controls = demo ? currentRegion.case.simulation.controls ?? [] : realSliderControls(real.context, label, unit);
   const controlsKey = [mode, currentRegion.id, demo ? factorModel?.active_version : simProof?.version_id,
@@ -559,10 +567,6 @@ export default function SimulatorPage() {
           {FACTOR_SCOPES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
         </select>
       </label>
-      {/* 학습 기간·변수·규제 같은 학습 조건은 오케스트레이터에서 바꾼다(두 모드 같음). */}
-      <button type="button" className="btn btn-secondary pl-train-link" onClick={() => navigateToTab("tab-mlops-orch")}>
-        <i className="fa-solid fa-diagram-project" aria-hidden="true"></i> 학습 조건 바꾸기
-      </button>
       {!demo && real.loading && <p role="status">모델과 관측 입력 확인 중…</p>}
       {!demo && real.feedback && <p className="async-feedback is-error" role="alert">{real.feedback}</p>}
       {factor.feedback && <p className="async-feedback is-error" role="alert">{factor.feedback}</p>}
@@ -742,6 +746,7 @@ export default function SimulatorPage() {
             ) : (
               realPending
             )}
+            <ForecastCompare view={compareView} loading={compare.loading} />
             {/* 계산 근거 — 예측 입력 기여도·검증 오차·기준선·활성 버전(이전 STAGE ①·② 실데이터 내용) */}
             <ModelEvidence slot="sim.sim.evidence" demo={demo} state={evidenceState} result={simShown ?? real.context} regions={regions} datasetName={real.datasetName} label={label} />
           </Card>

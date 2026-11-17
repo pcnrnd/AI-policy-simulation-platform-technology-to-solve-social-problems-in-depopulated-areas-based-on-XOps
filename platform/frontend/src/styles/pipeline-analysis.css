@@ -509,11 +509,10 @@
 .pl-contrib-foot {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 12px;
   margin-top: 12px;
 }
-.pl-contrib-foot .pl-source-note { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pl-contrib-more {
   flex-shrink: 0;
   border: 1px solid var(--border-color);
@@ -538,12 +537,8 @@
 }
 .pl-model-pair .pl-model-box { margin: 0; padding: 10px 12px; }
 .pl-model-pair .pl-model-chips { max-height: 96px; }
-/* ① 학습 조건 바꾸기(오케스트레이터로) */
-.pl-train-link {
-  align-self: flex-end;
-  padding: 7px 14px;
-  font-size: 12px;
-}
+/* 1280 폭 등에서는 학습 모델 상자 제목이 두 줄이 된다 — 칩 상자를 줄여 옆 검증 카드와 줄 높이를 맞춘다(카드 아래 빈 공간 40px 이하). */
+@media (max-width: 1365px) { .pl-model-pair .pl-model-chips { max-height: 92px; } }  /* 칩 세 줄(줄 간격 33px)이 잘리지 않는 높이 */
 
 /* STAGE② 문제 진단 — 유형·변화율 머리, 요인 행, 진단 항목, 지표별 상태 */
 .pl-diag {

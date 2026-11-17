@@ -25,7 +25,6 @@ export default function FactorResultStage({ open, onToggle, locked = false, runn
   const more = zones.some((z) => z.rows.length > ZONE_LIMIT);
   const value = (number) => formatUnitValue(number, view?.unit);
   const versionTitle = view?.model.versionId; // 화면은 짧은 ID, 전체 ID는 title
-  const basisText = view?.basis; // 한 줄로 줄인 출처 줄의 전체 문구(마우스 올리면)
   return (
     <CollapsibleStage
       id="stage-result"
@@ -37,7 +36,7 @@ export default function FactorResultStage({ open, onToggle, locked = false, runn
     >
       <div className="pl-flow-grid pl-flow-2">
         {/* 요인 기여도 — 기존 ①-1 목록과 ② 상관관계 카드를 합쳤다(+/− 구역에 이름과 기여도 값). */}
-        <Card title="AI + 인구학적 요인 분석 결과" icon="fa-list-check" dataSource="api" data-slot="sim.result.card-1">
+        <Card title="예측을 높이고 낮춘 요인" icon="fa-list-check" dataSource="api" data-slot="sim.result.card-1">
           {!ready ? pending() : rows.length === 0 ? <PendingData text={FACTOR_SCOPE_EMPTY_TEXT} /> : (
             <>
               <div className="pl-corr-grid">
@@ -54,14 +53,13 @@ export default function FactorResultStage({ open, onToggle, locked = false, runn
                   </div>
                 ))}
               </div>
-              <div className="pl-contrib-foot">
-                <span className="pl-source-note" title={basisText}><i className="fa-solid fa-database" aria-hidden="true"></i> {view.basis}</span>
-                {more && (
+              {more && (
+                <div className="pl-contrib-foot">
                   <button type="button" className="pl-contrib-more" onClick={() => setExpanded((v) => !v)} aria-expanded={expanded}>
                     {expanded ? "접기" : `모두 보기 (${rows.length})`}
                   </button>
-                )}
-              </div>
+                </div>
+              )}
               <p className="pl-stat-baseline sr-only">{FACTOR_EXPLAIN_TEXT}</p>
             </>
           )}
@@ -80,8 +78,8 @@ export default function FactorResultStage({ open, onToggle, locked = false, runn
       </div>
 
       <div className="pl-flow-grid pl-flow-2 pl-result-row">
-        {/* 모델 정보 — 기여도 분해식과 활성 버전. 요인분석 모델은 릿지 회귀(백엔드 RidgeRegressor). */}
-        <Card title="릿지 회귀 예측 모델" icon="fa-microchip" dataSource="api" data-slot="sim.result.card-3">
+        {/* 모델 정보 — 기여도 분해식과 활성 버전. 화면에는 특정 알고리즘 이름을 쓰지 않는다(사용자 지시 11-17). */}
+        <Card title="요인분석 모델" icon="fa-microchip" dataSource="api" data-slot="sim.result.card-3">
           {!ready ? pending() : (
             <div className="pl-model-pair">
               <div className="pl-model-box pl-model-xai">
@@ -109,7 +107,6 @@ export default function FactorResultStage({ open, onToggle, locked = false, runn
               </div>
               <p className="pl-stat-baseline">
                 검증 평균 절대 오차 {value(view.validation.mae)} {view.unit} · 기준선 {value(view.validation.baselineMae)} {view.unit}
-                {view.validation.baselineName ? `(${view.validation.baselineName})` : ""}
               </p>
               <div className="pl-stage-label">분석 대상</div>
               <ul className="pl-mini-list">

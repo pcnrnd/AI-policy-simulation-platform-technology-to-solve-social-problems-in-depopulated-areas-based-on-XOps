@@ -166,8 +166,8 @@ export const scopeFactors = (rows, scope) => (scope === "policy" ? rows.filter((
 export const FACTOR_SCOPE_EMPTY_TEXT = "정책 관련 요인이 든 학습데이터를 등록해 학습하면 표시됩니다.";
 
 /**
- * 요인분석 추론 결과 → STAGE ①(카드 3개)·②(상관관계) 표시 데이터. 두 모드가 같은 함수를 쓰고,
- * 모드는 출처 문구(basis)만 바꾼다. dataset: 결과의 등록 학습데이터(카탈로그 행, 없으면 ID로 표기).
+ * 요인분석 추론 결과 → STAGE ② 표시 데이터. 두 모드가 같은 함수를 쓰고 값만 다르다.
+ * dataset: 결과의 등록 학습데이터(카탈로그 행, 없으면 ID로 표기).
  */
 export function factorAnalysisView(result, { demo, dataset, label }) {
   const p = result.provenance;
@@ -181,14 +181,13 @@ export function factorAnalysisView(result, { demo, dataset, label }) {
     // rest: 10행 밖 요인 — ①-1 카드 안 "모두 보기" 펼침에서 같은 형식으로 보인다.
     unit, factors, rest: all.slice(FACTOR_LIST_LIMIT), more: all.length - factors.length,
     split: { positive: factors.filter((row) => row.value > 0), negative: factors.filter((row) => row.value < 0) },
-    basis: demo ? `연계 데이터: 데모 요인 패널 · ${name}` : `현재 등록 데이터 기준 · ${name} (관측 ${observed})`,
     runInfo: `학습데이터 ${name} · 요인분석 활성 버전 ${displayId(p.version_id)}`,
     // listKey: 요인 목록 쪽 번호를 1쪽으로 되돌리는 기준 — 같은 버전이라도 행정동이 바뀌면 다른 목록이다.
     listKey: `${p.version_id}|${p.dong_code ?? ""}`,
     model: { version: displayId(p.version_id), versionId: p.version_id, intercept: result.intercept, prediction: result.prediction,
       features: (p.features ?? []).map(label) },
     validation: {
-      mae: p.metrics?.mae, baselineMae: p.baseline?.mae, baselineName: baselineName(p.baseline?.name),
+      mae: p.metrics?.mae, baselineMae: p.baseline?.mae,
       targets: [`${targetName(p.target)} · 요인 ${(p.features ?? []).length}개`, `관측 기간 ${observed}`,
         `검증 기간 ${evaluation ? `${formatMonth(evaluation.from)}~${formatMonth(evaluation.to)}` : "—"}`,
         `기준월 ${formatMonth(p.prediction_period)}`]
@@ -249,6 +248,28 @@ export function forecastSeries(context, simulation) {
   const adjusted = simulation?.prediction ?? null;
   return { labels: ["3개월 전", "2개월 전", "전월", `예측월 ${period}`],
     baseline: [...observed, baseline], adjusted: [...observed, adjusted] };
+}
+
+// ③ 활성 모델(릿지)·원격 시계열 모델(Chronos-2) 다음 달 예측 나란히(결정 30). 화면에는 역할 이름만 쓴다.
+// 원격 예측이 없으면 같은 자리에 이 행동 안내만 둔다.
+export const REMOTE_FORECAST_GUIDE_TEXT = "시계열 예측 서버를 연결하면 활성 모델 예측과 함께 표시됩니다.";
+/**
+ * forecast-compare 응답 → ③ 비교 줄 표시 값. 선택(모드·모델·버전·행정동)과 다른 응답은 낡은 결과라 null.
+ * remote: 원격 예측이 정상(10% ≤ 50% ≤ 90% 분위, 모두 유한)일 때만 값, 아니면 null(→ 행동 안내).
+ */
+export function forecastCompareView(result, { mode, modelId, versionId, dong }, unit) {
+  const p = result?.provenance;
+  if (!p || p.mode !== mode || result.source !== mode || p.instance_id !== modelId || p.version_id !== versionId
+    || (dong && p.dong_code !== dong)) return null;
+  const text = (value) => `${formatUnitValue(value, unit)}${unit}`;
+  const r = result.remote;
+  const ok = r?.status === "ok" && [r.low, r.median, r.high].every(Number.isFinite) && r.low <= r.median && r.median <= r.high;
+  return {
+    // 예측 대상·달 — 데모는 카드 윗부분(10년 인구)과 대상이 달라 줄 이름에 대상을 붙인다(두 모드 같은 형식).
+    period: `${targetName(p.target)} ${formatMonth(p.prediction_period)}`,
+    ridge: Number.isFinite(result.ridge?.prediction) ? text(result.ridge.prediction) : "—",
+    remote: ok ? { median: text(r.median), range: `${compactNumber(r.low)}~${compactNumber(r.high)}${unit}` } : null
+  };
 }
 
 /** 민감도 순위 → 정책 추천 패널(RICE 패널과 같은 형식, 점수 대신 모델 예측상 변화). */
