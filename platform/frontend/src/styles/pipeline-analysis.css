@@ -481,27 +481,138 @@
   padding: 3px 0;
 }
 
-/* STAGE② 문제 진단 */
-.pl-diag-list {
+/* STAGE② 문제 진단 — 유형·변화율 머리, 요인 행, 진단 항목, 지표별 상태 */
+.pl-diag {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.pl-diag-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  background: var(--surface-hover);
+}
+.pl-diag-kind {
+  font-size: 13px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(var(--accent-orange-rgb), 0.12);
+  color: var(--accent-orange);
+}
+.pl-diag-change {
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+.pl-diag-basis {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.pl-diag-head.is-down { border-color: rgba(var(--accent-red-rgb), 0.3); background: rgba(var(--accent-red-rgb), 0.05); }
+.pl-diag-head.is-down .pl-diag-kind { background: rgba(var(--accent-red-rgb), 0.12); color: var(--accent-red); }
+.pl-diag-head.is-down .pl-diag-change { color: var(--accent-red); }
+.pl-diag-head.is-up { border-color: rgba(var(--accent-teal-rgb), 0.3); background: rgba(var(--accent-teal-rgb), 0.05); }
+.pl-diag-head.is-up .pl-diag-kind { background: rgba(var(--accent-teal-rgb), 0.12); color: var(--accent-teal); }
+.pl-diag-head.is-up .pl-diag-change { color: var(--accent-teal); }
+.pl-diag-head.is-flat { border-color: rgba(var(--accent-orange-rgb), 0.3); background: rgba(var(--accent-orange-rgb), 0.05); }
+.pl-diag-rows {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+.pl-diag-row {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 2px;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 13px;
+}
+.pl-diag-row:last-child { border-bottom: none; }
+.pl-diag-row dt {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+.pl-diag-row dd { margin: 0; }
+.pl-diag-label { color: var(--text-primary); }
+.pl-diag-value {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.pl-diag-row.is-down .pl-diag-value { color: var(--accent-red); }
+.pl-diag-row.is-up .pl-diag-value { color: var(--accent-teal); }
+.pl-diag-row.is-season .pl-diag-value { color: var(--accent-orange); }
+.pl-diag-items {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
 }
-.pl-diag-list li {
+.pl-diag-items li {
   display: flex;
-  align-items: flex-start;
-  gap: 8px;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 2px;
+  border-bottom: 1px solid var(--border-color);
   font-size: 13px;
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
-.pl-diag-list li i {
-  color: var(--accent-orange, #f59e0b);
-  margin-top: 3px;
+.pl-diag-items li:last-child { border-bottom: none; }
+.pl-diag-no {
   flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent-orange);
+  background: rgba(var(--accent-orange-rgb), 0.12);
 }
+.pl-diag-indicators {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border-color);
+}
+.pl-diag-tag {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-right: 4px;
+}
+.pl-diag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--surface-hover);
+  border: 1px solid var(--border-color);
+}
+.pl-diag-chip b { font-weight: 700; }
+.pl-diag-chip span { font-variant-numeric: tabular-nums; }
+.pl-diag-chip.is-down b { color: var(--accent-red); }
+.pl-diag-chip.is-up b { color: var(--accent-teal); }
+.pl-diag-chip.is-flat b { color: var(--accent-orange); }
 .pl-param-derive {
   margin-top: 14px;
   padding-top: 12px;

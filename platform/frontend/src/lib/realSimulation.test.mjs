@@ -6,7 +6,7 @@ import { activeModelPair, selectedFactorModel, inferenceMatches, inferenceContex
   contributionFactors, contributionSplit, realSliderControls, forecastSeries, sensitivityRecommendation, regionRealStatus,
   REAL_GUIDE_TEXT, FACTOR_GUIDE_TEXT, FACTOR_PENDING_TEXT, FACTOR_RUN_LOCK_TEXT, REAL_LOAD_FAILED_TEXT, REAL_PREDICT_FAILED_TEXT, REAL_VERSION_CHANGED_TEXT,
   FACTOR_IDLE_TEXT, FACTOR_FAILED_TEXT, FACTOR_VERSION_CHANGED_TEXT, FACTOR_EXPLAIN_TEXT,
-  DEMO_FACTOR_TARGET, FACTOR_PANEL_FEATURES, FACTOR_LIST_LIMIT, factorAnalysisView, factorDiagnosis, yoyChange, rankTargets, indicatorLine, AUTO_TARGET_LABEL, featureUnit, targetUnit, formatUnitValue, sliderValueText } from "./realSimulation.js";
+  DEMO_FACTOR_TARGET, FACTOR_PANEL_FEATURES, FACTOR_LIST_LIMIT, factorAnalysisView, diagnosisView, yoyChange, rankTargets, AUTO_TARGET_LABEL, featureUnit, targetUnit, formatUnitValue, sliderValueText } from "./realSimulation.js";
 const proof={instance_id:"factor",model_type:"factor_analysis",version_id:"v1",job_id:"job1",dataset_id:"registered1",dataset_hash:"a".repeat(64),region_id:"namwon",target:"observed_sales_krw",dong_code:"45190250",prediction_period:202401,features:["y_lag1"],mode:"real",source:"real"};
 const sim={provenance:{...proof,instance_id:"sim",model_type:"simulation",dataset_id:"registered2",version_id:"v2",job_id:"job2"}};
 const request=inferenceRequest(sim,{y_lag1:100});
@@ -140,7 +140,7 @@ assert.doesNotMatch(factorHook,/set(?:Feedback|Missing)\([^)]*(?:error|err)\b/);
 // ② 상관관계는 ① 기여도 부호, 진단은 데모 서사/실데이터 안내.
 assert.match(page,/split=\{factorView\?\.split\}/);
 // 실데이터 진단은 제약 문구 대신 ① 결과에서 읽은 신호 — 화면에 "등록 후 제공" 같은 문구가 없다.
-assert.match(page,/diagnosis=\{demo \? currentRegion\.case\.problemDiagnosis : factorView && factor\.ranking\?\.length \? \[\.\.\.\(factorDiagnosis\(factorView\) \?\? \[\]\), indicatorLine\(factor\.ranking\)\] : factorDiagnosis\(factorView\)\}/); // 자동 실행이면 지표별 한 줄을 진단 끝에 더한다
+assert.match(page,/diagnosis=\{demo \? \{ items: currentRegion\.case\.problemDiagnosis \} : diagnosisView\(factorView, factor\.ranking\)\}/); // 데모는 진단 항목, 실데이터는 구조화한 진단(자동 실행이면 지표별 포함)
 assert.doesNotMatch(page+resultStage+read("lib","realSimulation.js"),/등록 후 제공|diagnosisNote/);
 // ④ 추천 전 안내는 실데이터에서 "관측 입력", 데모 시설 추천에서 "시설 변수"
 assert.match(page,/\{demo \? "시설 변수를" : "관측 입력을"\}/);
@@ -181,15 +181,21 @@ const dongView=factorAnalysisView({...panelResult,provenance:{...panelProof,dong
 assert.equal(demoView.listKey,`${panelProof.version_id}|all`);assert.notEqual(dongView.listKey,demoView.listKey);
 // 문제 유형 진단(실데이터 ②) — 추정 대 전년 같은 달로 유형, 행정동 제외 최대 하방·상방 요인, 계절 비중.
 const salesLabel=(feature) => observedFeatureLabel(feature,"observed_sales_krw",[{code:"1",name:"운봉읍"}]);
-const diagOf=(contributions,prediction) => factorDiagnosis(factorAnalysisView({provenance:{...proof,metrics:{},baseline:{}},intercept:0,prediction,contributions},{demo:false,dataset:null,label:salesLabel}));
+const diagOf=(contributions,prediction,ranking=null) => diagnosisView(factorAnalysisView({provenance:{...proof,metrics:{},baseline:{}},intercept:0,prediction,contributions},{demo:false,dataset:null,label:salesLabel}),ranking);
 const salesRows=[{feature:"dong_1",input:0,value:-90},{feature:"y_yoy",input:100,value:40},{feature:"month_cos",input:0.5,value:-30},{feature:"has_yoy",input:1,value:0},{feature:"y_lag1",input:80,value:-20}];
-assert.deepEqual(diagOf(salesRows,90),["유형: 감소형 — 다음 달 추정값이 전년 같은 달 관측보다 10.0% 낮습니다.",
-  "주된 하방 요인: 월별 계절성 2 (기여도 -30 원)","주된 상방 요인: 전년 같은 달 관측 소비 (기여도 +40 원)","계절 영향: 월별 계절성이 전체 기여의 17%를 차지합니다."]);
-assert.match(diagOf(salesRows,103)[0],/^유형: 정체형 — .*3\.0% 높습니다\.$/);
-// 전년 관측이 없으면 유형을 단정하지 않는다(요인 줄만), 결과가 없으면 null.
-assert.doesNotMatch(diagOf(salesRows.map((r)=>r.feature==="has_yoy"?{...r,input:0}:r),90).join("|"),/유형:/);
-assert.equal(factorDiagnosis(null),null);
-for (const line of diagOf(salesRows,90)) { assert.doesNotMatch(line,INTERNAL,line); assert.doesNotMatch(line,CAUSAL,line); }
+// 머리: 유형·변화율(전년 같은 달 대비), 행: 하방·상방 요인(행정동 제외, 부호 붙은 기여도), 계절 비중 15% 이상이면 계절 행.
+assert.deepEqual(diagOf(salesRows,90),{kind:"감소형",change:"−10.0%",rows:[
+  {dir:"down",name:"하방 요인",label:"월별 계절성 2",value:"−30원"},{dir:"up",name:"상방 요인",label:"전년 같은 달 관측 소비",value:"+40원"},
+  {dir:"season",name:"계절 영향",label:"월별 계절성",value:"17%"}],indicators:[]});
+assert.deepEqual([diagOf(salesRows,103).kind,diagOf(salesRows,103).change],["정체형","+3.0%"]);
+// 전년 관측이 없으면 유형을 단정하지 않는다(요인 행만), 결과가 없으면 null.
+const noYoy=diagOf(salesRows.map((r)=>r.feature==="has_yoy"?{...r,input:0}:r),90);
+assert.deepEqual([noYoy.kind,noYoy.change,noYoy.rows.length],[null,null,3]);
+assert.equal(diagnosisView(null),null);
+// 지표별 상태(자동 실행 순위 순) — 비교 불가는 유형 없이 "전년 비교 불가".
+assert.deepEqual(diagOf(salesRows,90,[{target:"observed_sales_krw",change:-8.24},{target:"nonlocal_visitors",change:null}]).indicators,[
+  {target:"observed_sales_krw",name:"관측 소비",kind:"감소형",change:"−8.2%"},{target:"nonlocal_visitors",name:"타지역 방문객",kind:null,change:"전년 비교 불가"}]);
+for (const text of JSON.stringify(diagOf(salesRows,90)).split('"')) { assert.doesNotMatch(text,INTERNAL,text); assert.doesNotMatch(text,CAUSAL,text); }
 const many={...panelResult,contributions:Array.from({length:14},(_,i)=>({feature:`dong_${i}`,input:1,value:i-7}))};
 const manyView=factorAnalysisView(many,{demo:false,dataset:null,label:(f)=>f});
 assert.equal(manyView.factors.length,FACTOR_LIST_LIMIT);assert.equal(manyView.more,4);
@@ -285,8 +291,6 @@ const entry = (target, change) => ({ target, change });
 assert.deepEqual(rankTargets([entry("nonlocal_visitors", 1), entry("observed_sales_krw", -8.2)]).map((e) => e.target), ["observed_sales_krw", "nonlocal_visitors"]);
 assert.deepEqual(rankTargets([entry("observed_sales_krw", null), entry("nonlocal_visitors", 3)]).map((e) => e.target), ["nonlocal_visitors", "observed_sales_krw"]);
 assert.deepEqual(rankTargets([entry("observed_sales_krw", null), entry("nonlocal_visitors", null)]).map((e) => e.target), ["observed_sales_krw", "nonlocal_visitors"]); // 둘 다 불가 → 입력 순서
-assert.equal(indicatorLine([entry("observed_sales_krw", -8.2), entry("nonlocal_visitors", 1)]), "지표별: 관측 소비 감소형 −8.2% · 타지역 방문객 정체형 +1.0%");
-assert.equal(indicatorLine([entry("nonlocal_visitors", 9.04), entry("observed_sales_krw", null)]), "지표별: 타지역 방문객 증가형 +9.0% · 관측 소비 전년 비교 불가");
 assert.equal(AUTO_TARGET_LABEL, "자동(가장 나빠진 지표)");
 // 변화율은 ② 진단의 유형 계산과 같다(다음 달 추정 대 전년 같은 달).
 const yoyView = (yoy, prediction, has = 1) => factorAnalysisView({ provenance: { ...proof, metrics: {}, baseline: {} }, intercept: 0, prediction,

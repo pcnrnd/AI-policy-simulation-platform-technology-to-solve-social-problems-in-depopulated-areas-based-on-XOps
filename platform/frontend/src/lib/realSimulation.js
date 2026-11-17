@@ -212,43 +212,6 @@ export function rankTargets(entries) {
   return entries.map((e, i) => [e, i]).sort(([a, i], [b, j]) => rank(a) - rank(b) || i - j).map(([e]) => e);
 }
 
-/** ② 진단 카드의 지표별 한 줄 — 순위 순. */
-export function indicatorLine(ranked) {
-  const text = (e) => (Number.isFinite(e.change)
-    ? `${REAL_TARGETS[e.target] ?? e.target} ${trendKind(e.change)} ${e.change < 0 ? "−" : "+"}${Math.abs(e.change).toFixed(1)}%`
-    : `${REAL_TARGETS[e.target] ?? e.target} 전년 비교 불가`);
-  return `지표별: ${ranked.map(text).join(" · ")}`;
-}
-
-/**
- * 요인분석 결과만으로 읽는 문제 유형 진단(실데이터 STAGE ②) — 유형(추정 대 전년 같은 달)·주된 하방/상방 요인·계절 영향.
- * 행정동 항목은 선택 동이 아닌 동의 평균 대비 보정이라 요인으로 내세우지 않는다. 읽을 신호가 없으면 빈 배열.
- * @param {ReturnType<typeof factorAnalysisView> | null} view
- * @returns {string[] | null}
- */
-export function factorDiagnosis(view) {
-  if (!view) return null;
-  const all = [...view.factors, ...view.rest];
-  const amount = (row) => `${formatUnitValue(row.value, view.unit)} ${view.unit}`;
-  const lines = [];
-  const change = yoyChange(view);
-  if (change !== null) {
-    const kind = trendKind(change);
-    lines.push(`유형: ${kind} — 다음 달 추정값이 전년 같은 달 관측보다 ${Math.abs(change).toFixed(1)}% ${change < 0 ? "낮습니다" : "높습니다"}.`);
-  }
-  const drivers = all.filter((row) => !row.feature.startsWith("dong_")); // |기여도| 내림차순 유지
-  const down = drivers.find((row) => row.value < 0);
-  const up = drivers.find((row) => row.value > 0);
-  if (down) lines.push(`주된 하방 요인: ${down.label} (기여도 ${amount(down)})`);
-  if (up) lines.push(`주된 상방 요인: ${up.label} (기여도 +${amount(up)})`);
-  const total = all.reduce((sum, row) => sum + Math.abs(row.value), 0);
-  const seasonal = all.filter((row) => row.feature === "month_sin" || row.feature === "month_cos")
-    .reduce((sum, row) => sum + Math.abs(row.value), 0);
-  if (total > 0 && seasonal / total >= DIAGNOSIS_SEASONAL_SHARE) {
-    lines.push(`계절 영향: 월별 계절성이 전체 기여의 ${Math.round((seasonal / total) * 100)}%를 차지합니다.`);
-  }
-  return lines;
-}
 
 // 범위/100을 유효숫자 2자리로 — 슬라이더 한 칸.
 function sliderStep(span) {
@@ -300,4 +263,44 @@ export function regionRealStatus(catalog, regionId, target) {
   const ready = (catalog?.instances ?? []).some((row) => row.mode === "real" && row.region_id === regionId && row.target === target &&
     row.model_type === "simulation" && row.active_version);
   return ready ? "실데이터 시뮬레이션 모델 준비됨" : "실데이터 모델 없음";
+}
+
+// ── ② 문제 유형 진단 카드 표시 형식 ──
+const signedText = (value, unit) => `${value < 0 ? "−" : "+"}${formatUnitValue(Math.abs(value), unit)}${unit}`;
+const percentText = (change) => `${change < 0 ? "−" : "+"}${Math.abs(change).toFixed(1)}%`;
+
+/**
+ * ② 문제 유형 진단 카드(실데이터) — 유형·변화율(머리), 하방·상방 요인 행, 계절 영향 행, 지표별 상태(자동 실행일 때).
+ * 행정동 항목은 요인으로 내세우지 않는다. 읽을 신호가 하나도 없으면 빈 형식(rows 0·kind null).
+ * @param {ReturnType<typeof factorAnalysisView> | null} view
+ * @param {{ target: string, change: number|null }[] | null} ranking 자동 실행의 지표별 순위
+ */
+export function diagnosisView(view, ranking = null) {
+  if (!view) return null;
+  const all = [...view.factors, ...view.rest];
+  const change = yoyChange(view);
+  const drivers = all.filter((row) => !row.feature.startsWith("dong_")); // |기여도| 내림차순 유지
+  const down = drivers.find((row) => row.value < 0);
+  const up = drivers.find((row) => row.value > 0);
+  const rows = [
+    down && { dir: "down", name: "하방 요인", label: down.label, value: signedText(down.value, view.unit) },
+    up && { dir: "up", name: "상방 요인", label: up.label, value: signedText(up.value, view.unit) }
+  ].filter(Boolean);
+  const total = all.reduce((sum, row) => sum + Math.abs(row.value), 0);
+  const seasonal = all.filter((row) => row.feature === "month_sin" || row.feature === "month_cos")
+    .reduce((sum, row) => sum + Math.abs(row.value), 0);
+  if (total > 0 && seasonal / total >= DIAGNOSIS_SEASONAL_SHARE) {
+    rows.push({ dir: "season", name: "계절 영향", label: "월별 계절성", value: `${Math.round((seasonal / total) * 100)}%` });
+  }
+  return {
+    kind: change === null ? null : trendKind(change),
+    change: change === null ? null : percentText(change),
+    rows,
+    indicators: (ranking ?? []).map((e) => ({
+      target: e.target,
+      name: REAL_TARGETS[e.target] ?? e.target,
+      kind: Number.isFinite(e.change) ? trendKind(e.change) : null,
+      change: Number.isFinite(e.change) ? percentText(e.change) : "전년 비교 불가"
+    }))
+  };
 }
