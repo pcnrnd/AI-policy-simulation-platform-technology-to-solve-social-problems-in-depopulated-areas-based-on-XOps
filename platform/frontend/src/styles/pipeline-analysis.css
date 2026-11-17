@@ -441,10 +441,17 @@
 }
 
 /* STAGE② 상관관계 */
+/* ② 줄 높이 균형 — 줄 높이는 두 카드 중 큰 쪽이 정한다. 상관관계 카드는 양·음 상자를 카드 아래까지 늘려
+   카드 아래 빈 띠를 두지 않는다(목록이 짧은 지역에서도 상자가 줄 높이를 채움). */
+.pl-flow-2 > [data-slot="sim.result.card-1"] {
+  display: flex;
+  flex-direction: column;
+}
 .pl-corr-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 14px;
+  flex: 1;
 }
 .pl-corr {
   border-radius: 12px;
@@ -485,16 +492,21 @@
 .pl-diag {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
 }
 .pl-diag-head {
   display: flex;
-  align-items: baseline;
-  gap: 12px;
-  padding: 14px 16px;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 14px;
   border-radius: 12px;
   border: 1px solid var(--border-color);
   background: var(--surface-hover);
+}
+.pl-diag-head-main {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
 }
 .pl-diag-kind {
   font-size: 13px;
@@ -505,7 +517,7 @@
   color: var(--accent-orange);
 }
 .pl-diag-change {
-  font-size: 26px;
+  font-size: 24px;
   font-weight: 800;
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
@@ -533,7 +545,7 @@
   grid-template-columns: 72px minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
-  padding: 10px 2px;
+  padding: 7px 2px;
   border-bottom: 1px solid var(--border-color);
   font-size: 13px;
 }
@@ -579,9 +591,19 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  padding-top: 12px;
+  gap: 6px;
+  padding-top: 8px;
   border-top: 1px dashed var(--border-color);
+}
+/* ③ 연결 표지 — 카드 제목 줄 오른쪽 */
+.pl-diag-link {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-blue);
+  white-space: nowrap;
+}
+.pl-diag-link i {
+  margin-right: 4px;
 }
 .pl-diag-tag {
   font-size: 11px;
@@ -593,7 +615,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px;
+  padding: 2px 10px;
   border-radius: 999px;
   font-size: 12px;
   color: var(--text-secondary);
@@ -605,18 +627,6 @@
 .pl-diag-chip.is-down b { color: var(--accent-red); }
 .pl-diag-chip.is-up b { color: var(--accent-teal); }
 .pl-diag-chip.is-flat b { color: var(--accent-orange); }
-.pl-param-derive {
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px dashed var(--border-color);
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--accent-blue);
-}
-.pl-param-derive i {
-  margin-right: 6px;
-}
-
 /* STAGE③ 시뮬레이션 설정 띠 — 다섯 칸, 이름은 작은 표지·값은 크게 */
 .pl-sim-frame {
   display: grid;

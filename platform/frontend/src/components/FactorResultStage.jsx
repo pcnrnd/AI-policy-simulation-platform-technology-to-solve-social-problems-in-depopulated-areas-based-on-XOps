@@ -44,16 +44,14 @@ export default function FactorResultStage({ open, onToggle, locked = false, runn
           )}
         </Card>
 
-        <Card title="문제 유형 진단 결과" icon="fa-stethoscope" dataSource={diagnosisSource} data-slot="sim.result.card-2">
+        <Card title="문제 유형 진단 결과" icon="fa-stethoscope" dataSource={diagnosisSource} data-slot="sim.result.card-2"
+          headerRight={!locked && diagnosis ? (
+            <span className="pl-diag-link"><i className="fa-solid fa-arrow-down-long" aria-hidden="true"></i> ③ 시뮬레이션으로 연결</span>
+          ) : null}>
           {!locked && diagnosis ? (
             <DiagnosisBody diagnosis={diagnosis} />
           ) : (
             <PendingData running={running} text={pendingText ?? "[요인분석 실행] 후 문제 유형 진단 결과가 표시됩니다."} />
-          )}
-          {!locked && diagnosis && (
-            <div className="pl-param-derive">
-              <i className="fa-solid fa-arrow-down-long" aria-hidden="true"></i> ③ 시뮬레이션으로 연결
-            </div>
           )}
         </Card>
       </div>
@@ -63,14 +61,26 @@ export default function FactorResultStage({ open, onToggle, locked = false, runn
 
 const KIND_TONE = { 감소형: "down", 증가형: "up", 정체형: "flat" };
 
-/** 문제 유형 진단 본문 — 두 모드 같은 구조: 유형·변화율(머리) → 요인 행(이름·기여도) → 점검 항목 → 지표별 상태. */
+/** 문제 유형 진단 본문 — 두 모드 같은 구조: 머리(유형·변화율, 지표별 상태) → 요인 행(이름·기여도) → 점검 항목. ③ 연결 표지는 카드 제목 줄 오른쪽. */
 function DiagnosisBody({ diagnosis: d }) {
   return (
     <div className="pl-diag">
       <div className={`pl-diag-head is-${KIND_TONE[d.kind] ?? "none"}`}>
-        {d.kind && <span className="pl-diag-kind">{d.kind}</span>}
-        <strong className="pl-diag-change">{d.change}</strong>
-        <span className="pl-diag-basis">전년 같은 달 대비</span>
+        <div className="pl-diag-head-main">
+          {d.kind && <span className="pl-diag-kind">{d.kind}</span>}
+          <strong className="pl-diag-change">{d.change}</strong>
+          <span className="pl-diag-basis">전년 같은 달 대비</span>
+        </div>
+        {d.indicators?.length > 0 && (
+          <div className="pl-diag-indicators">
+            <span className="pl-diag-tag">지표별</span>
+            {d.indicators.map((e) => (
+              <span key={e.target} className={`pl-diag-chip is-${KIND_TONE[e.kind] ?? "none"}`}>
+                {e.name}{e.kind && <b>{e.kind}</b>}<span>{e.change}</span>
+              </span>
+            ))}
+          </div>
+        )}
       </div>
       {d.rows?.length > 0 && (
         <dl className="pl-diag-rows">
@@ -88,16 +98,6 @@ function DiagnosisBody({ diagnosis: d }) {
         {d.items?.length ? d.items.map((text) => <span key={text} className="pl-diag-check">{text}</span>)
           : <span className="pl-diag-none">해당 항목 없음</span>}
       </div>
-      {d.indicators?.length > 0 && (
-        <div className="pl-diag-indicators">
-          <span className="pl-diag-tag">지표별</span>
-          {d.indicators.map((e) => (
-            <span key={e.target} className={`pl-diag-chip is-${KIND_TONE[e.kind] ?? "none"}`}>
-              {e.name}{e.kind && <b>{e.kind}</b>}<span>{e.change}</span>
-            </span>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
