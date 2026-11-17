@@ -6,7 +6,7 @@ import { activeModelPair, selectedFactorModel, inferenceMatches, inferenceContex
   contributionFactors, contributionSplit, realSliderControls, forecastSeries, sensitivityRecommendation, regionRealStatus,
   REAL_GUIDE_TEXT, FACTOR_GUIDE_TEXT, FACTOR_PENDING_TEXT, FACTOR_RUN_LOCK_TEXT, REAL_LOAD_FAILED_TEXT, REAL_PREDICT_FAILED_TEXT, REAL_VERSION_CHANGED_TEXT,
   FACTOR_IDLE_TEXT, FACTOR_FAILED_TEXT, FACTOR_VERSION_CHANGED_TEXT, FACTOR_EXPLAIN_TEXT,
-  DEMO_FACTOR_TARGET, FACTOR_PANEL_FEATURES, FACTOR_LIST_LIMIT, factorAnalysisView, diagnosisView, simFrameView, monthText, yoyChange, rankTargets, AUTO_TARGET_LABEL, featureUnit, targetUnit, formatUnitValue, sliderValueText } from "./realSimulation.js";
+  DEMO_FACTOR_TARGET, FACTOR_PANEL_FEATURES, FACTOR_LIST_LIMIT, factorAnalysisView, diagnosisView, simFrameView, monthText, quarterYoyChange, yoyChange, rankTargets, AUTO_TARGET_LABEL, featureUnit, targetUnit, formatUnitValue, sliderValueText } from "./realSimulation.js";
 const proof={instance_id:"factor",model_type:"factor_analysis",version_id:"v1",job_id:"job1",dataset_id:"registered1",dataset_hash:"a".repeat(64),region_id:"namwon",target:"observed_sales_krw",dong_code:"45190250",prediction_period:202401,features:["y_lag1"],mode:"real",source:"real"};
 const sim={provenance:{...proof,instance_id:"sim",model_type:"simulation",dataset_id:"registered2",version_id:"v2",job_id:"job2"}};
 const request=inferenceRequest(sim,{y_lag1:100});
@@ -140,7 +140,7 @@ assert.doesNotMatch(factorHook,/set(?:Feedback|Missing)\([^)]*(?:error|err)\b/);
 // ② 상관관계는 ① 기여도 부호, 진단은 데모 서사/실데이터 안내.
 assert.match(page,/split=\{factorView\?\.split\}/);
 // 실데이터 진단은 제약 문구 대신 ① 결과에서 읽은 신호 — 화면에 "등록 후 제공" 같은 문구가 없다.
-assert.match(page,/diagnosis=\{diagnosisView\(factorView, autoRanking, demo \? currentRegion\.case\.problemDiagnosis : \[\]\)\}/); // 두 모드 같은 진단 함수·구조(점검 항목은 데모 사례 정의에만)
+assert.match(page,/diagnosis=\{diagnosisView\(factorView, autoRanking, demo \? currentRegion\.case\.problemDiagnosis : \[\], diagHead\)\}/); // 두 모드 같은 진단 함수·구조(데모 머리 칸은 공표 통계 전년 같은 분기 대비)
 assert.doesNotMatch(page+resultStage+read("lib","realSimulation.js"),/등록 후 제공|diagnosisNote/);
 // ④ 추천 전 안내는 실데이터에서 "관측 입력", 데모 시설 추천에서 "시설 변수"
 assert.match(page,/\{demo \? "시설 변수를" : "관측 입력을"\}/);
@@ -181,10 +181,10 @@ const dongView=factorAnalysisView({...panelResult,provenance:{...panelProof,dong
 assert.equal(demoView.listKey,`${panelProof.version_id}|all`);assert.notEqual(dongView.listKey,demoView.listKey);
 // 문제 유형 진단(실데이터 ②) — 추정 대 전년 같은 달로 유형, 행정동 제외 최대 하방·상방 요인, 계절 비중.
 const salesLabel=(feature) => observedFeatureLabel(feature,"observed_sales_krw",[{code:"1",name:"운봉읍"}]);
-const diagOf=(contributions,prediction,ranking=null,items=[]) => diagnosisView(factorAnalysisView({provenance:{...proof,metrics:{},baseline:{}},intercept:0,prediction,contributions},{demo:false,dataset:null,label:salesLabel}),ranking,items);
+const diagOf=(contributions,prediction,ranking=null,items=[],head={}) => diagnosisView(factorAnalysisView({provenance:{...proof,metrics:{},baseline:{}},intercept:0,prediction,contributions},{demo:false,dataset:null,label:salesLabel}),ranking,items,head);
 const salesRows=[{feature:"dong_1",input:0,value:-90},{feature:"y_yoy",input:100,value:40},{feature:"month_cos",input:0.5,value:-30},{feature:"has_yoy",input:1,value:0},{feature:"y_lag1",input:80,value:-20}];
 // 머리: 유형·변화율(전년 같은 달 대비), 행: 하방·상방 요인(행정동 제외, 부호 붙은 기여도), 계절 비중 15% 이상이면 계절 행.
-assert.deepEqual(diagOf(salesRows,90),{kind:"감소형",change:"−10.0%",items:[],rows:[
+assert.deepEqual(diagOf(salesRows,90),{kind:"감소형",change:"−10.0%",basis:"전년 같은 달 대비",items:[],rows:[
   {dir:"down",name:"하방 요인",label:"월별 계절성 2",value:"−30원"},{dir:"up",name:"상방 요인",label:"전년 같은 달 관측 소비",value:"+40원"},
   {dir:"season",name:"계절 영향",label:"월별 계절성",value:"17%"}],indicators:[]});
 assert.deepEqual([diagOf(salesRows,103).kind,diagOf(salesRows,103).change],["정체형","+3.0%"]);
@@ -328,4 +328,17 @@ assert.deepEqual(realFrame, {
 assert.deepEqual(Object.values(simFrameView({ demo: false, target: "observed_sales_krw" })).map((c) => c.value ?? c.chips.length), ["–", "–", "–", 0, "–"]);
 for (const text of JSON.stringify([demoFrame, realFrame]).split('"')) { assert.doesNotMatch(text, INTERNAL, text); assert.doesNotMatch(text, /\(|강화학습|STAGE/, text); }
 assert.match(page, /simFrameView\(\{ demo, sim, budgetTotal, controls, target, context: real\.ready \? real\.context : null, dongName \}\)/);
+// 결정 25: 데모 ② 머리 칸 = 생활인구 공표 통계 최근 분기 대 전년 같은 분기(생활인구 = 등록 + 체류).
+const q = (year, quarter, registered, stay) => ({ year, quarter, registered, stay });
+const shinanQ = [q(2025, 1, 3.9, 19), q(2025, 2, 3.9, 20.2), q(2025, 3, 4, 21), q(2026, 1, 4.1, 17), q(2026, 2, 4.2, 18.2)];
+assert.equal(quarterYoyChange(shinanQ).toFixed(1), "-7.1"); // 22.4 대 24.1
+assert.equal(quarterYoyChange([q(2025, 4, 1, 9), q(2024, 4, 1, 9.3)]).toFixed(1), "-2.9"); // 정체형 범위
+assert.equal(quarterYoyChange([q(2025, 4, 1, 11), q(2024, 4, 1, 9)]).toFixed(1), "20.0"); // 증가
+assert.equal(quarterYoyChange([q(2026, 2, 1, 1), q(2025, 3, 1, 1)]), null); // 전년 같은 분기 없음
+assert.equal(quarterYoyChange(null), null);
+const kindOf = (pct) => diagOf(salesRows, 90, null, [], { change: pct, basis: "전년 같은 분기 대비" }).kind;
+assert.deepEqual([kindOf(quarterYoyChange(shinanQ)), kindOf(-3), kindOf(20)], ["감소형", "정체형", "증가형"]);
+const demoHead = diagOf(salesRows, 90, [{ target: DEMO_FACTOR_TARGET, change: quarterYoyChange(shinanQ) }], [], { change: quarterYoyChange(shinanQ), basis: "전년 같은 분기 대비" });
+assert.deepEqual([demoHead.kind, demoHead.change, demoHead.basis, demoHead.indicators[0].kind, demoHead.indicators[0].change], ["감소형", "−7.1%", "전년 같은 분기 대비", "감소형", "−7.1%"]);
+assert.deepEqual([diagOf(salesRows, 90, null, [], { change: null, basis: "전년 같은 분기 대비" }).change, diagOf(salesRows, 90).basis], ["전년 비교 불가", "전년 같은 달 대비"]);
 console.log("PASS: current mode/model/version/district provenance, recommendation identity and late response isolation, U20 시나리오 예측 칸·U21 이동 버튼");

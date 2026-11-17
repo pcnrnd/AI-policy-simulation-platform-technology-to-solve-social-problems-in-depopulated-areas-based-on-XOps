@@ -16,13 +16,13 @@ import { useAppState } from "../context/AppStateContext.jsx";
 import { useChartTheme } from "../hooks/useChartTheme.js";
 import { useRealSimulation } from "../hooks/useRealSimulation.js";
 import { useFactorAnalysis } from "../hooks/useFactorAnalysis.js";
-import { useRegionStay } from "../hooks/usePublicTrends.js";
+import { usePublicTrends, useRegionStay } from "../hooks/usePublicTrends.js";
 import { getScrollBehavior } from "../lib/motion.js";
 import { facilityRows, recoControlSig, unlinkedControlNote, withRegionStay } from "../lib/facilityRecommendation.js";
 import { YEAR_LABELS, computeTrends, budgetToFactor, controlBoostOf, ANALYSIS_STEPS } from "../lib/simulation.js";
 import {
   REAL_TARGETS, REAL_GUIDE_TEXT, REAL_CONTROLS_LOCK_TEXT, FACTOR_GUIDE_TEXT, FACTOR_PENDING_TEXT, FACTOR_RUN_LOCK_TEXT, FACTOR_IDLE_TEXT,
-  diagnosisView, simFrameView, yoyChange, AUTO_TARGET, AUTO_TARGET_LABEL, DEMO_FACTOR_TARGET, realUnavailableText, selectedFactorModel, inferenceMatches, inferenceContextKey, factorAnalysisView,
+  diagnosisView, simFrameView, quarterYoyChange, AUTO_TARGET, AUTO_TARGET_LABEL, DEMO_FACTOR_TARGET, realUnavailableText, selectedFactorModel, inferenceMatches, inferenceContextKey, factorAnalysisView,
   observedFeatureLabel, rankSensitivity, targetUnit, formatUnitValue,
   realSliderControls, forecastSeries, sensitivityRecommendation, regionRealStatus
 } from "../lib/realSimulation.js";
@@ -143,6 +143,8 @@ export default function SimulatorPage() {
   // 시설 값이 없는 조절변수를 바꾸면 재도출 안내 대신 같은 자리에 자료 등록 안내를 둔다.
   // 지역 월평균 체류인구는 공표 통계 API 값(시드에 없음) — 늦게 도착하면 추천 입력이 바뀐 것으로 본다.
   const regionStay = useRegionStay(demo ? currentRegion.name : undefined);
+  // 데모 ② 진단 머리 칸의 근거 — 생활인구 공표 통계(정책 추천 전망 그래프와 같은 값)
+  const demoTrends = usePublicTrends(demo ? currentRegion.name : undefined);
   const recoInputSig = demo ? `${contextKey}|${recoControlSig(controls, controlValues)}|stay:${regionStay ?? ""}` : currentSig;
   const controlNote = demo ? unlinkedControlNote(controls, controlValues) : null;
   const recoStale = recommendation !== null && recoSig !== recoInputSig;
@@ -504,7 +506,10 @@ export default function SimulatorPage() {
   const factorLabel = (feature) => observedFeatureLabel(feature, factorTarget, factorResult?.analysis.dong_options ?? dongOptions);
   const factorView = factorResult ? factorAnalysisView(factorResult.analysis, { demo, dataset: factorResult.dataset, label: factorLabel }) : null;
   // 지표별 상태 — 자동 실행일 때만. 데모는 대상이 하나(생활인구)라 자동 = 그 지표 하나의 변화율.
-  const autoRanking = !auto || !factorView ? null : demo ? [{ target: DEMO_FACTOR_TARGET, change: yoyChange(factorView) }] : factor.ranking;
+  // 데모 ② 머리 칸·지표별: 생활인구 공표 통계(정책 추천 전망과 같은 API)의 전년 같은 분기 대비. 못 받으면 null → "전년 비교 불가".
+  const demoYoy = demo ? quarterYoyChange(demoTrends.population?.points) : null;
+  const diagHead = demo ? { change: demoYoy, basis: "전년 같은 분기 대비" } : {};
+  const autoRanking = !auto || !factorView ? null : demo ? [{ target: DEMO_FACTOR_TARGET, change: demoYoy }] : factor.ranking;
   const factorLine = <PendingData text={FACTOR_PENDING_TEXT} />;
   const factorIdle = <PendingData running={analysisRunning} text={FACTOR_IDLE_TEXT} />;
   const factorPlaceholders = factorMissing ? [guide(FACTOR_GUIDE_TEXT, moveAction), factorLine, factorLine] : [factorIdle, factorIdle, factorIdle];
@@ -596,7 +601,7 @@ export default function SimulatorPage() {
         locked={analysisStatus !== "done"}
         running={analysisRunning}
         split={factorView?.split}
-        diagnosis={diagnosisView(factorView, autoRanking, demo ? currentRegion.case.problemDiagnosis : [])}
+        diagnosis={diagnosisView(factorView, autoRanking, demo ? currentRegion.case.problemDiagnosis : [], diagHead)}
         diagnosisSource={cardSource}
         pendingText={factorMissing ? FACTOR_PENDING_TEXT : null}
       />

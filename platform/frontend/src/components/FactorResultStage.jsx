@@ -69,7 +69,7 @@ function DiagnosisBody({ diagnosis: d }) {
         <div className="pl-diag-head-main">
           {d.kind && <span className="pl-diag-kind">{d.kind}</span>}
           <strong className="pl-diag-change">{d.change}</strong>
-          <span className="pl-diag-basis">전년 같은 달 대비</span>
+          <span className="pl-diag-basis">{d.basis}</span>
         </div>
         {d.indicators?.length > 0 && (
           <div className="pl-diag-indicators">

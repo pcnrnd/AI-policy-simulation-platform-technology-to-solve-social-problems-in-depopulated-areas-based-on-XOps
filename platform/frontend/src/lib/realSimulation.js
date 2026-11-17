@@ -266,6 +266,20 @@ export function regionRealStatus(catalog, regionId, target) {
 }
 
 // ── ② 문제 유형 진단 카드 표시 형식 ──
+
+/**
+ * 생활인구 공표 통계(분기, 생활인구 = 등록 + 체류)의 가장 최근 분기 대 전년 같은 분기 변화율(%) — 데모 ② 머리 칸.
+ * 정책 추천 전망 그래프와 같은 API 값. 전년 같은 분기 값이 없으면 null.
+ * @param {{ year: number, quarter: number, registered: number, stay: number }[] | null | undefined} points
+ */
+export function quarterYoyChange(points) {
+  if (!points?.length) return null;
+  const latest = points.reduce((a, p) => (p.year * 4 + p.quarter > a.year * 4 + a.quarter ? p : a));
+  const prior = points.find((p) => p.year === latest.year - 1 && p.quarter === latest.quarter);
+  const living = (p) => p.registered + p.stay;
+  if (!prior || !(living(prior) > 0)) return null;
+  return ((living(latest) - living(prior)) / living(prior)) * 100;
+}
 const signedText = (value, unit) => `${value < 0 ? "−" : "+"}${formatUnitValue(Math.abs(value), unit)}${unit}`;
 const percentText = (change) => `${change < 0 ? "−" : "+"}${Math.abs(change).toFixed(1)}%`;
 
@@ -275,12 +289,13 @@ const percentText = (change) => `${change < 0 ? "−" : "+"}${Math.abs(change).t
  * @param {ReturnType<typeof factorAnalysisView> | null} view
  * @param {{ target: string, change: number|null }[] | null} ranking 자동 실행의 지표별 순위
  * @param {string[]} items 지역 점검 항목(데모 사례 정의에만 있음, 실데이터는 빈 배열 → 같은 자리에 "해당 항목 없음")
- * 두 모드가 같은 함수·같은 형식을 쓴다. 전년 같은 달 값이 없으면 머리의 변화율 자리에 "전년 비교 불가".
+ * @param {{ change?: number|null, basis?: string }} head 머리 칸 변화율을 모델 대신 다른 근거로 줄 때(데모: 공표 통계 전년 같은 분기 대비)
+ * 두 모드가 같은 함수·같은 형식을 쓴다. 변화율을 못 구하면 머리의 변화율 자리에 "전년 비교 불가".
  */
-export function diagnosisView(view, ranking = null, items = []) {
+export function diagnosisView(view, ranking = null, items = [], head = {}) {
   if (!view) return null;
   const all = [...view.factors, ...view.rest];
-  const change = yoyChange(view);
+  const change = "change" in head ? head.change : yoyChange(view);
   const drivers = all.filter((row) => !row.feature.startsWith("dong_")); // |기여도| 내림차순 유지
   const down = drivers.find((row) => row.value < 0);
   const up = drivers.find((row) => row.value > 0);
@@ -297,6 +312,7 @@ export function diagnosisView(view, ranking = null, items = []) {
   return {
     kind: change === null ? null : trendKind(change),
     change: change === null ? "전년 비교 불가" : percentText(change),
+    basis: head.basis ?? "전년 같은 달 대비",
     rows,
     items: [...items],
     indicators: (ranking ?? []).map((e) => ({
