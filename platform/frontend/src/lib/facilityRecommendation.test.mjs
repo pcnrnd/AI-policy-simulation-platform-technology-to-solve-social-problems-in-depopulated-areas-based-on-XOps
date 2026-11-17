@@ -567,6 +567,8 @@ assert.deepEqual(realCharts.map((c) => c.empty), ["생활인구 통계를 연결
 for (const c of realCharts) assert.deepEqual([c.labels, c.series], [[], []]);
 // 실데이터 표시(시설 없음)는 시설 효과가 없으므로 정책 미반영 선만 그린다.
 for (const c of evidenceChartsView(trends, null)) assert.deepEqual(c.series.map((x) => x.label), ["정책 미반영"]);
+// 관측→전망 경계 표지는 관측 분기 수(observed)로 그린다.
+assert.match(read("components", "PolicyRecommendation.jsx"), /phase: \{ observed: chart\.observed/);
 // 사례 월별 그래프 코드는 화면에서 빠졌다.
 assert.doesNotMatch(read("lib", "facilityRecommendation.js"), /caseTrendData|caseTrendSpots|NO_CASE_GUIDE|TREND_MONTHS/);
 assert.doesNotMatch(read("hooks", "usePublicTrends.js"), /spot-visitors|spots/);

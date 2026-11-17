@@ -32,6 +32,36 @@ const END_DIFF_PLUGIN = {
   }
 };
 
+// 관측→전망 경계: 마지막 관측 분기와 첫 전망 분기 사이 옅은 세로선, 위쪽에 짧은 표지 "관측"·"전망".
+// 값은 옵션으로 받는다(차트는 처음 한 번만 만들어져 닫힌 값이 낡는다).
+const PHASE_PLUGIN = {
+  id: "phase",
+  afterDatasetsDraw(c) {
+    const opt = c.options.plugins.phase;
+    const pts = c.getDatasetMeta(0)?.data;
+    if (!opt?.observed || !pts?.[opt.observed] || !pts[opt.observed - 1]) return;
+    const { top, bottom, left, right } = c.chartArea;
+    const x = (pts[opt.observed - 1].x + pts[opt.observed].x) / 2;
+    const { ctx } = c;
+    ctx.save();
+    ctx.strokeStyle = opt.color;
+    ctx.globalAlpha = 0.45;
+    ctx.beginPath();
+    ctx.moveTo(x, top);
+    ctx.lineTo(x, bottom);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = opt.color;
+    ctx.font = "600 11px sans-serif";
+    ctx.textBaseline = "top";
+    ctx.textAlign = "right";
+    ctx.fillText("관측", Math.max(left + 28, x - 6), top + 2);
+    ctx.textAlign = "left";
+    ctx.fillText("전망", Math.min(right - 28, x + 6), top + 2);
+    ctx.restore();
+  }
+};
+
 /** 근거 그래프 하나(선 그래프) — 값이 없으면 캔버스 자리를 그대로 두고 행동 안내만 겹친다. */
 function EvidenceChart({ chart, ct }) {
   const tickUnit = chart.unit.replace(/ 명$/, "");
@@ -60,6 +90,7 @@ function EvidenceChart({ chart, ct }) {
     },
     plugins: {
       // 마지막 예측 분기의 반영 선 옆에 차이 값만(+0.29만) — 값은 옵션으로 넘겨 다시 그릴 때마다 최신 값을 쓴다.
+      phase: { observed: chart.observed, color: ct.tick },
       endDiff: { text: chart.endDiff ? `${chart.endDiff > 0 ? "+" : "−"}${Math.abs(chart.endDiff).toFixed(2)}${tickUnit}` : null },
       legend: { display: chart.series.length > 1, position: "bottom", labels: { color: ct.tick, boxWidth: 10, font: { size: 10 } } },
       tooltip: {
@@ -79,7 +110,7 @@ function EvidenceChart({ chart, ct }) {
         <strong>{chart.title}</strong>
       </figcaption>
       <div className="reco-evidence-canvas">
-        <Line data={data} options={options} plugins={[END_DIFF_PLUGIN]} aria-label={`${chart.title} 그래프`} role="img" />
+        <Line data={data} options={options} plugins={[END_DIFF_PLUGIN, PHASE_PLUGIN]} aria-label={`${chart.title} 그래프`} role="img" />
         {chart.empty && <ChartEmptyNote>{chart.empty}</ChartEmptyNote>}
       </div>
     </figure>
