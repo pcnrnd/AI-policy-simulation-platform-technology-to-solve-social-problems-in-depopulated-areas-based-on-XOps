@@ -22,8 +22,8 @@ import { facilityRows, recoControlSig, unlinkedControlNote, withRegionStay } fro
 import { YEAR_LABELS, computeTrends, budgetToFactor, controlBoostOf, ANALYSIS_STEPS } from "../lib/simulation.js";
 import {
   REAL_TARGETS, REAL_GUIDE_TEXT, REAL_CONTROLS_LOCK_TEXT, FACTOR_GUIDE_TEXT, FACTOR_PENDING_TEXT, FACTOR_RUN_LOCK_TEXT, FACTOR_IDLE_TEXT,
-  diagnosisView, AUTO_TARGET, AUTO_TARGET_LABEL, DEMO_FACTOR_TARGET, realUnavailableText, selectedFactorModel, inferenceMatches, inferenceContextKey, factorAnalysisView,
-  observedFeatureLabel, rankSensitivity, targetUnit, formatUnitValue, formatMonth,
+  diagnosisView, simFrameView, AUTO_TARGET, AUTO_TARGET_LABEL, DEMO_FACTOR_TARGET, realUnavailableText, selectedFactorModel, inferenceMatches, inferenceContextKey, factorAnalysisView,
+  observedFeatureLabel, rankSensitivity, targetUnit, formatUnitValue,
   realSliderControls, forecastSeries, sensitivityRecommendation, regionRealStatus
 } from "../lib/realSimulation.js";
 
@@ -35,6 +35,30 @@ const STAGE_IDS = ["stage-factor", "stage-result", "stage-sim", "stage-report"];
 // ①·②: 두 모드 모두 선택한 기존 활성 요인분석 모델의 결과(useFactorAnalysis).
 // ③·④: 데모는 지역 사례(mock_data.json)와 화면 예시 계산, 실데이터는 같은 지역·학습 대상의 활성 시뮬레이션 버전
 // 추론(useRealSimulation) — 실데이터 ③·④는 ① 실행과 무관하다. 실데이터 대응이 없는 요소는 같은 자리에 행동 안내를 둔다.
+/** ③ 설정 띠의 한 칸 — 이름은 작은 표지, 값은 크게(조절변수는 항목 칩), 보조 정보는 한 줄. */
+function SimFrameCell({ kind = "", tag, cell, status = null }) {
+  return (
+    <div className={`pl-sim-cell${kind ? ` pl-sim-${kind}` : ""}`}>
+      <div className="pl-sim-cell-head">
+        <span className="pl-sim-tag">{tag}</span>
+        {status && (
+          <span className="pl-param-chip">
+            <i className="fa-solid fa-circle-check" aria-hidden="true"></i> {status}
+          </span>
+        )}
+      </div>
+      {cell.chips ? (
+        <div className="pl-sim-chips mock-data-output">
+          {cell.chips.length ? cell.chips.map((chip) => <span key={chip} className="pl-sim-chip">{chip}</span>) : <strong className="pl-sim-value">–</strong>}
+        </div>
+      ) : (
+        <strong className="pl-sim-value mock-data-output">{cell.value}</strong>
+      )}
+      {cell.meta && <span className="pl-sim-meta">{cell.meta}</span>}
+    </div>
+  );
+}
+
 export default function SimulatorPage() {
   const {
     appData, currentRegion, setCurrentRegion,
@@ -484,18 +508,8 @@ export default function SimulatorPage() {
   const factorPlaceholders = factorMissing ? [guide(FACTOR_GUIDE_TEXT, moveAction), factorLine, factorLine] : [factorIdle, factorIdle, factorIdle];
   const factorRunInfo = factorView ? factorView.runInfo
     : demo ? "인구 구조·시설 지표 9개 요인 · 학습 대상 생활인구" : `등록 학습데이터 기준 · 학습 대상 ${targetName}`;
-  const rangeProof = simProof?.range_provenance;
-  const frame = demo
-    ? { objective: sim.objective, demand: sim.factors.demand, supply: sim.factors.supply, adjust: sim.factors.adjust, constraint: `${sim.constraint} · ${budgetTotal.toLocaleString()}억` }
-    : real.ready
-      ? {
-          objective: `다음 달 ${targetName} 예측 (예측월 ${formatMonth(simProof.prediction_period)})`,
-          demand: `${targetName} 관측 · ${dongName}`,
-          supply: simResult ? `기준 예측 ${formatUnitValue(simResult.baseline_prediction, unit)} ${unit}` : "–",
-          adjust: `관측 입력 ${controls.length}개 (${controls.map((c) => c.label).join("·")})`,
-          constraint: `학습 구간 관측 범위 안 조정 · ${formatMonth(rangeProof?.from)}~${formatMonth(rangeProof?.to)}`
-        }
-      : { objective: "–", demand: "–", supply: "–", adjust: "–", constraint: "–" };
+  // ③ 설정 띠 다섯 칸 — 두 모드 같은 형식(값·표지·칩), 값만 다르다.
+  const frame = simFrameView({ demo, sim, budgetTotal, controls, target, context: real.ready ? real.context : null, dongName });
   const cardSource = demo ? "mock" : "api";
 
   const conditions = (
@@ -594,33 +608,12 @@ export default function SimulatorPage() {
       >
         {/* 강화학습 변수 프레임 */}
         <div className="pl-sim-frame" data-slot="sim.sim.frame">
-          <div className="pl-sim-cell pl-sim-obj">
-            <span className="pl-sim-tag">목적함수</span>
-            <span className="mock-data-output">{frame.objective}</span>
-            {analysisDone && (
-              <span className="pl-param-chip">
-                <i className="fa-solid fa-circle-check" aria-hidden="true"></i> STAGE ② 도출 파라미터 적용
-              </span>
-            )}
-          </div>
-          <div className="pl-sim-vars">
-            <div className="pl-sim-cell">
-              <span className="pl-sim-tag">수요</span>
-              <span className="mock-data-output">{frame.demand}</span>
-            </div>
-            <div className="pl-sim-cell">
-              <span className="pl-sim-tag">공급</span>
-              <span className="mock-data-output">{frame.supply}</span>
-            </div>
-            <div className="pl-sim-cell">
-              <span className="pl-sim-tag">조절변수</span>
-              <span className="mock-data-output">{frame.adjust}</span>
-            </div>
-            <div className="pl-sim-cell pl-sim-constraint">
-              <span className="pl-sim-tag">제약요소</span>
-              <span className="mock-data-output">{frame.constraint}</span>
-            </div>
-          </div>
+          <SimFrameCell kind="obj" tag="목적함수" cell={frame.objective}
+            status={demo && analysisDone ? "② 진단 반영" : null} />
+          <SimFrameCell tag="수요" cell={frame.demand} />
+          <SimFrameCell tag="공급" cell={frame.supply} />
+          <SimFrameCell kind="adjust" tag="조절변수" cell={frame.adjust} />
+          <SimFrameCell kind="constraint" tag="제약요소" cell={frame.constraint} />
         </div>
 
         {/* 공간정보 탐색: 전체 지도 + 플로팅 패널 + 우측 지자체 독 */}

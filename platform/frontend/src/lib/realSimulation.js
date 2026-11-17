@@ -304,3 +304,45 @@ export function diagnosisView(view, ranking = null) {
     }))
   };
 }
+
+// ── ③ 시뮬레이션 설정 띠 표시 형식 ──
+/** YYYYMM → "2019년 4월" */
+export const monthText = (value) => (value ? `${String(value).slice(0, 4)}년 ${Number(String(value).slice(4))}월` : "—");
+
+// 데모 조절변수 중 정책 강조 가중치 슬라이더(SimulatorDock) — 시설 조절변수 앞에 둔다.
+const DEMO_WEIGHT_CONTROLS = ["복지 예산", "산업 일자리", "주거·주택"];
+
+/**
+ * ③ 시뮬레이션 설정 띠 — 다섯 칸(목적함수·수요·공급·조절변수·제약요소)의 값. 두 모드가 같은 형식({ value, meta, chips })이다.
+ * 데모: 지역 사례의 시뮬레이션 정의와 현재 총 예산. 실데이터: 활성 시뮬레이션 모델의 근거(예측월·전월 관측·조정 입력·학습 구간).
+ * 실데이터 모델에는 공급 입력이 없어 공급 칸은 "해당 없음"이다.
+ */
+export function simFrameView({ demo, sim = null, budgetTotal = null, controls = [], target = null, context = null, dongName = "" }) {
+  if (demo) {
+    return {
+      // 사례 정의의 "방식 — 목표" 가운데 목표만 보인다(방식은 화면 문구 규칙상 싣지 않음).
+      objective: { value: String(sim.objective).split(" — ").at(-1), meta: null },
+      demand: { value: sim.factors.demand, meta: null },
+      supply: { value: sim.factors.supply, meta: null },
+      adjust: { chips: [...DEMO_WEIGHT_CONTROLS, ...controls.map((c) => c.label)], meta: null },
+      constraint: { value: `${Number(budgetTotal).toLocaleString("ko-KR")}억 원`, meta: `총 ${sim.constraint}` }
+    };
+  }
+  const proof = context?.provenance;
+  if (!proof) {
+    const empty = { value: "–", meta: null };
+    return { objective: empty, demand: empty, supply: empty, adjust: { chips: [], meta: null }, constraint: empty };
+  }
+  const noun = targetName(target);
+  const unit = targetUnit(target);
+  const lastObserved = context.inputs?.y_lag1;
+  const range = proof.range_provenance;
+  return {
+    objective: { value: `${noun} 증가`, meta: `예측월 ${monthText(proof.prediction_period)}` },
+    demand: { value: Number.isFinite(lastObserved) ? `${formatUnitValue(lastObserved, unit)}${unit}` : "–", meta: `전월 ${noun} · ${dongName}` },
+    supply: { value: "해당 없음", meta: null },
+    // 조정 입력 이름에서 반복되는 학습 대상 이름은 칸 표지(meta)로 한 번만 둔다.
+    adjust: { chips: controls.map((c) => c.label.replace(noun, "").trim() || c.label), meta: noun },
+    constraint: { value: `${monthText(range?.from)}~${monthText(range?.to)}`, meta: "입력 조정 범위" }
+  };
+}

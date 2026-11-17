@@ -6,7 +6,7 @@ import { activeModelPair, selectedFactorModel, inferenceMatches, inferenceContex
   contributionFactors, contributionSplit, realSliderControls, forecastSeries, sensitivityRecommendation, regionRealStatus,
   REAL_GUIDE_TEXT, FACTOR_GUIDE_TEXT, FACTOR_PENDING_TEXT, FACTOR_RUN_LOCK_TEXT, REAL_LOAD_FAILED_TEXT, REAL_PREDICT_FAILED_TEXT, REAL_VERSION_CHANGED_TEXT,
   FACTOR_IDLE_TEXT, FACTOR_FAILED_TEXT, FACTOR_VERSION_CHANGED_TEXT, FACTOR_EXPLAIN_TEXT,
-  DEMO_FACTOR_TARGET, FACTOR_PANEL_FEATURES, FACTOR_LIST_LIMIT, factorAnalysisView, diagnosisView, yoyChange, rankTargets, AUTO_TARGET_LABEL, featureUnit, targetUnit, formatUnitValue, sliderValueText } from "./realSimulation.js";
+  DEMO_FACTOR_TARGET, FACTOR_PANEL_FEATURES, FACTOR_LIST_LIMIT, factorAnalysisView, diagnosisView, simFrameView, monthText, yoyChange, rankTargets, AUTO_TARGET_LABEL, featureUnit, targetUnit, formatUnitValue, sliderValueText } from "./realSimulation.js";
 const proof={instance_id:"factor",model_type:"factor_analysis",version_id:"v1",job_id:"job1",dataset_id:"registered1",dataset_hash:"a".repeat(64),region_id:"namwon",target:"observed_sales_krw",dong_code:"45190250",prediction_period:202401,features:["y_lag1"],mode:"real",source:"real"};
 const sim={provenance:{...proof,instance_id:"sim",model_type:"simulation",dataset_id:"registered2",version_id:"v2",job_id:"job2"}};
 const request=inferenceRequest(sim,{y_lag1:100});
@@ -301,4 +301,24 @@ assert.equal(yoyChange(yoyView(0, 90)), null);
 // 페이지: 학습 대상 첫 항목 자동·기본값, 실행은 자동이면 runAuto
 assert.match(page, /useState\(true\)/);
 assert.match(page, /factor\.runAuto\(\{ onPick/);
+// ③ 설정 띠 다섯 칸 — 두 모드 같은 형식, 기간은 "2019년 4월", 숫자는 천 단위·단위, 조절변수는 반복 이름 없는 칩.
+assert.equal(monthText(201904), "2019년 4월"); assert.equal(monthText(null), "—");
+const demoFrame = simFrameView({ demo: true, sim: { objective: "목적제 기반 강화학습 — 정주여건 만족도 극대화", factors: { demand: "주거·정주 수요량", supply: "임대주택·정주여건 시설 공급" }, constraint: "예산" },
+  budgetTotal: 1200, controls: [{ label: "임대주택 공급 호수" }, { label: "운영 인력" }] });
+assert.deepEqual(demoFrame, {
+  objective: { value: "정주여건 만족도 극대화", meta: null }, demand: { value: "주거·정주 수요량", meta: null },
+  supply: { value: "임대주택·정주여건 시설 공급", meta: null },
+  adjust: { chips: ["복지 예산", "산업 일자리", "주거·주택", "임대주택 공급 호수", "운영 인력"], meta: null },
+  constraint: { value: "1,200억 원", meta: "총 예산" } });
+const realFrame = simFrameView({ demo: false, target: "observed_sales_krw", dongName: "운봉읍",
+  controls: ["y_lag1", "y_lag2", "y_yoy"].map((f) => ({ label: observedFeatureLabel(f, "observed_sales_krw") })),
+  context: { inputs: { y_lag1: 403738634 }, provenance: { prediction_period: 202401, range_provenance: { from: 201904, to: 202309 } } } });
+assert.deepEqual(realFrame, {
+  objective: { value: "관측 소비 증가", meta: "예측월 2024년 1월" }, demand: { value: "403,738,634원", meta: "전월 관측 소비 · 운봉읍" },
+  supply: { value: "해당 없음", meta: null }, adjust: { chips: ["전월", "2개월 전", "전년 같은 달"], meta: "관측 소비" },
+  constraint: { value: "2019년 4월~2023년 9월", meta: "입력 조정 범위" } });
+// 모델 준비 전에는 다섯 칸 모두 같은 자리에 "–"(칩 없음).
+assert.deepEqual(Object.values(simFrameView({ demo: false, target: "observed_sales_krw" })).map((c) => c.value ?? c.chips.length), ["–", "–", "–", 0, "–"]);
+for (const text of JSON.stringify([demoFrame, realFrame]).split('"')) { assert.doesNotMatch(text, INTERNAL, text); assert.doesNotMatch(text, /\(|강화학습|STAGE/, text); }
+assert.match(page, /simFrameView\(\{ demo, sim, budgetTotal, controls, target, context: real\.ready \? real\.context : null, dongName \}\)/);
 console.log("PASS: current mode/model/version/district provenance, recommendation identity and late response isolation, U20 시나리오 예측 칸·U21 이동 버튼");

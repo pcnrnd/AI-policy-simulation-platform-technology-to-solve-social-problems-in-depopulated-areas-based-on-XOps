@@ -625,47 +625,69 @@
   margin-right: 6px;
 }
 
-/* STAGE③ 강화학습 변수 프레임 */
+/* STAGE③ 시뮬레이션 설정 띠 — 다섯 칸, 이름은 작은 표지·값은 크게 */
 .pl-sim-frame {
   display: grid;
-  grid-template-columns: 1fr 2fr;
-  gap: 14px;
+  grid-template-columns: 1.1fr 1fr 0.8fr 1.35fr 1.25fr;
+  gap: 12px;
   margin-bottom: 20px;
 }
-.pl-sim-vars {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
-}
 .pl-sim-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
   background: var(--surface-hover);
   border: 1px solid var(--border-color);
   border-radius: 12px;
   padding: 12px 14px;
+}
+.pl-sim-cell-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 20px;
+}
+.pl-sim-tag {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+.pl-sim-value {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  word-break: keep-all;
+}
+.pl-sim-meta {
   font-size: 12px;
-  color: var(--text-secondary);
+  color: var(--text-muted);
+}
+.pl-sim-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.pl-sim-chip {
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
 }
 .pl-sim-obj {
   background: rgba(59, 130, 246, 0.08);
   border-color: rgba(59, 130, 246, 0.3);
-  color: var(--text-primary);
-  font-weight: 600;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
 }
+.pl-sim-obj .pl-sim-value { color: var(--accent-blue); }
 .pl-sim-constraint {
   border-color: rgba(245, 158, 11, 0.4);
   background: rgba(245, 158, 11, 0.08);
-}
-.pl-sim-tag {
-  display: block;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  margin-bottom: 6px;
 }
 
 /* 스텝퍼 완료 체크 */
@@ -687,8 +709,7 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  margin-top: 8px;
-  padding: 3px 10px;
+  padding: 2px 9px;
   border-radius: 999px;
   font-size: 10px;
   font-weight: 700;
@@ -810,16 +831,13 @@
     grid-template-columns: 1fr;
   }
   .pl-sim-frame {
-    grid-template-columns: 1fr;
-  }
-  .pl-sim-vars {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 @media (max-width: 768px) {
   .pl-flow-2,
   .pl-corr-grid,
-  .pl-sim-vars {
+  .pl-sim-frame {
     grid-template-columns: 1fr;
   }
   .pipeline-step-label {
