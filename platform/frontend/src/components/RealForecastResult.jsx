@@ -16,7 +16,7 @@ export default function RealForecastResult({ chartData, chartOpts, result, unit,
       </div>
       <div style={{ display: "flex", justifyContent: "space-around", marginTop: 16, textAlign: "center" }}>
         <div>
-          <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>조정 예측 ({formatMonth(result.provenance.prediction_period)})</div>
+          <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>조정 예측 · {formatMonth(result.provenance.prediction_period)}</div>
           <div style={{ fontSize: 18, fontWeight: 700, color: "var(--accent-blue)" }}>
             {value(result.prediction)}{unit}
           </div>
@@ -28,7 +28,7 @@ export default function RealForecastResult({ chartData, chartOpts, result, unit,
           </div>
         </div>
       </div>
-      <p className="chart-summary">
+      <p className="chart-summary sr-only">
         기준 예측 {value(result.baseline_prediction)}{unit}, 조정 예측 {value(result.prediction)}{unit}로
         모델 예측상 {value(result.delta)}{unit} 변화입니다. 검증 평균 절대 오차는 {value(result.provenance.metrics?.mae)}{unit}입니다.
       </p>

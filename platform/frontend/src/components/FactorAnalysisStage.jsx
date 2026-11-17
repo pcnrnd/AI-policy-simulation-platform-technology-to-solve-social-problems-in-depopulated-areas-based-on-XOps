@@ -2,7 +2,7 @@ import Card from "./Card.jsx";
 import CollapsibleStage from "./CollapsibleStage.jsx";
 import PendingData from "./PendingData.jsx";
 import TablePager, { usePager } from "./TablePager.jsx";
-import { formatUnitValue, FACTOR_EXPLAIN_TEXT, FACTOR_FOOTNOTE } from "../lib/realSimulation.js";
+import { formatUnitValue, FACTOR_EXPLAIN_TEXT } from "../lib/realSimulation.js";
 import { displayId } from "../lib/modelops.js";
 
 // STAGE ① 사회문제 요인분석
@@ -115,8 +115,7 @@ export default function FactorAnalysisStage({
               <div className="pl-source-note">
                 <i className="fa-solid fa-database" aria-hidden="true"></i> {view.basis}
               </div>
-              <p className="pl-stat-baseline">{FACTOR_EXPLAIN_TEXT}</p>
-              <p className="pl-stat-baseline">{FACTOR_FOOTNOTE}</p>
+              <p className="pl-stat-baseline sr-only">{FACTOR_EXPLAIN_TEXT}</p>
             </>
         ))}
 

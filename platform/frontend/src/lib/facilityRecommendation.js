@@ -19,6 +19,7 @@ const OPTION_RULES = {
 };
 const DEFAULT_OPTIONS = [["운영 개선", "이용 실적 확인 후 운영 개선 검토"], ["개방·공유", "유휴 공간 개방 검토"]];
 const SETTLE_KINDS = new Set(["house", "job"]);
+const isVisitPlan = (option) => !SETTLE_KINDS.has(option.kind) && option.kind !== "stay";
 
 // 추천 지수 = 생활인구 효과(중심)·정주 효과·추진 여건의 가중 평균(각 0~100). 방안 선택은 근거 등급을 먼저 보고, 같은 등급 안에서 같은 비중의 앞 두 항으로 한다.
 // 생활인구 효과 점수는 지역 상한(월평균 체류인구 × 상한 비율) 대비 로그 척도, 정주 효과 점수는 지역 연간 다른 시군구 전입의 1%를 만점으로 둔다.
@@ -111,6 +112,7 @@ export function capacityCap(facility, rules) {
 }
 
 // 비교 가능 사례 — 같은 방안 유형·비슷한 지역 유형(섬·농촌·소도시)·인구감소지역, 그 시설 자신의 사례 제외. 시설·사례 속성만 본다.
+// 추이 참고 사례(trend_only, 월평균 값 없음)는 효과 추정에 넣지 않고 사례 성과 그래프에만 쓴다(conversionOf·facilityRows).
 // 같은 시설 유형 사례가 있으면 그것만 쓰고(2곳 이상이면 사례값 범위, 1곳이면 규모 보정 추정),
 // 없으면 그 방안을 적용할 수 있는 다른 유형 사례를 규모로 보정한 추정(참고 사례)으로 쓴다.
 export function comparableCases(option, facility, cases, rules) {
@@ -121,16 +123,8 @@ export function comparableCases(option, facility, cases, rules) {
   const reference = base.filter((c) => c.applies_to.includes(facility.type));
   return { tier: reference.length ? "reference" : "none", cases: reference };
 }
-const ESTIMATE_NOTE = { single: "같은 유형 시설 규모 기준 추정", reference: "유사 방안 사례 규모 기준 추정" };
-// 기간이 짧은 행사 사례를 연간 효과로 쓸 때 근거 문장에 그 사실을 드러낸다.
-const EVENT_NOTE = "·연 1회 행사 방문을 12개월로 나눈 값";
-const isEvent = (c) => Number.isFinite(c.event_days);
-// 계획 목표 수용 인원(실제 정원 출처 없음)으로 잘린 값이면 근거 문장에 그 사실을 드러낸다.
-const PLAN_CAPACITY_NOTE = "·계획 수용 인원 기준";
-const planCapNote = (facility, facilityCap, cap, high) => (
-  String(facility.capacity_kind ?? "").includes("계획") && facilityCap <= cap && high > facilityCap ? PLAN_CAPACITY_NOTE : "");
 
-// 방안 하나의 효과 범위 — 값마다 basis(source | synthetic)와 화면 근거 문장을 붙인다.
+// 방안 하나의 효과 범위 — 값마다 basis(source | synthetic)를 붙인다.
 function optionEffect(option, facility, housing, ctx) {
   const { region, cases, rules } = ctx;
   const cap = region.stay_monthly * rules.visit_cap_share;
@@ -144,12 +138,12 @@ function optionEffect(option, facility, housing, ctx) {
     const settle = option.kind === "house" && useful
       ? span(housing.vacant * fill[0] * region.persons_per_household * inflowRatio, housing.vacant * fill[1] * region.persons_per_household * inflowRatio)
       : span(region.inflow_external * rules.settle_share[0], region.inflow_external * rules.settle_share[1]);
-    return { utilization, living: { ...settle, basis: "synthetic" }, settle: { ...settle, basis: "synthetic" }, note: "전입 통계 기준 추정", cases: [], caseTier: "none" };
+    return { utilization, living: { ...settle, basis: "synthetic" }, settle: { ...settle, basis: "synthetic" }, cases: [], caseTier: "none" };
   }
   if (option.kind === "stay") {
     const vacant = useful ? housing.vacant : 0;
     const raw = span(vacant * rules.short_stay_per_unit[0], vacant * rules.short_stay_per_unit[1]);
-    return { utilization, living: { ...span(Math.min(raw.low, cap), Math.min(raw.high, cap)), basis: "synthetic" }, settle: null, note: "공실 규모 기준 추정", cases: [], caseTier: "none" };
+    return { utilization, living: { ...span(Math.min(raw.low, cap), Math.min(raw.high, cap)), basis: "synthetic" }, settle: null, cases: [], caseTier: "none" };
   }
   // 방문형: 비교 가능 사례마다 규모 보정 배수와 운영 중 시설의 증가분(신규 개관 총량 사례일 때)을 곱하고,
   // 시설 수용 상한·지역 상한 가운데 작은 값으로 자른다.
@@ -164,18 +158,12 @@ function optionEffect(option, facility, housing, ctx) {
     });
     const low = Math.min(...ranges.map((r) => r.low)), high = Math.max(...ranges.map((r) => r.high));
     const adjusted = ranges.some((r) => r.adjusted) || high > limit;
-    const annualized = matched.some(isEvent);
-    const event = annualized ? EVENT_NOTE : "";
-    const planned = planCapNote(facility, facilityCap, cap, high);
-    const isRange = tier === "range";
     return {
       utilization,
-      living: { ...span(Math.min(low, limit), Math.min(high, limit)), basis: isRange && !adjusted ? "source" : "synthetic" },
+      living: { ...span(Math.min(low, limit), Math.min(high, limit)), basis: tier === "range" && !adjusted ? "source" : "synthetic" },
       settle: null,
-      note: isRange ? `유사 사례 ${matched.length}곳 기준${adjusted ? "·규모 반영" : ""}${event}${planned}` : `${ESTIMATE_NOTE[tier]}${event}${planned}`,
       cases: matched.map((c) => c.id),
-      caseTier: tier,
-      annualized
+      caseTier: tier
     };
   }
   const [a, b] = rules.visit_share[option.planType];
@@ -183,7 +171,6 @@ function optionEffect(option, facility, housing, ctx) {
     utilization,
     living: { ...span(Math.min(region.stay_monthly * a, limit), Math.min(region.stay_monthly * b, limit)), basis: "synthetic" },
     settle: null,
-    note: `지역 생활인구 규모 기준 추정${planCapNote(facility, facilityCap, cap, region.stay_monthly * b)}`,
     cases: [],
     caseTier: "none"
   };
@@ -203,11 +190,12 @@ const EVIDENCE_GRADE = { range: 4, single: 3, reference: 2, none: 1 };
 const gradeOf = (o) => EVIDENCE_GRADE[o.caseTier];
 
 // 시설 하나의 방안 비교(효과·판단) — 지역 통계가 없으면 null(화면에서 행동 안내).
+// 월평균 체류인구(stay_monthly)는 시드에 없고 플랫폼 공표 통계 API에서 받아 withRegionStay로 붙인다 — 받지 못하면 null.
 function conversionOf(facility, housing, conversion) {
   const region = conversion?.regions?.[facility.region_id];
   const rules = conversion?.synthetic?.rules;
-  if (!region || !rules) return null;
-  const ctx = { region, cases: conversion.cases ?? [], rules };
+  if (!region || !rules || !(region.stay_monthly > 0)) return null;
+  const ctx = { region, cases: (conversion.cases ?? []).filter((c) => !c.trend_only), rules };
   const options = optionCandidates(facility).map((option) => {
     const effect = optionEffect(option, facility, housing, ctx);
     return { ...option, ...effect, score: optionScore(effect, region, rules) };
@@ -219,6 +207,18 @@ function conversionOf(facility, housing, conversion) {
     chosen: o === chosen,
     verdict: o === chosen && o.living.high > 0 ? "추천" : o.score >= chosen.score * REVIEW_RATIO && o.living.high > 0 ? "검토" : "보류"
   }));
+}
+
+/**
+ * 시드 conversion에 지역 월평균 체류인구(플랫폼 API 값)를 붙인 새 객체 — 값이 없으면 그 지역은 미연결 그대로.
+ * @param {object|null} conversion 시드 conversion
+ * @param {string} regionId
+ * @param {number|null|undefined} stayMonthly 공표 통계 API /public-stats/stay-average 값
+ */
+export function withRegionStay(conversion, regionId, stayMonthly) {
+  const region = conversion?.regions?.[regionId];
+  if (!region || !(stayMonthly > 0)) return conversion;
+  return { ...conversion, regions: { ...conversion.regions, [regionId]: { ...region, stay_monthly: stayMonthly } } };
 }
 
 /**
@@ -247,8 +247,8 @@ export function facilityRows(regionId, facilities, controls = [], controlValues 
       planType: (choice ?? fallback).planType,
       plan: (choice ?? fallback).text,
       options,
-      // 사례 성과 그래프는 고른 방안의 근거 문장과 같은 사례 묶음(자기 사례 제외·비교 가능 사례만)을 그린다.
-      planCases: choice ? (conversion.cases ?? []).filter((c) => choice.cases.includes(c.id)) : [],
+      // 사례 성과 그래프는 고른 방문형 방안과 비교할 수 있는 사례 묶음(자기 사례 제외)을 그린다 — 추이 참고 사례 포함.
+      planCases: choice && isVisitPlan(choice) ? comparableCases(choice, f, conversion.cases ?? [], conversion.synthetic.rules).cases : [],
       index,
       utilization: housing === null ? null : Math.round(housing.occupancy),
       utilizationLabel: housing === null ? null : "입주율",
@@ -271,7 +271,7 @@ export function sortFacilityRows(rows, criterionKey = DEFAULT_CRITERION) {
 }
 
 const utilizationText = (row) => (row.utilization === null ? "이용실적 등록" : `${row.utilizationLabel} ${row.utilization}%`);
-const budgetText = (row) => (row.budget === null ? "예산 자료 등록" : row.budget.toLocaleString("ko-KR"));
+const budgetText = (row) => (row.budget === null ? "예산 자료 등록" : `${row.budget.toLocaleString("ko-KR")}억`);
 const num = (v) => v.toLocaleString("ko-KR");
 const rangeText = (r, unit) => (r.low === r.high ? `+${num(r.low)}${unit}` : `+${num(r.low)}~${num(r.high)}${unit}`);
 /** 생활인구 변화 문구(월) — 카드 효과 줄과 비교 표가 같은 문구를 쓴다. */
@@ -314,7 +314,7 @@ export function facilityRecommendationView(rows, criterionKey = DEFAULT_CRITERIO
     tableItems: sortFacilityRows(items, criterionKey),
     criterion: criterionKey,
     title: "시설 활용 추천",
-    scoreLabel: "추천 지수(0~100)",
+    scoreLabel: "추천 지수",
     scoreMax: 100,
     scoreUnit: "",
     // 표 9열 = 순위 + columns 6 + 숫자 열(scoreColumn) 1 + 검토 구분 — 기존 추천 표와 같은 열 수·같은 숫자 열 자리.
@@ -322,24 +322,23 @@ export function facilityRecommendationView(rows, criterionKey = DEFAULT_CRITERIO
     columns: [
       { label: "시설" },
       { label: "활용 방안" },
-      { label: "활용도(주거 입주율·개방 시설 이용률)", sortKey: "utilization" },
-      { label: "생활인구 관련 관측(외지인 방문·소비)" },
+      { label: "활용도", sortKey: "utilization" },
+      { label: "생활인구 관련 관측" },
       { label: "기금 투자 여부" },
       { label: "자료 기준일" }
     ],
-    scoreColumn: { label: "운영 예산(억 원)", sortKey: "budget" },
+    scoreColumn: { label: "운영 예산", sortKey: "budget" },
     rankText: (i) => `${i + 1}순위`,
     statusLabel: "검토 구분",
     // 검토 구분은 표 정렬과 관계없이 추천 순위로 정한다.
     status: (item) => (item.missing ? { text: "자료 등록 후 검토", strong: false } : { text: item.rank <= 3 ? "우선 검토" : "추가 검토", strong: item.rank <= 3 }),
     caption: `시설별 활용 방안과 관측값 — 정렬 기준 ${criterion.text}`,
-    basisTip: "전환 뒤 기대 생활인구 효과가 큰 방안을 중심으로 정주 효과와 추진 여건을 함께 보아 순위를 정합니다.",
-    footnote: `※ 순위: 추천 지수(0~100) 높은 순 · 표 정렬 기준: ${criterion.text}(순위·활용도·운영 예산 열 제목으로 변경) · 운영 예산은 시설별 관측값이며 총 예산과 합산하지 않습니다.`
+    basisTip: "전환 뒤 기대 생활인구 효과가 큰 방안을 중심으로 정주 효과와 추진 여건을 함께 보아 순위를 정합니다."
   };
 }
 
-// 전환 방안 비교(순위 그래프 아래) — 두 모드가 같은 표 구조를 갖는다. 값이 없으면 같은 자리에 행동 안내만.
-export const COMPARE_COLUMNS = ["전환 방안", "사용률 변화", "생활인구 변화", "정주인구 변화", "근거", "판단"];
+// 전환 방안 비교(근거 그래프 묶음 아래) — 두 모드가 같은 표 구조를 갖는다. 값이 없으면 같은 자리에 행동 안내만.
+export const COMPARE_COLUMNS = ["전환 방안", "사용률 변화", "생활인구 변화", "정주인구 변화", "판단"];
 const COMPARE_GUIDE = "시설 자료를 등록하면 전환 방안을 비교합니다.";
 
 /** 고른 시설의 전환 방안 비교 표시 형식 — item이 없거나 방안이 없으면 행동 안내. */
@@ -348,7 +347,7 @@ export function conversionCompareView(item) {
   if (!options.length) return { title: "전환 방안 비교", scope: "", rows: [], empty: COMPARE_GUIDE };
   return {
     title: "전환 방안 비교",
-    scope: `${item.name} · 전환 뒤 변화 범위`,
+    scope: item.name,
     rows: options.map((o, i) => ({
       id: `${item.id}-${i}`,
       verdict: o.verdict,
@@ -356,10 +355,8 @@ export function conversionCompareView(item) {
       cells: [
         `${o.planType} · ${o.text}`,
         rangeText(o.utilization, "%p"),
-        // 연 1회 행사 방문을 12개월로 나눈 값은 숫자 칸에서도 연 환산임을 붙인다(같은 칸 문구만).
-        `${livingText(o.living)}${o.annualized ? "(연 환산)" : ""}`,
+        livingText(o.living),
         o.settle ? `연 ${rangeText(o.settle, "명")}` : "해당 없음",
-        o.note,
         o.verdict
       ]
     })),
@@ -367,60 +364,88 @@ export function conversionCompareView(item) {
   };
 }
 
-// 근거 그래프 묶음(전환 방안 비교 아래) — 두 모드가 같은 세 자리를 갖는다. 값이 없으면 같은 자리에 행동 안내만.
+// 근거 그래프 묶음(순위 그래프 바로 아래, 전환 방안 비교 위) — 두 모드가 같은 두 자리(선 그래프)를 갖는다. 값이 없으면 같은 자리에 행동 안내만.
+// 고른 방안에 그릴 비교 사례가 없을 때 같은 자리의 행동 안내.
+export const NO_CASE_GUIDE = "다른 순위 카드를 고르거나 비교 사례 이용실적을 등록하세요.";
 export const EVIDENCE_CHART_SLOTS = [
-  { id: "population", title: "생활인구 추이(공식 통계)", guide: "생활인구 통계를 연결하면 표시됩니다." },
-  { id: "case", title: "유사 사례 성과", guide: "시설 이용실적을 등록하면 표시됩니다." },
-  { id: "plans", title: "추천 활용 방안 구성", guide: "시설 자료를 등록하면 표시됩니다." }
+  { id: "population", title: "생활인구 추이", guide: "생활인구 통계를 연결하면 표시됩니다." },
+  { id: "case", title: "유사 사례 성과", guide: "시설 이용실적을 등록하면 표시됩니다." }
 ];
 
-// 시드 그래프 값 → 공통 형식(labels + series). 한 계열 그래프는 points로 적는다.
-const seriesOf = (data) => (data.series
-  ? { labels: data.labels, series: data.series }
-  : { labels: data.points.map((p) => p.label), series: [{ label: data.label ?? "", values: data.points.map((p) => p.value) }] });
+// 생활인구 추이는 선 그래프 — 생활인구(등록+체류 합계)와 등록인구 두 선. 발표 값(등록·체류, 플랫폼 API)은 그대로 두고 여기서 합산한다.
+const round1 = (v) => Math.round(v * 10) / 10;
+/** @param {{ unit: string, points: {year: number, quarter: number, registered: number, stay: number}[] }} data */
+export function populationTrend(data) {
+  return {
+    unit: data.unit,
+    labels: data.points.map((p) => `${String(p.year).slice(2)}년 ${p.quarter}분기`),
+    series: [
+      { label: "생활인구", values: data.points.map((p) => round1(p.registered + p.stay)) },
+      { label: "등록인구", values: data.points.map((p) => p.registered) }
+    ]
+  };
+}
 
 /**
- * 그래프 묶음 표시 형식. regionCharts(지역 출처 수치)와 items(추천 행)가 없으면 모든 자리가 행동 안내.
- * 사례 성과는 고른 시설(selected)의 추천 방안 근거와 같은 사례 묶음(출처 월평균 방문)으로 그린다. 그 묶음이 비면 같은 자리에 안내.
- * @param {object|null} regionCharts mock_data.recommendation_charts[지역] — { population }
+ * 그래프 묶음 표시 형식. trends(플랫폼 공표 통계)와 items(추천 행)가 없으면 모든 자리가 행동 안내.
+ * 사례 성과는 고른 시설(selected)의 방안과 비교할 수 있는 사례 묶음의 관광지점 월별 입장객으로 그린다. 그 묶음이 비면 같은 자리에 안내.
+ * 화면에는 제목·축 눈금·범례·값만 나가고 출처·산출 설명은 싣지 않는다(월은 툴팁 제목).
+ * @param {{ population: object|null, spots: Record<string, {ym: string, value: number}[]>|null }|null} trends usePublicTrends 결과
  * @param {object[]|null} items facilityRecommendationView(...).items
  * @param {object|null} selected items 가운데 고른 시설(없으면 1순위)
  */
-export function evidenceChartsView(regionCharts, items, selected = null) {
-  const planCounts = PLAN_TYPES.map((type) => ({ label: type, value: (items ?? []).filter((i) => i.planType === type).length }))
-    .filter((p) => p.value > 0);
+const TREND_MONTHS = 36;
+const ymIndex = (ym) => Number(ym.slice(0, 4)) * 12 + Number(ym.slice(5, 7)) - 1;
+const ymLabel = (index) => `${String(Math.floor(index / 12)).slice(2)}년 ${(index % 12) + 1}월`;
+
+/** 추천 행들의 사례 묶음에 걸린 관광지점 이름(중복 없이) — 공표 통계 API에 한 번에 묻는다. */
+export function caseTrendSpots(items) {
+  return [...new Set((items ?? []).flatMap((i) => (i.planCases ?? []).map((c) => c.trend_spot)).filter(Boolean))];
+}
+
+/**
+ * 유사 사례 월별 추이 — 관광지점(trend_spot)의 공표된 월별 입장객이 있는 사례만 선 하나씩, 최근 36개월 안에서.
+ * 값이 공표되지 않은 달은 null로 비워 두고(나누거나 채우지 않는다), 월별 값이 없는 사례는 뺀다. 하나도 없으면 null.
+ * @param {object[]} cases conversion.cases 가운데 고른 방안의 사례 묶음
+ * @param {Record<string, {ym: string, value: number}[]>|null|undefined} spotSeries 관광지점 이름 → 월별 값(플랫폼 API)
+ */
+export function caseTrendData(cases, spotSeries) {
+  const withSeries = cases.map((c) => ({ c, points: spotSeries?.[c.trend_spot] ?? [] })).filter((x) => x.points.length);
+  if (!withSeries.length) return null;
+  const indexes = withSeries.flatMap((x) => x.points.map((p) => ymIndex(p.ym)));
+  const end = Math.max(...indexes);
+  const start = Math.max(Math.min(...indexes), end - TREND_MONTHS + 1);
+  const labels = Array.from({ length: end - start + 1 }, (_, i) => ymLabel(start + i));
+  return {
+    unit: "명",
+    labels,
+    series: withSeries.map(({ c, points }) => {
+      const byMonth = new Map(points.map((p) => [ymIndex(p.ym), p.value]));
+      return { label: c.trend_label ?? c.name, values: labels.map((_, i) => byMonth.get(start + i) ?? null) };
+    })
+  };
+}
+
+export function evidenceChartsView(trends, items, selected = null) {
   const pick = selected ?? items?.[0] ?? null;
   const cases = pick?.planCases ?? [];
-  // 고른 방안의 근거가 사례가 아닌 추정이면(사례 묶음 0곳) 사례 그래프 자리에 그 사실만 적는다.
-  const noCase = pick && Array.isArray(pick.planCases) && pick.options?.length ? "고른 방안과 같은 유형의 비교 가능한 사례가 없습니다." : null;
-  // 상시 운영 사례는 월평균, 기간이 짧은 행사 사례는 행사 기간 방문객 원값을 그 기간과 함께 그린다(월평균으로 환산해 보이지 않는다).
-  const hasEvent = cases.some((c) => Number.isFinite(c.event_days));
-  const caseData = cases.length
-    ? {
-      scope: `${pick.planType} ${pick.caseTier === "range" ? "사례" : "참고 사례"} · ${hasEvent ? "기간별 방문" : "월평균 방문"}`,
-      unit: "명",
-      points: cases.map((c) => (Number.isFinite(c.event_days)
-        ? { label: `${c.name}(축제 기간 ${c.event_days}일)`, value: c.event_visitors }
-        : { label: `${c.name}(월평균)`, value: c.monthly })),
-      label: hasEvent ? "방문객" : "월평균 방문",
-      note: `출처: ${cases.map((c) => c.sources[0].title).join(" · ")}`
-    }
-    : null;
-  const derived = planCounts.length
-    ? { scope: `추천 시설 ${items.length}곳 · 활용 방안별 시설 수`, unit: "곳", points: planCounts, label: "시설 수", note: "기준: 위 추천 결과" }
-    : null;
-  const dataOf = { population: regionCharts?.population, case: caseData, plans: derived };
+  // 고른 방안에 월별 통계가 있는 비교 사례가 없으면 사례 그래프 자리에 그 사실만 적는다.
+  // 통계 지점이 걸린 사례가 있는데 값을 받지 못했으면(적재 전·조회 실패) 자리의 기본 안내를 쓴다.
+  const noCase = pick && Array.isArray(pick.planCases) && pick.options?.length && !pick.planCases.some((c) => c.trend_spot)
+    ? NO_CASE_GUIDE : null;
+  // 사례 성과는 공표된 월별 방문객 선 그래프. 월별 값이 있는 사례가 없으면 같은 자리에 안내만.
+  const caseData = caseTrendData(cases, trends?.spots);
+  const trend = trends?.population ? populationTrend(trends.population) : null;
+  const dataOf = { population: trend, case: caseData };
   return EVIDENCE_CHART_SLOTS.map((slot) => {
-    const data = dataOf[slot.id] ?? null;
-    const { labels, series } = data ? seriesOf(data) : { labels: [], series: [] };
+    const data = dataOf[slot.id];
+    const labels = data?.labels ?? [];
     return {
       id: slot.id,
       title: slot.title,
-      scope: data ? `${data.scope} (${data.unit})` : "",
       unit: data?.unit ?? "",
       labels,
-      series,
-      note: data ? (data.note ?? `출처: ${data.source_text}`) : "",
+      series: data?.series ?? [],
       empty: labels.length === 0 ? (slot.id === "case" && noCase ? noCase : slot.guide) : null
     };
   });

@@ -952,7 +952,7 @@ export default function DataOpsPage() {
             <span id="catalog-auth-hint" style={{ fontSize: 11, color: "var(--text-muted)" }}>
               <i className={`fa-solid ${token ? "fa-key" : "fa-lock"}`} aria-hidden="true"></i>{" "}
               {token
-                ? `${authMethod} 인증됨 (Bearer) — 등록·삭제 가능`
+                ? `${authMethod} 인증됨 — 등록·삭제 가능`
                 : "등록·삭제 시 data:write 토큰을 자동 발급합니다"}
             </span>
           </div>
@@ -1208,7 +1208,7 @@ export default function DataOpsPage() {
           <Card title="요청 구성" icon="fa-sliders">
             {/* 3-1 인증 */}
             <div className="builder-section">
-              <div className="builder-section-label">3-1 · 인증 (JWT / OAuth2)</div>
+              <div className="builder-section-label">3-1 · 인증</div>
               <div
                 className="auth-box"
                 style={{
@@ -1221,7 +1221,7 @@ export default function DataOpsPage() {
                     <i className="fa-solid fa-key" style={{ marginRight: 6 }}></i>
                     인증 상태:{" "}
                     <span style={{ color: token ? "var(--accent-teal)" : "var(--accent-red)" }}>
-                      {token ? `${authMethod} 인증됨 (Bearer)` : "미인증 (401 반환)"}
+                      {token ? `${authMethod} 인증됨` : "미인증"}
                     </span>
                   </span>
                   <div className="auth-controls">
@@ -1275,7 +1275,7 @@ export default function DataOpsPage() {
 
             {/* 3-2 요청 구성 */}
             <div className="builder-section">
-              <div className="builder-section-label">3-2 · 요청 구성 (CRUD · 필터 · 정렬 · 페이징)</div>
+              <div className="builder-section-label">3-2 · 요청 구성</div>
               <div className="builder-control-grid">
                 <label className="control-field">
                   <span>HTTP 메서드</span>

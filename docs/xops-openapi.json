@@ -3374,6 +3374,173 @@
         }
       }
     },
+    "/api/v3/public-stats/spot-visitors": {
+      "get": {
+        "tags": [
+          "public-stats"
+        ],
+        "summary": "Spot Visitors",
+        "description": "관광지점 월별 입장객 합계 — 지점마다 월 순서 계열. 공표된 달만 있다(빈 달은 행 없음).",
+        "operationId": "spot_visitors_api_v3_public_stats_spot_visitors_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "spot",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 60
+              },
+              "minItems": 1,
+              "maxItems": 10,
+              "description": "관광지점 이름(통계표 그대로, 공백뿐인 이름 불가)",
+              "title": "Spot"
+            },
+            "description": "관광지점 이름(통계표 그대로, 공백뿐인 이름 불가)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Spot Visitors Api V3 Public Stats Spot Visitors Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v3/public-stats/living-population": {
+      "get": {
+        "tags": [
+          "public-stats"
+        ],
+        "summary": "Living Population",
+        "description": "지역의 생활인구 분기 발표 값 — 등록인구·체류인구(발표 단위 그대로), 분기 순서.",
+        "operationId": "living_population_api_v3_public_stats_living_population_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "region",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 40,
+              "description": "지역 이름(예: 전북특별자치도 남원시)",
+              "title": "Region"
+            },
+            "description": "지역 이름(예: 전북특별자치도 남원시)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Living Population Api V3 Public Stats Living Population Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v3/public-stats/stay-average": {
+      "get": {
+        "tags": [
+          "public-stats"
+        ],
+        "summary": "Stay Average",
+        "description": "지역 월평균 체류인구(발표 첨부 월별 체류인구의 기간 평균) — 시설 추천 계산의 지역 규모. 없으면 data null.",
+        "operationId": "stay_average_api_v3_public_stats_stay_average_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "region",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 40,
+              "description": "지역 이름(예: 전북특별자치도 남원시)",
+              "title": "Region"
+            },
+            "description": "지역 이름(예: 전북특별자치도 남원시)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Stay Average Api V3 Public Stats Stay Average Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v3/realdata/health": {
       "get": {
         "tags": [

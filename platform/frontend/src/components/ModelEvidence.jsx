@@ -6,7 +6,7 @@ import { observedFeatureLabel, targetName, targetUnit, formatUnitValue, formatMo
 // 기여도는 STAGE ① 첫 카드가 보인다(여기서는 검증 오차·기준선·버전·데이터셋 근거만).
 // state: 근거가 없을 때 이유 — "loading"(조회 중) | "error"(조회 실패) | 없음(활성 모델 없음 또는 emptyText).
 // demoRows: demo 표시의 [항목, 내용] 행 — 없으면 화면 예시 계산 3행.
-const DEMO_ROWS = [["데이터", "예시 사례 데이터"], ["계산", "화면 예시 계산"], ["모델 버전", "없음(예시)"]];
+const DEMO_ROWS = [["데이터", "예시 사례 데이터"], ["계산", "화면 예시 계산"], ["모델 버전", "없음"]];
 export default function ModelEvidence({ summary = "계산 근거", demo = false, demoRows = DEMO_ROWS, result, regions = [], datasetName = (id) => id, slot, state, emptyText, label: featureLabel }) {
   if (demo) {
     return (

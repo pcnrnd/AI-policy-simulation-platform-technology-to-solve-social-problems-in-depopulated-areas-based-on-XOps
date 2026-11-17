@@ -5,16 +5,18 @@
 (prepare_rules/*.py)에 둔다.
 
 사용법:
-    python platform/scripts/prepare_sheets.py
+    python platform/scripts/prepare_sheets.py                      # 전부
+    python platform/scripts/prepare_sheets.py --only kto_spot_visitors   # 일부만(나머지 MANIFEST 행 유지)
 """
 
 from __future__ import annotations
 
 import argparse
+import csv
 import logging
 from pathlib import Path
 
-from prepare_rules import bccard, common, festival, gwto, kt_visitors, readme
+from prepare_rules import bccard, common, festival, gwto, kt_visitors, kto_spot_visitors, mois_living_population, readme
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 _log = logging.getLogger("prepare_sheets")
@@ -24,15 +26,30 @@ _BUILDERS = {
     "namwon_kt_visitors": kt_visitors.build,
     "nowon_kt_festival": festival.build,
     "gwto_kt_tourism_indicators": gwto.build,
+    "kto_spot_visitors": kto_spot_visitors.build,
+    "mois_living_population": mois_living_population.build,
 }
+
+
+def kept_manifest_rows(only: set[str]) -> list[dict[str, str]]:
+    """--only 실행 때 다시 만들지 않는 데이터셋의 기존 MANIFEST 행."""
+    path = common.PREPARED_ROOT / "MANIFEST.csv"
+    if not path.exists():
+        return []
+    with path.open(encoding="utf-8", newline="") as f:
+        return [r for r in csv.DictReader(f) if r["dataset"] not in only]
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.parse_args()
+    parser.add_argument("--only", action="append", choices=sorted(_BUILDERS), help="이 데이터셋만 다시 만든다(반복 가능)")
+    args = parser.parse_args()
 
-    manifest_rows = []
+    only = set(args.only or [])
+    manifest_rows = kept_manifest_rows(only) if only else []
     for dataset, builder in _BUILDERS.items():
+        if only and dataset not in only:
+            continue
         extracted_dir = common.EXTRACTED_ROOT / dataset
         _log.info("처리 시작: dataset=%s", dataset)
         rows = builder(extracted_dir)

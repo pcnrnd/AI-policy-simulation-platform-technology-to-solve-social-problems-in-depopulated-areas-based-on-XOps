@@ -1,7 +1,6 @@
 import Card from "./Card.jsx";
 import CollapsibleStage from "./CollapsibleStage.jsx";
 import PendingData from "./PendingData.jsx";
-import { CORRELATION_BASIS_TEXT } from "../lib/realSimulation.js";
 
 // STAGE ② 요인분석 결과
 // 상관관계: STAGE ① 요인 기여도의 +/− 방향(두 모드 같은 함수). 문제 유형 진단: 데모는 예시 서사, 실데이터는 ① 결과에서 읽은 신호.
@@ -38,7 +37,6 @@ export default function FactorResultStage({ open, onToggle, locked = false, runn
                   <ul>{list(split.negative)}</ul>
                 </div>
               </div>
-              <p className="pl-stat-baseline">{CORRELATION_BASIS_TEXT}</p>
             </>
           ) : (
             <PendingData running={running} text={pendingText ?? "[요인분석 실행] 후 상관관계 분석 결과가 표시됩니다."} />

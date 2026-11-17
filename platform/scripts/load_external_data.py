@@ -1,8 +1,8 @@
-"""외부데이터(BC카드·KT·GWTO) prepared CSV → PostgreSQL(xops_dataops) `public` 스키마 적재.
+"""외부데이터(BC카드·KT·GWTO·관광지점 입장객·생활인구) prepared CSV → PostgreSQL(xops_dataops) `public` 스키마 적재.
 
 적재 대상: `platform/data/prepared/MANIFEST.csv` 의 `kind == data` 39건과 각
 `<NN>_<slug>.schema.json`. 테이블은 `public` 스키마에 두고 이름은
-`DATASET_PREFIX` 접두(ext_bccard/ext_kt_namwon/ext_kt_nowon/ext_gwto) +
+`DATASET_PREFIX` 접두(ext_bccard/ext_kt_namwon/ext_kt_nowon/ext_gwto/ext_kto/ext_mois) +
 `_` + slug(파일명에서 NN_ 접두사를 뗀 나머지)로 합성한다. xops-service의
 `safety.py` 가 점(.) 없는 단일 식별자만 허용하고 기존 실데이터 테이블도
 같은 public 접두 방식이라 스키마를 따로 두지 않는다. 테이블·컬럼·
@@ -44,6 +44,8 @@ DATASET_PREFIX = {
     "namwon_kt_visitors": "ext_kt_namwon",
     "nowon_kt_festival": "ext_kt_nowon",
     "gwto_kt_tourism_indicators": "ext_gwto",
+    "kto_spot_visitors": "ext_kto",
+    "mois_living_population": "ext_mois",
 }
 
 TYPE_MAP = {

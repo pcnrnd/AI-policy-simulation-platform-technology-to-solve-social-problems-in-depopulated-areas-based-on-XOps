@@ -47,6 +47,10 @@ ALLOWED_TABLES = {
     "ext_gwto_s4_2_navi_top500_prev_year",
     "ext_gwto_s4_3_navi_summary_500",
     "ext_gwto_daily_trend",
+    # 공표 통계(정책 추천 그래프) — 관광지점 월별 입장객, 생활인구 분기 발표 값
+    "ext_kto_spot_monthly_visitors",
+    "ext_mois_living_population_quarterly",
+    "ext_mois_stay_monthly_average",
 }
 
 _FETCH_BATCH = 1000

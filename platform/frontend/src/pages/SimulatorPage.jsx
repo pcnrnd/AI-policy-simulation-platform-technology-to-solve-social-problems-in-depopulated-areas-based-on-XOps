@@ -16,8 +16,9 @@ import { useAppState } from "../context/AppStateContext.jsx";
 import { useChartTheme } from "../hooks/useChartTheme.js";
 import { useRealSimulation } from "../hooks/useRealSimulation.js";
 import { useFactorAnalysis } from "../hooks/useFactorAnalysis.js";
+import { useRegionStay } from "../hooks/usePublicTrends.js";
 import { getScrollBehavior } from "../lib/motion.js";
-import { facilityRows, recoControlSig, unlinkedControlNote } from "../lib/facilityRecommendation.js";
+import { facilityRows, recoControlSig, unlinkedControlNote, withRegionStay } from "../lib/facilityRecommendation.js";
 import { YEAR_LABELS, computeTrends, budgetToFactor, controlBoostOf, ANALYSIS_STEPS } from "../lib/simulation.js";
 import {
   REAL_TARGETS, REAL_GUIDE_TEXT, REAL_CONTROLS_LOCK_TEXT, FACTOR_GUIDE_TEXT, FACTOR_PENDING_TEXT, FACTOR_RUN_LOCK_TEXT, FACTOR_IDLE_TEXT,
@@ -114,10 +115,17 @@ export default function SimulatorPage() {
   const currentSig = `${contextKey}|${welfareWeight}|${industryWeight}|${housingWeight}|${budgetTotal}|${controlSig}`;
   // 추천을 다시 도출해야 하는 입력 — 데모 시설 추천은 시설 값에 연결된 조절변수만(예산·정책 강조는 10년 예측에만 쓰인다).
   // 시설 값이 없는 조절변수를 바꾸면 재도출 안내 대신 같은 자리에 자료 등록 안내를 둔다.
-  const recoInputSig = demo ? `${contextKey}|${recoControlSig(controls, controlValues)}` : currentSig;
+  // 지역 월평균 체류인구는 공표 통계 API 값(시드에 없음) — 늦게 도착하면 추천 입력이 바뀐 것으로 본다.
+  const regionStay = useRegionStay(demo ? currentRegion.name : undefined);
+  const recoInputSig = demo ? `${contextKey}|${recoControlSig(controls, controlValues)}|stay:${regionStay ?? ""}` : currentSig;
   const controlNote = demo ? unlinkedControlNote(controls, controlValues) : null;
   const recoStale = recommendation !== null && recoSig !== recoInputSig;
-  const deriveFacilities = (region) => ({ items: facilityRows(region.id, appData.facilities, controls, controlValues, appData.conversion) });
+  const deriveFacilities = (region) => ({
+    items: facilityRows(region.id, appData.facilities, controls, controlValues, withRegionStay(appData.conversion, region.id, region.id === currentRegion.id ? regionStay : null))
+  });
+  // 자동 계산은 ① 완료 시점의 입력(공표 통계 도착 포함)으로 추천을 도출한다.
+  const deriveNow = useRef(null);
+  deriveNow.current = () => [deriveFacilities(currentRegion), recoInputSig];
 
   // 단계 접기/펼치기 상태 (기본 전부 펼침)
   const [openStages, setOpenStages] = useState(Object.fromEntries(STAGE_IDS.map((id) => [id, true])));
@@ -185,15 +193,14 @@ export default function SimulatorPage() {
     if (saved?.attempted || analysisStatus !== "idle") return;
     updateSimulatorRun(regionId, { version, attempted: true, result: null, recommendation: null, recoSig: "" });
     const startSig = sigRef.current;
-    const startRecoSig = recoInputSig;
     const region = currentRegion;
-    const derived = deriveFacilities(region);
     (async () => {
       // 입력이 바뀌었으면 ①의 결과도 게시하지 않고 버린다(훅 안에서 결과 게시 직전에 확인).
       const analysis = await factor.run({ accept: () => sigRef.current === startSig });
       if (!analysis || sigRef.current !== startSig) return;
+      const [derived, recoSigNow] = deriveNow.current();
       setRecommendation(derived);
-      setRecoSig(startRecoSig);
+      setRecoSig(recoSigNow);
       addConsoleLog(`INFO: ${region.name} 요인분석·시설 활용 추천 계산 완료 — 시설 ${derived.items.length}곳`);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 지역·활성 버전·준비 상태가 바뀔 때만 판정한다
@@ -312,7 +319,7 @@ export default function SimulatorPage() {
       labels: demo ? YEAR_LABELS : series.labels,
       datasets: [
         {
-          label: demo ? "자연 감소 예측 추이 (Base Model)" : "기준 입력 예측",
+          label: demo ? "자연 감소 예측 추이" : "기준 입력 예측",
           data: demo ? baseTrend : series.baseline,
           borderColor: "rgba(239, 68, 68, 0.65)",
           borderDash: [5, 5],
@@ -354,14 +361,14 @@ export default function SimulatorPage() {
       datasets: [
         {
           // 전국 인구감소 지역 분포 속에서 분석 대상의 상대 위치를 보여주는 배경 점
-          label: "전국 비교 지자체",
+          label: "인구감소 지역",
           data: (appData.benchmark_regions ?? []).map((r) => ({ x: r.riskIndex, y: r.population, name: r.name })),
           backgroundColor: "rgba(148, 163, 184, 0.55)",
           pointRadius: 5,
           pointHoverRadius: 8
         },
         {
-          label: "분석 대상 지자체",
+          label: "시범 지자체",
           data: appData.regions.map((r) => ({ x: r.riskIndex, y: r.population, name: r.name })),
           backgroundColor: appData.regions.map((r) =>
             r.id === currentRegion.id ? "rgba(59, 130, 246, 1)" : "rgba(245, 158, 11, 0.7)"
@@ -379,18 +386,32 @@ export default function SimulatorPage() {
     maintainAspectRatio: false,
     scales: {
       x: {
-        title: { display: true, text: "인구소멸 위험지수 (낮을수록 위험)", color: ct.tick },
+        title: { display: true, text: "인구소멸 위험지수", color: ct.tick },
         grid: { color: ct.grid },
         ticks: { color: ct.tick }
       },
       y: {
-        title: { display: true, text: "인구수(명)", color: ct.tick },
+        title: { display: true, text: "인구수", color: ct.tick },
         grid: { color: ct.grid },
         ticks: { color: ct.tick }
       }
     },
     plugins: {
-      legend: { display: false },
+      // 점 색의 뜻: 회색 = 인구감소 지역, 파랑 = 선택 지자체(두 번째 계열은 점마다 색이 달라 범례 색을 직접 정한다).
+      legend: {
+        display: true,
+        position: "bottom",
+        labels: {
+          color: ct.tick, boxWidth: 8, font: { size: 11 }, usePointStyle: true,
+          // 두 번째 계열은 시범 지자체(주황)와 선택 지자체(파랑)가 섞여 있어 범례는 점 색 세 개를 직접 그린다.
+          generateLabels: (chart) => [
+            ["인구감소 지역", "rgba(148, 163, 184, 0.8)", 0],
+            ["시범 지자체", "rgba(245, 158, 11, 0.8)", 1],
+            ["선택 지자체", "rgba(59, 130, 246, 1)", 1]
+          ].map(([text, color, datasetIndex]) => ({ text, fillStyle: color, strokeStyle: color, pointStyle: "circle", datasetIndex, hidden: false, fontColor: ct.tick })),
+        },
+        onClick: () => {}
+      },
       tooltip: {
         callbacks: {
           label: (cx) => `${cx.raw.name}: 위험지수 ${cx.raw.x}, 인구 ${cx.raw.y.toLocaleString()}명`
@@ -474,7 +495,7 @@ export default function SimulatorPage() {
       <label>
         학습 대상
         <select aria-label="학습 대상" value={demo ? "demo" : target} disabled={analysisRunning} onChange={(e) => { if (!demo) { setDong(""); setTarget(e.target.value); } }}>
-          {demo ? <option value="demo">인구 (데모 사례)</option> : Object.entries(REAL_TARGETS).map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+          {demo ? <option value="demo">인구</option> : Object.entries(REAL_TARGETS).map(([id, name]) => <option key={id} value={id}>{name}</option>)}
         </select>
       </label>
       <label>
@@ -569,11 +590,11 @@ export default function SimulatorPage() {
           </div>
           <div className="pl-sim-vars">
             <div className="pl-sim-cell">
-              <span className="pl-sim-tag">수요 (x)</span>
+              <span className="pl-sim-tag">수요</span>
               <span className="mock-data-output">{frame.demand}</span>
             </div>
             <div className="pl-sim-cell">
-              <span className="pl-sim-tag">공급 (y)</span>
+              <span className="pl-sim-tag">공급</span>
               <span className="mock-data-output">{frame.supply}</span>
             </div>
             <div className="pl-sim-cell">
@@ -624,7 +645,7 @@ export default function SimulatorPage() {
             controls={controls}
             controlValues={controlValues}
             onControlChange={edited((key, value) => setControlValues((prev) => ({ ...prev, [key]: value })))}
-            controlsLabel={demo ? "시설 조절변수 (x)" : "관측 입력 조정 (x)"}
+            controlsLabel={demo ? "시설 조절변수" : "관측 입력 조정"}
             controlsEmptyText={demo ? null : real.missing ? "시뮬레이션 모델 준비 후 조정할 수 있습니다." : real.loading ? "관측 입력 확인 중…" : null}
             controlsLockTitle={realLockTitle ?? "조정할 조절변수가 없습니다."}
             onResetControls={edited(() => { if (controls.length) setControlValues(defaultValues()); })}
@@ -659,7 +680,7 @@ export default function SimulatorPage() {
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-around", marginTop: 16, textAlign: "center" }}>
                   <div>
-                    <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>시뮬레이션 인구 (10년 후)</div>
+                    <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>10년 후 인구</div>
                     <div className="mock-data-output" style={{ fontSize: 18, fontWeight: 700, color: "var(--accent-blue)" }}>
                       {formatUnitValue(finalPop, "명")}명
                     </div>
@@ -672,7 +693,7 @@ export default function SimulatorPage() {
                     </div>
                   </div>
                 </div>
-                <p className="chart-summary">
+                <p className="chart-summary sr-only">
                   자연감소 기준 10년 후 {formatUnitValue(baseFinalPop, "명")}명, 정책 적용 시 {formatUnitValue(finalPop, "명")}명으로
                   기준 대비 {policyDifference >= 0 ? "+" : ""}{formatUnitValue(policyDifference, "명")}명입니다.
                 </p>
@@ -697,14 +718,14 @@ export default function SimulatorPage() {
           <Card title="전 지자체 위험지수 vs 인구 분포" icon="fa-braille" dataSource={cardSource} data-slot="sim.sim.distribution">
             {demo && resultsReady ? (
               <>
-                <p style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 12 }}>
+                <p className="sr-only">
                   전국 인구감소 지역(회색 점) 분포 속 시범 분석 대상 지자체의 상대 위치. 파란 점이 현재 선택
                   지자체입니다.
                 </p>
                 <div style={{ position: "relative", height: 220, width: "100%" }}>
                   <Scatter data={scatterData} options={scatterOpts} />
                 </div>
-                <p className="chart-summary">
+                <p className="chart-summary sr-only">
                   {currentRegion.name}은 위험지수 {currentRegion.riskIndex}, 인구 {currentRegion.population.toLocaleString()}명입니다.
                   비교 대상 {distributionRegions.length}곳 중 위험지수는 낮은 순 {riskRank}위(낮을수록 고위험), 인구는 큰 순 {populationRank}위입니다.
                   회색은 전국 비교군, 주황은 분석 대상, 파랑은 현재 선택 지역입니다.
@@ -763,7 +784,7 @@ export default function SimulatorPage() {
       >
         {recoReady && recommendation.items.length > 0 ? (
           demo
-            ? <PolicyRecommendation region={currentRegion} facilityRows={recommendation.items} chartSeed={appData.recommendation_charts?.[currentRegion.id]} />
+            ? <PolicyRecommendation region={currentRegion} facilityRows={recommendation.items} />
             : <PolicyRecommendation region={currentRegion} view={recommendation} />
         ) : (
           <Card title={demo ? "시설 활용 추천" : "맞춤 정책 추천"} icon="fa-lightbulb" dataSource={cardSource} data-slot="sim.report.panel">
