@@ -31,7 +31,7 @@ _SEED_IDS = [
     "ds_06_settlement_facility",
     "ds_07_civil_complaints",
 ]
-# 실데이터 2종(ds_08·ds_09) + 외부데이터 4종(ds_10~13)
+# 실데이터 2종(ds_08·ds_09) + 외부데이터 4종(ds_10~13) + 공표 통계 3종(ds_14~16)
 _REAL_IDS = [
     "ds_08_admin_boundary",
     "ds_09_welfare_facility",
@@ -41,6 +41,7 @@ _REAL_IDS = [
     "ds_13_gwto_tourism_indicators",
     "ds_14_kto_spot_monthly_visitors",
     "ds_15_mois_living_population_quarterly",
+    "ds_16_mois_stay_monthly_average",
 ]
 _ALL_COUNT = len(_SEED_IDS) + len(_REAL_IDS)
 
@@ -60,7 +61,7 @@ def test_catalog_list_and_search(client: TestClient) -> None:
 
 
 def test_catalog_default_excludes_demo_seed(bare: TestClient) -> None:
-    """헤더 없음 = 데모 표시 OFF — 실데이터(ds_08~15)만 남는다. include_seed=true 를 줘도 같다."""
+    """헤더 없음 = 데모 표시 OFF — 실데이터(ds_08~16)만 남는다. include_seed=true 를 줘도 같다."""
     for params in ({}, {"include_seed": "true"}):
         body = bare.get("/api/v3/dataops/catalog", params=params).json()
         assert [s["id"] for s in body if s["id"].startswith("ds_")] == _REAL_IDS

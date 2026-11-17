@@ -518,6 +518,29 @@
         { "name": "source_url", "type": "TEXT", "description": "발표 자료 주소" },
         { "name": "checked_on", "type": "DATE", "description": "확인한 날짜" }
       ]
+    },
+    {
+      "id": "ds_16_mois_stay_monthly_average",
+      "is_seed": false,
+      "label": "인구감소지역 월평균 체류인구",
+      "source": "RDB · PostgreSQL",
+      "object": "ext_mois_stay_monthly_average",
+      "description": "행정안전부 인구감소지역 생활인구 발표 첨부의 월별 체류인구를 기간 평균한 지역별 값. 정책 추천 시설 효과 계산의 지역 규모로 쓴다. 원본 platform/data/real/mois/stay_monthly_average.csv",
+      "archive": { "tier": "Hot", "retention": "5년 보존", "loaded_at": "2026-11-17", "rows": 2 },
+      "lineage": { "origin": "행정안전부 인구감소지역 생활인구 산정 결과 공표 https://www.mois.go.kr/frt/bbs/type013/commonSelectBoardList.do?bbsId=BBSMSTR_000000000006 (별첨 생활인구 현황)", "version": "v1", "commit": "e9c7b5" },
+      "range": { "column": "period_to", "from": "2026-06", "to": "2026-06" },
+      "tags": ["생활인구", "공표통계", "실데이터"],
+      "columns": [
+        { "name": "sigungu_name", "type": "TEXT", "description": "지역명" },
+        { "name": "period_from", "type": "TEXT", "description": "기간 시작(YYYY-MM)" },
+        { "name": "period_to", "type": "TEXT", "description": "기간 끝(YYYY-MM)" },
+        { "name": "stay_monthly_average", "type": "NUMERIC", "description": "월평균 체류인구" },
+        { "name": "unit", "type": "TEXT", "description": "단위" },
+        { "name": "method", "type": "TEXT", "description": "산정 방법" },
+        { "name": "source_title", "type": "TEXT", "description": "발표 자료 이름" },
+        { "name": "source_url", "type": "TEXT", "description": "발표 자료 주소" },
+        { "name": "checked_on", "type": "DATE", "description": "확인한 날짜" }
+      ]
     }
   ],
   "benchmark_regions": [
@@ -718,21 +741,19 @@
   "conversion": {
     "regions": {
       "namwon": {
-        "stay_monthly": 263632, "inflow_total": 6643, "inflow_external": 3528, "persons_per_household": 1.87,
-        "basis": { "stay_monthly": "source", "inflow_total": "source", "inflow_external": "source", "persons_per_household": "source" },
-        "periods": { "stay_monthly": "2025-07~2026-06", "inflow_total": "2025", "inflow_external": "2025", "persons_per_household": "2025-12" },
+        "inflow_total": 6643, "inflow_external": 3528, "persons_per_household": 1.87,
+        "basis": { "inflow_total": "source", "inflow_external": "source", "persons_per_household": "source" },
+        "periods": { "inflow_total": "2025", "inflow_external": "2025", "persons_per_household": "2025-12" },
         "sources": [
-          { "fields": ["stay_monthly"], "title": "행정안전부 인구감소지역 생활인구 산정 결과 공표(2025년 3분기~2026년 2분기, 별첨 생활인구 현황)", "url": "https://www.mois.go.kr/frt/bbs/type013/commonSelectBoardList.do?bbsId=BBSMSTR_000000000006", "checked": "2026-11-06", "method": "2025년 7월~2026년 6월 월별 체류인구의 평균" },
           { "fields": ["inflow_total", "inflow_external"], "title": "국가데이터처 KOSIS 국내인구이동통계 — 시군구별 이동자수(DT_1B26001_A01, 2025년, 2026-10-28 갱신)", "url": "https://kosis.kr/statHtml/statHtml.do?orgId=101&tblId=DT_1B26001_A01", "checked": "2026-11-06", "method": "다른 시군구에서 온 전입 = 시도내 시군구간 전입 + 시도간 전입" },
           { "fields": ["persons_per_household"], "title": "행정안전부 주민등록 인구통계 — 주민등록 인구 및 세대현황(세대당 인구, 2025년 12월)", "url": "https://jumin.mois.go.kr/statMonth.do", "checked": "2026-11-06" }
         ]
       },
       "shinan": {
-        "stay_monthly": 145542, "inflow_total": 7564, "inflow_external": 7077, "persons_per_household": 1.87,
-        "basis": { "stay_monthly": "source", "inflow_total": "source", "inflow_external": "source", "persons_per_household": "source" },
-        "periods": { "stay_monthly": "2025-07~2026-06", "inflow_total": "2025", "inflow_external": "2025", "persons_per_household": "2025-12" },
+        "inflow_total": 7564, "inflow_external": 7077, "persons_per_household": 1.87,
+        "basis": { "inflow_total": "source", "inflow_external": "source", "persons_per_household": "source" },
+        "periods": { "inflow_total": "2025", "inflow_external": "2025", "persons_per_household": "2025-12" },
         "sources": [
-          { "fields": ["stay_monthly"], "title": "행정안전부 인구감소지역 생활인구 산정 결과 공표(2025년 3분기~2026년 2분기, 별첨 생활인구 현황)", "url": "https://www.mois.go.kr/frt/bbs/type013/commonSelectBoardList.do?bbsId=BBSMSTR_000000000006", "checked": "2026-11-06", "method": "2025년 7월~2026년 6월 월별 체류인구의 평균" },
           { "fields": ["inflow_total", "inflow_external"], "title": "국가데이터처 KOSIS 국내인구이동통계 — 시군구별 이동자수(DT_1B26001_A01, 2025년, 2026-10-28 갱신)", "url": "https://kosis.kr/statHtml/statHtml.do?orgId=101&tblId=DT_1B26001_A01", "checked": "2026-11-06", "method": "다른 시군구에서 온 전입 = 시도내 시군구간 전입 + 시도간 전입" },
           { "fields": ["persons_per_household"], "title": "행정안전부 주민등록 인구통계 — 주민등록 인구 및 세대현황(세대당 인구, 2025년 12월)", "url": "https://jumin.mois.go.kr/statMonth.do", "checked": "2026-11-06" }
         ]

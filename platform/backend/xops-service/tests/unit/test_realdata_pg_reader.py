@@ -61,9 +61,9 @@ def test_fetch_all_rejects_table_outside_allowlist() -> None:
 
 
 def test_allowlist_covers_namwon_gwto_and_public_stats_only() -> None:
-    assert len(pg_reader.ALLOWED_TABLES) == 31
+    assert len(pg_reader.ALLOWED_TABLES) == 32
     assert len([t for t in pg_reader.ALLOWED_TABLES if t.startswith("ext_gwto_")]) == 26
-    assert {"ext_kto_spot_monthly_visitors", "ext_mois_living_population_quarterly"} <= pg_reader.ALLOWED_TABLES
+    assert {"ext_kto_spot_monthly_visitors", "ext_mois_living_population_quarterly", "ext_mois_stay_monthly_average"} <= pg_reader.ALLOWED_TABLES
     assert not [t for t in pg_reader.ALLOWED_TABLES if t.startswith("ext_kt_nowon_")]
 
 

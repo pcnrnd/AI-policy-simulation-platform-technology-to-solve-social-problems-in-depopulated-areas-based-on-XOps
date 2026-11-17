@@ -6,13 +6,20 @@ import { fileURLToPath } from "node:url";
 import {
   COMPARE_COLUMNS, DEFAULT_CRITERION, EVIDENCE_CHART_SLOTS, PLAN_TYPES, SORT_CRITERIA,
   caseTrendData, caseTrendSpots, conversionCompareView, evidenceChartsView, facilityRecommendationView, facilityRows, linkedControls, optionCandidates,
-  capacityCap, comparableCases, populationTrend, recoControlSig, scaleGrade, sortFacilityRows, unlinkedControlNote
+  capacityCap, comparableCases, populationTrend, recoControlSig, scaleGrade, sortFacilityRows, unlinkedControlNote, withRegionStay, NO_CASE_GUIDE
 } from "./facilityRecommendation.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (...path) => readFileSync(join(here, "..", ...path), "utf-8");
 const seed = JSON.parse(read("assets", "mock_data.json"));
-const conversion = seed.conversion;
+const seedConversion = seed.conversion;
+// 계산 검사는 실명 지역 시드 통계와 독립된 합성 지역 통계로 한다(실제 통계 값을 시험 기대값에 쓰지 않는다).
+// 월평균 체류인구는 시드에 없고 화면에서는 공표 통계 API 값(withRegionStay)으로 붙는다.
+const SYNTH_REGIONS = {
+  namwon: { stay_monthly: 250000, inflow_total: 6000, inflow_external: 3000, persons_per_household: 2 },
+  shinan: { stay_monthly: 150000, inflow_total: 7500, inflow_external: 7000, persons_per_household: 2 }
+};
+const conversion = { ...seedConversion, regions: SYNTH_REGIONS };
 const regionOf = (id) => seed.regions.find((r) => r.id === id);
 const controlsOf = (id) => regionOf(id).case.simulation.controls;
 const ids = (list) => list.map((r) => r.id);
@@ -69,9 +76,12 @@ for (const id of ["fac_sa_solar", "fac_sa_garden"]) assert.equal(seed.facilities
 
 // 전환 효과 시드: 지역 통계·사례는 출처 값(source, 원 페이지 URL·확인일), 합성 규칙은 synthetic + 규칙별 생성 방법, 난수 없음.
 const https = (s) => /^https:\/\//.test(s.url) && /^\d{4}-\d{2}-\d{2}$/.test(s.checked) && Boolean(s.title);
-const STAT_FIELDS = ["stay_monthly", "inflow_total", "inflow_external", "persons_per_household"];
-assert.deepEqual(Object.keys(conversion.regions), ["namwon", "shinan"]);
-for (const [id, stats] of Object.entries(conversion.regions)) {
+const STAT_FIELDS = ["inflow_total", "inflow_external", "persons_per_household"];
+assert.deepEqual(Object.keys(seedConversion.regions), ["namwon", "shinan"]);
+for (const [id, stats] of Object.entries(seedConversion.regions)) {
+  // 생활인구 공표 파생값(월평균 체류인구)은 시드·출처 목록에 없다 — 비추적 입력 → PG → API(ds_16).
+  assert.ok(!("stay_monthly" in stats) && !("stay_monthly" in stats.basis) && !("stay_monthly" in stats.periods), `${id} 시드에 월평균 체류인구 없음`);
+  assert.ok(stats.sources.every((s) => !s.fields.includes("stay_monthly")), `${id} 체류인구 출처 줄 없음`);
   for (const field of STAT_FIELDS) {
     assert.ok(Number.isFinite(stats[field]) && stats[field] > 0, `${id}.${field}`);
     assert.equal(stats.basis[field], "source", `${id}.${field}`);
@@ -82,9 +92,6 @@ for (const [id, stats] of Object.entries(conversion.regions)) {
   }
   assert.ok(stats.inflow_external <= stats.inflow_total);
 }
-// 원표 값(2026-11-06 확인): 체류인구 2025-07~2026-06 월평균, 2025년 전입(KOSIS 시군구별 이동자수), 세대당 인구(주민등록 2025-12).
-assert.deepEqual(STAT_FIELDS.map((f) => conversion.regions.namwon[f]), [263632, 6643, 3528, 1.87]);
-assert.deepEqual(STAT_FIELDS.map((f) => conversion.regions.shinan[f]), [145542, 7564, 7077, 1.87]);
 // 사례: 비교 가능한 사례만(인구감소지역 안 사례, 원 파일 89개 시군구로 확인) — 전주 하얀양옥집은 뺐다. 섬 운영 개선 사례 2건(청산도·임자도)을 더했다.
 // 2차 보정: 같은 시설 유형의 섬 정원 사례(1004섬 분재정원)를 더했다. 사례마다 지역 유형(섬·농촌·소도시·도시)을 적었다.
 // 3차 보강: 공표 월별 입장객이 있는 추이 참고 사례 2곳(연홍미술관·젊은달 와이파크) — 효과 추정에는 쓰지 않는다(trend_only).
@@ -159,17 +166,10 @@ for (const row of [...namwon, ...shinan]) {
       const values = o.cases.map((id) => caseById[id].monthly);
       assert.ok(o.cases.length >= 2, `${row.id} 출처 범위는 2곳 이상`);
       assert.deepEqual([o.living.low, o.living.high], [Math.min(...values), Math.max(...values)], `${row.id} 사례 값 그대로`);
-      assert.match(o.note, new RegExp(`^유사 사례 ${o.cases.length}곳 기준(·연 1회 행사 방문을 12개월로 나눈 값)?$`));
     }
-    const event = o.cases.some((id) => Number.isFinite(caseById[id].event_days));
-    assert.equal(Boolean(o.annualized), event, `${row.id} 연 환산 표시는 행사 사례를 쓸 때만`);
-    // 3차 보정: 계획 목표 수용 인원(실제 정원 출처 없음)으로 잘린 값이면 근거 문장 끝에 "계획 수용 인원 기준".
-    const planned = o.kind === "visit" && /계획/.test(f.capacity_kind ?? "") && o.living.high === capacityCap(f, synthetic.rules) ? "·계획 수용 인원 기준" : "";
-    assert.equal(o.note.endsWith("·계획 수용 인원 기준"), Boolean(planned), `${row.id} 계획 수용 인원 문구`);
-    if (o.cases.length >= 2 && o.caseTier === "range") assert.match(o.note, new RegExp(`^유사 사례 ${o.cases.length}곳 기준(·규모 반영)?${event ? "·연 1회 행사 방문을 12개월로 나눈 값" : ""}${planned}$`));
-    if (o.caseTier === "single") assert.equal(o.note, `같은 유형 시설 규모 기준 추정${event ? "·연 1회 행사 방문을 12개월로 나눈 값" : ""}${planned}`);
-    if (o.caseTier === "reference") assert.equal(o.note, `유사 방안 사례 규모 기준 추정${event ? "·연 1회 행사 방문을 12개월로 나눈 값" : ""}${planned}`);
-    if (o.caseTier !== "range") assert.ok(!/^유사 사례/.test(o.note), `${row.id} 1곳·참고 사례는 사례값 범위로 보이지 않음`);
+    if (o.caseTier !== "range") assert.equal(o.living.basis, "synthetic", `${row.id} 1곳·참고 사례는 사례값 범위가 아님`);
+    // 전환 방안 비교 근거 열 삭제(11-17 사용자 결정): 방안에 화면 근거 문장이 없다.
+    assert.ok(!("note" in o) && !("annualized" in o), `${row.id} 근거 문장 없음`);
     for (const id of o.cases) {
       const c = caseById[id];
       assert.notEqual(c.facility_id, row.id, `${row.id} 자기 사례 제외`);
@@ -223,23 +223,23 @@ assert.doesNotMatch(read("lib", "facilityRecommendation.js"), /fac_(nw|sa)_/); /
 // 규모 보정이 실제로 적용된다(다른 시설의 전체 방문객을 그대로 변화로 옮기지 않는다). 2차 보정부터 큰 시설에도 배수를 건다:
 // - 글로컬캠퍼스(대형, 조성) 복합화 = 피오리움(중형) 10,833 × 2 = 21,666 → 시설 수용 상한 1,000(계획 수용 인원)으로 자름
 // - 옛 두동초(소형, 계획) 복합화 = 10,833 × 1/2 = 5,417 / 1도1뮤지엄(소형, 운영 중) = 10,833 × 1/2 × 25~50% = 1,354~2,708
-// - 퍼플섬(대형, 운영 중) 복합화 = 10,833 × 2 × 25~50% = 5,417~10,833 → 지역 상한 7,277로 자름
+// - 퍼플섬(대형, 운영 중) 복합화 = 10,833 × 2 × 25~50% = 5,417~10,833 → 합성 지역 상한(15만 × 5% = 7,500)으로 자름
 // - 정원수(중형, 운영 중) 복합화 = 분재정원(중형) 9,804 × 1 × 25~50% = 2,451~4,902(같은 유형 1곳 → 추정)
 // - 피오리움(중형, 운영 중) 운영 개선 = 섬 축제 3곳(대형, 참고 사례) × 1/2 → 834~2,092
 const opt = (rowsList, id, planType) => rowsList.find((r) => r.id === id).options.find((o) => o.planType === planType);
-assert.deepEqual([opt(namwon, "fac_nw_glocal", "복합화").living, opt(namwon, "fac_nw_glocal", "복합화").note], [{ low: 1000, high: 1000, basis: "synthetic" }, "유사 방안 사례 규모 기준 추정·계획 수용 인원 기준"]);
-assert.deepEqual([opt(namwon, "fac_nw_dudong", "복합화").living, opt(namwon, "fac_nw_dudong", "복합화").note], [{ low: 5417, high: 5417, basis: "synthetic" }, "유사 방안 사례 규모 기준 추정"]);
+assert.deepEqual([opt(namwon, "fac_nw_glocal", "복합화").living, opt(namwon, "fac_nw_glocal", "복합화").caseTier], [{ low: 1000, high: 1000, basis: "synthetic" }, "reference"]);
+assert.deepEqual([opt(namwon, "fac_nw_dudong", "복합화").living, opt(namwon, "fac_nw_dudong", "복합화").caseTier], [{ low: 5417, high: 5417, basis: "synthetic" }, "reference"]);
 assert.deepEqual(opt(shinan, "fac_sa_museum", "복합화").living, { low: Math.round(10833 * 0.5 * 0.25), high: Math.round(10833 * 0.5 * 0.5), basis: "synthetic" });
-assert.deepEqual(opt(shinan, "fac_sa_purple", "복합화").living, { low: Math.round(10833 * 2 * 0.25), high: Math.round(145542 * 0.05), basis: "synthetic" });
-assert.deepEqual([opt(shinan, "fac_sa_garden", "복합화").living, opt(shinan, "fac_sa_garden", "복합화").note], [{ low: Math.round(9804 * 0.25), high: Math.round(9804 * 0.5), basis: "synthetic" }, "같은 유형 시설 규모 기준 추정"]);
-assert.deepEqual([opt(namwon, "fac_nw_fiorium", "운영 개선").living, opt(namwon, "fac_nw_fiorium", "운영 개선").cases, opt(namwon, "fac_nw_fiorium", "운영 개선").note],
-  [{ low: Math.round(1667 * 0.5), high: Math.round(4183 * 0.5), basis: "synthetic" }, ["case_purple_festival", "case_cheongsan", "case_imja"], "유사 방안 사례 규모 기준 추정·연 1회 행사 방문을 12개월로 나눈 값"]);
-assert.deepEqual([opt(namwon, "fac_nw_farm01", "개방·공유").living, opt(namwon, "fac_nw_farm01", "개방·공유").note], [{ low: 152, high: 152, basis: "synthetic" }, "같은 유형 시설 규모 기준 추정"]);
-assert.deepEqual([opt(namwon, "fac_nw_dudong", "용도 전환").living, opt(namwon, "fac_nw_dudong", "용도 전환").note], [{ low: 700, high: 1250, basis: "source" }, "유사 사례 2곳 기준"]);
-// 퍼플섬 운영 개선은 자기 사례를 빼고 같은 유형 섬 축제 2곳 값 그대로(출처 값), 근거 문장에 연간 환산을 드러낸다.
+assert.deepEqual(opt(shinan, "fac_sa_purple", "복합화").living, { low: Math.round(10833 * 2 * 0.25), high: Math.round(SYNTH_REGIONS.shinan.stay_monthly * 0.05), basis: "synthetic" });
+assert.deepEqual([opt(shinan, "fac_sa_garden", "복합화").living, opt(shinan, "fac_sa_garden", "복합화").caseTier], [{ low: Math.round(9804 * 0.25), high: Math.round(9804 * 0.5), basis: "synthetic" }, "single"]);
+assert.deepEqual([opt(namwon, "fac_nw_fiorium", "운영 개선").living, opt(namwon, "fac_nw_fiorium", "운영 개선").cases, opt(namwon, "fac_nw_fiorium", "운영 개선").caseTier],
+  [{ low: Math.round(1667 * 0.5), high: Math.round(4183 * 0.5), basis: "synthetic" }, ["case_purple_festival", "case_cheongsan", "case_imja"], "reference"]);
+assert.deepEqual([opt(namwon, "fac_nw_farm01", "개방·공유").living, opt(namwon, "fac_nw_farm01", "개방·공유").caseTier], [{ low: 152, high: 152, basis: "synthetic" }, "single"]);
+assert.deepEqual([opt(namwon, "fac_nw_dudong", "용도 전환").living, opt(namwon, "fac_nw_dudong", "용도 전환").caseTier], [{ low: 700, high: 1250, basis: "source" }, "range"]);
+// 퍼플섬 운영 개선은 자기 사례를 빼고 같은 유형 섬 축제 2곳 값 그대로(출처 값).
 // 3차 보정: 같은 유형 2곳 범위라 근거 등급이 가장 높아 추천, 값이 더 큰 복합화(다른 유형 참고 사례 보정)는 검토.
-assert.deepEqual([opt(shinan, "fac_sa_purple", "운영 개선").living, opt(shinan, "fac_sa_purple", "운영 개선").cases, opt(shinan, "fac_sa_purple", "운영 개선").verdict, opt(shinan, "fac_sa_purple", "운영 개선").note],
-  [{ low: 1667, high: 4183, basis: "source" }, ["case_cheongsan", "case_imja"], "추천", "유사 사례 2곳 기준·연 1회 행사 방문을 12개월로 나눈 값"]);
+assert.deepEqual([opt(shinan, "fac_sa_purple", "운영 개선").living, opt(shinan, "fac_sa_purple", "운영 개선").cases, opt(shinan, "fac_sa_purple", "운영 개선").verdict],
+  [{ low: 1667, high: 4183, basis: "source" }, ["case_cheongsan", "case_imja"], "추천"]);
 assert.equal(opt(shinan, "fac_sa_purple", "복합화").verdict, "검토");
 
 // 근거 등급(3차 보정): 같은 유형 2곳 이상 범위 > 같은 유형 1곳 보정 > 다른 유형 참고 보정 > 통계 기준 추정.
@@ -261,10 +261,10 @@ const assertVerdicts = (rows, label) => {
   }
 };
 assertVerdicts([...namwon, ...shinan], "기본");
-// 경계 바로 아래·위 사례를 고정한다 — 기준을 0.798~0.848 사이로 묶는다.
+// 경계 바로 아래·위 사례를 고정한다(합성 지역 통계) — 기준을 0.719~0.802 사이로 묶는다.
 const ratioOf = (rows, id, planType) => Math.round((1000 * opt(rows, id, planType).score) / rows.find((r) => r.id === id).options.find((o) => o.chosen).score) / 1000;
-assert.deepEqual([ratioOf(shinan, "fac_sa_museum", "운영 개선"), opt(shinan, "fac_sa_museum", "운영 개선").verdict], [0.798, "보류"]); // 1도1뮤지엄 운영 개선
-assert.deepEqual([ratioOf(namwon, "fac_nw_farm01", "운영 개선"), opt(namwon, "fac_nw_farm01", "운영 개선").verdict], [0.848, "검토"]); // 스마트팜 1단지 운영 개선
+assert.deepEqual([ratioOf(namwon, "fac_nw_fiorium", "개방·공유"), opt(namwon, "fac_nw_fiorium", "개방·공유").verdict], [0.719, "보류"]); // 피오리움 개방·공유
+assert.deepEqual([ratioOf(shinan, "fac_sa_museum", "운영 개선"), opt(shinan, "fac_sa_museum", "운영 개선").verdict], [0.802, "검토"]); // 1도1뮤지엄 운영 개선
 // 옛 두동초: 복합화(참고 사례 보정 월 +5,417명)가 값은 크지만 캠핑·체험 전환(같은 유형 2곳 범위 월 +700~1,250명)이 추천, 복합화는 검토.
 assert.ok(opt(namwon, "fac_nw_dudong", "복합화").score > opt(namwon, "fac_nw_dudong", "용도 전환").score);
 assert.deepEqual(namwon.find((r) => r.id === "fac_nw_dudong").options.map((o) => [o.planType, o.caseTier, o.verdict]),
@@ -272,24 +272,23 @@ assert.deepEqual(namwon.find((r) => r.id === "fac_nw_dudong").options.map((o) =>
 
 // 합성 규칙 재계산(난수 없음): 사례 없는 방문형 = 지역 월평균 체류인구 × 비율 범위, 주거 공실 = (공급 − 입주) 호수 기준.
 const nwOption = (id, planType) => namwon.find((r) => r.id === id).options.find((o) => o.planType === planType);
-assert.deepEqual([nwOption("fac_nw_fiorium", "개방·공유").living.low, nwOption("fac_nw_fiorium", "개방·공유").living.high], [Math.round(263632 * 0.0005), Math.round(263632 * 0.001)]);
-assert.equal(nwOption("fac_nw_fiorium", "개방·공유").note, "지역 생활인구 규모 기준 추정");
+assert.deepEqual([nwOption("fac_nw_fiorium", "개방·공유").living.low, nwOption("fac_nw_fiorium", "개방·공유").living.high], [Math.round(SYNTH_REGIONS.namwon.stay_monthly * 0.0005), Math.round(SYNTH_REGIONS.namwon.stay_monthly * 0.001)]);
 const nwRental = nwOption("fac_nw_rental", "용도 전환"); // 공실 120 × 9% = 10.8호
-assert.deepEqual([nwRental.living.low, nwRental.living.high, nwRental.note], [Math.round(10.8 * 4), Math.round(10.8 * 8), "공실 규모 기준 추정"]);
-const nwSettle = nwOption("fac_nw_rental", "운영 개선"); // 10.8호 × 채움 30~50% × 세대당 1.87명 × 다른 시군구 전입 3,528/6,643
-assert.deepEqual([nwSettle.settle.low, nwSettle.settle.high], [Math.round(10.8 * 0.3 * 1.87 * 3528 / 6643), Math.round(10.8 * 0.5 * 1.87 * 3528 / 6643)]);
+assert.deepEqual([nwRental.living.low, nwRental.living.high], [Math.round(10.8 * 4), Math.round(10.8 * 8)]);
+const nwSettle = nwOption("fac_nw_rental", "운영 개선"); // 10.8호 × 채움 30~50% × 합성 세대당 2명 × 합성 다른 시군구 전입 3,000/6,000
+assert.deepEqual([nwSettle.settle.low, nwSettle.settle.high], [Math.round(10.8 * 0.3 * 2 * 3000 / 6000), Math.round(10.8 * 0.5 * 2 * 3000 / 6000)]);
 assert.deepEqual([nwSettle.utilization.low, nwSettle.utilization.high], [Math.round(9 * 0.3), Math.round(9 * 0.5)]);
 const glocalJob = nwOption("fac_nw_glocal", "용도 전환"); // 일자리형: 연간 다른 시군구 전입 × 0.3~0.6%
-assert.deepEqual([glocalJob.settle.low, glocalJob.settle.high, glocalJob.note], [Math.round(3528 * 0.003), Math.round(3528 * 0.006), "전입 통계 기준 추정"]);
+assert.deepEqual([glocalJob.settle.low, glocalJob.settle.high], [Math.round(3000 * 0.003), Math.round(3000 * 0.006)]);
 assert.deepEqual([glocalJob.living.low, glocalJob.living.high], [glocalJob.settle.low, glocalJob.settle.high]);
-// 지역 1~3순위 고른 방안의 생활인구 효과 합 ÷ 지역 월평균 체류인구(보고서 18절): 남원 1.0~1.6%, 신안 3.8~8.1%.
+// 지역 1~3순위 고른 방안의 생활인구 효과 합 ÷ 지역 월평균 체류인구(합성 지역 통계 기준 값).
 const top3Share = (rowsList, id) => {
   const chosen = rowsList.slice(0, 3).map((r) => r.options.find((o) => o.chosen).living);
   const stay = conversion.regions[id].stay_monthly;
   return [chosen.reduce((s, r) => s + r.low, 0), chosen.reduce((s, r) => s + r.high, 0)].map((v) => Math.round((1000 * v) / stay) / 10);
 };
-assert.deepEqual(top3Share(namwon, "namwon"), [1, 1.6]);
-assert.deepEqual(top3Share(shinan, "shinan"), [3.8, 8.1]);
+assert.deepEqual(top3Share(namwon, "namwon"), [1, 1.7]);
+assert.deepEqual(top3Share(shinan, "shinan"), [3.6, 7.9]);
 
 // 활용도: 주거 시설 입주율만 값이 있고, 나머지는 빈 값(화면에서 행동 안내).
 const byId = Object.fromEntries([...namwon, ...shinan].map((r) => [r.id, r]));
@@ -304,7 +303,7 @@ for (const row of [...namwon, ...shinan]) {
 
 // 추천 순위(1단계 재정의): 생활인구 효과 중심 + 정주 효과·추진 여건 보조. 모든 시설에 값이 있다(주 그래프 빈 막대 0).
 assert.deepEqual(ids(namwon), ["fac_nw_fiorium", "fac_nw_glocal", "fac_nw_dudong", "fac_nw_farm01", "fac_nw_farm02", "fac_nw_rental"]);
-assert.deepEqual(namwon.map((r) => r.index), [60, 55, 52, 46, 44, 42]);
+assert.deepEqual(namwon.map((r) => r.index), [60, 55, 52, 46, 44, 43]);
 assert.deepEqual(ids(shinan), ["fac_sa_purple", "fac_sa_garden", "fac_sa_museum", "fac_sa_rental", "fac_sa_solar"]);
 assert.deepEqual(shinan.map((r) => r.index), [69, 68, 65, 53, 48]);
 // 고른 방안 분포(3차 보정 재도출 결과 — 규칙을 결과에 맞추지 않았다): 남원 운영 개선 1·복합화 1·용도 전환 2·개방·공유 2, 신안 운영 개선 1·복합화 2·용도 전환 1·개방·공유 1.
@@ -369,11 +368,23 @@ assert.equal(unlinkedControlNote(nwControls, { farm_scale: 30 }), "스마트팜 
 assert.equal(unlinkedControlNote(nwControls, { farm_scale: 30, staff: 100 }), "스마트팜 단지 규모·운영 인력: 시설 자료를 등록하면 추천에 반영됩니다.");
 assert.equal(unlinkedControlNote(saControls, { rental_units: 600 }), null);
 assert.equal(unlinkedControlNote(undefined, {}), null);
-// 화면 연결: 데모 재도출은 시드 conversion을 넘기고, 서명은 연결 변수만, 행동 안내는 재도출 안내와 같은 <p> 자리.
+// 화면 연결: 데모 재도출은 시드 conversion에 공표 통계 API의 월평균 체류인구를 붙여 넘기고, 서명은 연결 변수와 그 값, 행동 안내는 재도출 안내와 같은 <p> 자리.
 const pageSrc = read("pages", "SimulatorPage.jsx");
 const dockSrc = read("components", "SimulatorDock.jsx");
-assert.match(pageSrc, /facilityRows\(region\.id, appData\.facilities, controls, controlValues, appData\.conversion\)/);
-assert.match(pageSrc, /const recoInputSig = demo \? `\$\{contextKey\}\|\$\{recoControlSig\(controls, controlValues\)\}` : currentSig;/);
+assert.match(pageSrc, /facilityRows\(region\.id, appData\.facilities, controls, controlValues, withRegionStay\(appData\.conversion, region\.id, region\.id === currentRegion\.id \? regionStay : null\)\)/);
+assert.match(pageSrc, /const regionStay = useRegionStay\(demo \? currentRegion\.name : undefined\);/);
+assert.match(pageSrc, /const recoInputSig = demo \? `\$\{contextKey\}\|\$\{recoControlSig\(controls, controlValues\)\}\|stay:\$\{regionStay \?\? ""\}` : currentSig;/);
+// 월평균 체류인구 미연결(API 실패·미적재): 시드만으로는 방안 효과를 계산하지 않고 같은 자리에 자료 등록 안내(값을 꾸며 넣지 않는다).
+const unlinked = facilityRows("namwon", seed.facilities, controlsOf("namwon"), {}, seedConversion);
+assert.ok(unlinked.length === 6 && unlinked.every((r) => r.options === null && r.index === null && r.planCases.length === 0));
+assert.ok(facilityRecommendationView(unlinked).items.every((i) => i.scoreUnit === "자료 등록 후 산정" && i.effectLine === ""));
+assert.equal(conversionCompareView(facilityRecommendationView(unlinked).items[0]).empty, "시설 자료를 등록하면 전환 방안을 비교합니다.");
+// API 값이 오면 그 지역에만 새 객체로 붙는다(시드 원본 불변). 0·음수·없음은 미연결 그대로.
+const linked = withRegionStay(seedConversion, "namwon", 1234);
+assert.equal(linked.regions.namwon.stay_monthly, 1234);
+assert.ok(!("stay_monthly" in seedConversion.regions.namwon) && !("stay_monthly" in linked.regions.shinan));
+for (const bad of [null, undefined, 0, -1, Number.NaN]) assert.equal(withRegionStay(seedConversion, "namwon", bad), seedConversion);
+assert.equal(withRegionStay(seedConversion, "gunwi", 1234), seedConversion);
 assert.match(pageSrc, /const recoStale = recommendation !== null && recoSig !== recoInputSig;/);
 assert.match(pageSrc, /const controlNote = demo \? unlinkedControlNote\(controls, controlValues\) : null;/);
 assert.match(pageSrc, /controlNote=\{controlNote\}/);
@@ -439,8 +450,8 @@ assert.equal(utilView.tableItems[0].id, "fac_nw_rental");
 const missing = facilityRecommendationView(partial);
 assert.deepEqual(missing.items.map((i) => [i.scoreText, i.scoreUnit, missing.status(i).text]), [["44", "추천 지수", "우선 검토"], ["", "자료 등록 후 산정", "자료 등록 후 검토"]]);
 
-// 전환 방안 비교: 6열(전환 방안·사용률·생활인구·정주인구·근거·판단), 시설 방안 수만큼 행. 실데이터(방안 없음)는 같은 구조에 행동 안내.
-assert.deepEqual(COMPARE_COLUMNS, ["전환 방안", "사용률 변화", "생활인구 변화", "정주인구 변화", "근거", "판단"]);
+// 전환 방안 비교: 5열(전환 방안·사용률·생활인구·정주인구·판단 — 근거 열은 11-17 사용자 결정으로 삭제), 시설 방안 수만큼 행. 실데이터(방안 없음)는 같은 구조에 행동 안내.
+assert.deepEqual(COMPARE_COLUMNS, ["전환 방안", "사용률 변화", "생활인구 변화", "정주인구 변화", "판단"]);
 const views = { namwon: view, shinan: facilityRecommendationView(shinan) };
 const compares = Object.values(views).flatMap((v) => v.items.map(conversionCompareView));
 for (const c of compares) {
@@ -450,11 +461,10 @@ for (const c of compares) {
     assert.equal(row.cells.length, COMPARE_COLUMNS.length);
     assert.match(row.cells[1], /^\+\d+(~\d+)?%p$/);
     assert.match(row.cells[2], /^월 \+[\d,]+(~[\d,]+)?명$/);
-    // 연 1회 행사를 12개월로 나눈 값의 설명은 근거 칸 문장에만 있다 — 숫자 칸에는 괄호 꼬리표를 붙이지 않는다.
+    // 숫자 칸에는 괄호 꼬리표를 붙이지 않는다.
     assert.doesNotMatch(row.cells[2], /\(/, row.cells.join(" | "));
     assert.match(row.cells[3], /^(연 \+[\d,]+(~[\d,]+)?명|해당 없음)$/);
-    assert.match(row.cells[4], /^((유사 사례 \d곳 기준(·규모 반영)?|같은 유형 시설 규모 기준 추정|유사 방안 사례 규모 기준 추정)(·연 1회 행사 방문을 12개월로 나눈 값)?|지역 생활인구 규모 기준 추정|공실 규모 기준 추정|전입 통계 기준 추정)(·계획 수용 인원 기준)?$/);
-    assert.equal(row.cells[5], row.verdict);
+    assert.equal(row.cells[4], row.verdict);
     assert.ok(["source", "synthetic"].includes(row.basis.living) && row.basis.utilization === "synthetic");
   }
 }
@@ -462,25 +472,25 @@ const fioriumItem = view.items.find((i) => i.id === "fac_nw_fiorium");
 const fiorium = conversionCompareView(fioriumItem);
 assert.equal(fiorium.scope, "남원 달빛정원 피오리움");
 assert.deepEqual(fiorium.rows.map((r) => r.cells), [
-  ["복합화 · 전시·정원·광장 복합 운영으로 체류 시간 확대 검토", "+10~20%p", "월 +791~1,582명", "해당 없음", "지역 생활인구 규모 기준 추정", "검토"],
-  ["운영 개선 · 야간·계절 행사 운영 개선 검토", "+5~10%p", "월 +834~2,092명", "해당 없음", "유사 방안 사례 규모 기준 추정·연 1회 행사 방문을 12개월로 나눈 값", "추천"],
-  ["개방·공유 · 광장·정원 지역 행사 개방 검토", "+3~8%p", "월 +132~264명", "해당 없음", "지역 생활인구 규모 기준 추정", "보류"]
+  ["복합화 · 전시·정원·광장 복합 운영으로 체류 시간 확대 검토", "+10~20%p", "월 +750~1,500명", "해당 없음", "검토"],
+  ["운영 개선 · 야간·계절 행사 운영 개선 검토", "+5~10%p", "월 +834~2,092명", "해당 없음", "추천"],
+  ["개방·공유 · 광장·정원 지역 행사 개방 검토", "+3~8%p", "월 +125~250명", "해당 없음", "보류"]
 ]);
 assert.deepEqual(conversionCompareView(facilityRecommendationView(shinan).items[0]).rows.map((r) => r.cells), [
-  ["운영 개선 · 테마 행사·체류 프로그램 운영 개선 검토", "+5~10%p", "월 +1,667~4,183명", "해당 없음", "유사 사례 2곳 기준·연 1회 행사 방문을 12개월로 나눈 값", "추천"],
-  ["복합화 · 숙박·체험 기능 복합화 검토", "+10~20%p", "월 +5,417~7,277명", "해당 없음", "유사 방안 사례 규모 기준 추정", "검토"]
+  ["운영 개선 · 테마 행사·체류 프로그램 운영 개선 검토", "+5~10%p", "월 +1,667~4,183명", "해당 없음", "추천"],
+  ["복합화 · 숙박·체험 기능 복합화 검토", "+10~20%p", "월 +5,417~7,500명", "해당 없음", "검토"]
 ]);
-// 글로컬캠퍼스 비교 표: 계획 목표 수용 인원으로 잘린 복합화 행의 근거 칸.
-assert.deepEqual(conversionCompareView(view.items.find((i) => i.id === "fac_nw_glocal")).rows.map((r) => [r.cells[2], r.cells[4], r.cells[5]]), [
-  ["월 +11~21명", "전입 통계 기준 추정", "보류"], ["월 +1,000명", "유사 방안 사례 규모 기준 추정·계획 수용 인원 기준", "추천"]
+// 글로컬캠퍼스 비교 표: 계획 목표 수용 인원으로 잘린 복합화 행.
+assert.deepEqual(conversionCompareView(view.items.find((i) => i.id === "fac_nw_glocal")).rows.map((r) => [r.cells[2], r.cells[4]]), [
+  ["월 +9~18명", "보류"], ["월 +1,000명", "추천"]
 ]);
 for (const real of [conversionCompareView(null), conversionCompareView({ id: "s", name: "민감도 항목" })]) {
   assert.deepEqual([real.title, real.rows, real.empty], ["전환 방안 비교", [], "시설 자료를 등록하면 전환 방안을 비교합니다."]);
 }
 
-// 근거 그래프 묶음: 세 자리 고정. 생활인구 추이·사례 성과 값은 플랫폼 공표 통계 API(usePublicTrends)에서 오고 시드에는 없다.
-// 아래 값은 API 응답과 모양만 같은 합성 숫자다(공표 값은 저장소에 두지 않는다). 활용 방안 구성은 추천 결과.
-assert.deepEqual(EVIDENCE_CHART_SLOTS.map((s) => s.id), ["population", "case", "plans"]);
+// 근거 그래프 묶음: 두 자리 고정(추천 활용 방안 구성 그래프는 11-17 사용자 결정으로 삭제). 생활인구 추이·사례 성과 값은 플랫폼 공표 통계 API(usePublicTrends)에서 오고 시드에는 없다.
+// 아래 값은 API 응답과 모양만 같은 합성 숫자다(공표 값은 저장소에 두지 않는다).
+assert.deepEqual(EVIDENCE_CHART_SLOTS.map((s) => s.id), ["population", "case"]);
 assert.equal(seed.recommendation_charts, undefined, "시드에 생활인구 발표 값 없음");
 assert.ok(conversion.cases.every((c) => c.monthly_series === undefined && c.monthly_sources === undefined), "시드에 월별 공표 값 없음");
 // 사례 → 통계표 관광지점 이름(연결 키)만 시드에 둔다. 선 이름은 장소 이름(trend_label).
@@ -501,21 +511,18 @@ assert.deepEqual(populationTrend(synthPopulation), {
 });
 for (const id of ["namwon", "shinan"]) {
   const charts = evidenceChartsView(trends, views[id].items);
-  assert.deepEqual(charts.map((c) => c.id), ["population", "case", "plans"]);
+  assert.deepEqual(charts.map((c) => c.id), ["population", "case"]);
   for (const chart of charts) {
     assert.equal(chart.empty, null, `${id} ${chart.id}`);
     assert.ok(chart.series.length >= 1 && chart.series.every((s) => s.values.length === chart.labels.length && (chart.id === "case" ? s.values.some(Number.isFinite) : s.values.every(Number.isFinite))));
     assert.ok(chart.title && !("scope" in chart) && !("note" in chart), `${id} ${chart.id} 부제·출처 줄 없음`);
   }
-  assert.deepEqual(charts.map((c) => c.kind), ["line", "line", "bar"]);
   assert.deepEqual(charts[0].series.map((s) => s.label), ["생활인구", "등록인구"]);
-  assert.equal(charts[2].series[0].values.reduce((a, b) => a + b, 0), views[id].items.length);
 }
 // 사례 성과: 고른 방문형 방안과 비교할 수 있는 사례 묶음(자기 사례 제외) 가운데 API 월별 값이 있는 사례만, 사례마다 선 하나.
 // 값은 API 값 그대로 — 받지 못한 달은 null로 비우고, 나누거나 채운 값은 없다.
 const labelYm = (ym) => `${ym.slice(2, 4)}년 ${Number(ym.slice(5, 7))}월`;
 const nwCases = evidenceChartsView(trends, view.items)[1];
-assert.equal(nwCases.kind, "line");
 // 1순위 피오리움 운영 개선: 퍼플섬·청산도만 선(임자도 홍매화는 통계 지점 없음).
 assert.deepEqual(nwCases.series.map((x) => x.label), ["신안 퍼플섬", "완도 청산도"]);
 assert.ok(nwCases.labels.length <= 36 && nwCases.labels.every((l) => /^\d{2}년 \d{1,2}월$/.test(l)));
@@ -530,10 +537,12 @@ assert.deepEqual(linesOf("fac_nw_glocal"), ["영월 젊은달 와이파크"]);
 assert.deepEqual(linesOf("fac_nw_dudong"), ["고흥 연홍미술관"]);
 // 통계 지점이 걸린 사례가 없는 묶음(스마트팜 개방·공유)은 같은 자리에 안내만.
 const farm = evidenceChartsView(trends, view.items, view.items.find((i) => i.id === "fac_nw_farm01"))[1];
-assert.deepEqual([farm.labels, farm.series, farm.empty], [[], [], "고른 방안과 같은 유형의 비교 가능한 사례가 없습니다."]);
+// 사례 없음 빈 상태는 같은 자리의 짧은 행동 안내(다른 순위 카드 선택 또는 사례 이용실적 등록).
+assert.equal(NO_CASE_GUIDE, "다른 순위 카드를 고르거나 비교 사례 이용실적을 등록하세요.");
+assert.deepEqual([farm.labels, farm.series, farm.empty], [[], [], NO_CASE_GUIDE]);
 // 값을 받지 못하면(적재 전·조회 실패) 자리의 기본 안내.
 assert.deepEqual(evidenceChartsView({ population: null, spots: null }, view.items).map((c) => c.empty),
-  ["생활인구 통계를 연결하면 표시됩니다.", "시설 이용실적을 등록하면 표시됩니다.", null]);
+  ["생활인구 통계를 연결하면 표시됩니다.", "시설 이용실적을 등록하면 표시됩니다."]);
 for (const item of [...view.items, ...facilityRecommendationView(shinan).items]) {
   const chosen = item.options.find((o) => o.chosen);
   const chart = evidenceChartsView(trends, view.items, item)[1];
@@ -541,8 +550,7 @@ for (const item of [...view.items, ...facilityRecommendationView(shinan).items])
   assert.deepEqual(chart.series.map((x) => x.label), drawn.map((c) => c.trend_label), `${item.id} 그래프 = 비교 사례 중 월별 값이 있는 사례`);
   assert.ok(!item.planCases.some((c) => c.facility_id === item.id), `${item.id} 자기 사례를 그리지 않음`);
   assert.ok(chosen.cases.every((id) => !caseById[id].trend_only), `${item.id} 효과 추정에 추이 참고 사례 없음`);
-  if (chosen.caseTier === "range") assert.match(chosen.note, new RegExp(`^유사 사례 ${chosen.cases.length}곳`));
-  if (!item.planCases.some((c) => c.trend_spot)) assert.equal(chart.empty, "고른 방안과 같은 유형의 비교 가능한 사례가 없습니다.");
+  if (!item.planCases.some((c) => c.trend_spot)) assert.equal(chart.empty, NO_CASE_GUIDE);
 }
 // API에 한 번에 묻는 지점 목록: 추천 행 전체 사례 묶음의 지점 이름, 중복 없음.
 const askSpots = caseTrendSpots(view.items);
@@ -565,12 +573,17 @@ assert.equal(trend.series[1].values.filter((v) => v !== null).length, 1);
 assert.equal(caseTrendData([{ name: "다" }], synthSeries), null);
 assert.equal(caseTrendData(synthCases, null), null);
 assert.equal(caseTrendData([], synthSeries), null);
-assert.notDeepEqual(evidenceChartsView(null, views.namwon.items)[2].series, evidenceChartsView(null, views.shinan.items)[2].series);
 const realCharts = evidenceChartsView(null, null);
-assert.deepEqual(realCharts.map((c) => c.empty), ["생활인구 통계를 연결하면 표시됩니다.", "시설 이용실적을 등록하면 표시됩니다.", "시설 자료를 등록하면 표시됩니다."]);
+assert.deepEqual(realCharts.map((c) => c.empty), ["생활인구 통계를 연결하면 표시됩니다.", "시설 이용실적을 등록하면 표시됩니다."]);
 for (const c of realCharts) assert.deepEqual([c.labels, c.series], [[], []]);
-// 실데이터 표시도 같은 API의 생활인구 추이를 같은 자리에 그린다(시설 기반 두 자리는 안내).
-assert.deepEqual(evidenceChartsView(trends, null).map((c) => c.empty), [null, "시설 이용실적을 등록하면 표시됩니다.", "시설 자료를 등록하면 표시됩니다."]);
+// 실데이터 표시도 같은 API의 생활인구 추이를 같은 자리에 그린다(시설 기반 사례 자리는 안내).
+assert.deepEqual(evidenceChartsView(trends, null).map((c) => c.empty), [null, "시설 이용실적을 등록하면 표시됩니다."]);
+// 삭제한 두 요소(11-17 사용자 결정)의 전용 코드·문구가 남지 않는다. 그래프 줄은 두 칸이 줄 너비를 고르게 나누고 좁은 화면은 한 칸.
+assert.doesNotMatch(read("lib", "facilityRecommendation.js"), /추천 활용 방안 구성|ESTIMATE_NOTE|EVENT_NOTE|planCapNote|\bnote:|"plans"/);
+assert.doesNotMatch(read("components", "PolicyRecommendation.jsx"), /PLAN_COLORS|"plans"|chart\.kind|<Bar data=\{data\}/);
+const policyCss = read("styles", "policy.css");
+assert.match(policyCss, /\.reco-evidence-charts \{\s*display: grid;\s*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);
+assert.match(policyCss, /@media \(max-width: 768px\) \{\s*\.reco-top3,\s*\.reco-evidence-charts \{\s*grid-template-columns: 1fr;/);
 
 // 추천 근거 접이식 제외(11-06 사용자 결정): STAGE ④에 추천 근거 영역·전용 코드 없음, 다른 단계 계산 근거 두 곳은 유지.
 const stageSrc = pageSrc.slice(pageSrc.indexOf('id="stage-report"'));
@@ -606,7 +619,7 @@ for (const text of [...compareTexts, ...view.items.map((i) => i.effectLine), ...
   assert.doesNotMatch(text, /현재|이용률 \d|입주율|예산|기금|투자|억 원/, text);
 }
 
-// 패널 구조: 주 그래프 → 근거 그래프 묶음(그래프 4개를 한 영역에) → 전환 방안 비교 → 표 → 쪽 넘김, 각주 없음, 모드 분기 없이(두 모드 같은 자리·같은 구조).
+// 패널 구조: 주 그래프 → 근거 그래프 묶음(두 자리) → 전환 방안 비교 → 표 → 쪽 넘김, 각주 없음, 모드 분기 없이(두 모드 같은 자리·같은 구조).
 const panelSrc = read("components", "PolicyRecommendation.jsx");
 assert.equal(panelSrc.match(/data-slot="sim\.report\.charts"/g)?.length, 1);
 assert.equal(panelSrc.match(/data-slot="sim\.report\.compare"/g)?.length, 1);
@@ -634,4 +647,4 @@ assert.equal(mapSrc.match(/filter\(hasLocation\)/g)?.length, 2);
 assert.ok(mapSrc.includes('운영 예산: ${Number.isFinite(f.operating_budget) ? `<strong>${f.operating_budget}억</strong>` : "예산 자료 등록"}'));
 assert.equal(seed.facilities.filter((f) => Number.isFinite(f.lat) && Number.isFinite(f.lng)).length, 6);
 
-console.log("facilityRecommendation: 출처·합성 구분·방안 후보 규칙·규모 보정(큰 시설 포함)·시설 수용 상한(섬 관광 일 방문·계획 목표)·근거 등급 순 방안 선택·연 환산 표기·사례 2곳 이상 범위·같은 시설·지역 유형 사례·행사 기간 표기·효과 basis·효과 중심 순위·Top3 임대주택≤1·전환 방안 비교·사례 묶음 일치·실명 시설 예산 안내·근거 그래프·실데이터 안내·화면 문구·카드 선택 PASS");
+console.log("facilityRecommendation: 출처·합성 구분·방안 후보 규칙·규모 보정(큰 시설 포함)·시설 수용 상한(섬 관광 일 방문·계획 목표)·근거 등급 순 방안 선택·사례 2곳 이상 범위·같은 시설·지역 유형 사례·효과 basis·효과 중심 순위·Top3 임대주택≤1·전환 방안 비교·사례 묶음 일치·실명 시설 예산 안내·근거 그래프·실데이터 안내·화면 문구·카드 선택 PASS");

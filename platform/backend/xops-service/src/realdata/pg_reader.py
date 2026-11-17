@@ -50,6 +50,7 @@ ALLOWED_TABLES = {
     # 공표 통계(정책 추천 그래프) — 관광지점 월별 입장객, 생활인구 분기 발표 값
     "ext_kto_spot_monthly_visitors",
     "ext_mois_living_population_quarterly",
+    "ext_mois_stay_monthly_average",
 }
 
 _FETCH_BATCH = 1000

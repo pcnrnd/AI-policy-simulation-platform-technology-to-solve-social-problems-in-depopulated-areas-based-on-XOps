@@ -39,3 +39,25 @@ export function usePublicTrends(regionName, spots) {
   }, [regionName, spotKey]);
   return trends;
 }
+
+/**
+ * 지역 월평균 체류인구(시설 추천 계산의 지역 규모) — 플랫폼 공표 통계 API에서 읽는다(시드에 값 없음).
+ * 받지 못하면 null이고, 추천 카드·표는 같은 자리에 자료 등록 안내를 보인다.
+ * @param {string|undefined} regionName
+ * @returns {number|null}
+ */
+export function useRegionStay(regionName) {
+  const [stay, setStay] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    setStay(null);
+    (async () => {
+      const token = await getRealdataToken().catch(() => null);
+      if (!token || !alive || !regionName) return;
+      const res = await apiGet(`${BASE}/stay-average`, { token, params: { region: regionName } }).catch(() => null);
+      if (alive && res?.status === "ok" && res.data?.value > 0) setStay(res.data.value);
+    })();
+    return () => { alive = false; };
+  }, [regionName]);
+  return stay;
+}

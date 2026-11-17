@@ -15,23 +15,19 @@ import {
 
 const MEDAL = ["🥇", "🥈", "🥉"];
 const SERIES_COLORS = [["rgba(59, 130, 246, 0.75)", "rgba(59, 130, 246, 1)"], ["rgba(14, 165, 233, 0.45)", "rgba(14, 165, 233, 1)"], ["rgba(16, 185, 129, 0.45)", "rgba(16, 185, 129, 1)"]];
-const PLAN_COLORS = ["rgba(139, 92, 246, 0.55)", "rgba(139, 92, 246, 1)"];
 
-/** 근거 그래프 하나 — 값이 없으면 캔버스 자리를 그대로 두고 행동 안내만 겹친다. 생활인구 추이는 선 그래프(생활인구·등록인구), 나머지는 막대. */
+/** 근거 그래프 하나(선 그래프) — 값이 없으면 캔버스 자리를 그대로 두고 행동 안내만 겹친다. */
 function EvidenceChart({ chart, ct }) {
-  const isLine = chart.kind === "line";
   const tickUnit = chart.unit.replace(/ 명$/, "");
   // 월별처럼 눈금이 많은 선 그래프는 점을 감추고 눈금을 듬성듬성(공표된 달의 값은 그대로 선에 있다).
-  const dense = isLine && chart.labels.length > 12;
+  const dense = chart.labels.length > 12;
   // 눈금은 5개만 — 처음과 마지막 달은 항상 보이게 고르게 나눈다.
   const shownTicks = new Set(Array.from({ length: 5 }, (_, k) => Math.round((k * (chart.labels.length - 1)) / 4)));
   const data = {
     labels: chart.labels,
     datasets: (chart.series.length ? chart.series : [{ label: chart.title, values: [] }]).map((s, i) => {
-      const [fill, line] = chart.id === "plans" ? PLAN_COLORS : SERIES_COLORS[i] ?? SERIES_COLORS[0];
-      return isLine
-        ? { label: s.label || chart.title, data: s.values, borderColor: line, backgroundColor: line, borderWidth: 2, pointRadius: dense ? 0 : 3, pointHoverRadius: 5, tension: 0.25 }
-        : { label: s.label || chart.title, data: s.values, backgroundColor: fill, borderColor: line, borderWidth: 1.5, borderRadius: 4, maxBarThickness: 44 };
+      const line = (SERIES_COLORS[i] ?? SERIES_COLORS[0])[1];
+      return { label: s.label || chart.title, data: s.values, borderColor: line, backgroundColor: line, borderWidth: 2, pointRadius: dense ? 0 : 3, pointHoverRadius: 5, tension: 0.25 };
     })
   };
   const options = {
@@ -40,7 +36,7 @@ function EvidenceChart({ chart, ct }) {
     scales: {
       x: { grid: { display: false }, ticks: { color: ct.tickStrong, font: { size: 11 }, ...(dense && { autoSkip: false, maxRotation: 0, callback: (_, i) => (shownTicks.has(i) ? chart.labels[i] : "") }) } },
       // 단위는 눈금과 툴팁 값에 붙인다(축 제목·부제는 두지 않는다).
-      y: { beginAtZero: true, grid: { color: ct.grid }, ticks: { color: ct.tick, precision: isLine ? undefined : 0, callback: (v) => (v === 0 ? "0" : `${v.toLocaleString("ko-KR")}${tickUnit}`) } }
+      y: { beginAtZero: true, grid: { color: ct.grid }, ticks: { color: ct.tick, callback: (v) => (v === 0 ? "0" : `${v.toLocaleString("ko-KR")}${tickUnit}`) } }
     },
     plugins: {
       legend: { display: chart.series.length > 1 || chart.id === "case", position: "bottom", labels: { color: ct.tick, boxWidth: 10, font: { size: 10 } } },
@@ -51,14 +47,13 @@ function EvidenceChart({ chart, ct }) {
       }
     }
   };
-  const Chart = isLine ? Line : Bar;
   return (
     <figure className="reco-evidence-chart">
       <figcaption>
         <strong>{chart.title}</strong>
       </figcaption>
       <div className="reco-evidence-canvas">
-        <Chart data={data} options={options} aria-label={`${chart.title} 그래프`} role="img" />
+        <Line data={data} options={options} aria-label={`${chart.title} 그래프`} role="img" />
         {chart.empty && <ChartEmptyNote>{chart.empty}</ChartEmptyNote>}
       </div>
     </figure>
@@ -216,7 +211,7 @@ export default function PolicyRecommendation({ region, facilityRows = null, view
         <Bar data={chartData} options={chartOpts} />
       </div>
 
-      {/* 근거 그래프 묶음 — 순위 그래프 바로 아래(그래프 4개를 한 영역에), 두 모드 같은 세 자리 */}
+      {/* 근거 그래프 묶음 — 순위 그래프 바로 아래, 두 모드 같은 두 자리 */}
       <section className="reco-evidence-charts" data-slot="sim.report.charts" aria-label="추천 참고 그래프">
         {evidenceCharts.map((chart) => <EvidenceChart key={chart.id} chart={chart} ct={ct} />)}
       </section>

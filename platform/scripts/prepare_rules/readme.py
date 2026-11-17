@@ -46,7 +46,7 @@ _DATASET_TITLES = {
     "nowon_kt_festival": "C. nowon_kt_festival (KT 노원 축제, 11개: meta 1 + data 10)",
     "gwto_kt_tourism_indicators": "D. gwto_kt_tourism_indicators (KT 강원 관광지표, 26개)",
     "kto_spot_visitors": "E. kto_spot_visitors (주요관광지점 월별 입장객, 1개)",
-    "mois_living_population": "F. mois_living_population (생활인구 분기 발표 값, 1개)",
+    "mois_living_population": "F. mois_living_population (생활인구 분기 발표 값·월평균 체류인구, 2개)",
 }
 
 

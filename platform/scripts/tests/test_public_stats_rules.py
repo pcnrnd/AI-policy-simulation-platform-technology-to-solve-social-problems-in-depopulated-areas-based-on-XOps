@@ -89,6 +89,12 @@ def test_living_population_rows_split_quarter_and_sort() -> None:
     [
         ({"base_quarter": "2025 2분기"}, "YYYY-Qn"),
         ({"stay_population": "-1"}, "음수"),
+        ({"stay_population": "nan"}, "유한한 수가 아닙니다"),
+        ({"stay_population": "NaN"}, "유한한 수가 아닙니다"),
+        ({"registered_population": "inf"}, "유한한 수가 아닙니다"),
+        ({"registered_population": "-Infinity"}, "유한한 수가 아닙니다"),
+        ({"stay_population": "1e400"}, "유한한 수가 아닙니다"),
+        ({"stay_population": "abc"}, "숫자가 아닙니다"),
     ],
 )
 def test_living_population_rejects_bad_values(bad: dict[str, str], message: str) -> None:
@@ -101,6 +107,40 @@ def test_living_population_rejects_duplicates_and_missing_columns() -> None:
         mois_living_population.parse_rows([_MOIS_ROW, _MOIS_ROW])
     with pytest.raises(ValueError, match="열이 없습니다"):
         mois_living_population.parse_rows([{"sigungu_name": "합성군"}])
+
+
+_AVG_ROW = {
+    "sigungu_name": "합성군", "period_from": "2025-01", "period_to": "2025-12", "stay_monthly_average": "1,234",
+    "unit": "명", "method": "합성 평균", "source_title": "합성 발표", "source_url": "https://example.org", "checked_on": "2026-01-01",
+}
+
+
+def test_stay_average_rows_keep_value_and_sort_by_region() -> None:
+    rows = mois_living_population.parse_average_rows([{**_AVG_ROW, "sigungu_name": "합성읍"}, _AVG_ROW])
+    assert [r[:4] for r in rows] == [["합성군", "2025-01", "2025-12", "1234"], ["합성읍", "2025-01", "2025-12", "1234"]]
+    assert [c.name for c in mois_living_population.AVERAGE_COLUMNS] == list(_AVG_ROW)
+
+
+@pytest.mark.parametrize(
+    "bad, message",
+    [
+        ({"stay_monthly_average": "NaN"}, "유한한 수가 아닙니다"),
+        ({"stay_monthly_average": "Infinity"}, "유한한 수가 아닙니다"),
+        ({"stay_monthly_average": "-1"}, "음수"),
+        ({"period_from": "2025-13"}, "YYYY-MM"),
+        ({"period_from": "2026-01"}, "시작≤끝"),
+    ],
+)
+def test_stay_average_rejects_bad_values(bad: dict[str, str], message: str) -> None:
+    with pytest.raises(ValueError, match=message):
+        mois_living_population.parse_average_rows([{**_AVG_ROW, **bad}])
+
+
+def test_stay_average_rejects_duplicates_and_missing_columns() -> None:
+    with pytest.raises(ValueError, match="두 번"):
+        mois_living_population.parse_average_rows([_AVG_ROW, _AVG_ROW])
+    with pytest.raises(ValueError, match="열이 없습니다"):
+        mois_living_population.parse_average_rows([{"sigungu_name": "합성군"}])
 
 
 def test_only_option_keeps_other_manifest_rows(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -119,3 +159,4 @@ def test_new_datasets_load_into_ext_tables() -> None:
     assert load_external_data.DATASET_PREFIX["kto_spot_visitors"] == "ext_kto"
     assert load_external_data.DATASET_PREFIX["mois_living_population"] == "ext_mois"
     assert load_external_data._table_name("kto_spot_visitors/01_spot_monthly_visitors.csv") == "spot_monthly_visitors"
+    assert load_external_data._table_name("mois_living_population/02_stay_monthly_average.csv") == "stay_monthly_average"

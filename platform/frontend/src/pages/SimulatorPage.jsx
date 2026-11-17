@@ -16,8 +16,9 @@ import { useAppState } from "../context/AppStateContext.jsx";
 import { useChartTheme } from "../hooks/useChartTheme.js";
 import { useRealSimulation } from "../hooks/useRealSimulation.js";
 import { useFactorAnalysis } from "../hooks/useFactorAnalysis.js";
+import { useRegionStay } from "../hooks/usePublicTrends.js";
 import { getScrollBehavior } from "../lib/motion.js";
-import { facilityRows, recoControlSig, unlinkedControlNote } from "../lib/facilityRecommendation.js";
+import { facilityRows, recoControlSig, unlinkedControlNote, withRegionStay } from "../lib/facilityRecommendation.js";
 import { YEAR_LABELS, computeTrends, budgetToFactor, controlBoostOf, ANALYSIS_STEPS } from "../lib/simulation.js";
 import {
   REAL_TARGETS, REAL_GUIDE_TEXT, REAL_CONTROLS_LOCK_TEXT, FACTOR_GUIDE_TEXT, FACTOR_PENDING_TEXT, FACTOR_RUN_LOCK_TEXT, FACTOR_IDLE_TEXT,
@@ -114,10 +115,17 @@ export default function SimulatorPage() {
   const currentSig = `${contextKey}|${welfareWeight}|${industryWeight}|${housingWeight}|${budgetTotal}|${controlSig}`;
   // 추천을 다시 도출해야 하는 입력 — 데모 시설 추천은 시설 값에 연결된 조절변수만(예산·정책 강조는 10년 예측에만 쓰인다).
   // 시설 값이 없는 조절변수를 바꾸면 재도출 안내 대신 같은 자리에 자료 등록 안내를 둔다.
-  const recoInputSig = demo ? `${contextKey}|${recoControlSig(controls, controlValues)}` : currentSig;
+  // 지역 월평균 체류인구는 공표 통계 API 값(시드에 없음) — 늦게 도착하면 추천 입력이 바뀐 것으로 본다.
+  const regionStay = useRegionStay(demo ? currentRegion.name : undefined);
+  const recoInputSig = demo ? `${contextKey}|${recoControlSig(controls, controlValues)}|stay:${regionStay ?? ""}` : currentSig;
   const controlNote = demo ? unlinkedControlNote(controls, controlValues) : null;
   const recoStale = recommendation !== null && recoSig !== recoInputSig;
-  const deriveFacilities = (region) => ({ items: facilityRows(region.id, appData.facilities, controls, controlValues, appData.conversion) });
+  const deriveFacilities = (region) => ({
+    items: facilityRows(region.id, appData.facilities, controls, controlValues, withRegionStay(appData.conversion, region.id, region.id === currentRegion.id ? regionStay : null))
+  });
+  // 자동 계산은 ① 완료 시점의 입력(공표 통계 도착 포함)으로 추천을 도출한다.
+  const deriveNow = useRef(null);
+  deriveNow.current = () => [deriveFacilities(currentRegion), recoInputSig];
 
   // 단계 접기/펼치기 상태 (기본 전부 펼침)
   const [openStages, setOpenStages] = useState(Object.fromEntries(STAGE_IDS.map((id) => [id, true])));
@@ -185,15 +193,14 @@ export default function SimulatorPage() {
     if (saved?.attempted || analysisStatus !== "idle") return;
     updateSimulatorRun(regionId, { version, attempted: true, result: null, recommendation: null, recoSig: "" });
     const startSig = sigRef.current;
-    const startRecoSig = recoInputSig;
     const region = currentRegion;
-    const derived = deriveFacilities(region);
     (async () => {
       // 입력이 바뀌었으면 ①의 결과도 게시하지 않고 버린다(훅 안에서 결과 게시 직전에 확인).
       const analysis = await factor.run({ accept: () => sigRef.current === startSig });
       if (!analysis || sigRef.current !== startSig) return;
+      const [derived, recoSigNow] = deriveNow.current();
       setRecommendation(derived);
-      setRecoSig(startRecoSig);
+      setRecoSig(recoSigNow);
       addConsoleLog(`INFO: ${region.name} 요인분석·시설 활용 추천 계산 완료 — 시설 ${derived.items.length}곳`);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 지역·활성 버전·준비 상태가 바뀔 때만 판정한다
