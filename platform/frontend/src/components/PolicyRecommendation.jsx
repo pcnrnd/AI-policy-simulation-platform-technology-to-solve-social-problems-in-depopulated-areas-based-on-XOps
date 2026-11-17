@@ -171,8 +171,8 @@ export default function PolicyRecommendation({ region, facilityRows = null, view
   const compare = useMemo(() => conversionCompareView(realView ? null : selected), [realView, selected]);
   const trends = usePublicTrends(region?.name);
   const evidenceCharts = useMemo(
-    () => (realView ? evidenceChartsView(trends, null) : evidenceChartsView(trends, ranked, selected)),
-    [realView, trends, ranked, selected]
+    () => (realView ? evidenceChartsView(trends, null) : evidenceChartsView(trends, ranked, selected, region?.name)),
+    [realView, trends, ranked, selected, region?.name]
   );
   const vizMs = useRenderTiming([ranked]);
   const { scoreLabel, scoreUnit, columns } = view;

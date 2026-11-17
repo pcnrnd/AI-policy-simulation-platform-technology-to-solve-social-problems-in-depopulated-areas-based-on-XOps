@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  COMPARE_COLUMNS, DEFAULT_CRITERION, EVIDENCE_CHART_SLOTS, axisRange, PLAN_TYPES, SORT_CRITERIA,
+  COMPARE_COLUMNS, DEFAULT_CRITERION, EVIDENCE_CHART_SLOTS, axisRange, policyShortName, PLAN_TYPES, SORT_CRITERIA,
   conversionCompareView, evidenceChartsView, facilityRecommendationView, facilityRows, linkedControls, optionCandidates,
   capacityCap, comparableCases, populationForecast, recoControlSig, scaleGrade, sortFacilityRows, unlinkedControlNote, withRegionStay
 } from "./facilityRecommendation.js";
@@ -538,13 +538,24 @@ assert.deepEqual(short.series[0].values, [5.1, 6.2, 7.3, ...Array(13).fill(8.4)]
 const zero = populationForecast(synthPopulation, (p) => p.registered, { low: 0, high: 0 });
 assert.deepEqual(zero.series[1].values, zero.series[0].values);
 assert.equal(zero.endDiff, null); // 차이 0 → 칠하기·값 표기 없음
+// 결정 24: 반영 범례 = "정책 반영 · <시설 이름(괄호·앞 지역 이름 제외) 방안 유형>".
+const regionNames = { namwon: "전북특별자치도 남원시", shinan: "전남광주통합특별시 신안군" };
+assert.equal(policyShortName({ name: "신안 퍼플섬(반월도·박지도)" }, { planType: "운영 개선" }, regionNames.shinan), "퍼플섬 운영 개선");
+assert.equal(policyShortName({ name: "남원 옛 두동초 발효·체류시설" }, { planType: "용도 전환" }, regionNames.namwon), "옛 두동초 발효·체류시설 용도 전환");
+assert.equal(policyShortName({ name: "남원 달빛정원" }, { planType: "복합화" }), "남원 달빛정원 복합화"); // 지역 이름을 모르면 그대로
+// 카드를 바꾸면 범례 이름도 바뀐다.
+const secondPick = view.items[1];
+assert.equal(evidenceChartsView(trends, view.items, secondPick, regionNames.namwon)[0].series[1].label,
+  `정책 반영 · ${policyShortName(secondPick, secondPick.options.find((o) => o.chosen), regionNames.namwon)}`);
 for (const id of ["namwon", "shinan"]) {
-  const charts = evidenceChartsView(trends, views[id].items);
+  const charts = evidenceChartsView(trends, views[id].items, null, regionNames[id]);
   assert.deepEqual(charts.map((c) => [c.id, c.title]), [["population", "생활인구 전망"], ["settle", "정주인구 전망"]]);
   for (const chart of charts) {
     assert.equal(chart.empty, null, `${id} ${chart.id}`);
     assert.equal(chart.labels.length, 16);
-    assert.deepEqual(chart.series.map((s) => s.label), ["정책 미반영", "정책 반영"], `${id} ${chart.id} 시설 표시는 두 선`);
+    const top = views[id].items[0];
+    const pickName = policyShortName(top, top.options.find((o) => o.chosen), regionNames[id]);
+    assert.deepEqual(chart.series.map((s) => s.label), ["정책 미반영", `정책 반영 · ${pickName}`], `${id} ${chart.id} 시설 표시는 두 선, 반영 범례에 고른 정책 이름`);
     assert.ok(chart.series.every((s) => s.values.length === 16 && s.values.every(Number.isFinite)));
     assert.ok(chart.title && !("scope" in chart) && !("note" in chart), `${id} ${chart.id} 부제·출처 줄 없음`);
   }

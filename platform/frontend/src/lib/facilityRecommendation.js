@@ -386,8 +386,9 @@ const AXIS_PAD = 0.15; // 세로축 위아래 여유(값 범위 대비)
  * @param {{ unit: string, points: {year: number, quarter: number, registered: number, stay: number}[] }} data 공표 분기 값(만 명)
  * @param {(p: object) => number} valueOf 그릴 값(생활인구 = 등록+체류, 정주인구 = 등록)
  * @param {{low: number, high: number}|null} effect 고른 방안의 효과(명), 없으면 null
+ * @param {string} reflectLabel 정책 반영 선 범례 이름
  */
-export function populationForecast(data, valueOf, effect) {
+export function populationForecast(data, valueOf, effect, reflectLabel = REFLECT_LABEL) {
   const byIdx = new Map(data.points.map((p) => [p.year * 4 + p.quarter - 1, valueOf(p)]));
   const idxs = [...byIdx.keys()].sort((a, b) => a - b);
   const last = idxs[idxs.length - 1];
@@ -404,7 +405,7 @@ export function populationForecast(data, valueOf, effect) {
   const series = [{ label: "정책 미반영", values: axis.map((i) => round2(base.get(i))) }];
   if (effect) {
     series.push({
-      label: "정책 반영",
+      label: reflectLabel,
       values: axis.map((i) => round2(base.get(i) + mid * ramp(i))),
       // 예측 구간의 하한~상한(툴팁용) — 관측 구간은 null
       ranges: axis.map((i) => (i > last ? bounds.map((b) => round2(base.get(i) + b * ramp(i))) : null))
@@ -413,6 +414,22 @@ export function populationForecast(data, valueOf, effect) {
   const gap = series[1] ? round2(series[1].values[axis.length - 1] - series[0].values[axis.length - 1]) : 0;
   // 마지막 예측 분기의 반영-미반영 차이(0이면 null: 칠하기·값 표기 없음)
   return { unit: data.unit, labels: axis.map(quarterLabel), observed: shown.length, endDiff: gap || null, series };
+}
+
+export const REFLECT_LABEL = "정책 반영";
+
+/**
+ * 정책 반영 범례에 붙일 고른 정책의 짧은 이름 — 시설 이름(괄호 부분·앞의 지역 이름 제외) + 방안 유형.
+ * 예: "신안 퍼플섬(반월도·박지도)" + 운영 개선 → "퍼플섬 운영 개선".
+ * @param {{ name: string }} item 고른 시설
+ * @param {{ planType: string }} choice 고른 방안
+ * @param {string} [regionName] 지역 이름(예: 전남광주통합특별시 신안군)
+ */
+export function policyShortName(item, choice, regionName = "") {
+  const region = String(regionName).split(" ").at(-1)?.replace(/[시군구]$/, "") ?? "";
+  const words = item.name.replace(/\([^)]*\)/g, "").trim().split(/\s+/);
+  const body = (region && words[0] === region && words.length > 1 ? words.slice(1) : words).join(" ");
+  return `${body} ${choice.planType}`;
 }
 
 /** 세로축 범위 — 그려진 모든 값(선·반영 상한)에 위아래 여유를 둔다. 값이 없으면 null. */
@@ -432,14 +449,18 @@ export function axisRange(series) {
  * @param {{ population: object|null }|null} trends usePublicTrends 결과
  * @param {object[]|null} items facilityRecommendationView(...).items
  * @param {object|null} selected items 가운데 고른 시설(없으면 1순위)
+ * @param {string} [regionName] 지역 이름 — 범례의 정책 짧은 이름에서 지역 이름을 뺀다
  */
-export function evidenceChartsView(trends, items, selected = null) {
-  const choice = (selected ?? items?.[0] ?? null)?.options?.find((o) => o.chosen) ?? null;
+export function evidenceChartsView(trends, items, selected = null, regionName = "") {
+  const pick = selected ?? items?.[0] ?? null;
+  const choice = pick?.options?.find((o) => o.chosen) ?? null;
+  // 결정 24: 반영 선 범례에 고른 정책 이름을 붙인다(카드를 바꾸면 따라 바뀜, 툴팁 제목도 같은 이름).
+  const reflectLabel = choice ? `${REFLECT_LABEL} · ${policyShortName(pick, choice, regionName)}` : REFLECT_LABEL;
   const pop = trends?.population ?? null;
   const dataOf = {
-    population: pop && populationForecast(pop, (p) => p.registered + p.stay, choice?.living ?? null),
+    population: pop && populationForecast(pop, (p) => p.registered + p.stay, choice?.living ?? null, reflectLabel),
     // 방문형 방안은 정주 효과가 없다(settle null) — 반영 선은 미반영과 같다.
-    settle: pop && populationForecast(pop, (p) => p.registered, choice ? choice.settle ?? { low: 0, high: 0 } : null)
+    settle: pop && populationForecast(pop, (p) => p.registered, choice ? choice.settle ?? { low: 0, high: 0 } : null, reflectLabel)
   };
   return EVIDENCE_CHART_SLOTS.map((slot) => {
     const data = dataOf[slot.id];
