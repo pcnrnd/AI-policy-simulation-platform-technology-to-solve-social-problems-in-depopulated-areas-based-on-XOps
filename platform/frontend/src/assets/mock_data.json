@@ -157,7 +157,7 @@
           },
           "constraint": "예산",
           "controls": [
-            { "key": "rental_units", "label": "임대주택 공급 호수", "min": 50, "max": 1500, "default": 300, "step": 50, "unit": "호", "weight": 0.18, "facility_id": "fac_sa_rental", "field": "supply_units" },
+            { "key": "rental_units", "label": "임대주택 공급 호수", "min": 30, "max": 300, "default": 90, "step": 10, "unit": "호", "weight": 0.18, "facility_id": "fac_sa_aphae_housing", "field": "supply_units" },
             { "key": "staff", "label": "운영 인력", "min": 10, "max": 300, "default": 50, "step": 5, "unit": "명", "weight": 0.12 }
           ]
         },
@@ -559,51 +559,6 @@
   },
   "facilities": [
     {
-      "id": "fac_nw_farm01",
-      "name": "남원 임대형 스마트팜 1단지",
-      "type": "스마트팜",
-      "region_id": "namwon",
-      "lat": 35.4382,
-      "lng": 127.3661,
-      "operating_budget": 42,
-      "metric": "재배면적 12㏊ · 고용 청년 38명",
-      "reco_inputs": { "readiness": 70 },
-      "basis": { "location": "demo_example", "operating_budget": "demo_example", "metric": "demo_example", "reco_inputs": "demo_example" },
-      "sources": [
-        { "scope": "type", "title": "연합뉴스 2025-12-17(남원 대산면 청년창업형 스마트 농업단지)", "url": "https://www.yna.co.kr/view/AKR20251217106300055", "checked": "2026-11-05" }
-      ]
-    },
-    {
-      "id": "fac_nw_farm02",
-      "name": "남원 임대형 스마트팜 2단지",
-      "type": "스마트팜",
-      "region_id": "namwon",
-      "lat": 35.3921,
-      "lng": 127.4248,
-      "metric": "재배면적 8㏊ · 고용 청년 22명",
-      "operating_budget": 28,
-      "reco_inputs": { "readiness": 60 },
-      "basis": { "location": "demo_example", "operating_budget": "demo_example", "metric": "demo_example", "reco_inputs": "demo_example" },
-      "sources": [
-        { "scope": "type", "title": "연합뉴스 2025-12-17(남원 대산면 청년창업형 스마트 농업단지)", "url": "https://www.yna.co.kr/view/AKR20251217106300055", "checked": "2026-11-05" }
-      ]
-    },
-    {
-      "id": "fac_nw_rental",
-      "name": "남원 청년 임대주택",
-      "type": "임대주택",
-      "region_id": "namwon",
-      "lat": 35.4105,
-      "lng": 127.3812,
-      "operating_budget": 15,
-      "supply_units": 120,
-      "occupancy_rate": 91,
-      "metric": "공급 120호 · 입주율 91%",
-      "reco_inputs": { "readiness": 80 },
-      "basis": { "location": "demo_example", "operating_budget": "demo_example", "supply_units": "demo_example", "occupancy_rate": "demo_example", "metric": "demo_example", "reco_inputs": "demo_example" },
-      "sources": []
-    },
-    {
       "id": "fac_nw_fiorium",
       "name": "남원 달빛정원 피오리움",
       "type": "문화관광",
@@ -613,13 +568,17 @@
       "stage": "운영",
       "scale_area_m2": 3741,
       "use_plan": { "type": "복합화", "text": "전시·정원·광장 복합 운영으로 체류 시간 확대 검토" },
-      "reco_inputs": { "readiness": 70 },
-      "basis": { "address": "source", "metric": "source", "stage": "source", "scale_area_m2": "source", "reco_inputs": "demo_example" },
+      "open_space": "달빛정원·광장",
+      "basis": { "address": "source", "metric": "source", "stage": "source", "scale_area_m2": "source", "open_space": "source", "location": "source" },
       "sources": [
         { "scope": "facility", "title": "전북일보 2025-04-20", "url": "https://www.jjan.kr/article/20250420580050", "checked": "2026-11-05" },
         { "scope": "facility", "title": "나라살림연구소 2026-05-26", "url": "https://narasallim.net/view3/2124", "checked": "2026-11-05" },
-        { "scope": "facility", "title": "전북일보 2025-10-06(전시관 연면적 3,741㎡)", "url": "https://www.jjan.kr/article/20250923580442", "checked": "2026-11-06" }
-      ]
+        { "scope": "facility", "title": "전북일보 2025-10-06(전시관 연면적 3,741㎡)", "url": "https://www.jjan.kr/article/20250923580442", "checked": "2026-11-06" },
+        { "scope": "location", "fields": ["lat", "lng"], "title": "OpenStreetMap Nominatim 주소 검색 — 어현동 37-84, 남원시 → 어현동", "url": "https://nominatim.openstreetmap.org/", "checked": "2026-11-18" }
+      ],
+      "lat": 35.3899,
+      "lng": 127.39109,
+      "geo_precision": "dong"
     },
     {
       "id": "fac_nw_glocal",
@@ -632,12 +591,15 @@
       "capacity_people": 1000,
       "capacity_kind": "계획 목표(유치 목표·등록형)",
       "use_plan": { "type": "용도 전환", "text": "폐교 대학 시설을 교육·외국인 지원 거점으로 전환 검토" },
-      "reco_inputs": { "readiness": 55 },
-      "basis": { "address": "source", "metric": "source", "stage": "source", "capacity_people": "source_plan_target", "reco_inputs": "demo_example" },
+      "basis": { "address": "source", "metric": "source", "stage": "source", "capacity_people": "source_plan_target", "location": "source" },
       "sources": [
         { "scope": "facility", "title": "한겨레 2025-12-09", "url": "https://www.hani.co.kr/arti/area/honam/1233642.html", "checked": "2026-11-05" },
-        { "scope": "facility", "title": "전북일보 2026-09-29(최종 1000명 유치 목표 · 2026년 입학 242명 · 남원 학사 운영 2028년 3월)", "url": "https://www.jjan.kr/article/20260929500077", "checked": "2026-11-06" }
-      ]
+        { "scope": "facility", "title": "전북일보 2026-09-29(최종 1000명 유치 목표 · 2026년 입학 242명 · 남원 학사 운영 2028년 3월)", "url": "https://www.jjan.kr/article/20260929500077", "checked": "2026-11-06" },
+        { "scope": "location", "fields": ["lat", "lng"], "title": "OpenStreetMap Nominatim 주소 검색 — 광치동, 남원시 — 원문 주소는 '구 서남대 부지'뿐이고 '서남대학교'·'서남대길'은 남원에서 검색되지 않아 옛 캠퍼스 소재지로 알려진 광치동 중심에 둠(원문 미확인)", "url": "https://nominatim.openstreetmap.org/", "checked": "2026-11-18" }
+      ],
+      "lat": 35.4524386,
+      "lng": 127.3808975,
+      "geo_precision": "approx"
     },
     {
       "id": "fac_nw_dudong",
@@ -648,55 +610,14 @@
       "metric": "사업비 25억 원(2019년 계획)",
       "stage": "계획",
       "use_plan": { "type": "복합화", "text": "발효·양조 체험과 숙박·캠핑 기능 복합 운영 검토" },
-      "reco_inputs": { "readiness": 40 },
-      "basis": { "address": "source", "metric": "source", "stage": "source", "reco_inputs": "demo_example" },
+      "basis": { "address": "source", "metric": "source", "stage": "source", "location": "source" },
       "sources": [
-        { "scope": "facility", "title": "연합뉴스 2019-06-18", "url": "https://www.yna.co.kr/view/AKR20190618117900055", "checked": "2026-11-05" }
-      ]
-    },
-    {
-      "id": "fac_sa_rental",
-      "name": "신안 정주여건 임대주택 단지",
-      "type": "임대주택",
-      "region_id": "shinan",
-      "lat": 34.8421,
-      "lng": 126.1019,
-      "operating_budget": 21,
-      "supply_units": 300,
-      "occupancy_rate": 84,
-      "metric": "공급 300호 · 입주율 84%",
-      "reco_inputs": { "readiness": 75 },
-      "basis": { "location": "demo_example", "operating_budget": "demo_example", "supply_units": "demo_example", "occupancy_rate": "demo_example", "metric": "demo_example", "reco_inputs": "demo_example" },
-      "sources": []
-    },
-    {
-      "id": "fac_sa_solar",
-      "name": "신안 신재생(태양광) 이익공유 발전소",
-      "type": "신재생",
-      "region_id": "shinan",
-      "lat": 34.7902,
-      "lng": 126.1554,
-      "metric": "햇빛연금 수혜 16,333명(2025-01, 햇빛아동수당 포함)",
-      "reco_inputs": { "readiness": 70 },
-      "basis": { "location": "demo_example", "metric": "source", "reco_inputs": "demo_example" },
-      "sources": [
-        { "scope": "facility", "title": "신안군 보도자료(연합뉴스 배포) 2023-10-23", "url": "https://www.yna.co.kr/view/RPR20231023009300353", "checked": "2026-11-05" },
-        { "scope": "facility", "title": "뉴시스 2025-01-24", "url": "https://www.newsis.com/view/NISX20250124_0003045471", "checked": "2026-11-05" }
-      ]
-    },
-    {
-      "id": "fac_sa_garden",
-      "name": "신안 정원수 사회적협동조합",
-      "type": "정원수",
-      "region_id": "shinan",
-      "lat": 34.8794,
-      "lng": 126.0571,
-      "metric": "조합원 457명(설립 1년) · 2023년 묘목 31만 본",
-      "reco_inputs": { "readiness": 65 },
-      "basis": { "location": "demo_example", "metric": "source", "reco_inputs": "demo_example" },
-      "sources": [
-        { "scope": "facility", "title": "연합뉴스 2025-01-16", "url": "https://www.yna.co.kr/view/AKR20250116129400054", "checked": "2026-11-05" }
-      ]
+        { "scope": "facility", "title": "연합뉴스 2019-06-18", "url": "https://www.yna.co.kr/view/AKR20190618117900055", "checked": "2026-11-05" },
+        { "scope": "location", "fields": ["lat", "lng"], "title": "OpenStreetMap Nominatim 주소 검색 — 송동면, 남원시('두동초등학교'는 검색되지 않음)", "url": "https://nominatim.openstreetmap.org/", "checked": "2026-11-18" }
+      ],
+      "lat": 35.35042,
+      "lng": 127.33757,
+      "geo_precision": "town"
     },
     {
       "id": "fac_sa_museum",
@@ -708,30 +629,125 @@
       "stage": "운영",
       "scale_area_m2": 1094,
       "use_plan": { "type": "복합화", "text": "전시와 레지던스·체험 프로그램 복합 운영 검토" },
-      "reco_inputs": { "readiness": 70 },
-      "basis": { "address": "source", "metric": "source", "stage": "source", "scale_area_m2": "source", "reco_inputs": "demo_example" },
+      "basis": { "address": "source", "metric": "source", "stage": "source", "scale_area_m2": "source", "location": "source" },
       "sources": [
         { "scope": "facility", "title": "신안군 1도1뮤지움 누리집", "url": "https://www.shinan.go.kr/home/museum/museum04/museum05_26/museum05_07", "checked": "2026-11-05" },
-        { "scope": "facility", "title": "전남일보 2021-05-27", "url": "https://www.jnilbo.com/news/articleView.html?idxno=65014450970", "checked": "2026-11-05" }
-      ]
+        { "scope": "facility", "title": "전남일보 2021-05-27", "url": "https://www.jnilbo.com/news/articleView.html?idxno=65014450970", "checked": "2026-11-05" },
+        { "scope": "location", "fields": ["lat", "lng"], "title": "OpenStreetMap Nominatim 주소 검색 — 비금북부길 573-1, 신안군 → 비금북부길(비금면 지당리)", "url": "https://nominatim.openstreetmap.org/", "checked": "2026-11-18" }
+      ],
+      "lat": 34.7727212,
+      "lng": 125.9447131,
+      "geo_precision": "road"
     },
     {
-      "id": "fac_sa_purple",
-      "name": "신안 퍼플섬(반월도·박지도)",
-      "type": "섬 관광",
+      "id": "fac_sa_fossil",
+      "name": "신안 세계화석광물박물관",
+      "type": "폐교 활용",
       "region_id": "shinan",
-      "address": "전남 신안군 안좌면 반월도·박지도",
-      "metric": "누적 관광객 150만 명 이상(2019~2023)",
+      "address": "신안군 안좌면 대리길 18-24",
       "stage": "운영",
-      "capacity_people": 11081,
-      "capacity_kind": "일 최대 방문(관측)",
-      "use_plan": { "type": "운영 개선", "text": "테마 행사·체류 프로그램 운영 개선 검토" },
-      "reco_inputs": { "readiness": 75 },
-      "basis": { "address": "source", "metric": "source", "stage": "source", "capacity_people": "source", "reco_inputs": "demo_example" },
+      "scale_area_m2": 2190,
+      "visitors_monthly": 736,
+      "metric": "폐교가 된 초등학교를 개조, 개관 2019.07, 신안군 운영",
+      "basis": { "address": "source", "stage": "source", "scale_area_m2": "source", "visitors_monthly": "source", "metric": "source", "location": "source" },
       "sources": [
-        { "scope": "facility", "title": "연합뉴스 2024-01-17", "url": "https://www.yna.co.kr/view/AKR20240117129100054", "checked": "2026-11-05" },
-        { "scope": "facility", "title": "주간토탈채널 2026-05-30(2026-05-24 하루 1만1,081명 · 개장 이후 역대 최다)", "url": "https://www.ktotalchannel.com/news/articleView.html?idxno=12801", "checked": "2026-11-06" }
-      ]
+        { "scope": "facility", "title": "신안군 1도1뮤지움 — 세계화석광물박물관 박물관 안내(사업개요·설립 배경)", "url": "https://www.shinan.go.kr/home/museum/museum03/museum05_21/museum05_06", "checked": "2026-11-18" },
+        { "scope": "facility", "fields": ["visitors_monthly"], "title": "한국문화관광연구원 주요관광지점 입장객 — 신안군 2025-01~12 세계화석광물박물관 합계 8,834명 ÷ 12", "url": "https://know.tour.go.kr/stat/visitStatDis/table.do", "checked": "2026-11-18" },
+        { "scope": "location", "fields": ["lat", "lng"], "title": "OpenStreetMap Nominatim 주소 검색 — 대리, 안좌면, 신안군(대리길 18-24는 검색되지 않음)", "url": "https://nominatim.openstreetmap.org/", "checked": "2026-11-18" }
+      ],
+      "lat": 34.7155403,
+      "lng": 126.1691361,
+      "geo_precision": "ri"
+    },
+    {
+      "id": "fac_sa_eros",
+      "name": "신안 에로스서각박물관",
+      "type": "폐교 활용",
+      "region_id": "shinan",
+      "address": "신안군 암태면 박달로 362-26",
+      "stage": "운영",
+      "scale_area_m2": 1775,
+      "metric": "암태면 옛 동초등학교 건물 리모델링, 개관 2018.11, 신안군 운영",
+      "basis": { "address": "source", "stage": "source", "scale_area_m2": "source", "metric": "source", "location": "source" },
+      "sources": [
+        { "scope": "facility", "title": "신안군 1도1뮤지움 — 에로스서각박물관 박물관 안내(사업개요·설립 배경)", "url": "https://www.shinan.go.kr/home/museum/museum03/museum05_20/museum05_05", "checked": "2026-11-18" },
+        { "scope": "location", "fields": ["lat", "lng"], "title": "OpenStreetMap Nominatim 주소 검색 — 박달로 362-26, 신안군 → 박달로(암태면 신석리)", "url": "https://nominatim.openstreetmap.org/", "checked": "2026-11-18" }
+      ],
+      "lat": 34.8524586,
+      "lng": 126.1235058,
+      "geo_precision": "road"
+    },
+    {
+      "id": "fac_sa_birdcraft",
+      "name": "신안 새공예박물관",
+      "type": "문화관광",
+      "region_id": "shinan",
+      "address": "신안군 흑산면 흑산읍동길 38",
+      "stage": "운영",
+      "scale_area_m2": 300,
+      "metric": "박물관 연면적 300㎡ + 새조각공원 8,500㎡, 개관 2021.08",
+      "open_space": "새조각공원 8,500㎡",
+      "basis": { "address": "source", "stage": "source", "scale_area_m2": "source", "metric": "source", "open_space": "source", "location": "source" },
+      "sources": [
+        { "scope": "facility", "title": "신안군 1도1뮤지움 — 새공예박물관 박물관 안내(사업개요)", "url": "https://www.shinan.go.kr/home/museum/museum03/museum05_23/museum05_09", "checked": "2026-11-18" },
+        { "scope": "location", "fields": ["lat", "lng"], "title": "OpenStreetMap Nominatim 주소 검색 — 흑산읍동길 38, 신안군 → 흑산읍동길(흑산면 진리)", "url": "https://nominatim.openstreetmap.org/", "checked": "2026-11-18" }
+      ],
+      "lat": 34.6943296,
+      "lng": 125.4295001,
+      "geo_precision": "road"
+    },
+    {
+      "id": "fac_sa_aphae_housing",
+      "name": "신안 압해읍 특화 공공임대주택",
+      "type": "임대주택",
+      "region_id": "shinan",
+      "address": "신안군 압해읍",
+      "stage": "계획",
+      "supply_units": 90,
+      "metric": "국토부 2025년 하반기 지역제안형 특화 공공임대주택 공모 선정, 청년 60호·신혼부부 30호, 총사업비 366억 원, 부지 확보",
+      "basis": { "address": "source", "stage": "source", "supply_units": "source", "metric": "source", "location": "source" },
+      "sources": [
+        { "scope": "facility", "title": "뉴시스 2025-12-31(신안군, 압해읍에 공공임대주택 건설…국토부 공모 선정)", "url": "https://www.newsis.com/view/NISX20251231_0003461048", "checked": "2026-11-18" },
+        { "scope": "location", "fields": ["lat", "lng"], "title": "OpenStreetMap Nominatim 주소 검색 — 압해읍, 신안군(원문 주소가 압해읍까지)", "url": "https://nominatim.openstreetmap.org/", "checked": "2026-11-18" }
+      ],
+      "lat": 34.87468,
+      "lng": 126.3068411,
+      "geo_precision": "town"
+    },
+    {
+      "id": "fac_nw_smartfarm",
+      "name": "남원 청년창업형 스마트 농업단지",
+      "type": "스마트팜",
+      "region_id": "namwon",
+      "address": "남원시 대산면 운교리 일원",
+      "stage": "조성",
+      "metric": "2026년까지 240억 원, 18.9㏊, 스마트 온실·스마트팜·공동 이용시설",
+      "basis": { "address": "source", "stage": "source", "metric": "source", "location": "source" },
+      "sources": [
+        { "scope": "facility", "title": "연합뉴스 2025-12-17(남원시, 청년창업형 대규모 스마트 농업단지 조성…240억 투입)", "url": "https://www.yna.co.kr/view/AKR20251217106300055", "checked": "2026-11-18" },
+        { "scope": "location", "fields": ["lat", "lng"], "title": "OpenStreetMap Nominatim 주소 검색 — 대산면, 남원시(운교리 검색 안 됨) — 같은 면 시설과 겹치지 않게 북서로 약 0.5㎞ 옮김", "url": "https://nominatim.openstreetmap.org/", "checked": "2026-11-18" }
+      ],
+      "lat": 35.43,
+      "lng": 127.31671,
+      "geo_precision": "town"
+    },
+    {
+      "id": "fac_nw_bogeumjari",
+      "name": "남원 대산면 청년농촌보금자리",
+      "type": "임대주택",
+      "region_id": "namwon",
+      "address": "남원시 대산면 신계리 일원",
+      "stage": "계획",
+      "supply_units": 28,
+      "metric": "임대주택 28세대 + 커뮤니티센터 1동, 총사업비 100억 원, 2026-08-20 공사 입찰공고",
+      "basis": { "address": "source", "stage": "source", "supply_units": "source", "metric": "source", "location": "source" },
+      "sources": [
+        { "scope": "facility", "title": "아시아투데이 2026-08-20(남원 대산면에 청년 임대주택 28세대 조성…100억원 투입)", "url": "https://www.asiatoday.co.kr/kn/view.php?key=20260820010006558", "checked": "2026-11-18" },
+        { "scope": "location", "fields": ["lat", "lng"], "title": "OpenStreetMap Nominatim 주소 검색 — 대산면, 남원시(신계리 검색 안 됨) — 같은 면 시설과 겹치지 않게 남동으로 약 0.5㎞ 옮김", "url": "https://nominatim.openstreetmap.org/", "checked": "2026-11-18" }
+      ],
+      "lat": 35.424,
+      "lng": 127.32471,
+      "geo_precision": "town"
     }
   ],
   "conversion": {
@@ -765,37 +781,29 @@
       { "id": "case_daesu", "region_type": "농촌", "name": "부안 닥나무한지체험학습장(옛 대수초)", "plan_type": "용도 전환", "facility_type": "폐교 활용", "region": "전북특별자치도 부안군", "depopulation_area": true, "opening": "new", "applies_to": ["폐교 활용", "교육"],
         "monthly": 700, "measure": "개관(2023-06) 후 월평균 체험·방문 700여 명", "method": "발표 월평균 그대로", "basis": "source",
         "sources": [{ "title": "전북일보 2024-01-30", "url": "https://www.jjan.kr/article/20240130580236", "checked": "2026-11-06" }] },
-      { "id": "case_purple_festival", "region_type": "섬", "name": "신안 퍼플섬 라벤더 축제", "plan_type": "운영 개선", "facility_id": "fac_sa_purple", "facility_type": "섬 관광", "region": "전남광주통합특별시 신안군", "depopulation_area": true, "opening": "added", "applies_to": ["섬 관광", "문화관광"],
-        "event_days": 11, "event_period": "2026-05-15~25", "event_visitors": 50000,
-        "monthly": 4167, "measure": "축제 11일(2026-05-15~25) 관광객 5만여 명", "method": "5만 명 ÷ 12개월(연 1회 행사 기준)", "basis": "source",
-        "trend_label": "신안 퍼플섬", "trend_spot": "퍼플교",
-        "sources": [{ "title": "서울신문 2026-05-31", "url": "https://m.go.seoul.co.kr/news/publicnews/2026/05/31/20260531500006", "checked": "2026-11-06" }] },
-      { "id": "case_cheongsan", "region_type": "섬", "name": "완도 청산도 슬로걷기 축제", "plan_type": "운영 개선", "facility_type": "섬 관광", "region": "전남광주통합특별시 완도군", "depopulation_area": true, "opening": "added", "applies_to": ["섬 관광", "문화관광"],
-        "event_days": 30, "event_period": "2025-04-05~05-04", "event_visitors": 50198,
-        "monthly": 4183, "measure": "축제 한 달(2025-04-05~05-04) 방문 50,198명", "method": "50,198명 ÷ 12개월(연 1회 행사 기준)", "basis": "source",
-        "trend_label": "완도 청산도", "trend_spot": "슬로시티청산도",
-        "sources": [{ "title": "메트로신문 2025-05-08", "url": "https://www.metroseoul.co.kr/article/20250508500287", "checked": "2026-11-06" }] },
-      { "id": "case_imja", "region_type": "섬", "name": "신안 임자도 섬 홍매화 축제", "plan_type": "운영 개선", "facility_type": "섬 관광", "region": "전남광주통합특별시 신안군", "depopulation_area": true, "opening": "added", "applies_to": ["섬 관광", "문화관광"],
-        "event_days": 4, "event_period": "2026-02-27~03-02", "event_visitors": 20000,
-        "monthly": 1667, "measure": "축제 4일(2026-02-27~03-02) 관람객 2만여 명", "method": "2만 명 ÷ 12개월(연 1회 행사 기준)", "basis": "source",
-        "sources": [{ "title": "코리아타임뉴스 2026-03-03", "url": "https://www.koreatimenews.com/news/article.html?no=1083913", "checked": "2026-11-06" }] },
       { "id": "case_bonsai", "region_type": "섬", "name": "신안 1004섬 분재정원", "plan_type": "복합화", "facility_type": "정원수", "region": "전남광주통합특별시 신안군", "depopulation_area": true, "opening": "new", "applies_to": ["정원수"],
         "monthly": 9804, "measure": "2009년 개장 후 누적 방문객 200만 명 돌파(2026-01 보도)", "method": "200만 명 ÷ 204개월(2009~2025년)", "basis": "source",
         "trend_label": "신안 1004섬 분재정원", "trend_spot": "천사섬 분재공원",
         "sources": [{ "title": "뉴스와 2026-01-11", "url": "https://www.news-wa.com/amp/travel/tour-korea/2026/01/11/20260111500036", "checked": "2026-11-06" }] },
       { "id": "case_yeonhong", "region_type": "섬", "name": "고흥 연홍미술관(옛 연홍분교)", "plan_type": "용도 전환", "facility_type": "폐교 활용", "region": "전남광주통합특별시 고흥군", "depopulation_area": true, "opening": "new", "applies_to": ["폐교 활용", "교육"],
-        "trend_only": true, "trend_label": "고흥 연홍미술관", "trend_spot": "연홍미술관", "basis": "source",
-        "sources": [{ "title": "레이디경향 2020-05-28(1998년 폐교한 연홍분교장을 고친 미술관, 2006년 개관)", "url": "https://lady.khan.co.kr/travel/article/202005281024001", "checked": "2026-11-17" }] },
+        "monthly": 14083, "measure": "주요관광지점 입장객 2025-01~2025-12 합계 168,999명", "method": "최근 12개월 합계 ÷ 12 = 14,083명(여름 성수기 7·8월 비중이 큼)", "basis": "source",
+        "sources": [{ "title": "레이디경향 2020-05-28(1998년 폐교한 연홍분교장을 고친 미술관, 2006년 개관)", "url": "https://lady.khan.co.kr/travel/article/202005281024001", "checked": "2026-11-17" }, { "title": "한국문화관광연구원 주요관광지점 입장객 — 연홍미술관(고흥군), 저장소 kto-goheung-yeonhong.xls sha256 8015bb91…", "url": "https://know.tour.go.kr/stat/visitStatDis/table.do", "checked": "2026-11-18" }] },
       { "id": "case_ypark", "region_type": "농촌", "name": "영월 젊은달 와이파크(옛 술샘박물관)", "plan_type": "복합화", "facility_type": "문화관광", "region": "강원특별자치도 영월군", "depopulation_area": true, "opening": "new", "applies_to": ["문화관광", "폐교 활용", "교육"],
-        "trend_only": true, "trend_label": "영월 젊은달 와이파크", "trend_spot": "젊은달 와이파크(술샘박물관)", "basis": "source",
-        "sources": [{ "title": "트위그 2019-09-20(술샘박물관을 고친 복합예술공간)", "url": "https://twig24.com/news/lifestyle/trip/2019/09/20/20190920033003", "checked": "2026-11-17" }] },
+        "monthly": 3951, "measure": "주요관광지점 입장객 2025-04~2026-03 합계 47,417명", "method": "최근 12개월 합계 ÷ 12 = 3,951명", "basis": "source",
+        "sources": [{ "title": "트위그 2019-09-20(술샘박물관을 고친 복합예술공간)", "url": "https://twig24.com/news/lifestyle/trip/2019/09/20/20190920033003", "checked": "2026-11-17" }, { "title": "한국문화관광연구원 주요관광지점 입장객 — 젊은달 와이파크(술샘박물관, 영월군), 저장소 kto-yeongwol-jeolmeundal.xls sha256 6443f2ad…", "url": "https://know.tour.go.kr/stat/visitStatDis/table.do", "checked": "2026-11-18" }] },
+      { "id": "case_fossil", "region_type": "섬", "name": "신안 세계화석광물박물관(옛 초등학교)", "plan_type": "복합화", "facility_id": "fac_sa_fossil", "facility_type": "폐교 활용", "region": "전남광주통합특별시 신안군", "depopulation_area": true, "opening": "new", "scale_area_m2": 2190, "applies_to": ["폐교 활용"],
+        "monthly": 736, "measure": "주요관광지점 입장객 2025-01~2025-12 합계 8,834명", "method": "2025년 합계 ÷ 12 = 736명", "basis": "source",
+        "sources": [
+  { "title": "신안군 1도1뮤지움 — 세계화석광물박물관 박물관 안내(폐교 초등학교 개조, 연면적 2,190㎡, 개관 2019.07)", "url": "https://www.shinan.go.kr/home/museum/museum03/museum05_21/museum05_06", "checked": "2026-11-18" },
+  { "title": "한국문화관광연구원 주요관광지점 입장객 — 신안군 2025-01~12(세계화석광물박물관), sources/kto-shinan-2025.xls sha256 28cfcbe1…", "url": "https://know.tour.go.kr/stat/visitStatDis/table.do", "checked": "2026-11-18" }
+] },
       { "id": "case_sangju", "region_type": "소도시", "name": "상주 스마트팜 혁신밸리 견학", "plan_type": "개방·공유", "facility_type": "스마트팜", "region": "경상북도 상주시", "depopulation_area": true, "opening": "added", "applies_to": ["스마트팜", "신재생"],
         "monthly": 152, "measure": "운영 개시(2022-01) 후 7월 20일까지 기술 견학 1천여 명", "method": "1천 명 ÷ 6.6개월(1월 1일~7월 20일)", "basis": "source",
         "sources": [{ "title": "매일신문 2022-07-25", "url": "https://www.imaeil.com/page/view/2022072000482820948", "checked": "2026-11-06" }] }
     ],
     "synthetic": {
       "basis": "synthetic",
-      "random_seed": null,
+      "random_seed": 20261118,
       "rule_sources": [{ "rules": ["capacity_daily_by_type"], "title": "주간토탈채널 2026-05-30 — 신안 퍼플섬 2026-05-24 하루 방문객 1만1,081명(개장 이후 역대 최다)", "url": "https://www.ktotalchannel.com/news/articleView.html?idxno=12801", "checked": "2026-11-06" }, { "rules": ["capacity_area_per_person_m2"], "title": "소방시설 설치 및 관리에 관한 법률 시행령 [별표 7] 수용인원의 산정 방법(제17조 관련), 시행 2026-10-02", "url": "https://www.law.go.kr/LSW//lsBylInfoP.do?bylSeq=18481245&lsiSeq=290451&efYd=20261002&directYn=Y", "checked": "2026-11-06" }],
       "rules": {
         "visit_share": { "복합화": [0.003, 0.006], "용도 전환": [0.002, 0.004], "운영 개선": [0.002, 0.004], "개방·공유": [0.0005, 0.001] },
@@ -814,7 +822,18 @@
         "capacity_grade_area_m2": { "소형": 1000, "중형": 6000, "대형": 20000 },
         "capacity_turnover": { "daily": 2, "open_days": 25, "enrolled": 1 },
         "capacity_daily_by_type": { "섬 관광": 11081 },
-        "utilization_pp": { "복합화": [10, 20], "용도 전환": [15, 25], "운영 개선": [5, 10], "개방·공유": [3, 8] }
+        "utilization_pp": { "복합화": [10, 20], "용도 전환": [15, 25], "운영 개선": [5, 10], "개방·공유": [3, 8] },
+        "base_util_range": { "문화관광|운영": [40, 60], "폐교 활용|운영": [25, 45], "스마트팜|운영": [55, 75], "교육|운영": [35, 55], "기타|운영": [30, 50], "기타|유휴": [0, 10] },
+        "lease_up_range": [80, 92],
+        "unit_cost_manwon_per_m2": { "용도 전환": [150, 250], "복합화": [100, 200], "운영 개선": [10, 30], "개방·공유": [5, 15] },
+        "scale_adjust": { "clamp": [0.7, 1.4], "jitter": [0.9, 1.1] },
+        "house_settle_band": [0.9, 1.1],
+        "settle_ratio_pct": { "운영 개선": [1, 3], "개방·공유": [0.5, 2], "복합화": [2, 4], "용도 전환": [3, 6] },
+        "staff_per_1000m2": { "복합화": [2, 4], "용도 전환": [3, 5], "운영 개선": [0.5, 1], "개방·공유": [0.2, 0.5] },
+        "adoption_quarters": { "운영 개선": 2, "개방·공유": 3, "복합화": 6, "용도 전환": 8 },
+        "budget_elasticity": { "복합화": 0.8, "용도 전환": 0.9, "운영 개선": 0.5, "개방·공유": 0.3 },
+        "budget_change": 0.2,
+        "low_util_pct": 30
       },
       "method": {
         "visit_share": "같은 방안의 비교 가능한 출처 사례가 하나도 없을 때(같은 시설 유형도, 그 방안을 적용할 수 있는 다른 유형도 없을 때) 생활인구 변화(월) = 지역 월평균 체류인구(stay_monthly) × 방안 유형별 비율 범위",
@@ -834,7 +853,18 @@
         "capacity_grade_area_m2": "연면적 출처가 없을 때 규모 등급의 대표 연면적(합성): 소형 1,000㎡(2,000㎡ 미만 구간의 중간), 중형 6,000㎡(2,000~10,000㎡ 구간의 중간), 대형 20,000㎡(10,000㎡ 기준의 2배)",
         "capacity_turnover": "시설 수용 상한(월) = 동시 수용 인원 × 일 2회전 × 월 25일. 출처 수용 인원이 등록형(학생 등 같은 사람이 매달 이용, 계획 목표 포함)이면 수용 인원 × 1, 일 최대 방문(관측)이면 × 월 25일. 규모 보정·증가분 뒤 효과의 상·하한이 이 상한이나 지역 상한을 넘으면 자른다",
         "capacity_daily_by_type": "섬 관광 유형은 법정 바닥면적 기준을 적용할 건물이 없어 일 방문 상한 × 월 운영일(25일)로 시설 수용 상한을 둔다. 시설에 출처 관측값(capacity_kind \"일 최대 방문(관측)\")이 있으면 그 값을, 없으면 같은 유형 출처 관측값인 퍼플섬 2026-05-24 하루 1만1,081명(개장 이후 역대 최다)을 기본값(합성)으로 쓴다. 1일 입도 제한·도선 수송 능력의 공식 값은 찾지 못했다",
-        "random_seed": "난수를 쓰지 않는다. 같은 시드 값이면 항상 같은 결과다"
+        "base_util_range": "현재 사용률(%) = [시설 유형|운영] 범위에서 시설 id 시드 난수로 고른 정수. 계획·조성 단계는 [기타|유휴]. 입주율이 있는 주거 시설은 입주율을 그대로 쓴다. 시설 단위 이용 실적 공개 통계가 없어 만든 값",
+        "lease_up_range": "공급 호수만 출처에 있는 계획 단계 주거 시설의 초기 입주율(%) = 범위에서 시설 id 시드 난수로 고른 정수",
+        "unit_cost_manwon_per_m2": "소요 예산(억 원) = 대상 면적 × 방안 유형별 단가 범위(만 원/㎡). 대상 면적은 출처 연면적, 없으면 규모 등급 대표 연면적(capacity_grade_area_m2), 주거 시설은 그중 공실 비율만큼",
+        "scale_adjust": "규모 보정 = (연면적 ÷ 등급 대표 연면적)의 제곱근을 clamp로 자른 값 × 시설 id 시드 흔들림(jitter). 같은 등급 시설이 같은 값이 되지 않게 생활인구·정주 효과에 곱한다",
+        "house_settle_band": "주거 정착형 정주인구 변화(연) = 공급 호수 × 입주율 × 세대당 인구 × 다른 시군구 전입 비율의 band 범위. 생활인구 변화(월)도 같은 값",
+        "settle_ratio_pct": "정주 효과가 계산되지 않는 방안(방문형)의 정주인구 변화(연) = 운영 인력 × 세대당 인구 + 월 생활인구 효과 중간값 × 방안 유형별 정주 전환 비율(%, 시설·방안 시드 난수). 효과가 있으면 최소 1명",
+        "staff_per_1000m2": "운영 인력 = 대상 면적 ÷ 1,000㎡ × 방안 유형별 인원 범위(시설·방안 시드 난수)",
+        "adoption_quarters": "효과 도입 곡선: 전환 뒤 이 분기 수에 걸쳐 정상 상태에 닿는다(1 − (1 − t)², 처음에 빠르게 오르고 점점 느려짐). 정책 효과 전망의 반영 후 값 = 반영 전 전망 + 효과 × 도입 곡선",
+        "budget_elasticity": "예산 ±20% 효과 = 생활인구 효과 범위를 방안 유형별 탄력도 × 20%만큼 줄이고 늘린 범위",
+        "budget_change": "예산 변화 폭(±20%)",
+        "low_util_pct": "방안 선택 규칙: 주거 시설은 정착형, 열린 공간(출처 open_space)이 있으면 개방·공유, 현재 사용률이 이 값 미만이면 운영 개선, 계획·조성 단계면 용도 전환, 그 밖은 근거 등급·점수로 고른 방안",
+        "random_seed": "합성 값은 고정 시드(random_seed)와 시설 id(·방안)로 만든 결정적 난수(mulberry32)로 만든다. 같은 시드면 항상 같은 결과다"
       }
     }
   },

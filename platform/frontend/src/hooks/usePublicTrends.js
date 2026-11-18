@@ -32,10 +32,10 @@ export function usePublicTrends(regionName) {
 }
 
 /**
- * 지역 월평균 체류인구(시설 추천 계산의 지역 규모) — 플랫폼 공표 통계 API에서 읽는다(시드에 값 없음).
- * 받지 못하면 null이고, 추천 카드·표는 같은 자리에 자료 등록 안내를 보인다.
+ * 지역 월평균 체류인구(시설 추천 계산의 지역 규모)와 그 기간 — 플랫폼 공표 통계 API에서 읽는다(시드에 값 없음).
+ * 받지 못하면 null이고, 추천 구역은 같은 자리에 자료 등록 안내를 보인다.
  * @param {string|undefined} regionName
- * @returns {number|null}
+ * @returns {{ value: number, period_from: string, period_to: string }|null}
  */
 export function useRegionStay(regionName) {
   const [stay, setStay] = useState(null);
@@ -46,7 +46,7 @@ export function useRegionStay(regionName) {
       const token = await getRealdataToken().catch(() => null);
       if (!token || !alive || !regionName) return;
       const res = await apiGet(`${BASE}/stay-average`, { token, params: { region: regionName } }).catch(() => null);
-      if (alive && res?.status === "ok" && res.data?.value > 0) setStay(res.data.value);
+      if (alive && res?.status === "ok" && res.data?.value > 0) setStay({ value: res.data.value, period_from: res.data.period_from, period_to: res.data.period_to });
     })();
     return () => { alive = false; };
   }, [regionName]);

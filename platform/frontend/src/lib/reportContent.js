@@ -1,6 +1,7 @@
 // 보고서 콘텐츠 빌더 — 지자체/템플릿/드리프트 상태로부터 포맷 중립 블록 모델과
 // Excel 표·Markdown 문자열을 생성한다. 템플릿 종류에 따라 본문 구성을 분기.
 import { riskGrade } from "./riskGrade.js";
+import { livingText } from "./facilityRecommendation.js";
 
 /**
  * 기준 시점·행정동 표기 — 어느 스냅샷의 어느 행정동 기여도인지 본문에서 드러나야 한다.
@@ -176,9 +177,27 @@ function vitalPopulationBlocks(region, vital) {
   ];
 }
 
-function analysisBlocks(region, populationChange, live, explain) {
+/**
+ * 정책 추천 ④에서 [보고서로 보내기]로 넘긴 고른 사업 — 시행계획 중점과제 한 줄과 기금 투자계획 사업 한 건.
+ * 값은 고른 사업의 계산값(handoff)만 쓰고, 넘긴 사업이 없으면 블록을 만들지 않는다.
+ */
+function handoffBlocks(handoff) {
+  if (!handoff) return [];
+  return [
+    { type: "heading", level: 2, text: "시행계획 중점과제" },
+    { type: "paragraph", text: handoff.task },
+    { type: "heading", level: 2, text: "기금 투자계획 사업" },
+    { type: "list", items: handoff.fund.map(([label, value]) => `${label}: ${value}`) }
+  ];
+}
+
+/** 고른 사업의 기대 효과 한 줄 — 넘긴 사업이 없으면 null(고정 비율 값을 만들지 않는다). */
+const handoffEffect = (handoff) => (handoff
+  ? `추천 사업(${handoff.business}) 반영 시 정주인구 ${handoff.effect.settle} · 생활인구 ${livingText(handoff.effect.living)}`
+  : null);
+
+function analysisBlocks(region, populationChange, live, explain, handoff) {
   const tenYearBase = Math.round(region.population * 0.81).toLocaleString();
-  const tenYearPolicy = Math.round(region.population * 0.95).toLocaleString();
   return [
     { type: "heading", level: 2, text: "1. 분석 개요 및 대상 지자체 기본 현황" },
     {
@@ -205,7 +224,7 @@ function analysisBlocks(region, populationChange, live, explain) {
       type: "list",
       items: [
         `현 정책 유지 시 10년 후 인구수: ${tenYearBase}명`,
-        `추천 맞춤 정책(복지 가중치 집중) 적용 시 10년 후 인구수: ${tenYearPolicy}명`
+        ...(handoffEffect(handoff) ? [handoffEffect(handoff)] : [])
       ]
     },
     { type: "heading", level: 2, text: "5. 지자체 정책 실무 요약 권고 사항" },
@@ -252,17 +271,22 @@ function caseBlocks(region) {
 export function buildReportBlocks(region, template, extra = {}) {
   const header = approvalHeader(region, extra.generatedAt);
   if (extra.allowSeed === false) return [...header, ...modelMetricBlocks(extra.live), ...shapBlocks(extra.explain)];
-  if (template.id === "template_task_order") {
-    return [...header, ...taskOrderBlocks(region)];
-  }
-  if (template.id === "template_vital_population") {
-    return [...header, ...vitalPopulationBlocks(region, extra.vitalPopulation)];
-  }
-  if (template.id === "template_smartfarm" || template.id === "template_settlement") {
-    return [...header, ...caseBlocks(region)];
-  }
-  return [...header, ...analysisBlocks(region, extra.populationChange, extra.live, extra.explain)];
+  const handoff = extra.handoff?.regionId === region.id ? extra.handoff : null;
+  const body = template.id === "template_task_order" ? taskOrderBlocks(region)
+    : template.id === "template_vital_population" ? vitalPopulationBlocks(region, extra.vitalPopulation)
+      : template.id === "template_smartfarm" || template.id === "template_settlement" ? caseBlocks(region)
+        : analysisBlocks(region, extra.populationChange, extra.live, extra.explain, handoff);
+  return [...header, ...body, ...handoffBlocks(handoff)];
 }
+
+// 고른 사업 행 — 기대 효과(계산값)와 기금 투자계획 사업 항목. 넘긴 사업이 없으면 행이 없다.
+const handoffRows = (handoff) => (handoff ? [
+  ["시뮬레이션", "추천 사업", handoff.business],
+  ["시뮬레이션", "추천 사업 정주인구 변화(연)", handoff.effect.settleValue],
+  ["시뮬레이션", "추천 사업 생활인구 변화(월)", livingText(handoff.effect.living)],
+  ["시행계획 중점과제", "과제", handoff.task],
+  ...handoff.fund.map(([label, value]) => ["기금 투자계획 사업", label, value])
+] : []);
 
 /** Excel(.xlsx) 용 2차원 표 — 지표 요약. */
 export function buildReportRows(region, template, extra = {}) {
@@ -302,7 +326,7 @@ export function buildReportRows(region, template, extra = {}) {
       ? explain.contributions.map((c) => [`요인 기여도 (${explainBasis(explain)})`, c.label, c.phi])
       : []),
     ["시뮬레이션", "10년 후 인구(현행)", Math.round(region.population * 0.81)],
-    ["시뮬레이션", "10년 후 인구(정책적용)", Math.round(region.population * 0.95)]
+    ...handoffRows(extra.handoff?.regionId === region.id ? extra.handoff : null)
   ];
 
   const pc = extra.populationChange;

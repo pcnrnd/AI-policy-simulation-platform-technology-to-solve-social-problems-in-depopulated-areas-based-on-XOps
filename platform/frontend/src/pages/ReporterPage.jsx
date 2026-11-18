@@ -33,7 +33,7 @@ function regionShortName(region) {
   return parts[parts.length - 1] || region.name;
 }
 
-function buildPreview(region, template, live, generatedAt, allowSeed) {
+function buildPreview(region, template, live, generatedAt, allowSeed, handoff = null) {
   const tenYearPop = Math.round(region.population * 0.81).toLocaleString();
   const indicators = live?.indicators ?? null;
   const explain = live?.explain ?? null;
@@ -92,6 +92,20 @@ function buildPreview(region, template, live, generatedAt, allowSeed) {
         </>
       )}
 
+      {/* 정책 추천 ④에서 넘긴 고른 사업 — 시행계획 중점과제 한 줄과 기금 투자계획 사업 한 건(계산값만). */}
+      {allowSeed && handoff && (
+        <>
+          <h3>시행계획 중점과제</h3>
+          <p>{handoff.task}</p>
+          <h3>기금 투자계획 사업</h3>
+          <table>
+            <tbody>
+              {handoff.fund.map(([label, value]) => <tr key={label}><th scope="row">{label}</th><td>{value}</td></tr>)}
+            </tbody>
+          </table>
+        </>
+      )}
+
       {allowSeed && <><h3>4. 제언 및 최종 권고 요약</h3>
       <ol>
         <li>welfare 예산 부문에 청년 보조 자금 배정 가중치를 최소 60% 이상으로 확대 편성.</li>
@@ -116,7 +130,7 @@ function buildPreview(region, template, live, generatedAt, allowSeed) {
 }
 
 export default function ReporterPage() {
-  const { appData, currentRegion, setCurrentRegion, addConsoleLog, mockDataVisible } = useAppState();
+  const { appData, currentRegion, setCurrentRegion, addConsoleLog, mockDataVisible, reportHandoffs } = useAppState();
   const templates = appData.report_templates;
   const regions = appData.regions;
 
@@ -151,6 +165,7 @@ export default function ReporterPage() {
 
   // 표시 판정은 순수 함수 한 곳에서만 한다(회귀 테스트 대상).
   const regionBinding = binding?.regionId === region.id ? binding : null;
+  const handoff = reportHandoffs[region.id] ?? null;
   const gateMode = reportGateMode({ binding: regionBinding, allowSeed });
 
   // 양식에 연결된 실데이터 API(평가·드리프트)를 호출해 지표를 자동 갱신.
@@ -223,7 +238,7 @@ export default function ReporterPage() {
     }
     const timestamp = new Date().toISOString();
     setGeneratedAt(timestamp);
-    setPreview(buildPreview(region, template, regionBinding, timestamp, allowSeed));
+    setPreview(buildPreview(region, template, regionBinding, timestamp, allowSeed, handoff));
     setReportFeedback({ tone: "success", message: `${region.name} 보고서 미리보기를 생성했습니다.` });
     addConsoleLog(`INFO: 보고서 미리보기 생성 성공 - ${region.name}`);
   };
@@ -247,7 +262,7 @@ export default function ReporterPage() {
     const timestamp = generatedAt ?? new Date().toISOString();
     if (!generatedAt) {
       setGeneratedAt(timestamp);
-      setPreview(buildPreview(region, template, regionBinding, timestamp, allowSeed));
+      setPreview(buildPreview(region, template, regionBinding, timestamp, allowSeed, handoff));
     }
     const fmt = EXPORT_FORMATS.find((f) => f.id === format) ?? EXPORT_FORMATS[0];
     const baseName = `R_D_인구소멸대응보고서_${regionShortName(region)}`;
@@ -255,6 +270,7 @@ export default function ReporterPage() {
     const extra = {
       generatedAt: timestamp,
       allowSeed,
+      handoff,
       populationChange: appData.population_change,
       vitalPopulation: appData.vital_population,
       live: regionBinding?.indicators ?? null,

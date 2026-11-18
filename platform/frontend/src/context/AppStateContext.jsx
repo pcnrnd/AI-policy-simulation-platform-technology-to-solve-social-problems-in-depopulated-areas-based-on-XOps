@@ -148,6 +148,11 @@ export function AppStateProvider({ children }) {
   const updateSimulatorRun = useCallback((regionId, patch) => {
     setSimulatorRuns((runs) => ({ ...runs, [regionId]: { ...runs[regionId], ...patch } }));
   }, []);
+  // ④ [보고서로 보내기]로 넘긴 고른 사업 — 지역별 최근 한 건(시행계획 중점과제·기금 투자계획 사업). 리포팅이 읽는다.
+  const [reportHandoffs, setReportHandoffs] = useState({});
+  const sendToReport = useCallback((handoff) => {
+    setReportHandoffs((all) => ({ ...all, [handoff.regionId]: handoff }));
+  }, []);
 
   const [consoleLogs, setConsoleLogs] = useState([]);
   const [alerts, setAlerts] = useState([]);
@@ -689,6 +694,8 @@ export function AppStateProvider({ children }) {
     setBudgetTotal,
     simulatorRuns,
     updateSimulatorRun,
+    reportHandoffs,
+    sendToReport,
     driftInjected,
     driftChecking,
     pipelineRunning,
