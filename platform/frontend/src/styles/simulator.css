@@ -410,3 +410,5 @@
 .sim-compare-cell strong { font-size: 16px; font-weight: 700; color: var(--text-primary); }
 .sim-compare-range { font-size: 11px; color: var(--text-secondary); }
 .sim-compare-title { grid-column: 1 / -1; margin: 0 0 -4px; font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+/* ③ 예측·분포 카드 — 카드마다 한 줄(두 모드 같음). 나란히 두면 내용이 짧은 분포 카드 아래가 200~350px 빈다(결정 36). */
+.sim-result-stack { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-xxl); margin: 24px 0 var(--space-xxl); }

@@ -728,8 +728,8 @@ export default function SimulatorPage() {
           note={realUnavailableText("시설물·격자 정보는")}
         />
 
-        {/* ── 분석: 예측 + 전 지자체 분포 ── */}
-        <div className="grid-cols-2" style={{ marginTop: 24 }}>
+        {/* ── 분석: 예측 + 전 지자체 분포 — 카드마다 한 줄(결정 36). 나란히 두면 분포 카드 아래가 비어 세로로 쌓는다. ── */}
+        <div className="sim-result-stack">
           <Card
             title={demo ? "10개년 인구 예측 시뮬레이션 결과" : `다음 달 ${targetName} 예측 결과`}
             icon="fa-wand-magic-sparkles"
