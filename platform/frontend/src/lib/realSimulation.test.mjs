@@ -9,7 +9,7 @@ import { activeModelPair, selectedFactorModel, inferenceMatches, inferenceContex
   REAL_GUIDE_TEXT, FACTOR_GUIDE_TEXT, FACTOR_PENDING_TEXT, FACTOR_RUN_LOCK_TEXT, REAL_LOAD_FAILED_TEXT, REAL_PREDICT_FAILED_TEXT, REAL_VERSION_CHANGED_TEXT,
   FACTOR_IDLE_TEXT, FACTOR_FAILED_TEXT, FACTOR_VERSION_CHANGED_TEXT, FACTOR_EXPLAIN_TEXT,
   DEMO_FACTOR_TARGET, FACTOR_PANEL_FEATURES, FACTOR_LIST_LIMIT, factorAnalysisView, diagnosisView, simFrameView, monthText, scopeFactors, isNonPolicyFeature, FACTOR_SCOPES, signedAmount, quarterYoyChange, yoyChange, rankTargets, AUTO_TARGET_LABEL, featureUnit, targetUnit, formatUnitValue, sliderValueText,
-  forecastCompareView, REMOTE_FORECAST_GUIDE_TEXT } from "./realSimulation.js";
+  forecastCompareView } from "./realSimulation.js";
 const proof={instance_id:"factor",model_type:"factor_analysis",version_id:"v1",job_id:"job1",dataset_id:"registered1",dataset_hash:"a".repeat(64),region_id:"namwon",target:"observed_sales_krw",dong_code:"45190250",prediction_period:202401,features:["y_lag1"],mode:"real",source:"real"};
 const sim={provenance:{...proof,instance_id:"sim",model_type:"simulation",dataset_id:"registered2",version_id:"v2",job_id:"job2"}};
 const request=inferenceRequest(sim,{y_lag1:100});
@@ -130,7 +130,7 @@ assert.doesNotMatch(resultStage,/view\.basis|pl-source-note|validation\.baseline
 {
   const visible = (src) => src.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "");
   const compare = readFileSync(join(here, "..", "components", "ForecastCompare.jsx"), "utf-8");
-  assert.doesNotMatch(visible(resultStage + compare) + REMOTE_FORECAST_GUIDE_TEXT, /릿지|Ridge|Chronos|딥러닝|인구학적/);
+  assert.doesNotMatch(visible(resultStage + compare), /릿지|Ridge|Chronos|딥러닝|인구학적/);
 }
 assert.match(page,/instanceLabel\(row, regionNameOf\)/);
 assert.doesNotMatch(page,/\{row\.name\} ·/); // 내부 등록 이름(phaseb_… 등)을 모델 선택 칸에 보이지 않는다
@@ -373,12 +373,12 @@ assert.deepEqual([signedAmount(-24000, "원"), signedAmount(3973, "명")], ["−
 // 모델 선택 칸 이름: 내부 등록 이름이 아니라 종류 · 지역 · 학습 대상.
 assert.equal(instanceLabel({ name: "phaseb_factor_namwon_x", model_type: "factor_analysis", region_id: "namwon", target: "observed_sales_krw" }, () => "전북특별자치도 남원시"),
   "요인분석 · 전북특별자치도 남원시 · 관측 소비");
-// ③ 릿지·Chronos-2 비교 줄(결정 30) — 합성 값. 선택과 다른 응답은 버리고, 원격 예측이 비정상·없음이면 행동 안내 자리.
+// ③ 비교 줄(결정 30·33) — 합성 값. 선택과 다른 응답은 버리고, 원격 예측이 비정상·없음이면 시계열 모델 값 자리에 "—".
 {
   const pick = { mode: "real", modelId: "sim", versionId: "v2", dong: "45190250" };
   const ok = { mode: "real", source: "real", provenance: { ...sim.provenance, prediction_period: 202401 }, ridge: { prediction: 123456789 },
     remote: { status: "ok", low: 110000000, median: 120000000, high: 135000000 } };
-  assert.deepEqual(forecastCompareView(ok, pick, "원"), { period: "관측 소비 2024-01", ridge: "123,456,789원", remote: { median: "120,000,000원", range: "1.1억~1.35억원" } });
+  assert.deepEqual(forecastCompareView(ok, pick, "원"), { title: "2024-01 관측 소비 예측", ridge: "123,456,789원", remote: { median: "120,000,000원", range: "1.1억~1.35억원" } });
   assert.equal(forecastCompareView({ ...ok, remote: { status: "unavailable" } }, pick, "원").remote, null);
   assert.equal(forecastCompareView({ ...ok, remote: { ...ok.remote, low: 130000000 } }, pick, "원").remote, null); // 10% > 50%
   assert.equal(forecastCompareView({ ...ok, remote: { ...ok.remote, high: NaN } }, pick, "원").remote, null);
@@ -388,13 +388,16 @@ assert.equal(instanceLabel({ name: "phaseb_factor_namwon_x", model_type: "factor
   assert.equal(forecastCompareView(null, pick, "원"), null);
   const demo = { mode: "mock", source: "mock", provenance: { ...sim.provenance, mode: "mock", source: "mock", target: "living_population", dong_code: "all", prediction_period: 202412 },
     ridge: { prediction: 1234.4 }, remote: { status: "unavailable" } };
-  assert.deepEqual(forecastCompareView(demo, { mode: "mock", modelId: "sim", versionId: "v2", dong: "" }, "명"), { period: "생활인구 2024-12", ridge: "1,234명", remote: null });
-  // 두 모드 같은 자리(③ 예측 카드 안, 계산 근거 위)에 같은 컴포넌트. 안내는 행동만(출처·방법·괄호 꼬리표 없음).
+  assert.deepEqual(forecastCompareView(demo, { mode: "mock", modelId: "sim", versionId: "v2", dong: "" }, "명"), { title: "2024-12 생활인구 예측", ridge: "1,234명", remote: null });
+  assert.equal(forecastCompareView({ ...demo, provenance: { ...demo.provenance, target: "population_change_pct", prediction_period: 9 } },
+    { mode: "mock", modelId: "sim", versionId: "v2", dong: "" }, "%p").title, "인구 변화율 예측"); // 옛 지역 원천: 달 없음, 원격 없음 → "—"
+  // 두 모드 같은 자리(③ 예측 카드 안, 계산 근거 위)에 같은 컴포넌트. 이름 줄 → 값 이름 "활성 모델"·"시계열 모델", 원격 없음이면 "—"(옛 안내 없음).
   assert.match(page, /<ForecastCompare view=\{compareView\} loading=\{compare\.loading\} \/>\s*\{\/\* 계산 근거/);
   assert.match(page, /const compareModel = demo \? factorModel : real\.ready \?/);
   const compareCard = read("components", "ForecastCompare.jsx");
-  assert.match(compareCard, /활성 모델 예측[\s\S]*시계열 모델 예측[\s\S]*범위 \{view\.remote\.range\}[\s\S]*REMOTE_FORECAST_GUIDE_TEXT/);
-  assert.doesNotMatch(REMOTE_FORECAST_GUIDE_TEXT, /[()（）]/);
-  assert.doesNotMatch(REMOTE_FORECAST_GUIDE_TEXT + compareCard, /출처|DGX|amazon|192\.168/);
+  assert.match(compareCard, /\{view\.title\}[\s\S]*>활성 모델<[\s\S]*>시계열 모델<[\s\S]*view\.remote \? view\.remote\.median : "—"[\s\S]*범위 \{view\.remote\.range\}/);
+  assert.doesNotMatch(compareCard, /예측<\/span>|시계열 예측 서버|sim-compare-guide|GUIDE_TEXT/);
+  assert.doesNotMatch(read("lib", "realSimulation.js"), /REMOTE_FORECAST_GUIDE_TEXT|시계열 예측 서버를 연결하면/);
+  assert.doesNotMatch(compareCard, /출처|DGX|amazon|192\.168/);
 }
 console.log("PASS: current mode/model/version/district provenance, recommendation identity and late response isolation, U20 시나리오 예측 칸·U21 이동 버튼");
