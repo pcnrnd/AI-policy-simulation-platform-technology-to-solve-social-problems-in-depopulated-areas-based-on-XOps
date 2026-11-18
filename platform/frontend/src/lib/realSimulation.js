@@ -251,11 +251,9 @@ export function forecastSeries(context, simulation) {
 }
 
 // ③ 활성 모델(릿지)·원격 시계열 모델(Chronos-2) 다음 달 예측 나란히(결정 30). 화면에는 역할 이름만 쓴다.
-// 원격 예측이 없으면 같은 자리에 이 행동 안내만 둔다.
-export const REMOTE_FORECAST_GUIDE_TEXT = "시계열 예측 서버를 연결하면 활성 모델 예측과 함께 표시됩니다.";
 /**
  * forecast-compare 응답 → ③ 비교 줄 표시 값. 선택(모드·모델·버전·행정동)과 다른 응답은 낡은 결과라 null.
- * remote: 원격 예측이 정상(10% ≤ 50% ≤ 90% 분위, 모두 유한)일 때만 값, 아니면 null(→ 행동 안내).
+ * remote: 원격 예측이 정상(10% ≤ 50% ≤ 90% 분위, 모두 유한)일 때만 값, 아니면 null(→ 값 자리에 "—").
  */
 export function forecastCompareView(result, { mode, modelId, versionId, dong }, unit) {
   const p = result?.provenance;
@@ -265,8 +263,9 @@ export function forecastCompareView(result, { mode, modelId, versionId, dong }, 
   const r = result.remote;
   const ok = r?.status === "ok" && [r.low, r.median, r.high].every(Number.isFinite) && r.low <= r.median && r.median <= r.high;
   return {
-    // 예측 대상·달 — 데모는 카드 윗부분(10년 인구)과 대상이 달라 줄 이름에 대상을 붙인다(두 모드 같은 형식).
-    period: `${targetName(p.target)} ${formatMonth(p.prediction_period)}`,
+    // 비교 대상 — 데모는 카드 윗부분(10년 인구)과 대상이 달라 이름 줄에 달·대상을 쓴다(두 모드 같은 형식).
+    // 옛 지역 원천은 예측 기간이 연월(YYYYMM)이 아니라 달을 뺀다.
+    title: `${/^\d{6}$/.test(String(p.prediction_period)) ? `${formatMonth(p.prediction_period)} ` : ""}${targetName(p.target)} 예측`,
     ridge: Number.isFinite(result.ridge?.prediction) ? text(result.ridge.prediction) : "—",
     remote: ok ? { median: text(r.median), range: `${compactNumber(r.low)}~${compactNumber(r.high)}${unit}` } : null
   };

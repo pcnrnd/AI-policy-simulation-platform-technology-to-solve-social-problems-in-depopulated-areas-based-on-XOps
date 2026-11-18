@@ -405,4 +405,4 @@
 .sim-compare-tag { font-size: 11px; color: var(--text-secondary); }
 .sim-compare-cell strong { font-size: 16px; font-weight: 700; color: var(--text-primary); }
 .sim-compare-range { font-size: 11px; color: var(--text-secondary); }
-.sim-compare-guide { margin: 2px 0 0; font-size: 12px; color: var(--text-secondary); }
+.sim-compare-title { grid-column: 1 / -1; margin: 0 0 -4px; font-size: 12px; font-weight: 600; color: var(--text-secondary); }
