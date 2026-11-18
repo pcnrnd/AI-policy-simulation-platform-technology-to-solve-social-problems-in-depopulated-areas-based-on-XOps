@@ -47,7 +47,7 @@ d911c5ae737f38c4a5c86de2133cf51f0f99fa26aed361fac07098f756853d1d  data_2026/rest
 
 ## 시험 조건
 
-- 지연: 없음(`CHART_SLEEP_MS` 미적용)
+- 지연: 없음
 - 브라우저: Firefox (Playwright 번들, 실측 153.0). 이 앱 전용 측정 스크립트는 없고,
   `chart_speed/tools/measure_speed.py <url> --charts 8`로 렌더 완료를 확인할 수 있다.
 - 데이터: `restaurant_2026` (2026년, 10,148행). 2021~2025도 동일 방식으로 선택 가능.
