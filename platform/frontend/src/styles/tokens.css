@@ -63,6 +63,11 @@
   --space-xl: 20px;
   --space-xxl: 24px;
   --space-xxxl: 32px;
+
+  /* 정책 추천 ④ 그래프 — 눈금선·글자 테두리(선 위 글자)·비선택 막대 */
+  --reco-grid: rgba(255, 255, 255, 0.05);
+  --reco-halo: #121c33;
+  --reco-bar-rest: rgba(148, 163, 184, 0.24);
 }
 
 /* ===== Light theme overrides ===== */
@@ -115,4 +120,7 @@
   --input-bg: #ffffff;
   --table-head-bg: rgba(15, 23, 42, 0.04);
   --card-hover-border: rgba(15, 23, 42, 0.14);
+  --reco-grid: rgba(15, 23, 42, 0.05);
+  --reco-halo: #ffffff;
+  --reco-bar-rest: #dde4ee;
 }
