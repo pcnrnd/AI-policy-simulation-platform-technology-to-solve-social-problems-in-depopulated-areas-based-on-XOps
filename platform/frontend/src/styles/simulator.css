@@ -390,6 +390,10 @@
 .real-flow-controls label, .real-flow-inputs label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
 .real-flow-controls select, .real-flow-inputs input { padding: 8px 10px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-card); color: var(--text-primary); }
 .real-flow-controls select[aria-disabled="true"] { cursor: not-allowed; color: var(--text-disabled); background: var(--input-bg); }
+/* ① 분석 기간(시작~끝 달) */
+.real-flow-period { display: flex; align-items: center; gap: 6px; }
+.real-flow-controls input[type="month"] { padding: 7px 8px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-card); color: var(--text-primary); font-family: inherit; font-size: 13px; }
+.real-flow-controls input[type="month"]:disabled { cursor: not-allowed; color: var(--text-disabled); background: var(--input-bg); }
 .real-flow-inputs { display: grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap: 14px; margin: 16px 0; }
 .real-flow-inputs label > span:last-child { color: var(--text-secondary); font-size: 12px; }
 .real-flow-evidence { margin-top: 16px; border-top: 1px solid var(--border-color); padding-top: 12px; }
@@ -406,3 +410,5 @@
 .sim-compare-cell strong { font-size: 16px; font-weight: 700; color: var(--text-primary); }
 .sim-compare-range { font-size: 11px; color: var(--text-secondary); }
 .sim-compare-title { grid-column: 1 / -1; margin: 0 0 -4px; font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+/* ③ 예측·분포 카드 — 카드마다 한 줄(두 모드 같음). 나란히 두면 내용이 짧은 분포 카드 아래가 200~350px 빈다(결정 36). */
+.sim-result-stack { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-xxl); margin: 24px 0 var(--space-xxl); }

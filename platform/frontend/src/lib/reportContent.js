@@ -11,13 +11,13 @@ function explainBasis(explain) {
 }
 
 /**
- * SHAP 기여도 블록 — explain 실측값만 싣는다. 바인딩이 없으면 섹션 자체를 비운다.
+ * 요인별 기여도 블록 — explain 실측값만 싣는다. 화면·파일 문구에는 모델·알고리즘 이름을 쓰지 않는다(결정 37). 바인딩이 없으면 섹션 자체를 비운다.
  * 표기명(label)은 dataopsApi 의 featureLabel 이 붙여 둔 값을 그대로 쓴다 — 본문·엑셀 공통.
  */
 function shapBlocks(explain) {
   if (!explain) return [];
   return [
-    { type: "heading", level: 2, text: `3. SHAP 특징 중요도 기여 요인 분석 (${explainBasis(explain)})` },
+    { type: "heading", level: 2, text: `3. 요인별 기여도 (${explainBasis(explain)})` },
     {
       type: "list",
       items: explain.contributions.map((c, i) => `${i + 1}순위: ${c.label} (기여도 ${formatMetric(c.phi, 4)})`)
@@ -227,11 +227,8 @@ function caseBlocks(region) {
     { type: "heading", level: 2, text: `1. 현안(${region.theme}) 및 사업 개요` },
     { type: "paragraph", text: c.summary },
     { type: "list", items: c.dataSources },
-    { type: "heading", level: 2, text: "2. AI·인구학적 요인분석 (XAI: SHAP)" },
-    {
-      type: "paragraph",
-      text: `딥러닝 예측 모델: ${c.aiModel.deepLearning.join(", ")} · 기준선: ${c.aiModel.statBaseline}`
-    },
+    { type: "heading", level: 2, text: "2. AI·인구학적 요인분석" },
+    { type: "paragraph", text: `시계열 예측 모델 · 기준선: ${c.aiModel.statBaseline}` },
     { type: "list", items: c.correlations.positive.map((t) => `(+) ${t}`) },
     { type: "list", items: c.correlations.negative.map((t) => `(−) ${t}`) },
     { type: "heading", level: 2, text: "3. 문제 유형 진단 결과" },
@@ -277,7 +274,7 @@ export function buildReportRows(region, template, extra = {}) {
     ["대상 지자체", region.name], ["생성 일시", formatReportTimestamp(extra.generatedAt)],
     ...(live ? [["모델 검증", "WAPE", live.wape], ["모델 검증", "MAE", live.mae],
       ["모델 검증", "기준선 MAE", live.baselineMae], ...(live.psi ?? []).map((entry) => ["모델 검증", `PSI (${entry.label})`, entry.psi])] : []),
-    ...(explain ? explain.contributions.map((entry) => [`SHAP 기여 (${explainBasis(explain)})`, entry.label, entry.phi]) : [])
+    ...(explain ? explain.contributions.map((entry) => [`요인 기여도 (${explainBasis(explain)})`, entry.label, entry.phi]) : [])
   ];
   const rows = [
     ["인구감소 대응 R&D 지표 요약", template.title],
@@ -300,9 +297,9 @@ export function buildReportRows(region, template, extra = {}) {
           ...(live.psi ?? []).map((entry) => ["모델 검증", `PSI (${entry.label})`, entry.psi])
         ]
       : []),
-    // SHAP 행도 explain 실측 바인딩이 있을 때만 싣는다 — 기여도를 만들지 않는다.
+    // 요인 기여도 행도 explain 실측 바인딩이 있을 때만 싣는다 — 기여도를 만들지 않는다.
     ...(explain
-      ? explain.contributions.map((c) => [`SHAP 기여 (${explainBasis(explain)})`, c.label, c.phi])
+      ? explain.contributions.map((c) => [`요인 기여도 (${explainBasis(explain)})`, c.label, c.phi])
       : []),
     ["시뮬레이션", "10년 후 인구(현행)", Math.round(region.population * 0.81)],
     ["시뮬레이션", "10년 후 인구(정책적용)", Math.round(region.population * 0.95)]

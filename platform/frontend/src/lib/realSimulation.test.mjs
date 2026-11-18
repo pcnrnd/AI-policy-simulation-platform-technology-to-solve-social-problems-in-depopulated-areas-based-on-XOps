@@ -10,6 +10,7 @@ import { activeModelPair, selectedFactorModel, inferenceMatches, inferenceContex
   FACTOR_IDLE_TEXT, FACTOR_FAILED_TEXT, FACTOR_VERSION_CHANGED_TEXT, FACTOR_EXPLAIN_TEXT,
   DEMO_FACTOR_TARGET, FACTOR_PANEL_FEATURES, FACTOR_LIST_LIMIT, factorAnalysisView, diagnosisView, simFrameView, monthText, scopeFactors, isNonPolicyFeature, FACTOR_SCOPES, signedAmount, quarterYoyChange, yoyChange, rankTargets, AUTO_TARGET_LABEL, featureUnit, targetUnit, formatUnitValue, sliderValueText,
   forecastCompareView } from "./realSimulation.js";
+import { signedShort, periodBounds, resolvePeriod, periodRequest, validatePeriodAnalysis, periodView, addMonth, monthInputValue, parseMonthInput, PERIOD_BASELINES } from "./realSimulation.js";
 const proof={instance_id:"factor",model_type:"factor_analysis",version_id:"v1",job_id:"job1",dataset_id:"registered1",dataset_hash:"a".repeat(64),region_id:"namwon",target:"observed_sales_krw",dong_code:"45190250",prediction_period:202401,features:["y_lag1"],mode:"real",source:"real"};
 const sim={provenance:{...proof,instance_id:"sim",model_type:"simulation",dataset_id:"registered2",version_id:"v2",job_id:"job2"}};
 const request=inferenceRequest(sim,{y_lag1:100});
@@ -142,7 +143,7 @@ assert.match(resultStage,/const versionTitle = view\?\.model\.versionId;/);asser
 assert.equal(factorStage.match(/title=\{versionTitle\}/g)?.length,1);assert.match(page,/versionTitle=\{factorView\?\.model\.versionId\}/);
 // 활성 버전 변경(추론 409)은 다시 실행 안내로 처리하며 자동 학습으로 우회하지 않는다.
 const hookSource=read("hooks","useFactorAnalysis.js");
-assert.match(hookSource,/phase === "predict" && error\?\.status === 409/);
+assert.match(hookSource,/phase !== "prepare" && status === 409/);  // 준비 단계 409는 일반 실패 문구
 assert.doesNotMatch(hookSource,/shortId|slice\(0, 12\)/);
 // ③ 계산 근거는 검증 오차·기준선·버전·데이터셋만 — 기여도 3행은 ① 카드로 옮겼다. "요인" 표현도 쓰지 않는다.
 const evidence=read("components","ModelEvidence.jsx");
@@ -401,3 +402,52 @@ assert.equal(instanceLabel({ name: "phaseb_factor_namwon_x", model_type: "factor
   assert.doesNotMatch(compareCard, /출처|DGX|amazon|192\.168/);
 }
 console.log("PASS: current mode/model/version/district provenance, recommendation identity and late response isolation, U20 시나리오 예측 칸·U21 이동 버튼");
+
+// ── ① 분석 기간·비교 기준(결정 29) ──
+assert.deepEqual(periodBounds({ observed_from: 202101, observed_to: 202312 }, false), { from: 202104, to: 202401 });  // 실데이터: 랙 3개월~예측월
+assert.deepEqual(periodBounds({ observed_from: 201501, observed_to: 202412 }, true), { from: 201501, to: 202412 });   // 데모 패널: 관측 기간
+assert.equal(periodBounds({ observed_from: 0, observed_to: 9 }, true), null);  // 옛 지역 원천(연월 아님)
+assert.equal(addMonth(202401, -1), 202312); assert.equal(addMonth(202412, 1), 202501); assert.equal(addMonth(202403, -14), 202301);
+const bounds = { from: 202104, to: 202401 };
+assert.deepEqual(resolvePeriod(bounds, null), { from: 202302, to: 202401, months: 12 });  // 기본: 최근 12개월
+assert.deepEqual(resolvePeriod({ from: 202110, to: 202112 }, null), { from: 202110, to: 202112, months: 3 });  // 범위가 짧으면 범위 전체
+assert.deepEqual(resolvePeriod(bounds, { from: 202001, to: 202405 }), { from: 202104, to: 202401, months: 34 });  // 범위 밖은 안으로
+assert.deepEqual(resolvePeriod(bounds, { from: 202306, to: 202303 }), { from: 202306, to: 202306, months: 1 });  // 끝<시작
+assert.deepEqual(resolvePeriod({ from: 201501, to: 202412 }, { from: 201501, to: 202412 }), { from: 201501, to: 201712, months: 36 });  // 36개월 상한
+assert.equal(resolvePeriod(null, null), null);
+assert.equal(monthInputValue(202403), "2024-03"); assert.equal(parseMonthInput("2024-03"), 202403); assert.equal(parseMonthInput(""), null); assert.equal(parseMonthInput("2024-13"), null);
+assert.deepEqual(PERIOD_BASELINES.map((b) => b.id), ["train_mean", "prev_year", "prev_period"]);
+const periodContext = { provenance: { ...proof, instance_id: "factor" } };
+const periodReq = periodRequest(periodContext, { from: 202310, to: 202312 }, "prev_year");
+assert.deepEqual(periodReq, { region_id: "namwon", target: "observed_sales_krw", dataset_id: "registered1", dataset_hash: "a".repeat(64), dong_code: "45190250",
+  period_from: 202310, period_to: 202312, baseline: "prev_year" });
+const month = (base_ym, a, b, ref = 0) => ({ base_ym, status: "used", prediction: ref + a + b, reference_prediction: ref, actual: null,
+  contributions: [{ feature: "y_lag1", value: a }, { feature: "month_sin", value: b }] });
+const periodResult = { provenance: { ...periodContext.provenance, period_from: 202310, period_to: 202312, period_baseline: "prev_year" }, intercept: 10,
+  months: [month(202310, 4, -1, 50), { base_ym: 202311, status: "no_reference", prediction: null, reference_prediction: null, contributions: [] }, month(202312, -2, 3, 60)],
+  summary: { used_months: 2, skipped: [{ base_ym: 202311, reason: "no_reference" }], total: [{ feature: "y_lag1", value: 2 }, { feature: "month_sin", value: 2 }],
+    mean: [{ feature: "y_lag1", value: 1 }, { feature: "month_sin", value: 1 }], total_delta: 4 } };
+assert.equal(validatePeriodAnalysis(periodResult, periodContext, periodReq), periodResult);
+const broken = (patch) => assert.throws(() => validatePeriodAnalysis({ ...periodResult, ...patch }, periodContext, periodReq));
+broken({ months: [{ ...periodResult.months[0], prediction: 99 }, ...periodResult.months.slice(1)] });  // 항등식 위반
+broken({ summary: { ...periodResult.summary, total: [{ feature: "y_lag1", value: 3 }, { feature: "month_sin", value: 2 }] } });  // 합계 재검산
+broken({ summary: { ...periodResult.summary, mean: [{ feature: "y_lag1", value: 2 }, { feature: "month_sin", value: 1 }] } });  // 평균 = 합계/사용 달
+broken({ summary: { ...periodResult.summary, used_months: 3 } });
+broken({ provenance: { ...periodResult.provenance, period_baseline: "train_mean" } });  // 요청과 다른 기준
+broken({ provenance: { ...periodResult.provenance, version_id: "other" } });
+const periodLabel = (f) => observedFeatureLabel(f, "observed_sales_krw");
+const meanView = periodView(periodResult, { label: periodLabel, agg: "mean" });
+assert.deepEqual(meanView.factors.map((r) => [r.feature, r.value]), [["y_lag1", 1], ["month_sin", 1]]);
+assert.equal(meanView.info, "분석 기간 2023-10~2023-12 · 2개월");
+assert.deepEqual(meanView.trend.labels, ["2023-10", "2023-11", "2023-12"]);
+assert.deepEqual(meanView.trend.lines.find((l) => l.feature === "y_lag1").data, [4, null, -2]);  // 빠진 달은 null(선 끊김)
+const totalView = periodView(periodResult, { label: periodLabel, agg: "total" });
+assert.deepEqual(totalView.factors.map((r) => r.value), [2, 2]);
+assert.deepEqual(totalView.trend.lines.find((l) => l.feature === "y_lag1").data, [4, null, 2]);  // 합계는 누적
+assert.deepEqual(periodView(periodResult, { label: periodLabel, scope: "policy" }).factors, []);  // 요인 범위 적용
+const manyFactors = { ...periodResult, summary: { ...periodResult.summary, total: Array.from({ length: 8 }, (_, i) => ({ feature: `f${i}`, value: (i - 4) * 3 })),
+  mean: Array.from({ length: 8 }, (_, i) => ({ feature: `f${i}`, value: i - 4 })) } };
+assert.deepEqual(periodView(manyFactors, { label: (f) => f }).trend.lines.map((l) => l.feature), ["f0", "f1", "f7", "f2", "f6"]);  // |합계| 상위 5개
+// ② 기여도 목록 짧은 값 — 1만 미만은 그대로, 이상은 만·억
+assert.equal(signedShort(3343, "명"), "+3,343명"); assert.equal(signedShort(-40119, "명"), "−4.0만명");
+assert.equal(signedShort(12345678, "원"), "+1,235만원"); assert.equal(signedShort(-123456789, "원"), "−1.23억원"); assert.equal(signedShort(0.5, "%"), "+0.5%");

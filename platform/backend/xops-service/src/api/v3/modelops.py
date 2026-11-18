@@ -60,6 +60,19 @@ class PredictionInput(BaseModel):
     adjustments: dict[str, Annotated[float, Field(strict=True, allow_inf_nan=False)]] = Field(default_factory=dict, max_length=30)
 
 
+class PeriodAnalysisInput(BaseModel):
+    """① 분석 기간·비교 기준 — 예측 근거 4필드는 predict와 같고, 기간은 연월(YYYYMM) 정수다."""
+    model_config = {"extra": "forbid"}
+    region_id: str = Field(min_length=1, max_length=128)
+    target: str = Field(min_length=1, max_length=128)
+    dataset_id: str = Field(min_length=1, max_length=128)
+    dataset_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    dong_code: str | None = Field(default=None, max_length=32)
+    period_from: int = Field(strict=True, ge=100001, le=999912)
+    period_to: int = Field(strict=True, ge=100001, le=999912)
+    baseline: Literal["train_mean", "prev_year", "prev_period"] = "train_mean"
+
+
 class RollbackInput(BaseModel):
     model_config = {"extra": "forbid"}
     reason: str = Field(default="", max_length=200)
@@ -142,6 +155,11 @@ def inference_inputs(instance_id: str, version_id: str, auth: Read, mode: Mode =
 @router.post("/instances/{instance_id}/versions/{version_id}/predict")
 def predict_version(instance_id: str, version_id: str, body: PredictionInput, auth: Read, mode: Mode = "real") -> dict[str, Any]:
     return inference.predict(mode, instance_id, version_id, body.model_dump())
+
+
+@router.post("/instances/{instance_id}/versions/{version_id}/factor-period")
+def factor_period(instance_id: str, version_id: str, body: PeriodAnalysisInput, auth: Read, mode: Mode = "real") -> dict[str, Any]:
+    return inference.period_analysis(mode, instance_id, version_id, body.model_dump())
 
 
 @router.get("/instances/{instance_id}/versions/{version_id}/forecast-compare")

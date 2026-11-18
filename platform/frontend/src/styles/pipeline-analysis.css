@@ -525,6 +525,18 @@
 }
 .pl-contrib-more:hover { background: var(--surface-hover); }
 .pl-contrib-more:focus-visible { outline: 2px solid var(--border-focus); outline-offset: 2px; }
+/* ② 기여도 월별(① 분석 기간) — 요인별 본문을 같은 자리에 숨겨 두고 그 위에 선 그래프를 겹친다(카드·줄 높이 그대로). */
+.pl-contrib-body { position: relative; display: flex; flex-direction: column; flex: 1; }
+.pl-contrib-body.is-monthly > .pl-corr-grid,
+.pl-contrib-body.is-monthly > .pl-contrib-foot { visibility: hidden; }
+.pl-contrib-trend { position: absolute; inset: 0; }
+/* 카드 머리 오른쪽 전환(요인별|월별, 월평균|합계) */
+.pl-seg { display: inline-flex; border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; }
+.pl-seg-btn { font-family: inherit; font-size: 11px; color: var(--text-secondary); background: var(--input-bg); border: 0; padding: 4px 9px; cursor: pointer; white-space: nowrap; transition: var(--transition-fast); }
+.pl-seg-btn + .pl-seg-btn { border-left: 1px solid var(--border-color); }
+.pl-seg-btn:hover { color: var(--text-primary); }
+.pl-seg-btn.is-on { color: #fff; background: var(--accent-blue-strong); }
+.pl-seg-btn:focus-visible { outline: 2px solid var(--border-focus); outline-offset: -2px; }
 /* ② 둘째 줄(모델 정보·검증) — 모델 카드는 기여도 분해·학습 모델 상자를 나란히 두고, 입력 요인 칩은 정해진 높이 안에서 넘겨 본다
    (요인이 많은 실데이터에서도 옆 검증 카드와 줄 높이를 맞춘다). */
 .pl-result-row { margin-top: 20px; }

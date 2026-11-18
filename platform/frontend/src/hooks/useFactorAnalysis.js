@@ -5,7 +5,7 @@ import { dataModeEpoch } from "../lib/dataMode.js";
 import { displayId } from "../lib/modelops.js";
 import {
   selectedFactorModel, inferenceRequest, factorAnalysisView, yoyChange, rankTargets, REAL_TARGETS, validateInference, createRequestGate, formatUnitValue, formatMonth, targetUnit,
-  FACTOR_FAILED_TEXT, FACTOR_VERSION_CHANGED_TEXT
+  periodBounds, resolvePeriod, periodRequest, validatePeriodAnalysis, FACTOR_FAILED_TEXT, FACTOR_VERSION_CHANGED_TEXT, FACTOR_PERIOD_EMPTY_TEXT
 } from "../lib/realSimulation.js";
 
 const BASE = "/api/v3/modelops";
@@ -21,9 +21,12 @@ const rawText = (error) => error?.message || String(error);
  * [요인분석 실행] → 1 선택한 활성 모델·관측 입력 → 2 추론 → 3 기여도 합계 확인 → 4 완료.
  * 두 모드 모두 기존 활성 모델만 사용하며 이 화면에서 등록·학습·활성화하지 않는다.
  * 알림(feedback)은 고정 문구이고 서버·브라우저 원문은 log(WARN 한 줄)로만 남긴다.
- * 지역·학습 대상·행정동이 바뀌면 진행 중 실행을 버리고 처음 상태로 돌아간다.
+ * 지역·학습 대상·행정동·분석 기간·비교 기준이 바뀌면 진행 중 실행을 버리고 처음 상태로 돌아간다.
+ * period: ① 분석 기간 선택({ from, to } YYYYMM, null이면 최근 12개월) — 실행 때 결과 모델의 관측 범위로 맞춘다. baseline: 비교 기준 id.
  */
-export function useFactorAnalysis({ demo, region, target, dong, modelId, versionId, log }) {
+export function useFactorAnalysis({ demo, region, target, dong, modelId, versionId, period = null, baseline = "train_mean", log }) {
+  const periodFrom = period?.from ?? null;
+  const periodTo = period?.to ?? null;
   const [catalog, setCatalog] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -44,7 +47,7 @@ export function useFactorAnalysis({ demo, region, target, dong, modelId, version
   }, [demo, revision]);
   const [status, setStatus] = useState("idle"); // idle | running | done
   const [step, setStep] = useState(0); // 1-based 진행 단계
-  const [result, setResult] = useState(null); // { analysis(추론 결과), dataset(카탈로그 행) }
+  const [result, setResult] = useState(null); // { analysis(추론 결과), dataset(카탈로그 행), period(기간 분석 결과 | null) }
   const [feedback, setFeedback] = useState(null);
   const [missing, setMissing] = useState(false);
   const [ranking, setRanking] = useState(null); // 자동 실행의 지표별 순위 [{ target, change }]
@@ -67,7 +70,19 @@ export function useFactorAnalysis({ demo, region, target, dong, modelId, version
       return;
     }
     setStatus("idle"); setStep(0); setResult(null); setRanking(null); setFeedback(null); setMissing(false);
-  }, [demo, region, target, dong, modelId, versionId]);
+  }, [demo, region, target, dong, modelId, versionId, periodFrom, periodTo, baseline]);
+
+  // ① 분석 기간 기여도 — 예측월 추론(analysis) 뒤에 같은 모델·입력으로. 기간을 고를 수 없는 옛 지역 원천 모델은 null.
+  const analyzePeriod = async (at, model, inputs, token) => {
+    const range = resolvePeriod(periodBounds(inputs.provenance, inputs.provenance.mode === "mock"), periodFrom && periodTo ? { from: periodFrom, to: periodTo } : null);
+    if (!range) return null;
+    const request = periodRequest(inputs, range, baseline);
+    const raw = await at(apiSend("POST", endpoint(model) + "/factor-period", { token, body: request }));
+    return validatePeriodAnalysis(raw, inputs, request);
+  };
+  // 알림은 고정 문구 — 상태 코드로만 고른다(원문은 로그 한 줄).
+  const failText = (phase, status) => (phase === "period" && status === 422 ? FACTOR_PERIOD_EMPTY_TEXT
+    : phase !== "prepare" && status === 409 ? FACTOR_VERSION_CHANGED_TEXT : FACTOR_FAILED_TEXT);
 
   // accept: 결과를 게시하기 직전에 부른다 — false면 결과를 버리고 처음 상태로 둔다(자동 계산 중 입력이 바뀐 경우).
   const run = useCallback(async ({ accept } = {}) => {
@@ -96,14 +111,16 @@ export function useFactorAnalysis({ demo, region, target, dong, modelId, version
       setStep(2);
       say(`INFO: [요인분석 2/4] 요인분석 활성 버전 ${displayId(model.active_version)} 추론`);
       const raw = await at(apiSend("POST", endpoint(model) + "/predict", { token, body: inferenceRequest(inputs) }));
-      setStep(3);
       const analysis = validateInference(raw, inputs);
+      phase = "period";
+      const period = await analyzePeriod(at, model, inputs, token);
+      setStep(3);
       say(`INFO: [요인분석 3/4] 요인 ${analysis.contributions.length}개 기여도 분해 — 합계 확인`);
       setStep(4);
       const unit = targetUnit(proof.target);
       say(`INFO: [요인분석 4/4] 검증 평균 절대 오차 ${formatUnitValue(proof.metrics?.mae, unit)} / 기준선 ${formatUnitValue(proof.baseline?.mae, unit)} ${unit}`);
       if (accept && !accept()) { setStatus("idle"); setStep(0); return null; }
-      setResult({ analysis, dataset });
+      setResult({ analysis, dataset, period });
       setStatus("done");
       return analysis;
     } catch (error) {
@@ -111,11 +128,11 @@ export function useFactorAnalysis({ demo, region, target, dong, modelId, version
       setStatus("idle"); setStep(0);
       if (error === MISSING) { setMissing(true); return null; }
       say(`WARN: 요인분석 실행 실패 — ${rawText(error)}`);
-      const conflict = phase === "predict" && error?.status === 409;
-      setFeedback(conflict ? FACTOR_VERSION_CHANGED_TEXT : FACTOR_FAILED_TEXT);
+      const code = error?.status;
+      setFeedback(failText(phase, code));
       return null;
     }
-  }, [demo, region, target, dong, modelId, versionId]);
+  }, [demo, region, target, dong, modelId, versionId, periodFrom, periodTo, baseline]);
 
   // 자동(가장 나빠진 지표) — 이 지역에 활성 요인분석 모델이 있는 학습 대상마다 같은 추론을 돌려, 다음 달 추정이
   // 전년 같은 달보다 가장 많이 줄어든 지표를 고른다(전년 비교 불가는 맨 뒤). 고른 지표로 조건을 옮기고(onPick) 그 결과를 보인다.
@@ -125,6 +142,7 @@ export function useFactorAnalysis({ demo, region, target, dong, modelId, version
     const at = async (promise) => { const value = await promise; if (!current()) throw CANCELLED; return value; };
     const say = (message) => logRef.current?.(message);
     setStatus("running"); setStep(1); setResult(null); setRanking(null); setFeedback(null); setMissing(false);
+    let phase = "prepare";
     try {
       const token = await at(getRealdataToken());
       const catalog = await at(apiGet(`${BASE}/catalog`, { token }));
@@ -140,15 +158,18 @@ export function useFactorAnalysis({ demo, region, target, dong, modelId, version
         const analysis = validateInference(raw, inputs);
         const dataset = catalog.datasets.find((row) => row.id === inputs.provenance.dataset_id) ?? null;
         const change = yoyChange(factorAnalysisView(analysis, { demo: false, dataset, label: (f) => f }));
-        found.push({ target: t, change, model, analysis, dataset });
+        found.push({ target: t, change, model, analysis, dataset, inputs });
         say(`INFO: [요인분석 자동] ${REAL_TARGETS[t]} 추론 완료`);
       }
       if (!found.length) throw MISSING;
-      setStep(4);
       const ranked = rankTargets(found);
       const best = ranked[0];
+      // 지표 순위는 예측월 추론으로 고르고, 고른 지표 하나만 기간 분석을 이어서 한다.
+      phase = "period";
+      const period = await analyzePeriod(at, best.model, best.inputs, token);
+      setStep(4);
       const summary = ranked.map(({ target: t, change }) => ({ target: t, change }));
-      const next = { result: { analysis: best.analysis, dataset: best.dataset }, ranking: summary };
+      const next = { result: { analysis: best.analysis, dataset: best.dataset, period }, ranking: summary };
       if (best.target === target && best.model.id === modelId && best.model.active_version === versionId) {
         setResult(next.result); setRanking(summary); setStatus("done");
       } else {
@@ -161,10 +182,11 @@ export function useFactorAnalysis({ demo, region, target, dong, modelId, version
       setStatus("idle"); setStep(0);
       if (error === MISSING) { setMissing(true); return null; }
       say(`WARN: 요인분석 실행 실패 — ${rawText(error)}`);
-      setFeedback(FACTOR_FAILED_TEXT);
+      const code = error?.status;
+      setFeedback(failText(phase, code));
       return null;
     }
-  }, [region, target, dong, modelId, versionId]);
+  }, [region, target, dong, modelId, versionId, periodFrom, periodTo, baseline]);
 
   // 같은 조건에서 이미 끝난 결과(앱 상태에 보존)를 다시 계산하지 않고 되살린다 — 진행 중 실행은 버린다.
   const restore = useCallback((saved) => {

@@ -27,7 +27,8 @@ import {
   REAL_TARGETS, REAL_GUIDE_TEXT, REAL_CONTROLS_LOCK_TEXT, FACTOR_GUIDE_TEXT, FACTOR_PENDING_TEXT, FACTOR_RUN_LOCK_TEXT,
   diagnosisView, simFrameView, quarterYoyChange, AUTO_TARGET, AUTO_TARGET_LABEL, DEMO_FACTOR_TARGET, realUnavailableText, selectedFactorModel, inferenceMatches, inferenceContextKey, factorAnalysisView,
   observedFeatureLabel, rankSensitivity, targetUnit, formatUnitValue,
-  realSliderControls, forecastSeries, sensitivityRecommendation, regionRealStatus, FACTOR_SCOPES, activeModelPair, forecastCompareView
+  realSliderControls, forecastSeries, sensitivityRecommendation, regionRealStatus, FACTOR_SCOPES, activeModelPair, forecastCompareView,
+  periodBounds, resolvePeriod, monthInputValue, parseMonthInput, PERIOD_BASELINES
 } from "../lib/realSimulation.js";
 
 // 실데이터 표시에서 관측 입력을 바꾼 뒤 시뮬레이션 추론(읽기 전용 계산)을 다시 부르기까지의 대기.
@@ -78,6 +79,9 @@ export default function SimulatorPage() {
   const [auto, setAuto] = useState(true);
   // ① 요인 범위 — ② 기여도 카드의 표시 범위(전체 / 정책 관련 요인만). 두 모드 같음, 기본 전체.
   const [factorScope, setFactorScope] = useState("all");
+  // ① 분석 기간·비교 기준(결정 29) — 기간은 고른 달({ from, to }), null이면 최근 12개월. 기준 기본은 학습 기간 평균(기존 기여도와 같은 뜻).
+  const [periodPick, setPeriodPick] = useState(null);
+  const [baseline, setBaseline] = useState("train_mean");
   // 행정동은 고른 지역과 함께 기억한다 — 지역이 바뀌면 "전체"(첫 옵션)로 돌아가 이전 지역 코드를 요청에 싣지 않는다.
   const [dongPick, setDongPick] = useState({ regionId: currentRegion.id, code: "" });
   const dong = dongPick.regionId === currentRegion.id ? dongPick.code : "";
@@ -90,13 +94,17 @@ export default function SimulatorPage() {
   const [modelPick, setModelPick] = useState(null);
   const picked = modelPick?.context === factorContext ? modelPick : null;
   const factor = useFactorAnalysis({ demo, region: currentRegion.id, target: factorTarget, dong: demo ? "" : dong,
-    modelId: picked?.id, versionId: picked?.version,
+    modelId: picked?.id, versionId: picked?.version, period: periodPick, baseline,
     log: (message) => addConsoleLog(message, false, message.startsWith("WARN")) });
   const factorModels = factor.catalog?.mode === mode && factor.catalog?.source === mode
     ? factor.catalog.instances.filter((row) => appData.regions.some((r) => r.id === row.region_id)
       && (demo ? row.target === DEMO_FACTOR_TARGET : Object.hasOwn(REAL_TARGETS, row.target))
       && selectedFactorModel(factor.catalog, row.id, row.region_id, row.target, mode)) : [];
   const factorModel = selectedFactorModel(factor.catalog, picked?.id, currentRegion.id, factorTarget, mode);
+  // 분석 기간 입력의 범위 — 선택 모델 활성 버전의 학습데이터 관측 기간(실행 때 훅도 같은 규칙으로 맞춘다).
+  const factorDatasetId = factor.catalog?.versions?.find((row) => row.id === factorModel?.active_version)?.dataset_id;
+  const periodLimits = periodBounds(factor.catalog?.datasets?.find((row) => row.id === factorDatasetId), demo);
+  const periodRange = resolvePeriod(periodLimits, periodPick);
   useEffect(() => {
     if (factor.loading || factor.loadFailed) return;
     const chosen = factorModels.find((row) => row.id === picked?.id);
@@ -567,6 +575,24 @@ export default function SimulatorPage() {
           {FACTOR_SCOPES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
         </select>
       </label>
+      <label>
+        분석 기간
+        <span className="real-flow-period">
+          <input type="month" aria-label="분석 시작 달" value={monthInputValue(periodRange?.from)} min={monthInputValue(periodLimits?.from)}
+            max={monthInputValue(periodRange?.to)} disabled={analysisRunning || !periodRange}
+            onChange={(e) => { const from = parseMonthInput(e.target.value); if (from) setPeriodPick({ from, to: periodRange.to }); }} />
+          <span aria-hidden="true">~</span>
+          <input type="month" aria-label="분석 끝 달" value={monthInputValue(periodRange?.to)} min={monthInputValue(periodRange?.from)}
+            max={monthInputValue(periodLimits?.to)} disabled={analysisRunning || !periodRange}
+            onChange={(e) => { const to = parseMonthInput(e.target.value); if (to) setPeriodPick({ from: periodRange.from, to }); }} />
+        </span>
+      </label>
+      <label>
+        비교 기준
+        <select aria-label="비교 기준" value={baseline} disabled={analysisRunning} onChange={(e) => setBaseline(e.target.value)}>
+          {PERIOD_BASELINES.map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}
+        </select>
+      </label>
       {!demo && real.loading && <p role="status">모델과 관측 입력 확인 중…</p>}
       {!demo && real.feedback && <p className="async-feedback is-error" role="alert">{real.feedback}</p>}
       {factor.feedback && <p className="async-feedback is-error" role="alert">{factor.feedback}</p>}
@@ -617,6 +643,8 @@ export default function SimulatorPage() {
         running={analysisRunning}
         view={factorView}
         scope={factorScope}
+        period={factorResult?.period ?? null}
+        label={factorLabel}
         evidence={<ModelEvidence slot="sim.factor.evidence" result={factorResult?.analysis} regions={regions} label={factorLabel}
           datasetName={() => factorResult?.dataset?.name ?? factorResult?.analysis.provenance.dataset_id}
           emptyText={factorMissing ? FACTOR_PENDING_TEXT : "[요인분석 실행] 후 모델·학습데이터 근거가 표시됩니다."} />}
@@ -700,8 +728,8 @@ export default function SimulatorPage() {
           note={realUnavailableText("시설물·격자 정보는")}
         />
 
-        {/* ── 분석: 예측 + 전 지자체 분포 ── */}
-        <div className="grid-cols-2" style={{ marginTop: 24 }}>
+        {/* ── 분석: 예측 + 전 지자체 분포 — 카드마다 한 줄(결정 36). 나란히 두면 분포 카드 아래가 비어 세로로 쌓는다. ── */}
+        <div className="sim-result-stack">
           <Card
             title={demo ? "10개년 인구 예측 시뮬레이션 결과" : `다음 달 ${targetName} 예측 결과`}
             icon="fa-wand-magic-sparkles"

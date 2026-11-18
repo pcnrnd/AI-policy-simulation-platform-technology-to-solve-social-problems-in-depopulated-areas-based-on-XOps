@@ -45,8 +45,6 @@
         ],
         "policyEffect": "임대형 스마트팜 성공요인 도출을 통한 청년인구 유입 효과 및 청년의 안정적 정착을 위한 정책적 의사결정 자료로 활용",
         "aiModel": {
-          "xai": "SHAP (Shapley Additive exPlanations)",
-          "deepLearning": ["Auto-Encoder + BiLSTM", "Conv-LSTM + BiLSTM"],
           "statBaseline": "유사지역 대비 생산기여 분석 (작물 분포·운영 패턴·직업 만족도)"
         },
         "correlations": {
@@ -129,8 +127,6 @@
         ],
         "policyEffect": "정주여건 지원사업의 지속적 효과를 위한 정책적 의사결정 자료로 활용",
         "aiModel": {
-          "xai": "SHAP (Shapley Additive exPlanations)",
-          "deepLearning": ["Conv-LSTM + BiLSTM"],
           "statBaseline": "전국 대비 신안군 분석 (임대주택 운영·정주인구 규모·임대비율·운영 인력)"
         },
         "correlations": {

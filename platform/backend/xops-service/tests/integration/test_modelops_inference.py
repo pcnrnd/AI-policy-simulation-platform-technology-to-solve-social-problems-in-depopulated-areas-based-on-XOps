@@ -174,3 +174,136 @@ def test_mock_factor_panel_trains_activates_and_explains_with_named_factors(clie
     # 기존 지역 인구 추이 원천의 학습·추론 경로는 그대로다(공존).
     legacy = client.post(BASE+"/datasets", headers=h, json={"name": "인구 추이", "source_dataset_id": "mock_namwon", "source_hash": sources[0]["content_hash"]}).json()
     assert legacy["features"] == ["rate_t-1", "riskIndex", "birthRate", "agingIndex"]
+
+
+# ── ① 분석 기간·비교 기준(factor-period) ──
+def period_body(context, start, end, baseline="train_mean"):
+    proof = context["provenance"]
+    return {**{key: proof[key] for key in ("region_id", "target", "dataset_id", "dataset_hash", "dong_code")},
+        "period_from": start, "period_to": end, "baseline": baseline}
+
+
+def real_model(client, auth, monkeypatch, tmp_path, skip=()):
+    # 합성 관측 36개월(2021-01~2023-12), skip 달은 원천 공백 — 실데이터 값은 쓰지 않는다.
+    rows = [{"base_ym": add_month(202101, i), "dong_code": "45190250", "y": 100+3*i+(i % 3)*7, "nonlocal_visitors": 100+3*i,
+        "local_visitors": 200, "foreign_visitors": 1} for i in range(36) if add_month(202101, i) not in skip]
+    original = tmp_path/"period.json"
+    record = snapshot.DatasetRecord(dataset_id="ds-testperiod", target="nonlocal_visitors", model_id=snapshot.TARGETS["nonlocal_visitors"],
+        spec={"target": "nonlocal_visitors", "model_id": snapshot.TARGETS["nonlocal_visitors"]}, quality={}, observed_from=202101, observed_to=202312,
+        row_count=len(rows), excluded_rows={}, content_hash=snapshot._content_hash(rows), file_path=str(original), created_at=store.now(), rows=rows)
+    original.write_text(json.dumps(asdict(record)), encoding="utf-8")
+    monkeypatch.setattr(snapshot, "list_datasets", lambda: [asdict(record)])
+    monkeypatch.setattr(snapshot, "load_dataset", lambda _: record)
+    h, ds, p, job, url = train(client, auth, mode="real", kind="factor_analysis")
+    return h, url, client.get(url+"/inputs", headers=h).json(), rows
+
+
+def assert_identity(result):
+    for row in result["months"]:
+        if row["status"] == "used":
+            assert row["prediction"]-row["reference_prediction"] == pytest.approx(sum(c["value"] for c in row["contributions"]))
+
+
+def test_period_train_mean_month_matches_predict_and_aggregates(client, auth_headers, monkeypatch, tmp_path):
+    h, url, context, rows = real_model(client, auth_headers, monkeypatch, tmp_path)
+    before = [tuple(row) for row in _conn().execute("SELECT * FROM mo_assets ORDER BY mode,kind,id")]
+    predicted = client.post(url+"/predict", headers=h, json=body(context)).json()
+    one = client.post(url+"/factor-period", headers=h, json=period_body(context, 202401, 202401)).json()
+    month = one["months"][0]
+    assert month["status"] == "used" and month["actual"] is None and month["reference_prediction"] == one["intercept"]
+    assert month["prediction"] == pytest.approx(predicted["prediction"])
+    assert [c["value"] for c in month["contributions"]] == pytest.approx([c["value"] for c in predicted["contributions"]])
+    year = client.post(url+"/factor-period", headers=h, json=period_body(context, 202301, 202312)).json()
+    assert year["summary"]["used_months"] == 12 and year["summary"]["skipped"] == []
+    assert year["provenance"]["period_from"] == 202301 and year["provenance"]["period_baseline"] == "train_mean"
+    assert year["months"][0]["actual"] == next(row["y"] for row in rows if row["base_ym"] == 202301)
+    assert_identity(year)
+    total = {row["feature"]: row["value"] for row in year["summary"]["total"]}
+    mean = {row["feature"]: row["value"] for row in year["summary"]["mean"]}
+    for name, value in total.items():
+        assert value == pytest.approx(sum(c["value"] for m in year["months"] for c in m["contributions"] if c["feature"] == name))
+        assert mean[name] == pytest.approx(value/12)
+    assert year["summary"]["total_delta"] == pytest.approx(sum(m["prediction"]-m["reference_prediction"] for m in year["months"]))
+    assert [tuple(row) for row in _conn().execute("SELECT * FROM mo_assets ORDER BY mode,kind,id")] == before  # 읽기 전용
+
+
+def test_period_prev_year_cancels_season_and_prev_period_shifts_by_length(client, auth_headers, monkeypatch, tmp_path):
+    h, url, context, _ = real_model(client, auth_headers, monkeypatch, tmp_path)
+    result = client.post(url+"/factor-period", headers=h, json=period_body(context, 202305, 202310, "prev_year")).json()
+    assert_identity(result)
+    for row in result["months"]:
+        assert row["reference_ym"] == add_month(row["base_ym"], -12)
+        season = [c for c in row["contributions"] if c["feature"] in ("month_sin", "month_cos")]
+        assert len(season) == 2 and all(c["value"] == pytest.approx(0, abs=1e-9) for c in season)
+    shifted = client.post(url+"/factor-period", headers=h, json=period_body(context, 202305, 202310, "prev_period")).json()
+    assert [row["reference_ym"] for row in shifted["months"]] == [add_month(row["base_ym"], -6) for row in shifted["months"]]
+    assert_identity(shifted)
+
+
+def test_period_skips_gap_months_without_filling_and_excludes_them_from_mean(client, auth_headers, monkeypatch, tmp_path):
+    h, url, context, _ = real_model(client, auth_headers, monkeypatch, tmp_path, skip=(202206, 202207))
+    result = client.post(url+"/factor-period", headers=h, json=period_body(context, 202206, 202307, "prev_year")).json()
+    status = {row["base_ym"]: row["status"] for row in result["months"]}
+    # 공백 달과 그 뒤 랙 3개월이 모자란 달은 입력 없음, 이듬해 같은 달은 기준 없음
+    assert [t for t, s in status.items() if s == "no_input"] == [202206, 202207, 202208, 202209, 202210]
+    assert [t for t, s in status.items() if s == "no_reference"] == [202306, 202307]
+    assert result["summary"]["used_months"] == 7 and len(result["summary"]["skipped"]) == 7
+    total = {row["feature"]: row["value"] for row in result["summary"]["total"]}
+    assert all(row["value"] == pytest.approx(total[row["feature"]]/7) for row in result["summary"]["mean"])
+    assert all(m["contributions"] == [] and m["prediction"] is None for m in result["months"] if m["status"] != "used")
+    only_gap = client.post(url+"/factor-period", headers=h, json=period_body(context, 202206, 202207))
+    assert only_gap.status_code == 422 and "계산할 수 있는 달이 없습니다" in only_gap.json()["detail"]
+
+
+@pytest.mark.parametrize("start,end,baseline", [
+    (202313, 202401, "train_mean"),   # 월 형식
+    (202312, 202301, "train_mean"),   # 시작 > 끝
+    (202101, 202401, "train_mean"),   # 36개월 초과(37)
+    (202103, 202110, "train_mean"),   # 관측 시작+3 이전
+    (202312, 202402, "train_mean"),   # 예측월(관측 다음 달) 이후
+    (202301, 202312, "last_month"),   # 알 수 없는 비교 기준(스키마)
+    (202104, 202104, "prev_year"),    # 기준 달이 없어 계산할 달 0개
+])
+def test_period_rejects_invalid_requests(client, auth_headers, monkeypatch, tmp_path, start, end, baseline):
+    h, url, context, _ = real_model(client, auth_headers, monkeypatch, tmp_path)
+    assert client.post(url+"/factor-period", headers=h, json=period_body(context, start, end, baseline)).status_code == 422
+
+
+def test_period_boundaries_and_basis(client, auth_headers, monkeypatch, tmp_path):
+    h, url, context, _ = real_model(client, auth_headers, monkeypatch, tmp_path)
+    full = client.post(url+"/factor-period", headers=h, json=period_body(context, 202104, 202401)).json()  # 허용 범위 양 끝, 34개월
+    assert full["summary"]["used_months"] == 34 and full["months"][-1]["actual"] is None
+    one = period_body(context, 202301, 202301)
+    assert client.post(url+"/factor-period", headers=h, json={**one, "dataset_hash": "a"*64}).status_code == 409
+    assert client.post(url+"/factor-period", headers=h, json={**one, "extra": 1}).status_code == 422
+    assert client.post(url+"/factor-period", headers={**h, "X-Data-Mode": "mock"}, json=one).status_code == 404
+    assert client.post(url+"/factor-period", json=one).status_code == 401
+
+
+def test_period_demo_panel_and_legacy_mock_model(client, auth_headers):
+    h = {**auth_headers, "X-Data-Mode": "mock"}
+    source = next(row for row in client.get(BASE+"/available-datasets", headers=h).json()["data"] if row["id"] == "mock_factor_namwon")
+    ds = client.post(BASE+"/datasets", headers=h, json={"name": "요인 패널", "source_dataset_id": source["id"], "source_hash": source["content_hash"]}).json()
+    p = client.post(BASE+"/pipelines", headers=h, json={"id": "test_period_panel", "name": "요인 패널 학습", "model_type": "factor_analysis",
+        "dataset_id": ds["id"], "dataset_hash": ds["content_hash"]}).json()
+    job = client.post(BASE+"/pipelines/"+p["id"]+"/run", headers=h).json()
+    deadline = time.monotonic()+10
+    while time.monotonic() < deadline and job["state"] not in ("saved", "failed"):
+        job = client.get(BASE+"/jobs/"+job["id"], headers=h).json()
+    url = BASE+"/instances/"+p["instance_id"]+"/versions/"+job["version_id"]
+    assert client.post(url+"/activate", headers=h).status_code == 200
+    context = client.get(url+"/inputs", headers=h).json()
+    predicted = client.post(url+"/predict", headers=h, json=body(context)).json()
+    last = client.post(url+"/factor-period", headers=h, json=period_body(context, 202412, 202412)).json()
+    assert last["months"][0]["prediction"] == pytest.approx(predicted["prediction"])
+    year = client.post(url+"/factor-period", headers=h, json=period_body(context, 201601, 201612, "prev_year")).json()
+    assert year["summary"]["used_months"] == 12 and all(m["actual"] is not None for m in year["months"])
+    assert_identity(year)
+    # 2016-01 이전은 전년 기준 달이 없다, 관측 기간 밖은 거절
+    assert client.post(url+"/factor-period", headers=h, json=period_body(context, 201501, 201512, "prev_year")).status_code == 422
+    assert client.post(url+"/factor-period", headers=h, json=period_body(context, 201412, 201501)).status_code == 422
+    # 옛 지역 인구 추이 원천 모델(행에 기준월 없음)은 기간 분석을 하지 않는다
+    legacy_h, _, _, _, legacy_url = train(client, auth_headers, kind="factor_analysis")
+    legacy = client.get(legacy_url+"/inputs", headers=legacy_h).json()
+    response = client.post(legacy_url+"/factor-period", headers=legacy_h, json=period_body(legacy, 202412, 202412))
+    assert response.status_code == 422 and "지원하지 않습니다" in response.json()["detail"]

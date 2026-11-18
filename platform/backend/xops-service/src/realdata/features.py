@@ -66,12 +66,13 @@ def build_feature_rows(dataset: Any, *, for_month: int | None = None) -> list[di
     excluded = {"lag_missing": 0}
 
     by_dong = _group_by_dong(dataset)
+    canonical = _canonical_dongs()  # 동 목록 파일은 호출당 한 번만 읽는다
 
     targets: list[tuple[str, int]]
     if for_month is None:
         targets = sorted((code, t) for code, series in by_dong.items() for t in series)
     else:
-        targets = [(code, for_month) for code in _canonical_dongs()]
+        targets = [(code, for_month) for code in canonical]
 
     out: list[dict[str, Any]] = []
     for dong_code, t in targets:
@@ -99,7 +100,7 @@ def build_feature_rows(dataset: Any, *, for_month: int | None = None) -> list[di
             "month_sin": month_sin,
             "month_cos": month_cos,
         }
-        for code in _canonical_dongs():
+        for code in canonical:
             feature_row[f"dong_{code}"] = 1 if code == dong_code else 0
         out.append(feature_row)
 

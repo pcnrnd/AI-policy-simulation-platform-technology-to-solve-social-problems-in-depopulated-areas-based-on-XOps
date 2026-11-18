@@ -6,6 +6,7 @@
 //   3. 피처 표기명 — 내부 피처명(y_lag1·month_sin·dong_*)이 리포트에 그대로 나가지 않는다.
 //   4. 표시 판정 — 데모 OFF 라도 실데이터 바인딩이 있으면 표시한다(토글이 아니라 바인딩이 기준).
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   pickActiveModel,
   pickExplainTarget,
@@ -240,7 +241,7 @@ check("explain 이 ok 가 아니면 빈 상태로 둔다", () => {
   assert.equal(toExplainBinding(EXPLAIN_OK, TARGET, { status: "error" }, MODEL.target).dongName, null);
 });
 
-check("본문·표에 실측 기여도가 실리고 SHAP 합성 상수는 없다", () => {
+check("본문·표에 실측 기여도가 실리고 합성 상수는 없다", () => {
   const explain = toExplainBinding(EXPLAIN_OK, TARGET, DONG_MAP_OK, MODEL.target);
   const text = JSON.stringify(buildReportBlocks(REGION, TEMPLATE, { explain }));
   assert.match(text, /계절성\(월, 사인\) \(기여도 -0\.8700\)/);
@@ -249,16 +250,32 @@ check("본문·표에 실측 기여도가 실리고 SHAP 합성 상수는 없다
   assert.doesNotMatch(text, /내부 설명 문구/);
 
   const rows = buildReportRows(REGION, TEMPLATE, { explain });
-  assert.deepEqual(rows.find((r) => r[1] === "계절성(월, 사인)"), ["SHAP 기여 (202310 · 주천면)", "계절성(월, 사인)", -0.87]);
+  assert.deepEqual(rows.find((r) => r[1] === "계절성(월, 사인)"), ["요인 기여도 (202310 · 주천면)", "계절성(월, 사인)", -0.87]);
   // 원본 피처명은 바인딩에 남지만 본문·엑셀로는 나가지 않는다(폴백 y_lag12 만 예외).
   assert.doesNotMatch(text, /month_sin|y_lag1/);
   assert.equal(rows.some((r) => r[1] === "y_lag1"), false);
 });
 
-check("explain 바인딩이 없으면 본문·표에 SHAP 항목을 만들지 않는다", () => {
+check("explain 바인딩이 없으면 본문·표에 기여도 항목을 만들지 않는다", () => {
   const text = JSON.stringify(buildReportBlocks(REGION, TEMPLATE, {}));
-  assert.doesNotMatch(text, /SHAP/);
-  assert.equal(buildReportRows(REGION, TEMPLATE, {}).some((r) => String(r[0]).startsWith("SHAP")), false);
+  assert.doesNotMatch(text, /요인별 기여도|요인 기여도/);
+  assert.equal(buildReportRows(REGION, TEMPLATE, {}).some((r) => String(r[0]).startsWith("요인 기여도")), false);
+});
+
+// 결정 37 — 리포팅 화면(미리보기)·내려받는 본문·표에 모델·알고리즘 이름 대신 역할 이름만 쓴다(두 사례 템플릿·실측 기여도 포함).
+const MODEL_NAMES = /릿지|Ridge|Chronos|Conv-LSTM|BiLSTM|LSTM|Auto-Encoder|딥러닝|SHAP|XAI/i;
+check("리포팅 화면·보고서 본문에 모델·알고리즘 이름이 없다", () => {
+  const seed = JSON.parse(readFileSync(new URL("../assets/mock_data.json", import.meta.url), "utf-8"));
+  const explain = toExplainBinding(EXPLAIN_OK, TARGET, DONG_MAP_OK, MODEL.target);
+  for (const region of seed.regions) {
+    for (const template of seed.report_templates) {
+      const blocks = buildReportBlocks(region, template, { explain });
+      assert.doesNotMatch(JSON.stringify(blocks) + JSON.stringify(buildReportRows(region, template, { explain })), MODEL_NAMES, `${region.id} ${template.id}`);
+    }
+  }
+  assert.match(JSON.stringify(buildReportBlocks(seed.regions[0], { id: "template_smartfarm", title: "t" }, {})), /시계열 예측 모델 · 기준선/);
+  const page = readFileSync(new URL("../pages/ReporterPage.jsx", import.meta.url), "utf-8").replace(/\{\/\*[\s\S]*?\*\/\}|\/\/.*$/gm, "");
+  assert.doesNotMatch(page, MODEL_NAMES);
 });
 
 check("리포트 바인딩에 explain 이 그대로 실린다", () => {

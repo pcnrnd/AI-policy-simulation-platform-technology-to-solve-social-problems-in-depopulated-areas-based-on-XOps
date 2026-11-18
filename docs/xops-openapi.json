@@ -2418,6 +2418,88 @@
         }
       }
     },
+    "/api/v3/modelops/instances/{instance_id}/versions/{version_id}/factor-period": {
+      "post": {
+        "tags": [
+          "modelops"
+        ],
+        "summary": "Factor Period",
+        "operationId": "factor_period_api_v3_modelops_instances__instance_id__versions__version_id__factor_period_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "instance_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Instance Id"
+            }
+          },
+          {
+            "name": "version_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Version Id"
+            }
+          },
+          {
+            "name": "X-Data-Mode",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "enum": [
+                "mock",
+                "real"
+              ],
+              "type": "string",
+              "default": "real",
+              "title": "X-Data-Mode"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PeriodAnalysisInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Factor Period Api V3 Modelops Instances  Instance Id  Versions  Version Id  Factor Period Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v3/modelops/instances/{instance_id}/versions/{version_id}/forecast-compare": {
       "get": {
         "tags": [
@@ -5681,6 +5763,79 @@
             "status": 200
           }
         ]
+      },
+      "PeriodAnalysisInput": {
+        "properties": {
+          "region_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Region Id"
+          },
+          "target": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Target"
+          },
+          "dataset_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Dataset Id"
+          },
+          "dataset_hash": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Dataset Hash"
+          },
+          "dong_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 32
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dong Code"
+          },
+          "period_from": {
+            "type": "integer",
+            "maximum": 999912.0,
+            "minimum": 100001.0,
+            "title": "Period From"
+          },
+          "period_to": {
+            "type": "integer",
+            "maximum": 999912.0,
+            "minimum": 100001.0,
+            "title": "Period To"
+          },
+          "baseline": {
+            "type": "string",
+            "enum": [
+              "train_mean",
+              "prev_year",
+              "prev_period"
+            ],
+            "title": "Baseline",
+            "default": "train_mean"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "region_id",
+          "target",
+          "dataset_id",
+          "dataset_hash",
+          "period_from",
+          "period_to"
+        ],
+        "title": "PeriodAnalysisInput",
+        "description": "① 분석 기간·비교 기준 — 예측 근거 4필드는 predict와 같고, 기간은 연월(YYYYMM) 정수다."
       },
       "PipelineCreateRequest": {
         "properties": {
