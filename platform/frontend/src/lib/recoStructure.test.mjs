@@ -19,7 +19,7 @@ const conversion = { ...seed.conversion, regions: {
 } };
 const region = (id) => seed.regions.find((r) => r.id === id);
 const rows = Object.fromEntries(["namwon", "shinan"].map((id) => [id, facilityRows(id, seed.facilities, [], {}, conversion)]));
-const inputs = { budgetTotal: 600, welfare: 50, industry: 50, housing: 50, period: "2025-07~2026-06" };
+const inputs = { objective: "청년 정주 전환 극대화", budgetTotal: 600, welfare: 50, industry: 50, housing: 50, period: "2025-07~2026-06" };
 
 // ── 정책 효과 전망: 관측 8분기(앞 분기 채우기는 데모만) → 현재 → 전망 12분기, 반영 후 = 반영 전 + 효과 × 도입 곡선 ──
 // 아래 값은 API 응답과 모양만 같은 합성 숫자다(공표 값은 저장소에 두지 않는다).
@@ -50,12 +50,13 @@ assert.deepEqual(outlookChart(null, "population", pick), { id: "population", tit
 // ── 화면 문구: 상세(사업 개요·선정 사유), 전망 머리 숫자, 칩, 보고서 연계 ──
 const regionName = region("namwon").name;
 assert.deepEqual(overviewRows(pick).map((r) => r[0]), ["위치", "운영 현황", "소요 예산"]);
-assert.deepEqual(reasonRows(pick, inputs).map((r) => r[0]), ["반영 조건", "분석 기간", "예산 ±20%", "방안 기준"]);
-assert.equal(reasonRows(pick, inputs)[1][1], "2025-07~2026-06");
-assert.equal(reasonRows(pick, { ...inputs, period: null })[1][1], GUIDE.trends);
+assert.deepEqual(reasonRows(pick, inputs).map((r) => r[0]), ["목적함수", "반영 조건", "분석 기간", "예산 ±20%", "방안 기준"]);
+assert.equal(reasonRows(pick, inputs)[0][1], "청년 정주 전환 극대화");
+assert.equal(reasonRows(pick, inputs)[2][1], "2025-07~2026-06");
+assert.equal(reasonRows(pick, { ...inputs, period: null })[2][1], GUIDE.trends);
 // 사업이 없으면(실데이터 표시) 같은 자리·같은 이름에 행동 안내.
 assert.deepEqual(overviewRows(null).map((r) => r[1]), [GUIDE.pending, GUIDE.pending, GUIDE.pending]);
-assert.deepEqual(reasonRows(null, inputs).map((r) => r[0]), ["반영 조건", "분석 기간", "예산 ±20%", "방안 기준"]);
+assert.deepEqual(reasonRows(null, inputs).map((r) => r[0]), ["목적함수", "반영 조건", "분석 기간", "예산 ±20%", "방안 기준"]);
 assert.deepEqual(effectHeads(null), { util: null, population: null, settle: null });
 const heads = effectHeads(pick);
 const c = pick.options.find((o) => o.chosen);
@@ -118,7 +119,15 @@ const slots = ["sim.report.result", "sim.report.outlook", "sim.report.charts", "
 for (const slot of slots) assert.equal(componentSrc.split(`data-slot="${slot}"`).length - 1, 1, slot);
 for (const title of ["추천 결과", "정책 효과 전망", "세부 비교", "보고서로 보내기"]) assert.ok(componentSrc.includes(`title="${title}"`), title);
 const page = read("pages", "SimulatorPage.jsx");
-assert.match(page, /const recoItems = demo && recoReady \? recommendation\.items : \[\];/); // 실데이터는 시설 대장이 없어 빈 행
+// 데모 ④는 ③ 설정(목적함수·총 예산·정책 강조·시설 변수)이 바뀌면 바로 다시 계산, 실데이터는 시설 대장이 없어 빈 행(결정 72).
+assert.match(page, /const recoLive = useMemo\(\(\) => \(demo && analysisDone && recommendation \? deriveFacilities\(currentRegion\)\.items : \[\]\),/);
+assert.match(page, /\[demo, analysisDone, recommendation, currentRegion, controlValues, regionStay, budgetTotal, welfareWeight, industryWeight, housingWeight\]/);
+assert.match(page, /const recoContext = \{ objective: currentRegion\.case\?\.simulation\?\.objective \?\? "", budgetTotal,\s*policyWeights: \{ welfare: welfareWeight, industry: industryWeight, housing: housingWeight \} \};/);
+// ③ 10년 예측 ↔ ④: 정책 적용 선 = ③ 정책 계산 + 고른 사업 정주 효과(도입 곡선), 카드에 "고른 사업 반영분".
+assert.match(page, /const simTrend = useMemo\(\(\) => policyTrend\.map\(\(v, t\) => v \+ recoAdd\[t\]\)/);
+assert.match(page, /recoSelected\?\.forecast\?\.settlePath\[Math\.min\(4 \* \(t \+ 1\)/);
+assert.match(page, />고른 사업 반영분</);
+assert.equal(seed.regions.find((r) => r.id === "namwon").case.simulation.factors.supply, "전환 가능 시설 수용 규모");
 assert.match(page, /reco=\{\{ items: recoItems\.slice\(0, CHART_ITEMS\), selected: recoSelected, onPick: setRecoPick \}\}/); // 지도 추천 층
 assert.match(page, /selected=\{recoSelected\}\s*onPick=\{setRecoPick\}/);
 const map = read("components", "SimulatorMap.jsx");

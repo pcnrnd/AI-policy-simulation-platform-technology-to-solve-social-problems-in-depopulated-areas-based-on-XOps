@@ -28,6 +28,14 @@ const SETTLE_KINDS = new Set(["house", "job"]);
 // 고정 가중치 — 시설 대장 실적(2단계)이 들어오면 실적 기반으로 바꾼다.
 const INDEX_WEIGHTS = { living: 0.6, settle: 0.2 };
 export const INDEX_MAX = 100 * (INDEX_WEIGHTS.living + INDEX_WEIGHTS.settle);
+// 결정 72 — ③ 목적함수가 정주를 겨누면 정주 효과를 무겁게(합 0.8 그대로, 만점 80). 그 밖은 생활인구 중심.
+const SETTLE_FOCUS_WEIGHTS = { living: 0.3, settle: 0.5 };
+/** 목적함수 문구 → 추천 지수 가중(생활인구·정주). */
+export const indexWeights = (objective = "") => (/정주/.test(objective) ? SETTLE_FOCUS_WEIGHTS : INDEX_WEIGHTS);
+// ③ 정책 강조 가중치(0~100, 기본 50) → 방안 유형 가중 배수 0.5~1.5. 정착·주거 = 주거·체류형, 창업·일자리 = 일자리형, 돌봄·커뮤니티 = 주민 개방형.
+/** 방안이 받는 정책 강조 축 — housing | industry | welfare | null. */
+export const policyAxis = (o) => (o.kind === "house" || o.kind === "stay" ? "housing" : o.kind === "job" ? "industry" : o.planType === "개방·공유" ? "welfare" : null);
+const policyFactor = (o, weights) => { const axis = policyAxis(o); const w = axis ? weights?.[axis] : null; return Number.isFinite(w) ? 0.5 + w / 100 : 1; };
 export const FORECAST_QUARTERS = 12; // 정책 효과 전망 3년
 const SETTLE_FULL_SHARE = 0.01;
 // 판단: 시설 안에서 고른 방안이 추천, 고른 방안 점수 대비 이 비율 이상이면 검토, 그 아래는 보류.
@@ -217,18 +225,21 @@ export function withRegionStay(conversion, regionId, stayMonthly) {
   return { ...conversion, regions: { ...conversion.regions, [regionId]: { ...region, stay_monthly: stayMonthly } } };
 }
 
-// 방안 점수(추천 지수 = 반올림 전 값) — 생활인구 효과 0.6 + 정주 효과(연 정주인구 한 값) 0.2.
-function indexParts(option, region, rules) {
-  const living = INDEX_WEIGHTS.living * logScore(rangeMid(option.living), region.stay_monthly * rules.visit_cap_share);
-  const settle = INDEX_WEIGHTS.settle * Math.min(100, (100 * option.settleValue) / (region.inflow_external * SETTLE_FULL_SHARE));
-  return { living, settle, total: living + settle };
+// 방안 점수(추천 지수 = 반올림 전 값) — 목적함수 가중(생활인구·정주) 합 × 정책 강조 배수.
+function indexParts(option, region, rules, ctx) {
+  const w = indexWeights(ctx.objective);
+  const living = w.living * logScore(rangeMid(option.living), region.stay_monthly * rules.visit_cap_share);
+  const settle = w.settle * Math.min(100, (100 * option.settleValue) / (region.inflow_external * SETTLE_FULL_SHARE));
+  const policy = policyFactor(option, ctx.policyWeights);
+  return { living, settle, policy, total: (living + settle) * policy };
 }
 
 // 고른 방안 기준 판단 — 고른 방안 추천, 고른 방안 점수의 일정 비율 이상이면 검토, 그 아래 보류.
+// 소요 예산 하한이 ③ 총 예산을 넘는 방안은 "예산 초과"(고르지 않고 표 아래로).
 const verdictsOf = (options, chosen) => options.map((o) => ({
   ...o,
   chosen: o === chosen,
-  verdict: o === chosen && o.living.high > 0 ? "추천" : o.score >= chosen.score * REVIEW_RATIO && o.living.high > 0 ? "검토" : "보류"
+  verdict: o.overBudget ? "예산 초과" : o === chosen && o.living.high > 0 ? "추천" : o.score >= chosen.score * REVIEW_RATIO && o.living.high > 0 ? "검토" : "보류"
 }));
 
 /**
@@ -236,7 +247,7 @@ const verdictsOf = (options, chosen) => options.map((o) => ({
  * 효과 = 사례·통계 계산값 × 규모 보정, 주거 정착형은 공급 호수 × 입주율 × 세대당 인구 × 외부 전입 비율,
  * 방문형의 정주 = 운영 인력 + 방문객 정주 전환. 전환 후 사용률 = 현재 + 방안별 변화, 소요 예산 = 면적 × 단가.
  */
-function settleOptions(f, units, options, region, conversion) {
+function settleOptions(f, units, options, region, conversion, ctx) {
   const rules = conversion.synthetic.rules;
   const seed = conversion.synthetic.random_seed ?? 0;
   const grade = scaleGrade(f, rules);
@@ -255,17 +266,23 @@ function settleOptions(f, units, options, region, conversion) {
     const settleValue = next.settle ? Math.round(rangeMid(next.settle))
       : Math.max(livingMid > 0 ? 1 : 0, settleSynth(f, o.planType, livingMid, { area, pph, seed, rules }));
     const scored = { ...next, settleValue, settleSynthetic: !o.settle };
-    const parts = indexParts(scored, region, rules);
+    const parts = indexParts(scored, region, rules, ctx);
+    const budget = budgetOf(f, o.planType, grade, rules);
     return {
       ...scored,
       score: parts.total,
       parts,
       utilAfter: { low: Math.min(100, util + o.utilization.low), high: Math.min(100, util + o.utilization.high) },
-      budget: budgetOf(f, o.planType, grade, rules)
+      budget,
+      overBudget: Number.isFinite(ctx.budgetTotal) && budget.low > ctx.budgetTotal
     };
   });
-  const pick = choosePlan(f, adjusted, util, rules);
-  const chosen = pick.option ?? adjusted[options.findIndex((o) => o.chosen)];
+  // 고를 수 있는 방안 = 예산 안(모두 넘으면 전부). 규칙에 걸리지 않으면 근거 등급 → 가중 점수 순.
+  const within = adjusted.filter((o) => !o.overBudget);
+  const pool = within.length ? within : adjusted;
+  const pick = choosePlan(f, pool, util, rules);
+  const best = pool.reduce((a, o) => (gradeOf(o) > gradeOf(a) || (gradeOf(o) === gradeOf(a) && o.score > a.score) ? o : a));
+  const chosen = pick.option ?? best;
   const final = verdictsOf(adjusted, chosen).map((o) => ({ ...o, budgetSens: budgetSensitivity(o, rules) }));
   const ch = final.find((o) => o.chosen);
   const livingMid = Math.round(rangeMid(ch.living));
@@ -295,8 +312,10 @@ function settleOptions(f, units, options, region, conversion) {
  * @param {object[]} controls 시설 조절변수(facility_id·field가 있으면 그 시설 값에 연결)
  * @param {Record<string, number>} controlValues
  * @param {object|null} conversion 시드 conversion — 지역 통계(regions)·출처 사례(cases)·합성 규칙(synthetic)
+ * @param {{ objective?: string, budgetTotal?: number, policyWeights?: { welfare: number, industry: number, housing: number } }} [context]
+ *   ③ 설정(결정 72): 목적함수 → 지수 가중, 총 예산(억 원) → 넘는 방안 제외, 정책 강조 → 방안 유형 가중
  */
-export function facilityRows(regionId, facilities, controls = [], controlValues = {}, conversion = null) {
+export function facilityRows(regionId, facilities, controls = [], controlValues = {}, conversion = null, context = {}) {
   const linked = linkedControls(controls);
   const rules = conversion?.synthetic?.rules;
   const seed = conversion?.synthetic?.random_seed ?? 0;
@@ -307,7 +326,7 @@ export function facilityRows(regionId, facilities, controls = [], controlValues 
     const f = lease === null ? f0 : { ...f0, occupancy_rate: lease, basis: { ...f0.basis, occupancy_rate: "synthetic" } };
     const units = Number.isFinite(supply) && supply > 0 ? supply : f.supply_units;
     const options = conversionOf(f, housingOf(f, units), conversion);
-    const settled = options ? settleOptions(f, units, options, conversion.regions[f.region_id], conversion) : null;
+    const settled = options ? settleOptions(f, units, options, conversion.regions[f.region_id], conversion, context) : null;
     const fallback = optionCandidates(f)[0];
     return {
       id: f.id,
@@ -319,7 +338,8 @@ export function facilityRows(regionId, facilities, controls = [], controlValues 
       plan: (settled?.choice ?? fallback).text,
       options: settled?.options ?? null,
       score: settled?.choice.score ?? null,
-      index: settled ? Math.round(settled.choice.score) : null,
+      index: settled ? Math.min(INDEX_MAX, Math.round(settled.choice.score)) : null,
+      overBudget: Boolean(settled?.choice.overBudget),
       util: settled ? settled.util : null,
       choiceRule: settled?.choiceRule ?? null,
       scaleFactor: settled?.scaleFactor ?? null,
@@ -328,8 +348,9 @@ export function facilityRows(regionId, facilities, controls = [], controlValues 
       forecast: settled?.forecast ?? null
     };
   });
-  // 추천 순위: 점수 높은 순(값 없는 시설은 뒤, 같은 값은 시설 자료 순서).
-  const ranked = [...rows].sort((a, b) => ((a.score === null) - (b.score === null)) || (b.score ?? 0) - (a.score ?? 0) || a.order - b.order);
+  // 추천 순위: 점수 높은 순(값 없는 시설·모든 방안이 예산 초과인 시설은 뒤, 같은 값은 시설 자료 순서).
+  const ranked = [...rows].sort((a, b) => ((a.score === null) - (b.score === null)) || (a.overBudget - b.overBudget)
+    || (b.score ?? 0) - (a.score ?? 0) || a.order - b.order);
   return ranked.map((row, i) => ({ ...row, rank: i + 1 }));
 }
 

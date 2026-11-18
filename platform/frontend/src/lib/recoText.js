@@ -52,11 +52,12 @@ export const kpiText = (c) => `사용률 ${c.utilAfter.low}% 이상 · ${isSettl
 /**
  * 선정 사유 — 시뮬레이션 입력을 조절하면 달라지는 근거와 방안 기준. 값이 없으면 같은 자리에 행동 안내.
  * @param {object|null} item 고른 추천 행
- * @param {{ budgetTotal: number, welfare: number, industry: number, housing: number, period: string|null }} inputs
+ * @param {{ objective: string, budgetTotal: number, welfare: number, industry: number, housing: number, period: string|null }} inputs
  */
 export function reasonRows(item, inputs) {
   const c = chosenOf(item);
   return [
+    ["목적함수", inputs.objective || GUIDE.pending],
     ["반영 조건", `총 예산 ${num(inputs.budgetTotal)}억 원 · 정책 강조 복지 ${inputs.welfare} · 산업 ${inputs.industry} · 주거 ${inputs.housing}`],
     ["분석 기간", inputs.period ?? GUIDE.trends],
     ["예산 ±20%", c ? `생활인구 ${sensText(c)}` : GUIDE.pending, Boolean(c)],

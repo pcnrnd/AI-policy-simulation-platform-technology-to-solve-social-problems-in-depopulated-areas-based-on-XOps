@@ -24,7 +24,7 @@ import { useForecastCompare } from "../hooks/useForecastCompare.js";
 import { usePublicTrends, useRegionStay } from "../hooks/usePublicTrends.js";
 import { getScrollBehavior } from "../lib/motion.js";
 import { facilityRows, recoControlSig, unlinkedControlNote, withRegionStay } from "../lib/facilityRecommendation.js";
-import { CHART_ITEMS, GUIDE, reportHandoffOf } from "../lib/recoText.js";
+import { CHART_ITEMS, GUIDE, reportHandoffOf, shortName } from "../lib/recoText.js";
 import { YEAR_LABELS, computeTrends, budgetToFactor, controlBoostOf, ANALYSIS_STEPS } from "../lib/simulation.js";
 import { instanceLabel } from "../lib/modelops.js";
 import {
@@ -179,9 +179,13 @@ export default function SimulatorPage() {
   const demoTrends = usePublicTrends(demo ? currentRegion.name : undefined);
   const recoInputSig = demo ? `${contextKey}|${recoControlSig(controls, controlValues)}|stay:${regionStay ?? ""}` : currentSig;
   const controlNote = demo ? unlinkedControlNote(controls, controlValues) : null;
-  const recoStale = recommendation !== null && recoSig !== recoInputSig;
+  // 데모 ④는 ③ 설정이 바뀌면 바로 다시 계산한다(결정 72) — 낡음 판정은 실데이터에만.
+  const recoStale = !demo && recommendation !== null && recoSig !== recoInputSig;
+  // ③ 설정 → ④ 추천(결정 72): 목적함수 → 지수 가중, 총 예산 → 넘는 방안 제외, 정책 강조 → 방안 유형 가중.
+  const recoContext = { objective: currentRegion.case?.simulation?.objective ?? "", budgetTotal,
+    policyWeights: { welfare: welfareWeight, industry: industryWeight, housing: housingWeight } };
   const deriveFacilities = (region) => ({
-    items: facilityRows(region.id, appData.facilities, controls, controlValues, withRegionStay(appData.conversion, region.id, region.id === currentRegion.id ? regionStay : null))
+    items: facilityRows(region.id, appData.facilities, controls, controlValues, withRegionStay(appData.conversion, region.id, region.id === currentRegion.id ? regionStay : null), recoContext)
   });
   // 자동 계산은 ① 완료 시점의 입력(공표 통계 도착 포함)으로 추천을 도출한다.
   const deriveNow = useRef(null);
@@ -361,10 +365,21 @@ export default function SimulatorPage() {
     return () => observer.disconnect();
   }, []);
 
-  const { baseTrend, simTrend } = useMemo(
+  // ④ 추천 행·고른 사업 — 데모만 행이 있고 ③ 설정을 바꾸면 바로 다시 계산한다. 실데이터는 시설 대장이 없어 같은 자리에 행동 안내.
+  const recoLive = useMemo(() => (demo && analysisDone && recommendation ? deriveFacilities(currentRegion).items : []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- ③ 설정과 추천 도출 시점이 바뀔 때만 다시 계산한다
+    [demo, analysisDone, recommendation, currentRegion, controlValues, regionStay, budgetTotal, welfareWeight, industryWeight, housingWeight]);
+  const recoItems = recoLive;
+  const recoSelected = recoItems.slice(0, CHART_ITEMS).find((it) => it.id === recoPick) ?? recoItems[0] ?? null;
+  const recoGuide = !demo ? GUIDE.registry : GUIDE.derive;
+  // ③ 10년 예측 ↔ ④ 효과: 고른 사업의 정주 효과(도입 곡선 → 해마다)를 정책 적용 선에 더한다(고른 사업 반영분).
+  const recoAdd = YEAR_LABELS.map((_, t) => recoSelected?.forecast?.settlePath[Math.min(4 * (t + 1), recoSelected.forecast.settlePath.length - 1)] ?? 0);
+
+  const { baseTrend, simTrend: policyTrend } = useMemo(
     () => computeTrends(currentRegion, welfareWeight, industryWeight, housingWeight, budgetFactor, controlBoost),
     [currentRegion, welfareWeight, industryWeight, housingWeight, budgetFactor, controlBoost]
   );
+  const simTrend = useMemo(() => policyTrend.map((v, t) => v + recoAdd[t]), [policyTrend, recoAdd.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
   const currentSimulation = !demo && inferenceMatches(simResult, { mode: "real", region: currentRegion.id, target,
     modelId: simProof?.instance_id, versionId: simProof?.version_id, dong }) ? simResult : null;
   const series = demo ? null : forecastSeries(real.context, currentSimulation);
@@ -381,7 +396,7 @@ export default function SimulatorPage() {
           tension: 0.2
         },
         {
-          label: demo ? "정책 시뮬레이션 적용 예측 추이" : "조정 입력 예측",
+          label: demo ? (recoSelected ? "정책 시뮬레이션 적용(고른 사업 반영)" : "정책 시뮬레이션 적용 예측 추이") : "조정 입력 예측",
           data: demo ? simTrend : series.adjusted,
           borderColor: "rgba(59, 130, 246, 1)",
           backgroundColor: "rgba(59, 130, 246, 0.05)",
@@ -391,7 +406,7 @@ export default function SimulatorPage() {
       ]
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [demo, baseTrend, simTrend, simResult, real.context]
+    [demo, baseTrend, simTrend, simResult, real.context, recoSelected]
   );
 
   const chartOpts = {
@@ -496,10 +511,6 @@ export default function SimulatorPage() {
     ...(recoReady ? ["stage-sim", "stage-report"] : [])
   ];
 
-  // ④ 추천 행·고른 사업 — 데모만 행이 있다. 실데이터는 시설 대장이 없어 같은 자리에 행동 안내.
-  const recoItems = demo && recoReady ? recommendation.items : [];
-  const recoSelected = recoItems.slice(0, CHART_ITEMS).find((it) => it.id === recoPick) ?? recoItems[0] ?? null;
-  const recoGuide = !demo ? GUIDE.registry : GUIDE.derive;
 
   // 요인분석 모델이 있는 지역·대상으로 옮긴다(모델 선택·빈 상태 [이동] 공용). 진입 때 자동으로 옮기지는 않는다.
   const moveToModel = (model) => {
@@ -762,6 +773,14 @@ export default function SimulatorPage() {
                       {growthPercent}%
                     </div>
                   </div>
+                  {/* ④에서 고른 사업의 정주 효과 — ④ 정주인구 전망 머리 숫자와 같은 값 */}
+                  <div>
+                    <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>고른 사업 반영분</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: "var(--accent-blue)" }}>
+                      {recoSelected ? `+${formatUnitValue(recoAdd[9], "명")}명` : "–"}
+                    </div>
+                    <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{recoSelected ? shortName(recoSelected, currentRegion.name) : "④ 추천 사업 선택"}</div>
+                  </div>
                 </div>
                 <p className="chart-summary sr-only">
                   자연감소 기준 10년 후 {formatUnitValue(baseFinalPop, "명")}명, 정책 적용 시 {formatUnitValue(finalPop, "명")}명으로
@@ -845,7 +864,7 @@ export default function SimulatorPage() {
         items={recoItems}
         selected={recoSelected}
         onPick={setRecoPick}
-        inputs={{ budgetTotal, welfare: welfareWeight, industry: industryWeight, housing: housingWeight,
+        inputs={{ objective: String(currentRegion.case?.simulation?.objective ?? "").split(" — ").at(-1), budgetTotal, welfare: welfareWeight, industry: industryWeight, housing: housingWeight,
           period: stayStat ? `${stayStat.period_from}~${stayStat.period_to}` : null }}
         guide={recoGuide}
         onSend={(item) => {

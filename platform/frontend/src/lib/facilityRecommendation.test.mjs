@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  FORECAST_QUARTERS, INDEX_MAX, PLAN_TYPES, capacityCap, comparableCases, facilityRows, facilityShortName, linkedControls, livingText,
+  FORECAST_QUARTERS, INDEX_MAX, PLAN_TYPES, capacityCap, comparableCases, facilityRows, facilityShortName, indexWeights, linkedControls, livingText, policyAxis,
   optionCandidates, policyShortName, populationForecast, recoControlSig, scaleGrade, settleText, unlinkedControlNote, withRegionStay
 } from "./facilityRecommendation.js";
 import { adoption, baseUtil, budgetOf, effectPath, leaseUpOccupancy, rngFor, scaleFactor } from "./recoSynthetic.js";
@@ -181,6 +181,47 @@ assert.deepEqual(effectPath(1000, "복합화", 12, rules).slice(0, 2), [0, Math.
 assert.deepEqual(budgetOf({ scale_area_m2: 1000, basis: { scale_area_m2: "source" } }, "운영 개선", "소형", rules), { low: 1, high: 3 });
 assert.deepEqual(budgetOf({ occupancy_rate: 80, basis: {} }, "용도 전환", "중형", rules), { low: 18, high: 30 }); // 6,000㎡ × 공실 20%
 assert.ok(rngFor(1, "a")() !== rngFor(2, "a")());
+
+// ── 결정 72: ③ 설정이 ④ 추천을 움직인다 ──
+// 목적함수: 정주를 겨누면 정주 가중이 커진다(합 0.8 그대로).
+assert.deepEqual(indexWeights("목적제 기반 강화학습 — 청년 정주 전환 극대화"), { living: 0.3, settle: 0.5 });
+assert.deepEqual(indexWeights("생활인구 유입 극대화"), { living: 0.6, settle: 0.2 });
+const ctxOf = (id, extra = {}) => ({ objective: seed.regions.find((r) => r.id === id).case.simulation.objective, budgetTotal: 600, policyWeights: { welfare: 50, industry: 50, housing: 50 }, ...extra });
+const live = (id, extra) => facilityRows(id, seed.facilities, controlsOf(id), {}, conversion, ctxOf(id, extra));
+const nwSettle = live("namwon");
+for (const row of nwSettle) {
+  const region = SYNTH_REGIONS.namwon;
+  for (const o of row.options) {
+    const living = 0.3 * Math.min(100, (100 * Math.log10(1 + (o.living.low + o.living.high) / 2)) / Math.log10(1 + region.stay_monthly * rules.visit_cap_share));
+    const settle = 0.5 * Math.min(100, (100 * o.settleValue) / (region.inflow_external * 0.01));
+    assert.ok(Math.abs(o.score - (living + settle)) < 1e-9, `${row.id} 정주 목적 점수 식`);
+  }
+}
+const order = (rows) => rows.map((r) => r.id).join(",");
+assert.notEqual(order(nwSettle), order(namwon), "정주 목적함수면 순위가 바뀐다");
+assert.ok(nwSettle.findIndex((r) => r.id === "fac_nw_fiorium") > namwon.findIndex((r) => r.id === "fac_nw_fiorium"), "정주 효과가 작은 방문형 시설은 내려간다");
+assert.ok(nwSettle.find((r) => r.id === "fac_nw_bogeumjari").index > namwon.find((r) => r.id === "fac_nw_bogeumjari").index, "주거 정착 시설 지수는 올라간다");
+// 정책 강조: 정착·주거(주거·체류형)·창업·일자리(일자리형)·돌봄·커뮤니티(개방·공유) 방안에 0.5~1.5배. 주거를 올리면 주거 시설이 1순위로.
+assert.deepEqual([policyAxis({ kind: "house" }), policyAxis({ kind: "stay" }), policyAxis({ kind: "job" }), policyAxis({ kind: "visit", planType: "개방·공유" }), policyAxis({ kind: "visit", planType: "복합화" })],
+  ["housing", "housing", "industry", "welfare", null]);
+const saHousing = live("shinan", { policyWeights: { welfare: 50, industry: 50, housing: 100 } });
+assert.notEqual(live("shinan")[0].id, "fac_sa_aphae_housing");
+assert.equal(saHousing[0].id, "fac_sa_aphae_housing", "주거 강조 100이면 주거 시설이 1순위");
+const houseOf = (rows) => rows.find((r) => r.id === "fac_sa_aphae_housing").options.find((o) => o.kind === "house");
+assert.ok(Math.abs(houseOf(saHousing).score - houseOf(live("shinan")).score * 1.5) < 1e-9, "주거 강조 100 = 1.5배");
+assert.ok(saHousing.every((r) => r.index <= INDEX_MAX), "지수는 만점 80을 넘지 않는다");
+const nwJob = live("namwon", { policyWeights: { welfare: 50, industry: 100, housing: 0 } });
+assert.notEqual(order(nwJob), order(nwSettle), "산업·주거 강조를 바꾸면 순위가 바뀐다");
+// 총 예산: 소요 예산 하한이 총 예산을 넘는 방안은 "예산 초과"로 고르지 않고, 모든 방안이 넘는 시설은 순위 뒤로.
+const tight = live("namwon", { budgetTotal: 20 });
+for (const row of tight) {
+  for (const o of row.options) assert.equal(o.overBudget, o.budget.low > 20, `${row.id} ${o.planType} 예산 초과 판정`);
+  for (const o of row.options.filter((x) => x.overBudget)) assert.equal(o.verdict, "예산 초과");
+  if (row.options.some((o) => !o.overBudget)) assert.equal(row.options.find((o) => o.chosen).overBudget, false, `${row.id} 예산 안 방안을 고름`);
+}
+const glocalTight = tight.find((r) => r.id === "fac_nw_glocal");
+assert.ok(glocalTight.overBudget && glocalTight.rank === tight.length, "모든 방안이 예산 초과인 시설은 맨 뒤");
+assert.ok(!live("namwon").some((r) => r.options.some((o) => o.overBudget)), "총 예산 600억이면 초과 없음");
 
 // ── 문구 ──
 assert.equal(livingText({ low: 10, high: 10 }), "월 +10명");

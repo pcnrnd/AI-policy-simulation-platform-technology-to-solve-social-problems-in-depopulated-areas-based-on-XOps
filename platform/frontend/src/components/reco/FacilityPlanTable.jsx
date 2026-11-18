@@ -29,7 +29,7 @@ export default function FacilityPlanTable({ items, selected, onPick, regionName,
             <tr>{PLAN_COLUMNS.map((c, i) => <th key={c} scope="col" className={i === BUDGET_COL ? "cell-num" : undefined}>{c}</th>)}</tr>
           </thead>
           {rows.length ? rows.map((it) => {
-            const opts = [...it.options].sort((a, b) => b.chosen - a.chosen);
+            const opts = [...it.options].sort((a, b) => b.chosen - a.chosen || a.overBudget - b.overBudget); // 추천 방안 위, 예산 초과 아래
             return (
               <tbody key={it.id} className="grp" {...pickProps(it)}>
                 {opts.map((o, k) => (
