@@ -412,3 +412,22 @@
 .sim-compare-title { grid-column: 1 / -1; margin: 0 0 -4px; font-size: 12px; font-weight: 600; color: var(--text-secondary); }
 /* ③ 예측·분포 카드 — 카드마다 한 줄(두 모드 같음). 나란히 두면 내용이 짧은 분포 카드 아래가 200~350px 빈다(결정 36). */
 .sim-result-stack { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-xxl); margin: 24px 0 var(--space-xxl); }
+
+/* STAGE ③ 지도 추천 시설 표시 — 순위 번호, 크기 = 생활인구 효과, 진하기 = 순위(고른 곳 가장 진함) */
+.reco-mk { display: grid; place-items: center; border-radius: 50%; border: 2px solid #fff; color: #fff; font: 700 12px/1 'Outfit', sans-serif; box-shadow: 0 2px 6px rgba(15, 23, 42, 0.35); cursor: pointer; }
+.reco-mk.top { background: rgba(var(--accent-blue-rgb), 0.55); }
+.reco-mk.rest { background: #94a8c6; }
+.reco-mk.sel { background: var(--accent-blue); box-shadow: 0 0 0 4px rgba(var(--accent-blue-rgb), 0.25), 0 2px 8px rgba(15, 23, 42, 0.4); }
+.reco-mk-wrap { position: relative; width: 100%; height: 100%; }
+.reco-tip { position: absolute; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-control); border-radius: 8px; box-shadow: var(--glass-shadow); padding: 3px 8px; font: 500 12px/1.35 'Inter', sans-serif; white-space: nowrap; pointer-events: none; }
+.reco-tip.top { bottom: calc(100% + 4px); left: 50%; transform: translateX(-50%); }
+.reco-tip.bottom { top: calc(100% + 4px); left: 50%; transform: translateX(-50%); }
+.reco-tip.right { left: calc(100% + 6px); top: 50%; transform: translateY(-50%); }
+.reco-tip.left { right: calc(100% + 6px); top: 50%; transform: translateY(-50%); }
+.reco-tip.top-r, .reco-tip.top-l { bottom: calc(100% + 4px); }
+.reco-tip.bottom-r, .reco-tip.bottom-l { top: calc(100% + 4px); }
+.reco-tip.top-r, .reco-tip.bottom-r { left: 0; }
+.reco-tip.top-l, .reco-tip.bottom-l { right: 0; }
+.reco-tip.sel { border-color: var(--accent-blue); font-weight: 700; }
+.reco-legend-dot { display: inline-block; border-radius: 50%; background: rgba(var(--accent-blue-rgb), 0.45); border: 2px solid #fff; vertical-align: middle; }
+@media (max-width: 768px) { .reco-tip:not(.sel) { display: none; } }
