@@ -412,6 +412,27 @@
 .sim-compare-title { grid-column: 1 / -1; margin: 0 0 -4px; font-size: 12px; font-weight: 600; color: var(--text-secondary); }
 /* ③ 예측·분포 카드 — 카드마다 한 줄(두 모드 같음). 나란히 두면 내용이 짧은 분포 카드 아래가 200~350px 빈다(결정 36). */
 .sim-result-stack { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-xxl); margin: 24px 0 var(--space-xxl); }
+/* 1280 이상은 예측·분포 카드 나란히(6:6) 같은 높이, 분포 그래프가 남는 높이를 채운다(줄 빈 공간 없음). 좁으면 위아래. */
+@media (min-width: 1280px) { .sim-result-stack { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; } }
+.sim-result-stack > .card { display: flex; flex-direction: column; margin: 0; }
+.sim-dist-body { flex: 1; display: flex; flex-direction: column; gap: var(--space-l); min-height: 0; }
+.sim-dist-chart { position: relative; flex: 1; display: flex; flex-direction: column; justify-content: center; }
+.sim-dist-chart.is-chart { min-height: 200px; }
+.sim-dist-chart .pl-pending { min-height: 40px; } /* 그래프가 없으면 행동 안내 한 줄 */
+.sim-dist-canvas { position: absolute; inset: 0; }
+.risk-summary { display: flex; flex-direction: column; gap: 8px; }
+.risk-summary-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; }
+.risk-summary-name { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.risk-summary-value { font-family: 'Outfit', sans-serif; font-size: 15px; color: var(--text-primary); }
+.risk-scale { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 3px; margin: 0; padding: 0; list-style: none; }
+.risk-scale li { display: flex; flex-direction: column; gap: 3px; text-align: center; }
+.risk-scale-bar { height: 8px; border-radius: 4px; background: var(--grade); opacity: 0.3; }
+.risk-scale li.on .risk-scale-bar { opacity: 1; box-shadow: 0 0 0 2px var(--bg-card), 0 0 0 3px var(--grade); }
+.risk-scale-label { font-size: 11px; color: var(--text-muted); }
+.risk-scale li.on .risk-scale-label { color: var(--text-primary); font-weight: 700; }
+.risk-summary-stats { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0; font-size: 12px; }
+.risk-summary-stats dt { color: var(--text-muted); }
+.risk-summary-stats dd { margin: 0 8px 0 -10px; color: var(--text-primary); font-weight: 600; }
 
 /* STAGE ③ 지도 추천 시설 표시 — 순위 번호, 크기 = 생활인구 효과, 진하기 = 순위(고른 곳 가장 진함) */
 .reco-mk { display: grid; place-items: center; border-radius: 50%; border: 2px solid #fff; color: #fff; font: 700 12px/1 'Outfit', sans-serif; box-shadow: 0 2px 6px rgba(15, 23, 42, 0.35); cursor: pointer; }

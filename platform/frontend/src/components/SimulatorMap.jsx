@@ -285,8 +285,9 @@ export default function SimulatorMap({ appData, currentRegion, setCurrentRegion,
     const map = mapRef.current;
     if (!map) return undefined;
     const onResize = () => setSizeTick((n) => n + 1);
-    map.on("resize", onResize);
-    return () => map.off("resize", onResize);
+    // 크기나 확대 단계가 바뀌면 이름표 자리를 다시 고른다(범위는 다시 맞추지 않음).
+    map.on("resize zoomend", onResize);
+    return () => map.off("resize zoomend", onResize);
   }, []);
 
   // 추천 표시 — 지역·추천 사업·지도 크기가 바뀌면 추천 시설에 범위를 맞추고, 다른 곳에서 고르면 그 시설로 옮긴 뒤

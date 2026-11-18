@@ -10,6 +10,9 @@ import PendingData from "../components/PendingData.jsx";
 import ScenarioCompare from "../components/ScenarioCompare.jsx";
 import ModelEvidence from "../components/ModelEvidence.jsx";
 import SimulatorMap, { SimulatorMapDetails, riskGrade } from "../components/SimulatorMap.jsx";
+import { RISK_GRADES } from "../lib/riskGrade.js";
+import InfoTip from "../components/InfoTip.jsx";
+import RiskSummary from "../components/RiskSummary.jsx";
 import SimulatorDock from "../components/SimulatorDock.jsx";
 import RealForecastResult from "../components/RealForecastResult.jsx";
 import ForecastCompare from "../components/ForecastCompare.jsx";
@@ -31,6 +34,10 @@ import {
   realSliderControls, forecastSeries, regionRealStatus, FACTOR_SCOPES, activeModelPair, forecastCompareView,
   periodBounds, resolvePeriod, monthInputValue, parseMonthInput, PERIOD_BASELINES
 } from "../lib/realSimulation.js";
+
+// ③ 분포 카드 ⓘ — 지방소멸위험지수 산식·등급 구간(riskGrade.js의 RISK_GRADES 값 그대로)·점 색의 뜻.
+const RISK_INDEX_TIP = `지방소멸위험지수 = 20~39세 여성 인구 ÷ 65세 이상 인구. 값이 낮을수록 소멸 위험이 큽니다. 등급: ${
+  RISK_GRADES.map((g) => `${g.label} ${g.rangeLabel}`).join(" · ")}. 점 색: 회색 인구감소 지역, 주황 시범 지자체, 파랑 선택 지자체.`;
 
 // 실데이터 표시에서 관측 입력을 바꾼 뒤 시뮬레이션 추론(읽기 전용 계산)을 다시 부르기까지의 대기.
 const SIM_DEBOUNCE_MS = 500;
@@ -431,14 +438,15 @@ export default function SimulatorPage() {
   const scatterOpts = {
     responsive: true,
     maintainAspectRatio: false,
+    animation: false, // 카드 높이에 맞춰 늘어나는 자리 — 크기가 바뀔 때마다 다시 그려지는 움직임을 두지 않는다
     scales: {
       x: {
-        title: { display: true, text: "인구소멸 위험지수", color: ct.tick },
+        title: { display: true, text: "지방소멸위험지수", color: ct.tick },
         grid: { color: ct.grid },
         ticks: { color: ct.tick }
       },
       y: {
-        title: { display: true, text: "인구수", color: ct.tick },
+        title: { display: true, text: "인구 규모(명)", color: ct.tick },
         grid: { color: ct.grid },
         ticks: { color: ct.tick }
       }
@@ -461,7 +469,7 @@ export default function SimulatorPage() {
       },
       tooltip: {
         callbacks: {
-          label: (cx) => `${cx.raw.name}: 위험지수 ${cx.raw.x}, 인구 ${cx.raw.y.toLocaleString()}명`
+          label: (cx) => `${cx.raw.name}: 지방소멸위험지수 ${cx.raw.x}, 인구 ${cx.raw.y.toLocaleString()}명`
         }
       }
     }
@@ -737,7 +745,7 @@ export default function SimulatorPage() {
           >
             {demo && resultsReady ? (
               <>
-                <div style={{ position: "relative", height: 200, width: "100%" }}>
+                <div style={{ position: "relative", height: 170, width: "100%" }}>
                   <Line data={chartData} options={chartOpts} />
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-around", marginTop: 16, textAlign: "center" }}>
@@ -778,28 +786,32 @@ export default function SimulatorPage() {
             <ModelEvidence slot="sim.sim.evidence" demo={demo} state={evidenceState} result={simShown ?? real.context} regions={regions} datasetName={real.datasetName} label={label} />
           </Card>
 
-          <Card title="전 지자체 위험지수 vs 인구 분포" icon="fa-braille" dataSource={cardSource} data-slot="sim.sim.distribution">
-            {demo && resultsReady ? (
-              <>
-                <p className="sr-only">
-                  전국 인구감소 지역(회색 점) 분포 속 시범 분석 대상 지자체의 상대 위치. 파란 점이 현재 선택
-                  지자체입니다.
-                </p>
-                <div style={{ position: "relative", height: 220, width: "100%" }}>
-                  <Scatter data={scatterData} options={scatterOpts} />
-                </div>
-                <p className="chart-summary sr-only">
-                  {currentRegion.name}은 위험지수 {currentRegion.riskIndex}, 인구 {currentRegion.population.toLocaleString()}명입니다.
-                  비교 대상 {distributionRegions.length}곳 중 위험지수는 낮은 순 {riskRank}위(낮을수록 고위험), 인구는 큰 순 {populationRank}위입니다.
-                  회색은 전국 비교군, 주황은 분석 대상, 파랑은 현재 선택 지역입니다.
-                </p>
-              </>
-            ) : (
-              <PendingData
-                running={analysisRunning && demo}
-                text={demo ? "[요인분석 실행] 후 전 지자체 분포 분석이 표시됩니다." : realUnavailableText("지자체 비교 분포는")}
-              />
-            )}
+          <Card title={<>지방소멸위험지수·인구 규모 분포<InfoTip text={RISK_INDEX_TIP} label="지방소멸위험지수 계산 방식 보기" /></>} icon="fa-braille" dataSource={cardSource} data-slot="sim.sim.distribution">
+            {/* 두 모드 같은 구조: 선택 지자체 공표 통계 요약 + 분포 그래프 자리(실데이터는 같은 자리에 행동 안내 한 줄) */}
+            <div className="sim-dist-body">
+              <RiskSummary region={currentRegion} />
+              <div className={`sim-dist-chart${demo && resultsReady ? " is-chart" : ""}`}>
+                {demo && resultsReady ? (
+                  <>
+                    <p className="sr-only">
+                      전국 인구감소 지역(회색 점) 분포 속 시범 분석 대상 지자체의 상대 위치. 파란 점이 현재 선택
+                      지자체입니다.
+                    </p>
+                    <div className="sim-dist-canvas"><Scatter data={scatterData} options={scatterOpts} /></div>
+                    <p className="chart-summary sr-only">
+                      {currentRegion.name}은 지방소멸위험지수 {currentRegion.riskIndex}, 인구 {currentRegion.population.toLocaleString()}명입니다.
+                      비교 대상 {distributionRegions.length}곳 중 지수는 낮은 순 {riskRank}위(낮을수록 고위험), 인구는 큰 순 {populationRank}위입니다.
+                      회색은 전국 비교군, 주황은 분석 대상, 파랑은 현재 선택 지역입니다.
+                    </p>
+                  </>
+                ) : (
+                  <PendingData
+                    running={analysisRunning && demo}
+                    text={demo ? "[요인분석 실행] 후 지자체 분포가 표시됩니다." : realUnavailableText("지자체 비교 분포는")}
+                  />
+                )}
+              </div>
+            </div>
           </Card>
         </div>
 

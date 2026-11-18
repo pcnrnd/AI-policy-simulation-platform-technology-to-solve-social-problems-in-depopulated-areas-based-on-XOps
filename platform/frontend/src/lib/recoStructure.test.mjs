@@ -127,4 +127,14 @@ assert.match(map, /사용률 \$\{it\.util\}% → \$\{pctRange\(c\.utilAfter\)\}/
 assert.match(map, /OpenStreetMap/); // 좌표 출처는 접히는 ⓘ 안
 for (const f of ["reco/RecoResult.jsx", "reco/EffectOutlook.jsx", "reco/FacilityPlanTable.jsx"]) assert.match(read("components", ...f.split("/")), /onPick\(/, f);
 
-console.log("recoStructure: 전망 관측 8분기·앞 분기 채우기(데모만)·반영 후 = 반영 전 + 효과 추이·상세 두 칸·머리 숫자 한 번·칩·보고서 연계(0.95 제거)·화면 문구·기관명·개인정보 0·구역 4개 구조·선택 연동 PASS");
+// ③ 분포 카드: 전문 용어 제목·축, ⓘ에 산식·등급 구간(RISK_GRADES 값 그대로)·점 색의 뜻, 기관 이름 없음.
+assert.match(page, /title=\{<>지방소멸위험지수·인구 규모 분포<InfoTip text=\{RISK_INDEX_TIP\}/);
+assert.match(page, /text: "지방소멸위험지수"/);
+assert.match(page, /text: "인구 규모\(명\)"/);
+const tip = page.slice(page.indexOf("const RISK_INDEX_TIP"), page.indexOf("const SIM_DEBOUNCE_MS"));
+assert.match(tip, /20~39세 여성 인구 ÷ 65세 이상 인구/);
+assert.match(tip, /RISK_GRADES\.map\(\(g\) => `\$\{g\.label\} \$\{g\.rangeLabel\}`\)/);
+assert.match(tip, /회색 인구감소 지역, 주황 시범 지자체, 파랑 선택 지자체/);
+assert.doesNotMatch(tip, /정보원|연구원|통계청|국가데이터처|행정안전부/);
+
+console.log("recoStructure:전망 관측 8분기·앞 분기 채우기(데모만)·반영 후 = 반영 전 + 효과 추이·상세 두 칸·머리 숫자 한 번·칩·보고서 연계(0.95 제거)·화면 문구·기관명·개인정보 0·구역 4개 구조·선택 연동 PASS");
