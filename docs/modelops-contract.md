@@ -53,6 +53,8 @@ mock 원본에는 지역마다 데모 요인 패널(`mock_factor_<지역>`, targ
 
 `POST .../predict`는 `region_id`, `target`, `dataset_id`, `dataset_hash`, 선택 `dong_code` 및 `adjustments`(조정 가능한 feature → 유한 수치)를 받는다. 활성 버전이 바뀌거나 입력 근거가 다르면 409, 조정 불가/비유한/누락 입력은 422, 다른 모드 ID는 404다. 모든 계산은 read 권한으로 수행하며 저장·학습·활성 변경은 없다. 응답의 `inference_id`는 영속 기록이 아니라 해당 계산 결과의 연결 식별자다.
 
+`POST .../factor-period`는 ① 분석 기간·비교 기준용 읽기 전용 추론이다(재학습·저장 없음, predict 계약 불변). 요청은 predict와 같은 근거 4필드·선택 `dong_code`에 `period_from`·`period_to`(YYYYMM 정수)와 `baseline`(`train_mean`|`prev_year`|`prev_period`, 기본 `train_mean`)을 더한다. 기간 안 달마다 같은 활성 모델로 `prediction`과 기준 달 입력의 `reference_prediction`(학습 평균 기준이면 `intercept`)을 계산하고, 기여도는 `coef × (x − 기준)/std`라 `prediction − reference_prediction = Σ contributions.value`다. 기준 달은 `prev_year` = t−12, `prev_period` = t−기간 길이다. 입력 행이 없는 달(`no_input`)과 기준 달 행이 없는 달(`no_reference`)은 보간 없이 빼고 `summary.skipped`에 남기며, `summary.total`·`mean`(합계/사용 달 수)·`total_delta`는 사용된 달만 센다. 기간은 1~36개월, 실데이터는 관측 시작+3개월~예측월, 데모 요인 패널은 관측 기간 안이어야 하고, 형식·범위 오류와 계산할 달이 0개면 422, 옛 지역 인구 추이 원천 모델(행에 기준월 없음)도 422, 근거 불일치·활성 버전 변경은 409다.
+
 반환 `prediction`은 artifact 수식으로 계산하고 `intercept + Σ contributions.value`와 일치한다. `baseline_inputs`/`baseline_prediction` 대비 조정 `inputs`/`prediction`의 `delta`, 기여도의 입력/계수/평균/표준편차와 실제 값, 관측 범위 밖 입력 목록을 함께 반환한다. 시뮬레이션 응답 `recommendations`는 각 조정 가능한 관측 입력을 선택 행정동 학습 범위의 1%만큼 증가/감소한 단일 변경 시나리오의 실제 prediction/delta다. 전년 관측이 없으면 기존 feature 규칙대로 전월 값의 파생 대체 입력을 함께 갱신한다.
 
 real UI는 두 활성 모델의 지역·target·원 내용 hash·입력 좌표/기간·feature가 같을 때 연결하며 등록본 ID가 다르면 각 ID를 명시한다. 기여도 → 입력 가정 예측 → **정책 추천**(근거: 관측 지표의 예측 민감도)으로 표시하며, 데모 표시와 같은 시뮬레이터 4단계 화면의 같은 자리(① 요인분석·③ 시뮬레이션·④ 추천)에 채운다. 추천은 예측 민감도이며 정책 효과나 RICE 점수를 제시하지 않는다. 실제 외생 정책 입력을 가진 등록·학습 스키마는 후속 범위다. 활성/대응 자료가 없으면 등록→학습→활성화 안내만 제공한다.

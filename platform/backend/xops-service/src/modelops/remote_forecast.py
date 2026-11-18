@@ -80,7 +80,7 @@ def _call(matrix: list[list[float | None]], index: int) -> dict[str, Any]:
 
 def compare(mode: str, instance_id: str, version_id: str, dong_code: str | None = None) -> dict[str, Any]:
     """활성 릿지 버전의 기준 예측(조정 없음)과 같은 달의 원격 예측(10~90% 범위)."""
-    artifact, context = inference._context(mode, instance_id, version_id, dong_code)
+    artifact, context, _ = inference._context(mode, instance_id, version_id, dong_code)
     proof = context["provenance"]
     ridge, _ = inference._calculate(artifact, context["inputs"])
     remote: dict[str, Any] = {"status": "unavailable"}

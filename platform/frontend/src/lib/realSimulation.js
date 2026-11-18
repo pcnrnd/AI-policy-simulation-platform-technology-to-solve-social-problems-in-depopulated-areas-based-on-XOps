@@ -101,6 +101,7 @@ export const FACTOR_RUN_LOCK_TEXT = "이 지역·학습 대상의 요인분석 �
 export const FACTOR_IDLE_TEXT = "[요인분석 실행] 후 표시됩니다.";
 export const FACTOR_FAILED_TEXT = "요인분석을 실행하지 못했습니다. 잠시 뒤 다시 실행하세요.";
 export const FACTOR_VERSION_CHANGED_TEXT = "활성 버전이 바뀌었습니다. [요인분석 실행]을 다시 누르세요.";
+export const FACTOR_PERIOD_EMPTY_TEXT = "이 분석 기간·비교 기준으로 계산할 수 있는 달이 없습니다. 분석 기간이나 비교 기준을 바꾸세요.";
 export const FACTOR_EXPLAIN_TEXT = "기여도는 학습 기간 평균 대비 최근 관측값이 모델 추정을 높인(+)·낮춘(−) 크기입니다.";
 // 알림(role=alert) 고정 문구 — 서버·브라우저 원문은 활동 로그에만 남긴다.
 export const REAL_LOAD_FAILED_TEXT = "모델 정보를 불러오지 못했습니다. 잠시 뒤 다시 시도하세요.";
@@ -312,6 +313,14 @@ export function quarterYoyChange(points) {
 }
 /** 부호 붙은 금액·인원(−는 긴 빼기 기호) — 예: "−24,000원", "+3,973명". */
 export const signedAmount = (value, unit) => `${value < 0 ? "−" : "+"}${formatUnitValue(Math.abs(value), unit)}${unit}`;
+/** ② 기여도 목록용 짧은 값 — 1만 이상은 만·억 단위(1억↑ 소수 2자리, 10만↑ 정수 만, 1만↑ 소수 1자리). 이름 칸이 좁은 폭에서 접히지 않게. */
+export function signedShort(value, unit) {
+  const abs = Math.abs(value);
+  if (!(abs >= 1e4)) return signedAmount(value, unit);
+  const text = abs >= 1e8 ? `${(abs / 1e8).toLocaleString("ko-KR", { maximumFractionDigits: 2 })}억`
+    : abs >= 1e5 ? `${Math.round(abs / 1e4).toLocaleString("ko-KR")}만` : `${(abs / 1e4).toLocaleString("ko-KR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}만`;
+  return `${value < 0 ? "−" : "+"}${text}${unit}`;
+}
 const percentText = (change) => `${change < 0 ? "−" : "+"}${Math.abs(change).toFixed(1)}%`;
 
 /**
@@ -395,4 +404,90 @@ export function simFrameView({ demo, sim = null, budgetTotal = null, controls = 
     adjust: { chips: controls.map((c) => c.label.replace(noun, "").trim() || c.label), meta: noun },
     constraint: { value: `${monthText(range?.from)}~${monthText(range?.to)}`, meta: "입력 조정 범위" }
   };
+}
+
+// ── ① 분석 기간·비교 기준(결정 29) — 추론만 다시 하고 재학습하지 않는다. 결과는 ② 기여도 카드에 보인다. ──
+export const PERIOD_BASELINES = [{ id: "train_mean", label: "학습 기간 평균" }, { id: "prev_year", label: "전년 같은 기간" }, { id: "prev_period", label: "직전 기간" }];
+export const PERIOD_DEFAULT_MONTHS = 12;
+export const PERIOD_MAX_MONTHS = 36;
+export const PERIOD_TREND_LIMIT = 5;
+const monthIndex = (ym) => Math.floor(ym / 100) * 12 + (ym % 100) - 1;
+const fromIndex = (index) => Math.floor(index / 12) * 100 + (index % 12) + 1;
+export const addMonth = (ym, delta) => fromIndex(monthIndex(ym) + delta);
+const isMonth = (value) => Number.isInteger(value) && value >= 100001 && value % 100 >= 1 && value % 100 <= 12;
+/** "2024-03" ↔ 202403 (month 입력 값). */
+export const monthInputValue = (ym) => (isMonth(ym) ? formatMonth(ym) : "");
+export const parseMonthInput = (text) => { const ym = Number(String(text).replace("-", "")); return isMonth(ym) ? ym : null; };
+
+/** 고를 수 있는 달 — 실데이터는 관측 시작+3개월(랙 3개월)~예측월(관측 다음 달), 데모 요인 패널은 관측 기간. 연월이 아니면 null. */
+export function periodBounds(observed, demo) {
+  const from = observed?.observed_from, to = observed?.observed_to;
+  if (!isMonth(from) || !isMonth(to) || from > to) return null;
+  return demo ? { from, to } : { from: addMonth(from, 3), to: addMonth(to, 1) };
+}
+
+/** 화면·요청의 기간. pick이 없으면 최근 12개월. 범위 밖은 범위 안으로, 끝<시작이면 끝=시작, 36개월을 넘으면 끝을 당긴다. */
+export function resolvePeriod(bounds, pick) {
+  if (!bounds) return null;
+  const clamp = (value) => Math.min(bounds.to, Math.max(bounds.from, value));
+  let to = clamp(pick?.to ?? bounds.to);
+  const from = clamp(pick?.from ?? addMonth(to, 1 - PERIOD_DEFAULT_MONTHS));
+  if (to < from) to = from;
+  if (monthIndex(to) - monthIndex(from) >= PERIOD_MAX_MONTHS) to = addMonth(from, PERIOD_MAX_MONTHS - 1);
+  return { from, to, months: monthIndex(to) - monthIndex(from) + 1 };
+}
+
+/** factor-period 요청 본문 — 근거 4필드·행정동은 inputs 응답 그대로. */
+export function periodRequest(context, period, baseline) {
+  const { adjustments, ...basis } = inferenceRequest(context);
+  return { ...basis, period_from: period.from, period_to: period.to, baseline };
+}
+
+const PERIOD_FAILED = "기간 분석 결과를 확인하지 못했습니다.";
+const near = (a, b, scale) => Math.abs(a - b) <= 1e-9 * Math.max(1, scale);
+/** 근거·기간·기준이 요청과 같고, 달마다 prediction − reference_prediction = Σ기여도, 합계·평균이 사용 달로 다시 맞는지. */
+export function validatePeriodAnalysis(result, context, request) {
+  const expected = context.provenance, actual = result?.provenance;
+  if (!actual || ["instance_id", "model_type", "version_id", "job_id", "dataset_id", "dataset_hash", "region_id", "target", "dong_code", "mode", "source"].some((key) => actual[key] !== expected[key])
+    || actual.period_from !== request.period_from || actual.period_to !== request.period_to || actual.period_baseline !== request.baseline) {
+    throw new Error("분석 결과와 선택한 모델의 근거가 다릅니다. 목록을 다시 확인하세요.");
+  }
+  const used = (result.months ?? []).filter((m) => m.status === "used");
+  const total = new Map();
+  for (const m of used) {
+    const values = m.contributions?.map((c) => c.value) ?? [];
+    const sum = values.reduce((a, b) => a + b, 0);
+    if (!values.length || ![m.prediction, m.reference_prediction, ...values].every(Number.isFinite)
+      || !near(m.prediction - m.reference_prediction, sum, Math.abs(m.prediction) + Math.abs(m.reference_prediction))) throw new Error(PERIOD_FAILED);
+    for (const c of m.contributions) total.set(c.feature, (total.get(c.feature) ?? 0) + c.value);
+  }
+  const s = result.summary;
+  const scale = [...total.values()].reduce((a, b) => a + Math.abs(b), 0);
+  if (!used.length || s?.used_months !== used.length || s.total?.length !== total.size
+    || !s.total.every((row) => total.has(row.feature) && near(row.value, total.get(row.feature), scale))
+    || !s.mean?.every((row) => total.has(row.feature) && near(row.value * used.length, total.get(row.feature), scale))) throw new Error(PERIOD_FAILED);
+  return result;
+}
+
+/**
+ * 기간 분석 → ② 기여도 카드 표시. agg: "mean"(월평균) | "total"(합계). scope: 요인 범위(① 선택).
+ * factors: 요인별(|값| 내림차순). trend: |합계| 상위 5개 요인의 월별 기여도(합계면 누적), 빠진 달은 null로 선이 끊긴다.
+ */
+export function periodView(result, { label, agg = "mean", scope = "all" }) {
+  const factors = scopeFactors(result.summary[agg].map((row) => ({ feature: row.feature, label: label(row.feature), value: row.value })), scope)
+    .sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
+  const top = scopeFactors([...result.summary.total], scope).sort((a, b) => Math.abs(b.value) - Math.abs(a.value)).slice(0, PERIOD_TREND_LIMIT);
+  const lines = top.map(({ feature }) => {
+    let running = 0;
+    const data = result.months.map((m) => {
+      const value = m.status === "used" ? m.contributions.find((c) => c.feature === feature)?.value ?? 0 : null;
+      if (value === null) return null;
+      running += value;
+      return agg === "total" ? running : value;
+    });
+    return { feature, label: label(feature), data };
+  });
+  const p = result.provenance;
+  return { factors, trend: { labels: result.months.map((m) => formatMonth(m.base_ym)), lines },
+    info: `분석 기간 ${formatMonth(p.period_from)}~${formatMonth(p.period_to)} · ${result.summary.used_months}개월` };
 }
