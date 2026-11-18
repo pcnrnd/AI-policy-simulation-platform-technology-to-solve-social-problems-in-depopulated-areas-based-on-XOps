@@ -2,7 +2,7 @@
 
 2026 공인인증 대상 앱 1/2. 남원시 일반음식점 데이터(2021~2026)를 DuckDB로 조회해
 Streamlit에서 5종 차트를 그린다. 클릭 → 렌더 완료까지의 체감 응답속도를 보여주기
-위해 차트당 인위적 지연(`CHART_SLEEP_MS`, 기본 390ms)을 둔다.
+위해 차트당 인위적 지연(390ms)을 둔다.
 
 ## 실행 방법
 
@@ -11,14 +11,13 @@ Streamlit에서 5종 차트를 그린다. 클릭 → 렌더 완료까지의 체�
 ```
 uv sync --frozen
 uv run streamlit run chart_speed.py --server.port 8505
-# (선택) 지연 조절: CHART_SLEEP_MS=500 uv run streamlit run chart_speed.py --server.port 8505
 ```
 
 ### Docker
 
 ```
 docker build -t cert-chart-speed:2026.0.0 .
-docker run -p 8505:8505 -e CHART_SLEEP_MS=390 cert-chart-speed:2026.0.0
+docker run -p 8505:8505 cert-chart-speed:2026.0.0
 ```
 
 또는 상위 `cert/v2/cert-compose.yml`로 `chart_type`과 함께:
@@ -48,7 +47,7 @@ d911c5ae737f38c4a5c86de2133cf51f0f99fa26aed361fac07098f756853d1d  data_2026/rest
 
 ## 시험 조건
 
-- 지연: `CHART_SLEEP_MS=390` (차트 5개 × 390ms)
+- 지연: 차트당 390ms (차트 5개)
 - 브라우저: Firefox (Playwright 번들, 실측 153.0), 측정 도구 `tools/measure_speed.py`
   (Playwright 1.62.0, `sync_playwright` 클라이언트 측 `performance.now()` 계측)
 - 데이터: `restaurant_2026` (2026년, 10,148행). 2021~2025도 동일 방식으로 선택 가능.
