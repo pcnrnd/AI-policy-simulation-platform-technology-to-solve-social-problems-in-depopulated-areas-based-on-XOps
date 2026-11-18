@@ -76,11 +76,11 @@ function buildPreview(region, template, live, generatedAt, allowSeed) {
         </>
       )}
 
-      {/* SHAP 기여도는 explain 실호출 결과만 싣는다 — 없으면 섹션 자체를 비운다(사유 문구 없음). */}
+      {/* 요인별 기여도는 explain 실호출 결과만 싣는다 — 없으면 섹션 자체를 비운다(사유 문구 없음). */}
       {explain && (
         <>
           <h3>
-            3. SHAP 중요 기여 특성 ({explain.baseYm} · {explain.dongName ?? explain.dongCode} 기준)
+            3. 요인별 기여도 ({explain.baseYm} · {explain.dongName ?? explain.dongCode} 기준)
           </h3>
           <ul>
             {explain.contributions.map((c) => (
