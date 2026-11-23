@@ -1,6 +1,6 @@
 # cert-chart-type — 데이터 시각화 처리 유형 (2026)
 
-2026 공인인증 대상 앱 2/2. 같은 남원시 일반음식점 데이터(2021~2026)를 DuckDB로
+2026 공인인증 대상 앱 2/2. 같은 남원시 일반음식점 데이터(2022~2026)를 DuckDB로
 조회해 Streamlit에서 8종 차트를 그린다. 응답속도용 인위적 지연은 없다.
 
 ## 실행 방법
@@ -33,11 +33,10 @@ docker compose -f ../cert-compose.yml up -d --build types
 
 ## data_2026 파일 sha256
 
-원본(`prepro_2026.py` 산출물)에서 복사, 재생성하지 않음.
+원본(`prepro_2026.py` 산출물)에서 복사, 재생성하지 않음. 2021년 자료(`restaurant_2021.csv`, `database.db`의 `restaurant_2021` 표)는 삭제했다.
 
 ```
-82204fd074d71edbc6ad20f4220830e1a5cc7f06f7e4789848455f60d204cd2f  data_2026/database.db
-c97e3e12c5e964f23773605c80683fa65ca3cade4338c579021c1f7f2374d7a5  data_2026/restaurant_2021.csv
+e008eaad8b3b3434cfb6feb0360d42f7913d0eb567ba933c850fc8c3b00d2c8e  data_2026/database.db
 37636167f727e5e4ed74b8ddcca67c236021b16b29ad6e43d43489e31d7f64e3  data_2026/restaurant_2022.csv
 7459bbea132e9ea2051bc8e96f1be7357b8e1864713be66d8833c1f5002d4d2c  data_2026/restaurant_2023.csv
 cf941016d58b74a3b2b9f3692eaef9f919c9ff1ef621a3e309bb31b1f43e26a5  data_2026/restaurant_2024.csv
@@ -50,7 +49,8 @@ d911c5ae737f38c4a5c86de2133cf51f0f99fa26aed361fac07098f756853d1d  data_2026/rest
 - 지연: 없음
 - 브라우저: Firefox (Playwright 번들, 실측 153.0). 이 앱 전용 측정 스크립트는 없고,
   `chart_speed/tools/measure_speed.py <url> --charts 8`로 렌더 완료를 확인할 수 있다.
-- 데이터: `restaurant_2026` (2026년, 10,148행). 2021~2025도 동일 방식으로 선택 가능.
+- 데이터: `restaurant_2026` (2026년, 10,148행). 2022~2025도 동일 방식으로 선택 가능.
+- 초기화: "데이터 시각화 실행" 바로 아래 "시각화 상태 초기화" 버튼이 차트를 지우고 선택값을 처음 값으로 되돌린다.
 
 ## data_2026 기준
 

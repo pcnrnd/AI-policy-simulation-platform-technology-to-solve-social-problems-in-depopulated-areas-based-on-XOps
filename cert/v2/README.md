@@ -23,7 +23,7 @@
 | `uv.lock` | 각 폴더에 복사 후 재생성(루트 패키지명만 반영, 의존성 126개 핀 무변경) |
 | `Dockerfile` | 각 폴더로, `APP`/`PORT` 분기 제거·앱별 포트 고정 |
 | `.dockerignore` | 각 폴더에 동일 내용 복사 |
-| `data_2026/`(7파일) | 각 폴더에 복사(원본과 sha256 동일 확인, 재생성 안 함) |
+| `data_2026/`(6파일) | 각 폴더에 복사(원본과 sha256 동일 확인, 재생성 안 함) |
 | `measure_speed.py` | `chart_speed/tools/measure_speed.py` (CLI·계측 로직 무변경) |
 | `prepro_2026.py` | `tools/prepro_2026.py` (`--input`/`--output-dir` 필수 인자로 변경, 하드코딩 경로 제거) |
 | `data_check_2026.ipynb` | `tools/data_check_2026.ipynb` (DB 경로 셀만 `chart_type/data_2026/database.db` 기준으로 수정) |
@@ -31,7 +31,7 @@
 
 ## 공통 조건
 
-- 데이터: 남원시 일반음식점 2021~2026년(`prepro_2026.py` 산출물), 두 앱 각자 독립 사본을 갖되 내용은 원본과 sha256 동일.
+- 데이터: 남원시 일반음식점 2022~2026년(`prepro_2026.py` 산출물, 2021년 자료는 삭제), 두 앱 각자 독립 사본을 갖되 내용은 원본과 sha256 동일.
 - 지연: `chart_speed`만 차트당 390ms 적용, `chart_type`은 지연 없음.
 - 실행: 각 폴더가 완전히 독립된 uv 프로젝트/Docker 이미지 — 어느 한쪽만 떼어내 빌드·기동 가능(교차 참조 없음).
 - 상위 `cert-compose.yml`로 두 앱을 동시에 올릴 수 있다(`docker compose -f cert-compose.yml up -d --build`, 포트 8505/8506).
