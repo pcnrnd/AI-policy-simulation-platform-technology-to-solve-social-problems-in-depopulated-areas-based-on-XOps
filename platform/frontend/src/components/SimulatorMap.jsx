@@ -5,6 +5,7 @@ import TablePager, { usePager } from "./TablePager.jsx";
 import { buildRegionGrid, densityColor, DENSITY_LEGEND } from "../lib/geo.js";
 import { prefersReducedMotion } from "../lib/motion.js";
 import { RISK_GRADES, riskGrade } from "../lib/riskGrade.js";
+import { chosenOf, pctRange, shortName } from "../lib/recoText.js";
 
 // 정책 시뮬레이터 STAGE ③ 공간정보 탐색 지도 — 플로팅 패널(검색·레이어·테마·범례)·출처·시설물/격자 상세.
 // 두 모드 모두 같은 지도·컨트롤을 두고, 예시 오버레이는 데모 표시에서만 레이어에 올린다.
@@ -32,13 +33,72 @@ const DEFAULT_THEME_ID = "vw-midnight";
 // 소멸위험지수(낮을수록 위험) 등급 — 지역 현황 카드·리포트와 같은 공용 기준(한국고용정보원 2025 소멸위험분류).
 export { RISK_GRADES, riskGrade };
 
+// 추천 시설 표시 — 순위 번호, 크기 = 생활인구 효과, 진하기 = 순위(고른 곳 가장 진함).
+// 이름표("시설 · 방안 · 사용률 a% → b~c%")는 순위 높은 것부터 위·아래·오른쪽·왼쪽 가운데 앞서 놓은 이름표·표시와 겹치지 않는 쪽에 둔다.
+const LABEL_H = 22;
+const labelWidth = (text) => [...text].reduce((sum, ch) => sum + (/[가-힣]/.test(ch) ? 12.5 : 7.5), 18); // 12px 글꼴 기준 대략 폭
+// 자리 후보 — 위·아래·오른쪽·왼쪽, 그다음 위·아래의 오른쪽·왼쪽 치우침(표시 가장자리에 맞춤).
+const LABEL_DIRS = ["top", "bottom", "right", "left", "top-r", "top-l", "bottom-r", "bottom-l"];
+function labelBox(pt, size, w, dir) {
+  const above = [pt.y - size / 2 - 4 - LABEL_H, pt.y - size / 2 - 4];
+  const below = [pt.y + size / 2 + 4, pt.y + size / 2 + 4 + LABEL_H];
+  const [v, h] = dir.split("-");
+  if (dir === "right") return [pt.x + size / 2 + 6, pt.y - LABEL_H / 2, pt.x + size / 2 + 6 + w, pt.y + LABEL_H / 2];
+  if (dir === "left") return [pt.x - size / 2 - 6 - w, pt.y - LABEL_H / 2, pt.x - size / 2 - 6, pt.y + LABEL_H / 2];
+  const [y0, y1] = v === "top" ? above : below;
+  const x0 = h === "r" ? pt.x - size / 2 : h === "l" ? pt.x + size / 2 - w : pt.x - w / 2;
+  return [x0, y0, x0 + w, y1];
+}
+const overlaps = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
+const escapeHtml = (t) => String(t).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+// 왼쪽 위 플로팅 패널이 가리는 자리 — 범위 맞춤 여백과 이름표 자리 고르기에서 뺀다.
+const panelBox = (map) => {
+  const el = map.getContainer().parentElement?.querySelector(".map-float-tl");
+  return el ? [0, 0, el.offsetLeft + el.offsetWidth + 8, el.offsetTop + el.offsetHeight + 8] : null;
+};
+
+function drawReco(map, layer, { items, selected, onPick }, regionName, showLabels) {
+  layer.clearLayers();
+  const located = items.filter((it) => hasLocation(it.facility) && chosenOf(it));
+  if (!located.length) return;
+  const size = map.getSize();
+  const maxLiving = Math.max(...located.map((it) => it.forecast.living), 1);
+  const marks = located.map((it) => { const q = map.latLngToContainerPoint([it.facility.lat, it.facility.lng]); return [q.x - 20, q.y - 20, q.x + 20, q.y + 20]; });
+  const panel = panelBox(map);
+  const inside = (bx) => bx[0] >= 4 && bx[1] >= 4 && bx[2] <= size.x - 4 && bx[3] <= size.y - 4 && !(panel && overlaps(panel, bx));
+  const placed = [];
+  [...located].sort((a, b) => (a.id === selected?.id ? -1 : b.id === selected?.id ? 1 : a.rank - b.rank)).forEach((it) => {
+    const c = chosenOf(it);
+    const cls = it.id === selected?.id ? "sel" : it.rank <= 3 ? "top" : "rest";
+    const px = Math.round(24 + 22 * Math.sqrt(it.forecast.living / maxLiving));
+    const text = `${shortName(it, regionName)} · ${c.planType} · 사용률 ${it.util}% → ${pctRange(c.utilAfter)}`;
+    const pt = map.latLngToContainerPoint([it.facility.lat, it.facility.lng]);
+    const w = labelWidth(text);
+    const free = LABEL_DIRS.find((d) => {
+      const bx = labelBox(pt, px, w, d);
+      return inside(bx) && !placed.some((p) => overlaps(p, bx)) && !marks.some((m, k) => located[k].id !== it.id && overlaps(m, bx));
+    });
+    // 빈자리가 없으면 고른 시설만 위에 두고 나머지는 순위 번호만(이름은 표시 제목으로)
+    const dir = free ?? (cls === "sel" ? LABEL_DIRS.find((d) => inside(labelBox(pt, px, w, d))) ?? "top" : null);
+    if (dir) placed.push(labelBox(pt, px, w, dir));
+    const tip = showLabels && dir ? `<div class="reco-tip ${dir}${cls === "sel" ? " sel" : ""}">${escapeHtml(text)}</div>` : "";
+    const icon = L.divIcon({ className: "", html: `<div class="reco-mk-wrap">${tip}<div class="reco-mk ${cls}" style="width:${px}px;height:${px}px">${it.rank}</div></div>`, iconSize: [px, px], iconAnchor: [px / 2, px / 2] });
+    L.marker([it.facility.lat, it.facility.lng], { icon, keyboard: true, title: `${it.rank}순위 ${shortName(it, regionName)}`, zIndexOffset: cls === "sel" ? 1000 : 100 - it.rank * 10 })
+      .on("click", () => onPick(it.id))
+      .addTo(layer);
+  });
+}
+
 /**
  * @param {{ appData: object, currentRegion: object, setCurrentRegion: Function, allowSeed: boolean,
- *   searchText: string, onSearch: Function, overlayNote: string|null, resizeKey: string }} props
+ *   searchText: string, onSearch: Function, overlayNote: string|null, resizeKey: string,
+ *   reco?: { items: object[], selected: object|null, onPick: Function } }} props
  * overlayNote: 예시 오버레이가 없을 때 플로팅 패널 안내. resizeKey: 바뀌면 지도 크기를 다시 계산한다.
+ * reco: ④ 추천 사업(1~5순위)과 고른 사업 — 시설 층에 추천 표시를 그리고, 누르면 ④가 함께 바뀐다.
  */
-export default function SimulatorMap({ appData, currentRegion, setCurrentRegion, allowSeed, searchText, onSearch, overlayNote, resizeKey }) {
-  const [layerVis, setLayerVis] = useState({ markers: true, grid: true, facilities: true });
+export default function SimulatorMap({ appData, currentRegion, setCurrentRegion, allowSeed, searchText, onSearch, overlayNote, resizeKey, reco = null }) {
+  const [layerVis, setLayerVis] = useState({ markers: true, grid: true, facilities: true, labels: true });
   // 지도 베이스 테마 (한글 지명을 제공하는 VWorld 타일)
   const [mapTheme, setMapTheme] = useState(DEFAULT_THEME_ID);
 
@@ -48,6 +108,8 @@ export default function SimulatorMap({ appData, currentRegion, setCurrentRegion,
   const markerLayerRef = useRef(null);
   const gridLayerRef = useRef(null);
   const facilityLayerRef = useRef(null);
+  const recoLayerRef = useRef(null);
+  const recoViewRef = useRef({ regionId: null, sizeKey: "", ids: "", selectedId: null });
 
   // 지도 1회 초기화 — 줌 컨트롤은 우하단, 레이어 토글은 커스텀 플로팅 패널이 담당
   useEffect(() => {
@@ -65,13 +127,16 @@ export default function SimulatorMap({ appData, currentRegion, setCurrentRegion,
     const markerLayer = L.layerGroup();
     const gridLayer = L.layerGroup();
     const facilityLayer = L.layerGroup();
+    const recoLayer = L.layerGroup();
 
     markerLayer.addTo(map);
     gridLayer.addTo(map);
     facilityLayer.addTo(map);
+    recoLayer.addTo(map);
     markerLayerRef.current = markerLayer;
     gridLayerRef.current = gridLayer;
     facilityLayerRef.current = facilityLayer;
+    recoLayerRef.current = recoLayer;
     mapRef.current = map;
 
     setTimeout(() => map.invalidateSize(), 100);
@@ -83,6 +148,7 @@ export default function SimulatorMap({ appData, currentRegion, setCurrentRegion,
       markerLayerRef.current = null;
       gridLayerRef.current = null;
       facilityLayerRef.current = null;
+      recoLayerRef.current = null;
     };
     // 지도 인스턴스는 마운트 1회만 만든다 — 피처는 아래 적재 effect가 따로 채운다.
     // (지도를 다시 만들면 베이스 타일·레이어 토글 상태를 다시 맞춰야 해서 깨지기 쉽다.)
@@ -196,6 +262,7 @@ export default function SimulatorMap({ appData, currentRegion, setCurrentRegion,
     sync(markerLayerRef.current, layerVis.markers);
     sync(gridLayerRef.current, layerVis.grid);
     sync(facilityLayerRef.current, layerVis.facilities);
+    sync(recoLayerRef.current, layerVis.facilities);
   }, [layerVis]);
 
   // 선택 지자체로 지도 이동
@@ -208,11 +275,49 @@ export default function SimulatorMap({ appData, currentRegion, setCurrentRegion,
   }, [currentRegion]);
 
   // STAGE③ 재펼침/잠금해제 시 지도 크기 재계산 (display:none·blur 해제 후 타일 깨짐 방지)
+  const [sizeTick, setSizeTick] = useState(0);
   useEffect(() => {
     if (!mapRef.current) return undefined;
-    const t = setTimeout(() => mapRef.current?.invalidateSize(), 200);
+    const t = setTimeout(() => { mapRef.current?.invalidateSize(); setSizeTick((n) => n + 1); }, 200);
     return () => clearTimeout(t);
   }, [resizeKey]);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return undefined;
+    const onResize = () => setSizeTick((n) => n + 1);
+    // 크기나 확대 단계가 바뀌면 이름표 자리를 다시 고른다(범위는 다시 맞추지 않음).
+    map.on("resize zoomend", onResize);
+    return () => map.off("resize zoomend", onResize);
+  }, []);
+
+  // 추천 표시 — 지역·추천 사업·지도 크기가 바뀌면 추천 시설에 범위를 맞추고, 다른 곳에서 고르면 그 시설로 옮긴 뒤
+  // 화면 좌표로 이름표 자리를 고른다(이름표 자리를 이동 뒤 좌표로 고르려고 애니메이션 없이).
+  const recoItems = reco?.items ?? [];
+  const recoSelected = reco?.selected ?? null;
+  useEffect(() => {
+    const map = mapRef.current;
+    const layer = recoLayerRef.current;
+    if (!map || !layer) return;
+    const located = recoItems.filter((it) => hasLocation(it.facility));
+    if (!allowSeed || !located.length) { layer.clearLayers(); recoViewRef.current = { regionId: null, sizeKey: "", ids: "", selectedId: null }; return; }
+    map.invalidateSize();
+    const sz = map.getSize();
+    const view = { regionId: currentRegion.id, sizeKey: `${sz.x}x${sz.y}`, ids: located.map((it) => it.id).join(","), selectedId: recoSelected?.id ?? null };
+    const prev = recoViewRef.current;
+    if (prev.regionId !== view.regionId || prev.sizeKey !== view.sizeKey || prev.ids !== view.ids) {
+      const panel = panelBox(map);
+      map.fitBounds(L.latLngBounds(located.map((it) => [it.facility.lat, it.facility.lng])),
+        { paddingTopLeft: [(panel?.[2] ?? 0) + 60, 80], paddingBottomRight: [80, 80], maxZoom: 11, animate: false });
+    } else if (prev.selectedId !== view.selectedId && recoSelected && hasLocation(recoSelected.facility)) {
+      // 고른 시설을 플로팅 패널 오른쪽 빈 자리 가운데로
+      const pt = map.latLngToContainerPoint([recoSelected.facility.lat, recoSelected.facility.lng]);
+      const left = panelBox(map)?.[2] ?? 0;
+      map.panBy([pt.x - (left + sz.x) / 2, pt.y - sz.y / 2], { animate: false });
+    }
+    recoViewRef.current = view;
+    drawReco(map, layer, { items: located, selected: recoSelected, onPick: reco.onPick }, currentRegion.name, layerVis.labels);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 고른 사업·추천 행·크기·이름표 표시가 바뀔 때만 다시 그린다
+  }, [recoItems, recoSelected, allowSeed, currentRegion.id, layerVis.labels, sizeTick]);
 
   return (
     <div className="sim-map-wrap" data-slot="sim.map">
@@ -266,7 +371,15 @@ export default function SimulatorMap({ appData, currentRegion, setCurrentRegion,
             checked={layerVis.facilities}
             onChange={(e) => setLayerVis((v) => ({ ...v, facilities: e.target.checked }))}
           />
-          시설물 (정주여건·스마트팜)
+          추천 시설
+        </label>
+        <label className="map-float-toggle">
+          <input
+            type="checkbox"
+            checked={layerVis.labels}
+            onChange={(e) => setLayerVis((v) => ({ ...v, labels: e.target.checked }))}
+          />
+          시설 이름·사용률
         </label>
         <div className="map-float-section-label">지도 테마</div>
         <div className="map-theme-switch">
@@ -299,6 +412,12 @@ export default function SimulatorMap({ appData, currentRegion, setCurrentRegion,
           ))}
         </div>
 
+        <div className="map-float-section-label">생활인구 효과</div>
+        <div className="map-float-legend" aria-label="추천 시설 표시 크기 범례">
+          <span className="legend-item"><span className="reco-legend-dot" style={{ width: 12, height: 12 }} aria-hidden="true"></span>작음</span>
+          <span className="legend-item"><span className="reco-legend-dot" style={{ width: 22, height: 22 }} aria-hidden="true"></span>큼</span>
+        </div>
+
         <div className="map-float-section-label">인구밀도(㎢당)</div>
         <div className="map-float-legend" aria-label="인구밀도 범례">
           {DENSITY_LEGEND.map((d) => (
@@ -318,7 +437,11 @@ export default function SimulatorMap({ appData, currentRegion, setCurrentRegion,
           <a href="https://www.vworld.kr" target="_blank" rel="noreferrer">
             VWorld
           </a>{" "}
-          · 국토교통부
+          · 국토교통부 · 위치 ©{" "}
+          <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">
+            OpenStreetMap
+          </a>{" "}
+          contributors
         </span>
       </div>
     </div>
@@ -340,7 +463,7 @@ export function SimulatorMapDetails({ appData, currentRegion, allowSeed, note })
               <ul>
                 {facilities.pageRows.map((facility) => (
                   <li key={`${facility.name}-${facility.lat}-${facility.lng}`}>
-                    <strong>{facility.name}</strong> — {facility.type}, {facility.metric}, 운영 예산 {facility.operating_budget}억
+                    <strong>{facility.name}</strong> — {facility.type}, {facility.metric}{Number.isFinite(facility.operating_budget) ? `, 운영 예산 ${facility.operating_budget}억` : ""}
                   </li>
                 ))}
               </ul>

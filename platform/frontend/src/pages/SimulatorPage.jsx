@@ -10,6 +10,9 @@ import PendingData from "../components/PendingData.jsx";
 import ScenarioCompare from "../components/ScenarioCompare.jsx";
 import ModelEvidence from "../components/ModelEvidence.jsx";
 import SimulatorMap, { SimulatorMapDetails, riskGrade } from "../components/SimulatorMap.jsx";
+import { RISK_GRADES } from "../lib/riskGrade.js";
+import InfoTip from "../components/InfoTip.jsx";
+import RiskSummary from "../components/RiskSummary.jsx";
 import SimulatorDock from "../components/SimulatorDock.jsx";
 import RealForecastResult from "../components/RealForecastResult.jsx";
 import ForecastCompare from "../components/ForecastCompare.jsx";
@@ -21,15 +24,20 @@ import { useForecastCompare } from "../hooks/useForecastCompare.js";
 import { usePublicTrends, useRegionStay } from "../hooks/usePublicTrends.js";
 import { getScrollBehavior } from "../lib/motion.js";
 import { facilityRows, recoControlSig, unlinkedControlNote, withRegionStay } from "../lib/facilityRecommendation.js";
+import { CHART_ITEMS, GUIDE, reportHandoffOf, shortName } from "../lib/recoText.js";
 import { YEAR_LABELS, computeTrends, budgetToFactor, controlBoostOf, ANALYSIS_STEPS } from "../lib/simulation.js";
 import { instanceLabel } from "../lib/modelops.js";
 import {
   REAL_TARGETS, REAL_GUIDE_TEXT, REAL_CONTROLS_LOCK_TEXT, FACTOR_GUIDE_TEXT, FACTOR_PENDING_TEXT, FACTOR_RUN_LOCK_TEXT,
   diagnosisView, simFrameView, quarterYoyChange, AUTO_TARGET, AUTO_TARGET_LABEL, DEMO_FACTOR_TARGET, realUnavailableText, selectedFactorModel, inferenceMatches, inferenceContextKey, factorAnalysisView,
-  observedFeatureLabel, rankSensitivity, targetUnit, formatUnitValue,
-  realSliderControls, forecastSeries, sensitivityRecommendation, regionRealStatus, FACTOR_SCOPES, activeModelPair, forecastCompareView,
+  observedFeatureLabel, targetUnit, formatUnitValue,
+  realSliderControls, forecastSeries, regionRealStatus, FACTOR_SCOPES, activeModelPair, forecastCompareView,
   periodBounds, resolvePeriod, monthInputValue, parseMonthInput, PERIOD_BASELINES
 } from "../lib/realSimulation.js";
+
+// ③ 분포 카드 ⓘ — 지방소멸위험지수 산식·등급 구간(riskGrade.js의 RISK_GRADES 값 그대로)·점 색의 뜻.
+const RISK_INDEX_TIP = `지방소멸위험지수 = 20~39세 여성 인구 ÷ 65세 이상 인구. 값이 낮을수록 소멸 위험이 큽니다. 등급: ${
+  RISK_GRADES.map((g) => `${g.label} ${g.rangeLabel}`).join(" · ")}. 점 색: 회색 인구감소 지역, 주황 시범 지자체, 파랑 선택 지자체.`;
 
 // 실데이터 표시에서 관측 입력을 바꾼 뒤 시뮬레이션 추론(읽기 전용 계산)을 다시 부르기까지의 대기.
 const SIM_DEBOUNCE_MS = 500;
@@ -67,7 +75,7 @@ export default function SimulatorPage() {
   const {
     appData, currentRegion, setCurrentRegion,
     welfareWeight, setWelfareWeight, industryWeight, setIndustryWeight, housingWeight, setHousingWeight,
-    budgetTotal, setBudgetTotal, addConsoleLog, navigateToTab, mockDataVisible, simulatorRuns, updateSimulatorRun
+    budgetTotal, setBudgetTotal, addConsoleLog, navigateToTab, mockDataVisible, simulatorRuns, updateSimulatorRun, sendToReport
   } = useAppState();
   const ct = useChartTheme();
   const demo = mockDataVisible;
@@ -152,8 +160,10 @@ export default function SimulatorPage() {
   const budgetFactor = budgetToFactor(budgetTotal);
   const controlBoost = controlBoostOf(controls, controlValues);
 
-  // 정책 추천(실행 버튼으로 도출) 상태 — 데모는 시설 추천 행({ items }), 실데이터는 민감도 패널 view.
+  // 정책 추천(실행 버튼으로 도출) 상태 — 시설 추천 행({ items }). 실데이터는 시설 대장이 없어 도출하지 않는다(같은 자리에 행동 안내).
   const [recommendation, setRecommendation] = useState(null);
+  // ④ 고른 사업 — 지도·추천 지수 차트·칩·표가 같은 값을 바꾼다(없거나 1~5순위 밖이면 1순위).
+  const [recoPick, setRecoPick] = useState(null);
   const [recoSig, setRecoSig] = useState("");
   const controlSig = controls.map((c) => `${c.key}:${controlValues[c.key] ?? c.default}`).join(",");
   const contextKey = inferenceContextKey({ mode, region: currentRegion.id, target: factorTarget, dong: demo ? "" : dong,
@@ -162,14 +172,20 @@ export default function SimulatorPage() {
   // 추천을 다시 도출해야 하는 입력 — 데모 시설 추천은 시설 값에 연결된 조절변수만(예산·정책 강조는 10년 예측에만 쓰인다).
   // 시설 값이 없는 조절변수를 바꾸면 재도출 안내 대신 같은 자리에 자료 등록 안내를 둔다.
   // 지역 월평균 체류인구는 공표 통계 API 값(시드에 없음) — 늦게 도착하면 추천 입력이 바뀐 것으로 본다.
-  const regionStay = useRegionStay(demo ? currentRegion.name : undefined);
+  // 그 기간은 두 모드 모두 ④ 선정 사유의 분석 기간으로 쓴다.
+  const stayStat = useRegionStay(currentRegion.name);
+  const regionStay = demo ? stayStat?.value ?? null : null;
   // 데모 ② 진단 머리 칸의 근거 — 생활인구 공표 통계(정책 추천 전망 그래프와 같은 값)
   const demoTrends = usePublicTrends(demo ? currentRegion.name : undefined);
   const recoInputSig = demo ? `${contextKey}|${recoControlSig(controls, controlValues)}|stay:${regionStay ?? ""}` : currentSig;
   const controlNote = demo ? unlinkedControlNote(controls, controlValues) : null;
-  const recoStale = recommendation !== null && recoSig !== recoInputSig;
+  // 데모 ④는 ③ 설정이 바뀌면 바로 다시 계산한다(결정 72) — 낡음 판정은 실데이터에만.
+  const recoStale = !demo && recommendation !== null && recoSig !== recoInputSig;
+  // ③ 설정 → ④ 추천(결정 72): 목적함수 → 지수 가중, 총 예산 → 넘는 방안 제외, 정책 강조 → 방안 유형 가중.
+  const recoContext = { objective: currentRegion.case?.simulation?.objective ?? "", budgetTotal,
+    policyWeights: { welfare: welfareWeight, industry: industryWeight, housing: housingWeight } };
   const deriveFacilities = (region) => ({
-    items: facilityRows(region.id, appData.facilities, controls, controlValues, withRegionStay(appData.conversion, region.id, region.id === currentRegion.id ? regionStay : null))
+    items: facilityRows(region.id, appData.facilities, controls, controlValues, withRegionStay(appData.conversion, region.id, region.id === currentRegion.id ? regionStay : null), recoContext)
   });
   // 자동 계산은 ① 완료 시점의 입력(공표 통계 도착 포함)으로 추천을 도출한다.
   const deriveNow = useRef(null);
@@ -206,6 +222,7 @@ export default function SimulatorPage() {
     setSimResult(null);
     setRecommendation(null);
     setRecoSig("");
+    setRecoPick(null);
     // real.revision: 활성 버전이 바뀌거나(409) 다시 확인해 입력을 다시 읽으면 이전 결과를 비운다.
   }, [demo, currentRegion.id, target, dong, real.revision]);
 
@@ -311,28 +328,15 @@ export default function SimulatorPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [demo, real.ready, contextKey, controlSig]);
 
-  const handleRecommend = async () => {
-    // 조회 실패면 [정책 추천 도출]이 목록·입력을 다시 읽는다(재시도).
-    if (!demo && !real.ready) {
-      if (real.loadFailed) real.reload();
-      return;
-    }
+  const handleRecommend = () => {
     if (demo) {
       const derived = deriveFacilities(currentRegion);
       setRecommendation(derived);
       setRecoSig(recoInputSig);
+      setRecoPick(null);
       addConsoleLog(`INFO: ${currentRegion.name} 시설 활용 추천 도출 완료 — 시설 ${derived.items.length}곳`);
     } else {
-      // 대기 중인 자동 계산이 이 요청을 밀어내지 않게 먼저 끈다.
-      clearTimeout(simTimerRef.current);
-      const sim = simResult && simSig === currentSig ? simResult : await runSimulation();
-      if (!sim) return;
-      const ranking = rankSensitivity(sim);
-      setRecommendation(sensitivityRecommendation(ranking, label, unit, targetName));
-      setRecoSig(currentSig);
-      addConsoleLog(ranking.length
-        ? `INFO: ${currentRegion.name} 정책 추천 도출 완료 — 1순위 '${label(ranking[0].feature)} ${ranking[0].to > ranking[0].from ? "증가" : "감소"}' (모델 예측상 변화 +${formatUnitValue(ranking[0].delta, unit)}${unit}).`
-        : `WARN: ${currentRegion.name} 정책 추천 도출 — 관측 범위 안에서 증가 예측을 만든 조정 항목이 없습니다.`);
+      addConsoleLog(`INFO: ${currentRegion.name} 시설 대장이 없어 추천 사업을 만들지 않았습니다. 시설 대장을 등록하세요.`);
     }
     // 결과는 STAGE ④에 렌더되므로 — 펼친 뒤 화면으로 이동해 즉시 보이게 한다
     revealStage("stage-report");
@@ -361,10 +365,21 @@ export default function SimulatorPage() {
     return () => observer.disconnect();
   }, []);
 
-  const { baseTrend, simTrend } = useMemo(
+  // ④ 추천 행·고른 사업 — 데모만 행이 있고 ③ 설정을 바꾸면 바로 다시 계산한다. 실데이터는 시설 대장이 없어 같은 자리에 행동 안내.
+  const recoLive = useMemo(() => (demo && analysisDone && recommendation ? deriveFacilities(currentRegion).items : []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- ③ 설정과 추천 도출 시점이 바뀔 때만 다시 계산한다
+    [demo, analysisDone, recommendation, currentRegion, controlValues, regionStay, budgetTotal, welfareWeight, industryWeight, housingWeight]);
+  const recoItems = recoLive;
+  const recoSelected = recoItems.slice(0, CHART_ITEMS).find((it) => it.id === recoPick) ?? recoItems[0] ?? null;
+  const recoGuide = !demo ? GUIDE.registry : GUIDE.derive;
+  // ③ 10년 예측 ↔ ④ 효과: 고른 사업의 정주 효과(도입 곡선 → 해마다)를 정책 적용 선에 더한다(고른 사업 반영분).
+  const recoAdd = YEAR_LABELS.map((_, t) => recoSelected?.forecast?.settlePath[Math.min(4 * (t + 1), recoSelected.forecast.settlePath.length - 1)] ?? 0);
+
+  const { baseTrend, simTrend: policyTrend } = useMemo(
     () => computeTrends(currentRegion, welfareWeight, industryWeight, housingWeight, budgetFactor, controlBoost),
     [currentRegion, welfareWeight, industryWeight, housingWeight, budgetFactor, controlBoost]
   );
+  const simTrend = useMemo(() => policyTrend.map((v, t) => v + recoAdd[t]), [policyTrend, recoAdd.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
   const currentSimulation = !demo && inferenceMatches(simResult, { mode: "real", region: currentRegion.id, target,
     modelId: simProof?.instance_id, versionId: simProof?.version_id, dong }) ? simResult : null;
   const series = demo ? null : forecastSeries(real.context, currentSimulation);
@@ -381,7 +396,7 @@ export default function SimulatorPage() {
           tension: 0.2
         },
         {
-          label: demo ? "정책 시뮬레이션 적용 예측 추이" : "조정 입력 예측",
+          label: demo ? (recoSelected ? "정책 시뮬레이션 적용(고른 사업 반영)" : "정책 시뮬레이션 적용 예측 추이") : "조정 입력 예측",
           data: demo ? simTrend : series.adjusted,
           borderColor: "rgba(59, 130, 246, 1)",
           backgroundColor: "rgba(59, 130, 246, 0.05)",
@@ -391,7 +406,7 @@ export default function SimulatorPage() {
       ]
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [demo, baseTrend, simTrend, simResult, real.context]
+    [demo, baseTrend, simTrend, simResult, real.context, recoSelected]
   );
 
   const chartOpts = {
@@ -438,14 +453,15 @@ export default function SimulatorPage() {
   const scatterOpts = {
     responsive: true,
     maintainAspectRatio: false,
+    animation: false, // 카드 높이에 맞춰 늘어나는 자리 — 크기가 바뀔 때마다 다시 그려지는 움직임을 두지 않는다
     scales: {
       x: {
-        title: { display: true, text: "인구소멸 위험지수", color: ct.tick },
+        title: { display: true, text: "지방소멸위험지수", color: ct.tick },
         grid: { color: ct.grid },
         ticks: { color: ct.tick }
       },
       y: {
-        title: { display: true, text: "인구수", color: ct.tick },
+        title: { display: true, text: "인구 규모(명)", color: ct.tick },
         grid: { color: ct.grid },
         ticks: { color: ct.tick }
       }
@@ -468,7 +484,7 @@ export default function SimulatorPage() {
       },
       tooltip: {
         callbacks: {
-          label: (cx) => `${cx.raw.name}: 위험지수 ${cx.raw.x}, 인구 ${cx.raw.y.toLocaleString()}명`
+          label: (cx) => `${cx.raw.name}: 지방소멸위험지수 ${cx.raw.x}, 인구 ${cx.raw.y.toLocaleString()}명`
         }
       }
     }
@@ -494,6 +510,7 @@ export default function SimulatorPage() {
     ...(analysisDone ? ["stage-factor", "stage-result"] : []),
     ...(recoReady ? ["stage-sim", "stage-report"] : [])
   ];
+
 
   // 요인분석 모델이 있는 지역·대상으로 옮긴다(모델 선택·빈 상태 [이동] 공용). 진입 때 자동으로 옮기지는 않는다.
   const moveToModel = (model) => {
@@ -682,6 +699,7 @@ export default function SimulatorPage() {
             onSearch={setSearchText}
             overlayNote={null}
             resizeKey={`${openStages["stage-sim"]}|${analysisStatus}`}
+            reco={{ items: recoItems.slice(0, CHART_ITEMS), selected: recoSelected, onPick: setRecoPick }}
           />
           <SimulatorDock
             regions={filteredRegions}
@@ -714,8 +732,8 @@ export default function SimulatorPage() {
             onResetControls={edited(() => { if (controls.length) setControlValues(defaultValues()); })}
             onRecommend={handleRecommend}
             // 실데이터는 ① 실행 없이 시뮬레이션 모델만으로 추천한다. 조회 실패면 눌러서 다시 확인(재시도).
-            recommendDisabled={demo ? !analysisDone : !real.ready && !real.loadFailed}
-            notReadyText={demo ? (analysisDone ? null : "STAGE ① 요인분석 실행 후 추천을 도출할 수 있습니다.") : realLockTitle}
+            recommendDisabled={demo && !analysisDone}
+            notReadyText={demo && !analysisDone ? "STAGE ① 요인분석 실행 후 추천을 도출할 수 있습니다." : null}
             stale={recoStale}
             controlNote={controlNote}
           />
@@ -738,7 +756,7 @@ export default function SimulatorPage() {
           >
             {demo && resultsReady ? (
               <>
-                <div style={{ position: "relative", height: 200, width: "100%" }}>
+                <div style={{ position: "relative", height: 170, width: "100%" }}>
                   <Line data={chartData} options={chartOpts} />
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-around", marginTop: 16, textAlign: "center" }}>
@@ -754,6 +772,14 @@ export default function SimulatorPage() {
                       {parseFloat(growthPercent) > 0 ? "+" : ""}
                       {growthPercent}%
                     </div>
+                  </div>
+                  {/* ④에서 고른 사업의 정주 효과 — ④ 정주인구 전망 머리 숫자와 같은 값 */}
+                  <div>
+                    <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>고른 사업 반영분</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: "var(--accent-blue)" }}>
+                      {recoSelected ? `+${formatUnitValue(recoAdd[9], "명")}명` : "–"}
+                    </div>
+                    <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{recoSelected ? shortName(recoSelected, currentRegion.name) : "④ 추천 사업 선택"}</div>
                   </div>
                 </div>
                 <p className="chart-summary sr-only">
@@ -779,28 +805,32 @@ export default function SimulatorPage() {
             <ModelEvidence slot="sim.sim.evidence" demo={demo} state={evidenceState} result={simShown ?? real.context} regions={regions} datasetName={real.datasetName} label={label} />
           </Card>
 
-          <Card title="전 지자체 위험지수 vs 인구 분포" icon="fa-braille" dataSource={cardSource} data-slot="sim.sim.distribution">
-            {demo && resultsReady ? (
-              <>
-                <p className="sr-only">
-                  전국 인구감소 지역(회색 점) 분포 속 시범 분석 대상 지자체의 상대 위치. 파란 점이 현재 선택
-                  지자체입니다.
-                </p>
-                <div style={{ position: "relative", height: 220, width: "100%" }}>
-                  <Scatter data={scatterData} options={scatterOpts} />
-                </div>
-                <p className="chart-summary sr-only">
-                  {currentRegion.name}은 위험지수 {currentRegion.riskIndex}, 인구 {currentRegion.population.toLocaleString()}명입니다.
-                  비교 대상 {distributionRegions.length}곳 중 위험지수는 낮은 순 {riskRank}위(낮을수록 고위험), 인구는 큰 순 {populationRank}위입니다.
-                  회색은 전국 비교군, 주황은 분석 대상, 파랑은 현재 선택 지역입니다.
-                </p>
-              </>
-            ) : (
-              <PendingData
-                running={analysisRunning && demo}
-                text={demo ? "[요인분석 실행] 후 전 지자체 분포 분석이 표시됩니다." : realUnavailableText("지자체 비교 분포는")}
-              />
-            )}
+          <Card title={<>지방소멸위험지수·인구 규모 분포<InfoTip text={RISK_INDEX_TIP} label="지방소멸위험지수 계산 방식 보기" /></>} icon="fa-braille" dataSource={cardSource} data-slot="sim.sim.distribution">
+            {/* 두 모드 같은 구조: 선택 지자체 공표 통계 요약 + 분포 그래프 자리(실데이터는 같은 자리에 행동 안내 한 줄) */}
+            <div className="sim-dist-body">
+              <RiskSummary region={currentRegion} />
+              <div className={`sim-dist-chart${demo && resultsReady ? " is-chart" : ""}`}>
+                {demo && resultsReady ? (
+                  <>
+                    <p className="sr-only">
+                      전국 인구감소 지역(회색 점) 분포 속 시범 분석 대상 지자체의 상대 위치. 파란 점이 현재 선택
+                      지자체입니다.
+                    </p>
+                    <div className="sim-dist-canvas"><Scatter data={scatterData} options={scatterOpts} /></div>
+                    <p className="chart-summary sr-only">
+                      {currentRegion.name}은 지방소멸위험지수 {currentRegion.riskIndex}, 인구 {currentRegion.population.toLocaleString()}명입니다.
+                      비교 대상 {distributionRegions.length}곳 중 지수는 낮은 순 {riskRank}위(낮을수록 고위험), 인구는 큰 순 {populationRank}위입니다.
+                      회색은 전국 비교군, 주황은 분석 대상, 파랑은 현재 선택 지역입니다.
+                    </p>
+                  </>
+                ) : (
+                  <PendingData
+                    running={analysisRunning && demo}
+                    text={demo ? "[요인분석 실행] 후 지자체 분포가 표시됩니다." : realUnavailableText("지자체 비교 분포는")}
+                  />
+                )}
+              </div>
+            </div>
           </Card>
         </div>
 
@@ -827,71 +857,33 @@ export default function SimulatorPage() {
         />
       </CollapsibleStage>
 
-      {/* ── STAGE ④ 추천: 정책 추천 + AI 보고서 연계 (리포팅은 자동화 리포팅 탭 담당) ── */}
-      <CollapsibleStage
-        id="stage-report"
-        no="STAGE ④"
-        // reportFocus 는 데모 사례 정의의 문장이라 실데이터 표시에서는 쓰지 않는다.
-        title="추천"
-        // 부제는 제목 옆 툴팁으로만 — 제목 줄에는 [정책 추천 도출]이 오른쪽에 붙는다.
-        subTip={demo ? currentRegion.case.reportFocus : real.ready ? "관측 지표의 예측 민감도를 근거로 한 추천" : null}
+      {/* ── STAGE ④ 추천: 구역 4개(추천 결과·정책 효과 전망·세부 비교·보고서로 보내기), 두 모드 같은 구조 ── */}
+      <PolicyRecommendation
+        demo={demo}
+        region={currentRegion}
+        items={recoItems}
+        selected={recoSelected}
+        onPick={setRecoPick}
+        inputs={{ objective: String(currentRegion.case?.simulation?.objective ?? "").split(" — ").at(-1), budgetTotal, welfare: welfareWeight, industry: industryWeight, housing: housingWeight,
+          period: stayStat ? `${stayStat.period_from}~${stayStat.period_to}` : null }}
+        guide={recoGuide}
+        onSend={(item) => {
+          sendToReport(reportHandoffOf(item, currentRegion, { budgetTotal }));
+          addConsoleLog(`INFO: ${currentRegion.name} 추천 사업을 보고서로 보냈습니다.`);
+          navigateToTab("tab-reporter");
+        }}
+        open={openStages["stage-report"]}
+        onToggle={() => toggleStage("stage-report")}
+        subTip={demo ? currentRegion.case.reportFocus : null}
         action={
           <button type="button" className="btn btn-primary"
-            onClick={() => { if (demo ? analysisDone : real.ready || real.loadFailed) handleRecommend(); }}
-            aria-disabled={(demo ? !analysisDone : !real.ready && !real.loadFailed) || undefined}
-            title={demo ? !analysisDone ? "요인분석을 먼저 실행하세요." : undefined : realLockTitle ?? undefined}>
+            onClick={() => { if (!demo || analysisDone) handleRecommend(); }}
+            aria-disabled={(demo && !analysisDone) || undefined}
+            title={demo && !analysisDone ? "요인분석을 먼저 실행하세요." : undefined}>
             <i className="fa-solid fa-lightbulb" aria-hidden="true"></i> 정책 추천 도출
           </button>
         }
-        open={openStages["stage-report"]}
-        onToggle={() => toggleStage("stage-report")}
-      >
-        {recoReady && recommendation.items.length > 0 ? (
-          demo
-            ? <PolicyRecommendation region={currentRegion} facilityRows={recommendation.items} />
-            : <PolicyRecommendation region={currentRegion} view={recommendation} />
-        ) : (
-          <Card title={demo ? "시설 활용 추천" : "맞춤 정책 추천"} icon="fa-lightbulb" dataSource={cardSource} data-slot="sim.report.panel">
-            <div style={{ textAlign: "center", padding: "32px 16px", color: "var(--text-secondary)", fontSize: 13 }}>
-              <i
-                className="fa-solid fa-wand-magic-sparkles"
-                style={{ fontSize: 28, color: "var(--accent-blue)", marginBottom: 12, display: "block" }}
-              ></i>
-              {!demo && real.missing ? (
-                guide(REAL_GUIDE_TEXT)
-              ) : recoReady ? (
-                demo
-                  ? "시설 대장을 등록하면 시설별 활용 추천이 표시됩니다."
-                  : "관측 범위 안에서 증가 예측을 만든 조정 항목이 없습니다. 행정동이나 학습 대상을 바꿔 확인하세요."
-              ) : (
-                <>
-                  STAGE ③에서 {demo ? "시설 변수를" : "관측 입력을"} 조정한 뒤 <strong>[정책 추천 도출]</strong> 버튼을 누르면, 시뮬레이션
-                  결과에 맞는 {demo ? "시설 활용 추천이" : "맞춤 정책 추천이"} 생성됩니다.
-                </>
-              )}
-            </div>
-          </Card>
-        )}
-
-        <div className="pl-report-handoff" data-slot="sim.report.handoff">
-          <div className="pl-report-handoff-text">
-            <i className="fa-solid fa-file-invoice" aria-hidden="true"></i>
-            <div>
-              <strong>{demo ? "시설 활용 계획 작성" : "AI 정책 보고서 생성 및 평가"}</strong>
-              <p className="mock-data-output">
-                {demo
-                  ? `${currentRegion.name} · ${currentRegion.case.reportFocus}`
-                  : real.ready
-                    ? `${currentRegion.name} · 다음 달 ${targetName} 예측 기반 추천`
-                    : `${currentRegion.name} · 활성 모델 준비 필요`}
-              </p>
-            </div>
-          </div>
-          <button className="btn btn-primary" onClick={() => navigateToTab("tab-reporter")}>
-            보고서 생성으로 이동 <i className="fa-solid fa-arrow-right"></i>
-          </button>
-        </div>
-      </CollapsibleStage>
+      />
     </>
   );
 }
