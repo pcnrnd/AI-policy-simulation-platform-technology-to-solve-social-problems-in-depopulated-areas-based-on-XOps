@@ -20,6 +20,7 @@ from lib import visualization as vis
 DB_PATH = Path(__file__).resolve().parents[1] / "data_2026" / "database.db"  # cert/v2/data_2026
 TABLES = [f"restaurant_{year}" for year in range(2026, 2021, -1)]  # 최근 5개년
 BUTTON_LABEL = "데이터 시각화 실행"
+RESET_LABEL = "시각화 상태 초기화"
 
 
 @st.cache_resource
@@ -91,8 +92,11 @@ def run(title: str, select_label: str, *, extended: bool = False, sleep_ms: int 
     st.set_page_config(layout="wide")
     st.title(title)
 
-    table = st.selectbox(select_label, TABLES)
-    if not st.button(BUTTON_LABEL, use_container_width=True):
+    table = st.selectbox(select_label, TABLES, key="table")
+    run_clicked = st.button(BUTTON_LABEL, use_container_width=True)
+    # 초기화: 콜백이 선택값을 처음 값으로 되돌리고, 실행 버튼이 눌리지 않은 재실행이라 차트도 그려지지 않는다
+    st.button(RESET_LABEL, use_container_width=True, on_click=st.session_state.pop, args=("table",))
+    if not run_clicked:
         return
 
     render(aggregate(table, extended=extended), extended=extended, sleep_ms=sleep_ms)
