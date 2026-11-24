@@ -7,7 +7,7 @@ v1(`cert/v1/chart_speed/prepro/prepro_data.ipynb`)과 동일한 방식으로 처
 
 실행 (cwd 무관, --input·--output-dir 필수):
   python prepro_2026.py --input <리포 root>/data/식품_일반음식점.csv --output-dir <앱>/data_2026
-출력: <output-dir>/restaurant_{2021..2026}.csv + <output-dir>/database.db (테이블 restaurant_YYYY)
+출력: <output-dir>/restaurant_{2022..2026}.csv + <output-dir>/database.db (테이블 restaurant_YYYY)
 """
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from pathlib import Path
 import duckdb
 import pandas as pd
 
-YEARS = range(2021, 2027)
+YEARS = range(2022, 2027)
 SAMPLE_RANGE = (10120, 10200)  # v1과 동일: 연도별 최신 N행 랜덤 슬라이스
 RAW_USECOLS = [
     "인허가일자", "폐업일자", "영업상태명", "도로명주소", "사업장명",
