@@ -196,7 +196,7 @@ simulation_spatial/
 
 ## 실행 환경
 
-Node.js 18 이상(API·빌드·시험), PowerShell 7(위 실행 묶음), 최신 Chrome·Edge, flows MariaDB(읽기 계정). 의존성: react·react-dom 18.3, leaflet 1.9.4, react-leaflet 4.2.1, chart.js 4.4, react-chartjs-2 5.2, mariadb 3.5(API), vite 5.4, @vitejs/plugin-react 4.3.
+Node.js 22 이상(확인 22.17.1), PowerShell 7(위 실행 묶음), 최신 Chrome·Edge, flows MariaDB(읽기 계정). 의존성: react·react-dom 18.3, leaflet 1.9.4, react-leaflet 4.2.1, chart.js 4.4, react-chartjs-2 5.2, mariadb 3.5(API), vite 5.4, @vitejs/plugin-react 4.3.
 
 ## 자료 형식
 
