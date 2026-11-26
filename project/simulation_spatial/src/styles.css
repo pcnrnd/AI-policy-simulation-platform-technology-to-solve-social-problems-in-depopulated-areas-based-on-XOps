@@ -1,0 +1,200 @@
+/* 지도 작업대 느낌 — 종이색 바탕, 먹색 글자, 그룹 색은 의미(사회문제 요인)에만 쓴다. */
+:root {
+  --paper: #f4f1ea;
+  --panel: #fffdf8;
+  --ink: #1d2124;
+  --ink-soft: #5d6266;
+  --rule: #ddd6c8;
+  --accent: #8c2d04;
+  --radius: 6px;
+  --font: "Pretendard", "Noto Sans KR", "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif;
+  --mono: "D2Coding", "Consolas", ui-monospace, monospace;
+}
+
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+body { background: var(--paper); color: var(--ink); font: 14px/1.5 var(--font); }
+button, input { font: inherit; }
+h1, h2, h3 { margin: 0; letter-spacing: -0.01em; }
+h2 { font-size: 13px; font-weight: 700; text-transform: none; color: var(--ink); margin-bottom: 8px; padding-bottom: 6px; border-bottom: 2px solid var(--ink); }
+h3 { font-size: 13px; margin: 14px 0 8px; }
+
+.app { display: grid; grid-template-rows: auto 1fr; height: 100%; }
+
+/* 상단 */
+.topbar { display: flex; align-items: center; gap: 20px; padding: 10px 18px; background: var(--ink); color: #f4f1ea; }
+.brand { margin-right: auto; font-size: 18px; font-weight: 800; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+/* 왼쪽 맨 위(요약 상자 첫 줄) 지역 선택: 고른 시군구 이름, 펼치면 바로 아래로 판(탭 내용 위에 겹침) */
+.region-picker { position: relative; font-size: 13px; margin: 0 0 8px; }
+.region-picker summary { list-style: none; cursor: pointer; padding: 5px 10px; border: 1px solid rgba(244, 241, 234, 0.45); border-radius: var(--radius); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.region-picker summary::-webkit-details-marker { display: none; }
+.region-picker summary::after { content: " ▾"; opacity: 0.7; }
+.region-picker[open] summary { background: rgba(244, 241, 234, 0.12); }
+.region-panel { position: absolute; left: 0; right: 0; top: calc(100% + 6px); z-index: 1100; background: var(--panel, #fffdf8); color: var(--ink); border: 1px solid var(--rule); border-radius: var(--radius); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18); padding: 10px; }
+.region-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.region-chips .chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 8px; border-radius: 12px; background: #efe9dc; font-size: 12px; }
+.region-chips .chip button { border: 0; background: none; cursor: pointer; font-size: 14px; line-height: 1; color: var(--ink-soft); padding: 0 2px; }
+.region-filter { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 6px; margin-bottom: 6px; }
+.region-filter select, .region-filter input { padding: 4px 6px; border: 1px solid var(--rule); border-radius: var(--radius); font: inherit; background: #fff; min-width: 0; }
+.region-list { list-style: none; margin: 0; padding: 0; max-height: 300px; overflow-y: auto; }
+.region-list label { display: flex; align-items: center; gap: 6px; padding: 3px 2px; cursor: pointer; }
+.region-list small { margin-left: auto; color: var(--ink-soft); }
+.region-list input:disabled + span { color: var(--ink-soft); }
+button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid #f59e0b; outline-offset: 2px; }
+
+/* 2단 배치: 왼쪽 패널 + 지도 */
+.layout { display: grid; grid-template-columns: 300px minmax(0, 1fr); min-height: 0; }
+.panel { background: var(--panel); border-right: 1px solid var(--rule); display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+/* 요약 카드와 탭 줄은 위에 고정, 탭 내용만 스크롤 */
+.tabs { flex: none; display: flex; border-bottom: 1px solid var(--rule); }
+.tabs button { flex: 1; border: 0; border-bottom: 2px solid transparent; background: none; padding: 9px 2px 7px; font-size: 13px; color: var(--ink-soft); white-space: nowrap; cursor: pointer; transition: color 120ms, border-color 120ms; }
+.tabs button:hover { color: var(--ink); }
+.tabs button.on { color: var(--ink); font-weight: 700; border-bottom-color: var(--ink); }
+.tab-body { flex: 1; min-height: 0; overflow-y: auto; padding: 16px; }
+.tab-body[hidden] { display: none; }
+.hint { margin: 0 0 8px; color: var(--ink-soft); font-size: 12px; }
+
+/* 그룹·유형 */
+.group { margin-bottom: 10px; border-left: 4px solid var(--group); padding-left: 8px; }
+.group-head { display: flex; align-items: center; gap: 6px; font-weight: 700; padding: 4px 0; cursor: pointer; }
+.swatch { width: 10px; height: 10px; border-radius: 50%; background: var(--group); }
+.type-row { border-radius: var(--radius); }
+.type-row summary { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; padding: 4px 6px; cursor: pointer; list-style: none; border-radius: var(--radius); }
+.type-row summary::-webkit-details-marker { display: none; }
+.type-row summary:hover { background: #f1ece1; }
+/* "분석" 탭: 그룹 줄·유형 줄 버튼(고른 줄은 그룹 색 바탕·굵게, 다시 누르면 끔) */
+.basis-row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px; width: 100%; padding: 4px 6px; border: 0; border-radius: var(--radius); background: none; text-align: left; font: inherit; font-size: 13px; color: var(--ink); cursor: pointer; }
+.basis-row:hover { background: #f1ece1; }
+.basis-row.basis-head { grid-template-columns: auto 1fr auto; font-weight: 700; font-size: 14px; }
+.basis-row.on { background: color-mix(in srgb, var(--group) 18%, white); font-weight: 700; box-shadow: inset 3px 0 0 var(--group); }
+.count { font-family: var(--mono); font-size: 12px; color: var(--ink-soft); }
+.facility-list { list-style: none; margin: 2px 0 6px 26px; padding: 0; max-height: 160px; overflow-y: auto; border-left: 1px dotted var(--rule); }
+.facility-list button { width: 100%; text-align: left; border: 0; background: none; padding: 3px 8px; cursor: pointer; font-size: 13px; color: var(--ink); border-radius: 4px; }
+.facility-list button:hover, .facility-list button.on { background: color-mix(in srgb, var(--group) 18%, white); }
+
+/* 조건 항목 이름 옆 회색 "?"와 설명 — 카드가 오른쪽 끝이라 "?" 아래 왼쪽으로 연다(오른쪽 끝을 "?"에 맞춤) */
+.help-wrap { position: relative; display: inline-block; margin-left: 5px; vertical-align: 1px; }
+.help { width: 14px; height: 14px; padding: 0; border: 0; border-radius: 50%; background: #b8b2a6; color: #fff; font: 700 10px/14px var(--font); cursor: help; }
+.help:hover, .help[aria-expanded="true"] { background: var(--ink-soft); }
+/* 팁은 작게: 글자 12px(카드 항목 13px보다 작게), 폭 240px까지, 여백 6·8px, 그림자 약하게 */
+.help-tip { position: absolute; right: -4px; top: calc(100% + 5px); z-index: 10; width: max-content; max-width: 240px; padding: 6px 8px; border-radius: 4px; background: var(--ink); color: #f4f1ea; font-size: 12px; font-weight: 400; line-height: 1.45; word-break: keep-all; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.16); }
+.help-tip[hidden] { display: none; }
+/* "?"와 설명 사이 틈을 덮어 포인터가 설명으로 옮겨 가도 닫히지 않게 */
+.help-tip::before { content: ""; position: absolute; left: 0; right: 0; top: -8px; height: 8px; }
+
+/* 지도 */
+.map-wrap { position: relative; min-height: 420px; }
+.map { position: absolute; inset: 0; background: #e8e4da; }
+/* 배경지도는 흐리게 — 주제 색(부족·접근 거리·시설)이 먼저 읽히도록 */
+.map .leaflet-tile-pane { filter: grayscale(0.75) contrast(0.9); opacity: 0.75; }
+.legend { position: absolute; left: 12px; bottom: 22px; z-index: 500; background: rgba(255, 253, 248, 0.94); border: 1px solid var(--rule); border-radius: var(--radius); padding: 8px 10px; font-size: 12px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12); min-width: 170px; }
+/* 범례 접기·펴기: 첫 제목이 제목 줄(조건 카드처럼 ▾), 접으면 이 한 줄만 */
+.legend summary { display: flex; justify-content: space-between; gap: 8px; font-weight: 700; cursor: pointer; list-style: none; }
+.legend summary::-webkit-details-marker { display: none; }
+.legend summary::after { content: "▾"; color: var(--ink-soft); transition: transform 150ms; }
+.legend:not([open]) summary::after { transform: rotate(-90deg); }
+.legend-body { display: flex; flex-direction: column; gap: 3px; margin-top: 4px; }
+.legend i { display: inline-block; width: 12px; height: 12px; margin-right: 6px; vertical-align: -2px; border-radius: 2px; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12); }
+.legend i.dot { border-radius: 50%; box-shadow: none; }
+/* 인구 조절 중 읍면동 원 숫자 — 폭은 labels.js labelWidth(숫자 7px, '명' 14px, 여백 8px)가 정한다 */
+.pop-label { font: 700 11px/16px var(--mono); text-align: center; white-space: nowrap; overflow: hidden; color: var(--ink); background: rgba(255, 253, 248, 0.92); border-radius: 3px; box-shadow: 0 0 0 1px rgba(29, 33, 36, 0.18); pointer-events: none; }
+.legend i.ring { width: 11px; height: 11px; border-radius: 50%; background: none; box-shadow: none; border: 1.5px dashed #1f2937; box-sizing: border-box; }
+.legend-row { display: flex; flex-wrap: wrap; gap: 2px 10px; }
+.legend-row i.dot { width: 8px; height: 8px; margin: 0 6px 0 2px; vertical-align: 0; }
+.legend strong + span { margin-top: 1px; }
+.legend span + strong { margin-top: 5px; }
+
+/* 지도 위 오른쪽 위: 시뮬레이션 환경변수 카드 → 선택 상세 카드. 아래 쪽 출처 표기와 겹치지 않게 높이를 제한하고, 넘치면 선택 상세 카드 안에서 스크롤한다.
+   폭(340px)을 바꾸면 MapView.jsx 의 OVERLAY_PX 도 맞춘다. */
+.map-controls { position: absolute; top: 12px; right: 12px; z-index: 600; width: 340px; max-width: calc(100% - 64px); max-height: calc(100% - 52px); display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
+.env-card { flex: none; background: rgba(255, 253, 248, 0.96); border: 1px solid var(--rule); border-radius: var(--radius); box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12); padding: 0 12px; }
+.env-card summary { padding: 6px 0; font-size: 13px; font-weight: 700; cursor: pointer; display: flex; justify-content: space-between; list-style: none; }
+.env-card summary::-webkit-details-marker { display: none; }
+.env-card summary::after { content: "▾"; color: var(--ink-soft); transition: transform 150ms; }
+.env-card:not([open]) summary::after { transform: rotate(-90deg); }
+.env-card[open] summary { border-bottom: 2px solid var(--ink); margin-bottom: 6px; }
+.env-card[open] { padding-bottom: 2px; }
+/* "부족 판정"(거리·대상 인구 기준 두 줄)·"인구 증감" 묶음: 제목 아래 줄들을 왼쪽 선으로 묶는다(작게, 카드가 길어지지 않게) */
+.env-group { border: 0; border-left: 2px solid var(--rule); margin: 0 0 4px; padding: 0 0 0 8px; min-width: 0; }
+.env-group legend { padding: 0; margin: 0 0 2px -10px; font-size: 13px; color: var(--ink); }
+/* 인구 증감 9줄: 한 칸(슬라이더 폭을 넓게, 줄마다 이름·슬라이더·값이 붙어 읽히지 않게)에 줄 간격을 줄여 카드를 약 300px 안에,
+   ◉ 시설 대상 구간은 진하게·나머지는 흐리게(조절은 됨) */
+.bands { display: grid; row-gap: 0; }
+.band-row { display: grid; grid-template-columns: 58px minmax(0, 1fr) 40px; align-items: center; gap: 8px; font-size: 11px; line-height: 15px; font-weight: 700; }
+.band-row input { width: 100%; height: 13px; margin: 0; accent-color: var(--ink); }
+.band-row.slider-inline { grid-template-columns: 84px minmax(0, 1fr) 72px; font-size: 12px; line-height: 20px; font-weight: 400; margin-bottom: 2px; }
+.band-row output { font-family: var(--mono); text-align: right; }
+.band-row.faint { font-weight: 400; color: var(--ink-soft); }
+.band-row.faint input { opacity: 0.45; }
+.selection-card { flex: 0 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; background: rgba(255, 253, 248, 0.98); border: 1px solid var(--rule); border-radius: var(--radius); box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12); padding: 10px 12px 12px; }
+.selection-card .close { position: sticky; top: 0; float: right; z-index: 1; margin: -4px -6px 0 8px; width: 28px; height: 28px; border: 0; border-radius: 50%; background: var(--panel); color: var(--ink-soft); font-size: 20px; line-height: 1; cursor: pointer; }
+.selection-card .close:hover { background: #f1ece1; color: var(--ink); }
+
+/* 왼쪽 위 시뮬레이션 대상 요약 */
+/* 윗선은 위쪽 막대와 구분만 하는 어두운 회색 하나(분석 기준 그룹 색을 따르지 않음) */
+.summary { flex: none; background: var(--ink); color: #f4f1ea; padding: 14px 16px 16px; border-top: 4px solid #3a3f43; }
+.eyebrow { margin: 0 0 8px; font-size: 12px; color: #c9c2b2; }
+/* 첫 값(Nkm 밖 대상 인구 N명)이 길어 첫 칸을 넓히고, 이름이 두 줄이 되어도 값은 아래 줄에 맞춘다 */
+.kpis { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1fr); gap: 6px; align-items: end; }
+.kpis span { display: block; font-size: 11px; line-height: 1.3; color: #c9c2b2; }
+.kpis strong { font-size: 17px; font-family: var(--mono); white-space: nowrap; }
+/* 처음과 다를 때: "처음 {값} ±차이" — 세 숫자 모두 작을수록 나은 값이라 늘면 붉게, 줄면 푸르게 */
+/* 시설 분류 제목 줄 오른쪽 "전체" 지도 표시 체크 */
+.facility-head { display: flex; align-items: center; justify-content: space-between; }
+.all-toggle { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 400; cursor: pointer; }
+.kpis small { display: block; margin-top: 2px; font-size: 10.5px; line-height: 1.35; font-family: var(--mono); white-space: nowrap; }
+.kpis small .was { display: block; color: #c9c2b2; font-size: 10.5px; line-height: 1.35; }
+.kpis small b { display: block; font-weight: 700; }
+.kpis small .up { color: #fca5a5; }
+.kpis small .down { color: #86efac; }
+/* 지도 위 가운데 위쪽 "변화" 띠: 확대 버튼(왼쪽 위)과 오른쪽 겹침 묶음(352px) 사이 가운데 한 줄.
+   사용률 차이는 늘면 붉게(시설 부담 증가), 줄면 초록 */
+.change-strip { position: absolute; top: 12px; left: 56px; right: 364px; z-index: 550; display: flex; justify-content: center; pointer-events: none; }
+.change-strip > div { pointer-events: auto; display: flex; align-items: baseline; gap: 14px; max-width: 100%; overflow: hidden; padding: 6px 12px; background: rgba(255, 253, 248, 0.96); border: 1px solid var(--rule); border-radius: var(--radius); box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12); font-size: 12px; white-space: nowrap; }
+.change-strip span { color: var(--ink-soft); }
+.change-strip b { margin-left: 4px; color: var(--ink); font-family: var(--mono); }
+.change-strip em { margin-left: 4px; font-style: normal; font-family: var(--mono); }
+.change-strip em.up { color: #b91c1c; }
+.change-strip em.down { color: #15803d; }
+
+/* 선택 상세 내용 */
+.rows { margin: 0; display: grid; gap: 2px; }
+.rows div { display: flex; justify-content: space-between; border-bottom: 1px dotted var(--rule); padding: 3px 0; font-size: 13px; }
+.rows dt { color: var(--ink-soft); }
+.rows dd { margin: 0; font-weight: 600; text-align: right; }
+.chart-box { height: 190px; }
+.compare { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
+.compare th, .compare td { border-bottom: 1px solid var(--rule); padding: 4px; text-align: right; }
+.compare th:first-child, .compare td:first-child { text-align: left; }
+button.primary { width: 100%; padding: 9px; border: 0; border-radius: var(--radius); background: var(--accent); color: #fff; font-weight: 700; cursor: pointer; transition: transform 120ms, background 120ms; }
+button.primary:hover { background: #a33a0a; }
+button.primary:active { transform: translateY(1px); }
+.detail > button:not(.primary):not(.close) { margin-top: 10px; padding: 6px 10px; border: 1px solid var(--accent); color: var(--accent); background: none; border-radius: var(--radius); cursor: pointer; }
+.added-list { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 4px; }
+.added-list li { display: flex; gap: 4px; }
+.added-list button.on { border-color: var(--accent); }
+.tab-sub { font-size: 13px; margin: 0 0 4px; }
+/* 선택 상세: 추가·전환할 종류 고르기 */
+.kind-select { display: flex; align-items: center; gap: 6px; font-size: 12px; flex: 1; min-width: 0; }
+.kind-select label { white-space: nowrap; }
+.kind-select select { flex: 1; min-width: 0; padding: 4px; border: 1px solid var(--rule); border-radius: var(--radius); background: #fff; font: inherit; }
+/* 선택 상세 동작 줄(추가·전환·삭제): 스크롤 상자 맨 아래에 붙어 늘 보이고, 상세·미리 보기는 그 위에서 스크롤 */
+/* 동작 줄: 위 상세·미리 보기와 구분되게 둥근 테두리·옅은 바탕·위쪽 그림자. 카드 아래 끝에서 6px 띄우고,
+   둘레 6px은 카드 바탕색 그림자로 덮어 밑으로 스크롤되는 내용이 비치지 않게 한다 */
+.card-actions { position: sticky; bottom: -6px; z-index: 1; display: flex; align-items: center; gap: 8px; margin: 10px -6px -6px; padding: 6px 8px 6px 10px; background: #f1ebde; border: 1px solid #d8cfbd; border-radius: 6px; box-shadow: 0 0 0 6px #fffdf8, 0 -6px 14px rgba(29, 33, 36, 0.12); }
+.card-actions button.primary { width: auto; flex: none; padding: 6px 14px; margin-left: auto; }
+.added-list button { flex: 1; text-align: left; border: 1px solid var(--rule); background: #fff; border-radius: var(--radius); padding: 5px 8px; cursor: pointer; font-size: 13px; }
+.added-list button.ghost { flex: 0 0 auto; color: var(--accent); }
+
+@media (max-width: 1100px) {
+  .layout { grid-template-columns: 1fr; }
+  .map-wrap { height: 60vh; }
+  .panel { overflow: visible; border: 0; }
+  .tab-body { overflow: visible; }
+  .topbar { flex-wrap: wrap; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}
