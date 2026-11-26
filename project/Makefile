@@ -25,6 +25,9 @@ up-all:
 	make up-mlflow
 	make up-metadata
 
+run-simulation-spatial:
+	cd simulation_spatial && npm install && npm run dev
+
 down-all:
 	docker compose -f ./workflow/compose.airflow.yaml down --volumes --rmi all
 	docker compose -f ./mlflow/compose.mlflow.yml down --volumes --rmi all
