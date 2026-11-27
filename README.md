@@ -3,6 +3,9 @@
 ## Overall architecture 
 ![alt text](./README_img/image.png)
 
+## Policy simulator screen
+![Policy simulator screen](./README_img/policy-simulator-screen.png)
+
 ## DataOps acrhitecture
 ![alt text](./README_img/image-1.png)
 
