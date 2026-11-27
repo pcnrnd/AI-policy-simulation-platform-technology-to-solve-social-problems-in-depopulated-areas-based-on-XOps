@@ -27,6 +27,13 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from main import app  # noqa: E402
 from src.core import db  # noqa: E402
+from src.dataops import read_cache  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _reset_read_cache() -> None:
+    # 테스트마다 어댑터를 바꿔 끼우므로 앞 테스트의 조회 결과가 남지 않게 비운다.
+    read_cache.reset_cache()
 
 
 @pytest.fixture()

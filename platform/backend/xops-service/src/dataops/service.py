@@ -11,6 +11,7 @@ from typing import Any
 from src.core.logger import get_logger
 from src.core.settings import get_settings
 from src.core.data_mode import current_mode
+from src.dataops import read_cache
 from src.dataops.adapters import adapter_of, get_adapter
 from src.dataops.query_builder import build_query
 from src.dataops.results import ExecutionRequest, ExecutionResult
@@ -184,6 +185,7 @@ class DataService:
 
         DB가 내려가 있거나 스키마가 어긋나도 대시보드는 계속 동작해야 한다 —
         실패 사유는 경고 로그와 `source_kind` 로 드러난다.
+        조회 결과는 `read_cache` 에 60초 보관하고, 쓰기는 같은 소스의 보관 결과를 비운다.
         """
         request = ExecutionRequest(
             schema=schema,
@@ -195,12 +197,25 @@ class DataService:
             page_size=page_size,
             values=values,
         )
+        source_id = str(schema.get("id", ""))
+        cache = read_cache.store
+        key = read_cache.key_for(request)
+        generation = cache.generation(source_id)
+        if method == "GET":
+            cached = cache.get(key)
+            if cached is not None:
+                return cached
         try:
-            return get_adapter(schema).execute(request)
+            result = get_adapter(schema).execute(request)
         except Exception as exc:  # noqa: BLE001 - 드라이버 예외 계층이 다양해 경계에서 일괄 degrade
-            source_id = schema.get("id")
             _logger.warning(f"adapter 실행 실패 source={source_id} reason={exc} — In-Memory 응답 유지")
             # 사유를 응답의 source_kind_reason 으로도 내보낸다 — 로그에만 남기면 화면에서는
             # 스텁 값이 실조회처럼 보인다(조용한 degrade). 드라이버 메시지는 접속정보를 담지
             # 않는 예외 문자열만 그대로 쓴다.
-            return ExecutionResult.not_executed(f"저장소 실행 실패: {type(exc).__name__}: {exc}")
+            result = ExecutionResult.not_executed(f"저장소 실행 실패: {type(exc).__name__}: {exc}")
+        if method == "GET":
+            cache.put(key, result, generation)  # 실행된 결과만 보관된다
+        else:
+            # 쓰기는 예외로 끝나도 저장소에 반영됐을 수 있으므로 성공 여부와 무관하게 비운다.
+            cache.invalidate(source_id)
+        return result
